@@ -65,7 +65,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         registerServices()
         jsServices.reload()
 
-        val root = FrameLayout(this)
+        // The dock draws an icon being dragged out of it above its own bounds.
+        val root = FrameLayout(this).apply { clipChildren = false }
         val wallpaper = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
             val wp = luna.wallpaper()
@@ -96,7 +97,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         })
 
         quickLaunch = QuickLaunch(this, luna, onLaunch = { app -> quickLaunch.postDelayed({ launch(app.id) }, LAUNCH_DELAY_MS) }, onLauncher = { toggleLauncher() })
-        quickLaunch.apps = registry.apps
+        quickLaunch.onRemoveItem = { i -> setDock(dock().toMutableList().apply { removeAt(i) }) }
+        quickLaunch.onMoveItem = { from, to -> setDock(dock().toMutableList().apply { add(to, removeAt(from)) }) }
+        launcher.onDropOnDock = { app, x -> dropOnDock(app, x) }
+        launcher.onEditModeChanged = { on -> quickLaunch.editing = on }
+        showDock()
         root.addView(quickLaunch, FrameLayout.LayoutParams(MATCH_PARENT, luna.px(QuickLaunch.HEIGHT)).apply { gravity = android.view.Gravity.BOTTOM })
 
         // Notifications layer (reference §1.1): popup alerts, then the dashboard drop-down, under the status bar.
@@ -381,8 +386,49 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             configurator.run()
             jsServices.reload()
             launcher.setApps(registry.apps)
+            showDock()
             systemBanner("", if (error == null) "${app.title} removed" else "Couldn't remove ${app.title}: $error")
         }
+    }
+
+    // ---- the dock ----
+
+    private val dockPrefs by lazy { getSharedPreferences("launcher", MODE_PRIVATE) }
+
+    /** The dock's apps, as the user arranged them; at first, the first five apps. */
+    private fun dock(): List<String> {
+        val saved = dockPrefs.getString("dock", null)
+            ?: return registry.apps.take(QuickLaunch.MAX_ITEMS).map { it.id }
+        val a = runCatching { org.json.JSONArray(saved) }.getOrDefault(org.json.JSONArray())
+        return (0 until a.length()).map { a.optString(it) }
+    }
+
+    private fun setDock(ids: List<String>) {
+        dockPrefs.edit().putString("dock", org.json.JSONArray(ids.distinct().take(QuickLaunch.MAX_ITEMS)).toString()).apply()
+        showDock()
+    }
+
+    private fun showDock() { quickLaunch.apps = dock().mapNotNull { registry.get(it) } }
+
+    /**
+     * A launcher icon dropped on the dock. It joins at the slot under it; one already on the
+     * dock moves there. On a full dock it takes the place of the icon it lands on (LunaCE
+     * refused a sixth icon; swapping is Lunacy's).
+     */
+    private fun dropOnDock(app: AppInfo, x: Float) {
+        val ids = dock().filter { registry.get(it) != null }.toMutableList()
+        val present = ids.indexOf(app.id)
+        when {
+            present >= 0 -> { ids.removeAt(present); ids.add(quickLaunch.slotAt(x, ids.size + 1), app.id) }
+            ids.size < QuickLaunch.MAX_ITEMS -> ids.add(quickLaunch.slotAt(x, ids.size + 1), app.id)
+            else -> ids[quickLaunch.slotAt(x, ids.size)] = app.id
+        }
+        setDock(ids)
+    }
+
+    private fun exitEditMode() {
+        launcher.exitEditMode()
+        quickLaunch.editing = false
     }
 
     override fun onMaximized(card: Card) {
@@ -430,7 +476,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun homePressed() {
         if (notifications.menu.isOpen) { closeMenu(); return }
         notifications.popups.newest()?.let { onWindowClosed(it); return }
-        if (launcherOpen && launcher.editing) { launcher.exitEditMode(); return }
+        if (launcher.editing || quickLaunch.editing) { exitEditMode(); return }
         if (launcherOpen) { closeLauncher(); return }
         val max = cards.maximized
         if (max != null) { cards.showCardView(); return }
@@ -458,7 +504,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         launcherOpen = false
         cards.visibility = View.VISIBLE
         launcher.animate().translationY(launcher.height.toFloat()).setDuration(LAUNCHER_MS).setInterpolator(Easing.InOutQuint)
-            .withEndAction { if (!launcherOpen) { launcher.visibility = View.INVISIBLE; launcher.cancelLaunchFeedback(); launcher.exitEditMode() } }.start()
+            .withEndAction { if (!launcherOpen) { launcher.visibility = View.INVISIBLE; launcher.cancelLaunchFeedback(); exitEditMode() } }.start()
         if (cards.maximized == null) { fade(justType, true); statusBar.setMode(StatusBar.Mode.CARDS) }
     }
 

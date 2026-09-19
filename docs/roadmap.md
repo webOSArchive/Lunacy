@@ -5,55 +5,71 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-09-19)
 
-- **Spike 1:** done, on Chromium 37 and 64, with a TouchPad reference probe.
-- **Corpus survey:** on hold. codepoet is sharing a local drive with most packages backed
-  up.
-- **Phase 0 (skeleton):** effectively done in `android/`: card host, framework route,
-  webOS paths and origins, the bridge, serve-time transforms, bundled apps.
-- **Phase 1 (Enyo runs):** partly done:
-  - touch-as-mouse input and flicks;
-  - `palmGetResource`;
-  - the full PalmSystem surface (unimplemented calls are logged no-ops);
-  - Prelude served to pages;
-  - the border-image transform;
-  - window types from `window.open` attributes.
+Apps now install from the App Museum and run: Apollo plays music, Plex plays direct and
+transcoded video, Sound Cloud Player streams through its JS service, AccuWeather and USA Today
+show live data. Per-app results and every fix, with the layer it landed in, are in
+[fix-log.md](fix-log.md).
 
-  Not yet done: the `enyo.WebView` control, the network shim, db8, the startup
-  services, and a test suite.
-- **Phase 2 (bus):** only `applicationManager/launch` and `open`. Everything else returns
-  webOS's own errors.
-- **Phase 3 (shell):** brought forward and well along; see below.
-- **Phase 4 (App Museum):** installs work. The package manager reads `.ipk`s, and the
-  bundled Museum installs through its own Preware route unchanged. Installed apps appear in
-  the launcher, and `applicationManager/listApps` reports them. Not yet done: the
-  compatibility score and removing apps.
-- **App testing:** four Enyo 1 apps and one Enyo 2 app installed and tried; results and the
-  gaps they found are in [fix-log.md](fix-log.md).
-- **Bus subscriptions and the connection manager:** done; Apollo plays music.
-- **JS services:** running. Node 12 per service package, Palm's mojoservice from the TouchPad,
-  webOS paths, a curl, and the activity manager's foreground activities. Sound Cloud Player's
-  service fetches and buffers tracks, and the buffered file plays. Plex 1.0.0's service
-  transcodes, and its HLS plays through a loopback media server. See "JS services" in the
+- **Spike 1:** done, on Chromium 37 and 64, with a TouchPad reference probe. The probe
+  (`spike/probe`, 0.0.9 on the TouchPad) has since measured uncaught errors, the network
+  contract, media with an empty `src` and connection timeouts; `db8probe.sh` and
+  `db8watch.sh` measured db8.
+- **Corpus survey:** started. A scan of codepoet's package mirror (4,318 packages) found 121
+  with JS services and 45 with db8 configuration files. The ranking by `palm://` URIs is
+  still to do.
+- **Phase 0 (skeleton):** done.
+- **Phase 1 (Enyo runs):** mostly done.
+  - Done: touch-as-mouse input and flicks, `palmGetResource`, the PalmSystem surface,
+    Prelude, the border-image transform, window types, the app menu (relaunch with
+    `open-app-menu`, `PalmSystem.isActivated`), the keyboard (automatic and manual modes,
+    card resize), relaunch parameters, and the network shim (cross-origin XHR as the
+    TouchPad sent it, 9 s connect timeout, bundled Mozilla roots).
+  - Compat fixes from real apps: uncaught errors reach only the console, the TouchPad's user
+    agent and version (webOS CE 3.1.0), no service workers,
+    `webkitCancelRequestAnimationFrame`, media with an empty `src`, and `file:///media/internal`
+    URLs.
+  - Not yet: the `enyo.WebView` control, a test suite, runs on the factory WebView 37, and
+    the border-image seams in Enyo dialogs (see fix-log.md).
+- **Phase 2 (bus):** subscriptions and cancellation work. Answering: applicationManager
+  (launch, open, listApps, Preware installs), connectionmanager, preferences
+  `systemProperties/Get`, activitymanager (foreground activities), and db8 and tempdb
+  ([db8.md](db8.md)). Everything else returns webOS's own errors. Not yet: keys, display,
+  zeroconf (codepoet: never worked, skip), background activities, the media indexer.
+- **Phase 3 (shell):** well along. Card view, launcher, dock, status bar, banners (now
+  matching the TouchPad), dashboards and popup alerts. The launcher has the launch glow and
+  edit mode: reordering, moving icons between tabs (with the tab highlight), removing
+  installed apps, and arranging the dock (add, swap, reorder, drag up and out to remove),
+  checked against the TouchPad at the same scale.
+- **Phase 4 (App Museum):** installs work through the Museum's own Preware route, from
+  `http` and `https`; apps can be removed from the launcher; packages' db8 kinds and
+  permissions register at install. Not yet: the compatibility score, activities from
+  packages.
+- **Phase 6 (JS services):** brought forward and running. Node 12 (nodejs-mobile 0.3.3) per
+  service package, Palm's mojoservice and foundations from the TouchPad, webOS paths, a curl
+  in JS, and a loopback media server for services' HLS. See "JS services" in the
   architecture doc.
-- **db8:** `com.palm.db` and `com.palm.tempdb` on SQLite, matching the TouchPad on 41
-  measured calls and on watches; packages' kinds and permissions register at install. See
-  [db8.md](db8.md).
-- **App menu and keyboard:** done (the title's ▾ opens Enyo's app menu; text fields raise
-  Android's keyboard and the card resizes as on webOS). `systemProperties` answers too.
-- **Network shim:** done. Cross-origin XHRs go to native HTTP and behave as the TouchPad's
-  did, measured with the probe; the architecture doc lists the contract. The gaps that block
-  the most apps are now the startup services and db8.
 - **Pending from the LunaCE spec agent:** a revision of
   [luna-shell-reference.md](luna-shell-reference.md) that uses the reference TouchPad's own
   `/etc/palm` values as authoritative. Those values are the card ratios 0.55/0.50 and its
-  `lunaAnimations.conf`. It also corrects the dock icon y from 65 to 54, as measured. If
-  that revision never landed, redo it: the device files are in the local
+  `lunaAnimations.conf`. It also corrects the dock icon y from 65 to 54, as measured, and
+  should take in `/etc/palm/launcher3` (the delete decorator at -50,-50, the Done button's
+  offsets). If that revision never landed, redo it: the device files are in the local
   `spike/vendor/touchpad/etc-palm/`. Until then, where the doc disagrees with the code, the
   code's comments give the values measured on the device.
+- **Planned: Lunacy's own Device Info.** A built-in app, adapted from Palm's Device Info
+  (`com.palm.app.deviceinfo`, which codepoet has), that reports the state of the environment
+  rather than pretending to be webOS: Lunacy's version and build number, and the Android
+  version, WebView version, Node version and device it runs on.
+  - Palm's app is Mojo, so it either waits for phase 5 or is ported to Enyo 1 first.
+  - It gets Lunacy's details from a Lunacy service with its own name (not a webOS one), so
+    the bus stays honest about what is webOS and what isn't.
+  - It's Palm's code: the copy that ships needs a NOTICE, like Mojo's.
 - **Next candidates:**
   - the remaining startup services (keys, display), the media indexer's db8 kinds, and the
     FilePicker (Papyrus);
-  - the border-image seams in Enyo dialogs (see [fix-log.md](fix-log.md));
+  - Lunacy's Device Info (above);
+  - the border-image seams in Enyo dialogs;
+  - a test suite from the apps in fix-log.md, run on WebView 37 and 64;
   - card stacks/groups;
   - the status-bar system menu (wifi, brightness, battery, rotation lock), which is QML in
     LunaCE, per spec §4.3;

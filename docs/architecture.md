@@ -104,6 +104,32 @@ product; being "close enough" is not the goal.
   the shell also recovers through `onRenderProcessGone`.
 - **Launcher, status bar, banners and dashboard.** Driven by the bus (the applicationManager
   and notification services).
+  - A tapped icon, in the launcher or the dock, glows (`launcher-touch-feedback.png`, 90 px,
+    centred on the icon) until the launcher closes, or for LunaCE's 3 s at most.
+  - Holding an icon enters edit mode, LunaCE's reorder mode: every icon gets its frame
+    (`edit-icon-bg.png`), apps installed from packages get the delete decorator (bundled apps
+    can't be removed), a Done button joins the tab bar, and icons follow the finger to a new
+    place while the others slide aside (300 ms, InQuad). Done or the home button leaves it.
+    Each tab's order is kept; apps the user hasn't placed follow on the first tab by title.
+  - A dragged icon moves to another tab when it touches that tab, as LunaCE's tab bar takes
+    it, or when it's held at the screen's left or right edge (600 ms). The tab under the
+    icon (or under a pressing finger) shows `tab-highlight.png`, LunaCE's highlighted tab.
+  - Edit-mode geometry uses the reference TouchPad's `/etc/palm/launcher3` overrides where
+    they differ from LunaCE's defaults: the delete decorator at (-50, -50), and the Done
+    button 8 px from the bar's right edge with its label ("DONE") 3 px up. Checked against a
+    TouchPad screenshot at the same scale.
+  - The dock: holding a dock icon picks it up for that drag (the launcher's edit mode isn't
+    involved), and in edit mode a drag picks one up too. As LunaCE's QuickLaunchBar does, the
+    icon lifts to sit 15 px above the finger (MOVING_ICON_Y_OFFSET) and follows it, the others
+    make room, and above the dock it turns half transparent. Let go on the dock and it takes that slot,
+    let go above the dock and it leaves the dock (the app stays in the launcher), as on
+    webOS. A launcher icon dropped on the dock joins it at that slot (one already there moves).
+    On a full dock (five) it takes the place of the icon it lands on; LunaCE refused a sixth
+    icon, and the swap is Lunacy's. The dock's apps are kept.
+  - The delete decorator opens LunaCE's AppInfoDialog ("Remove Application?", "<title> -
+    v.<version>", Cancel and Remove). Remove closes the app's windows and uninstalls its
+    package: the app, the services its `packageinfo.json` names, and the package record. Its
+    db8 data stays for now.
 - **Layouts.** Tablet and phone layouts from the start; the tablet layout is the reference.
 - **Launcher mode.** Lunacy starts as a normal full-screen app. Nothing in the shell should
   assume that, so it can later become the Android home launcher, with Android apps appearing

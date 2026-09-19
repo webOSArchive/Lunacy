@@ -52,16 +52,23 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         const val SNAP_MS = 250L          // snap to page, InQuad
         const val FLICK_MIN_MS = 200L
         const val FLICK_MAX_MS = 1200L
-        // LunaCE's IconGeometrySettings and DynamicsSettings.
+        // LunaCE's IconGeometrySettings, DynamicsSettings and LayoutSettings, with the reference
+        // TouchPad's /etc/palm/launcher3 overrides.
         const val FEEDBACK = 90f          // launcher-touch-feedback.png, centred on the icon
         const val FEEDBACK_MS = 3000L     // IconFeedbackTimeout
         const val DELETE_DX = -50f        // delete decorator's centre from the cell centre
-        const val DELETE_DY = -47f
+        const val DELETE_DY = -50f        // the TouchPad's; LunaCE's default is -47
         const val DELETE_BOX = 32f
         const val MOVE_MS = 300L          // IconReorderIconMoveAnimTime, InQuad
         const val DONE_W = 100f           // edit-button-done.png, one state
         const val DONE_H = 40f
-        const val DONE_RIGHT = 12f        // doneButtonPositionAdjust
+        // doneButtonHorizontalPositionAdjustPx=42 on the TouchPad, which LunaCE applies to the
+        // button's centre. Measured on the TouchPad's screen: the button's right edge is 8 px
+        // in, which here means drawing its image 6 px in.
+        const val DONE_RIGHT = 6f
+        const val DONE_TEXT_DY = -3f      // doneButtonTextVerticalPosAdjust
+        const val EDGE = 30f              // a dragged icon held this close to a side flips the page
+        const val EDGE_MS = 600L
         // AppInfoDialog.qml
         const val DIALOG_EDGE = 11f
         const val DIALOG_MARGIN = 6f
@@ -79,6 +86,10 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     var dockHeight = 0f
     /** The user confirmed removing an app (the dialog's Remove). */
     var onRemove: (AppInfo) -> Unit = {}
+    /** An icon dragged in edit mode was dropped on the dock, at x in the dock's coordinates. */
+    var onDropOnDock: (AppInfo, Float) -> Unit = { _, _ -> }
+    /** Edit mode began or ended here (the dock follows it). */
+    var onEditModeChanged: (Boolean) -> Unit = {}
 
     private val prefs = context.getSharedPreferences("launcher", Context.MODE_PRIVATE)
     private val tabText = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = luna.px(16f); typeface = luna.fontBold; textAlign = Paint.Align.CENTER }
@@ -87,20 +98,24 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private val labels = HashMap<String, StaticLayout>()
 
     /**
-     * The order is the user's: apps they've placed keep their places, and others (all of them,
-     * until the first reorder) follow by title.
+     * Each tab's order is the user's: apps they've placed keep their tab and place, and others
+     * (all of them, until the first move) follow on the first tab by title.
      */
     fun setApps(apps: List<AppInfo>) {
-        val saved = runCatching { JSONArray(prefs.getString("order", "[]")) }.getOrDefault(JSONArray())
+        val saved = runCatching { JSONArray(prefs.getString("pages", null) ?: "[" + (prefs.getString("order", null) ?: "[]") + "]") }.getOrDefault(JSONArray())
         val byId = apps.associateBy { it.id }
-        val placed = (0 until saved.length()).mapNotNull { byId[saved.optString(it)] }
+        val placed = HashSet<String>()
         pages.forEach { it.apps.clear() }
-        pages[0].apps.addAll(placed + apps.filter { it !in placed }.sortedBy { it.title.lowercase() })
-        if (editing && dragging != null && dragging !in pages[0].apps) dragging = null
+        for (pi in 0 until minOf(saved.length(), pages.size)) {
+            val ids = saved.optJSONArray(pi) ?: continue
+            for (i in 0 until ids.length()) byId[ids.optString(i)]?.takeIf { placed.add(it.id) }?.let { pages[pi].apps += it }
+        }
+        pages[0].apps.addAll(apps.filter { it.id !in placed }.sortedBy { it.title.lowercase() })
+        if (dragging != null && pages.none { dragging in it.apps }) dragging = null
         invalidate()
     }
 
-    private fun saveOrder() = prefs.edit().putString("order", JSONArray(pages[0].apps.map { it.id }).toString()).apply()
+    private fun saveOrder() = prefs.edit().putString("pages", JSONArray(pages.map { p -> JSONArray(p.apps.map { it.id }) }).toString()).apply()
 
     // ---- launch feedback ----
 
@@ -169,7 +184,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
 
     /** Changes the order, with every icon sliding from where it is to its new cell (300 ms InQuad). */
     private fun reorder(change: () -> Unit) {
-        val page = pages[0]
+        val page = currentPage()
         val now = page.apps.mapIndexed { i, a -> a.id to drawnCentre(a, i) }.toMap()
         change()
         movedFrom.clear(); movedFrom.putAll(now)
@@ -256,7 +271,10 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val selected = pagePos.roundToInt()
         pages.forEachIndexed { i, p ->
             val r = RectF(i * tw, 0f, (i + 1) * tw, h)
-            if (i == selected) luna.nine(c, "launcher3/tab-selected-bg.png", r, 20, 20, 20, 20)
+            // LunaCE's PageTab: the highlighted background (a dragged icon over the tab, or a
+            // finger on it) stands in for the normal or selected one.
+            if (i == highlightedTab) luna.nine(c, "launcher3/tab-highlight.png", r, 20, 20, 20, 20)
+            else if (i == selected) luna.nine(c, "launcher3/tab-selected-bg.png", r, 20, 20, 20, 20)
             if (i > 0 && i != selected) luna.nine(c, "launcher3/tab-divider.png", RectF(r.left - luna.px(1f), 0f, r.left + luna.px(1f), h), 0, 20, 0, 20)
             tabText.color = if (i == selected) Color.WHITE else Color.rgb(0xC8, 0xC8, 0xC8)
             c.drawText(p.title.uppercase(), r.centerX(), h / 2 - (tabText.ascent() + tabText.descent()) / 2, tabText)
@@ -264,9 +282,13 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         if (editing) {
             val r = doneRect()
             drawState(c, "launcher3/edit-button-done.png", r.centerX(), r.centerY(), pressed = donePressed)
-            c.drawText("Done", r.centerX(), r.centerY() - (doneText.ascent() + doneText.descent()) / 2, doneText)
+            c.drawText("DONE", r.centerX(), r.centerY() - (doneText.ascent() + doneText.descent()) / 2 + luna.px(Params.DONE_TEXT_DY), doneText)
         }
     }
+
+    /** The tab under a dragged icon or a pressing finger, or -1. */
+    private var highlightedTab = -1
+    private fun tabAt(x: Float, y: Float) = if (y < tabBarH()) (x / tabWidth()).toInt().takeIf { it in pages.indices } ?: -1 else -1
 
     // ---- edit mode ----
 
@@ -278,17 +300,19 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private var pressedDelete: String? = null
     private var donePressed = false
 
-    fun enterEditMode() { if (!editing) { editing = true; cancelLaunchFeedback(); invalidate() } }
+    fun enterEditMode() { if (!editing) { editing = true; cancelLaunchFeedback(); onEditModeChanged(true); invalidate() } }
 
     /** Done, the home button, or the launcher closing. */
     fun exitEditMode() {
         if (!editing) return
         editing = false; dragging = null; dialogApp = null; pressedDelete = null; donePressed = false
+        removeCallbacks(edgeFlip)
+        onEditModeChanged(false)
         invalidate()
     }
 
     private fun pickUp(app: AppInfo, x: Float, y: Float) {
-        val page = pages[0]
+        val page = currentPage()
         val c = drawnCentre(app, page.apps.indexOf(app))
         dragging = app
         dragX = x; dragY = y
@@ -297,20 +321,57 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         invalidate()
     }
 
-    /** The dragged icon's cell follows the finger; the others make room. */
+    /**
+     * The dragged icon's cell follows the finger; the others make room. Over a tab, the icon
+     * goes to that tab's page, as LunaCE's tab bar takes it; held at a side edge, to the next
+     * page that way. Over the dock, it stays put until dropped.
+     */
     private fun dragTo(x: Float, y: Float) {
         dragX = x; dragY = y
-        val page = pages[0]
         val app = dragging ?: return
+        highlightedTab = tabAt(x, y)
+        if (y < tabBarH()) {
+            val i = (x / tabWidth()).toInt()
+            if (i in pages.indices && i != currentPage().let { pages.indexOf(it) }) moveDragged(i)
+            invalidate(); return
+        }
+        if (y > pageBottom()) { removeCallbacks(edgeFlip); invalidate(); return }
+        val edge = luna.px(Params.EDGE)
+        val side = if (x < edge) -1 else if (x > width - edge) 1 else 0
+        if (side != edgeSide) { edgeSide = side; removeCallbacks(edgeFlip); if (side != 0) postDelayed(edgeFlip, Params.EDGE_MS) }
+        val page = currentPage()
         val to = cellAt(x - grabDx, y + page.scrollY - grabDy, page.apps.size)
         val from = page.apps.indexOf(app)
         if (to != from && from >= 0) reorder { page.apps.removeAt(from); page.apps.add(to, app) }
         invalidate()
     }
 
+    private var edgeSide = 0
+    private val edgeFlip: Runnable = Runnable {
+        val target = pages.indexOf(currentPage()) + edgeSide
+        if (dragging != null && edgeSide != 0 && target in pages.indices) { moveDragged(target); postDelayed(edgeFlip, Params.EDGE_MS) }
+    }
+
+    /** Moves the dragged icon to the end of another page, and shows that page. */
+    private fun moveDragged(to: Int) {
+        val app = dragging ?: return
+        pages.forEach { it.apps.remove(app) }
+        pages[to].apps.add(app)
+        movedFrom.clear(); moveT = 1f
+        animatePage(to, Params.SNAP_MS, Easing.InQuad)
+    }
+
     private fun drop() {
         val app = dragging ?: return
-        val page = pages[0]
+        removeCallbacks(edgeFlip); edgeSide = 0
+        highlightedTab = -1
+        if (dragY > pageBottom()) {
+            // Onto the dock: it takes the app; the icon stays where it was in the launcher.
+            dragging = null
+            onDropOnDock(app, dragX)
+            invalidate(); return
+        }
+        val page = currentPage()
         // The icon settles from under the finger into its cell.
         val finger = PointF(dragX - grabDx, dragY - grabDy + page.scrollY)
         dragging = null
@@ -401,7 +462,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
 
     private fun deleteAt(x: Float, y: Float): AppInfo? {
         if (!editing) return null
-        val page = pages[0]
+        val page = currentPage()
         val r = luna.px(Params.DELETE_BOX) / 2 + luna.px(6f)
         return page.apps.withIndex().firstOrNull { (i, a) ->
             if (!a.userInstalled) return@firstOrNull false
@@ -422,6 +483,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
                 pressedDelete = deleteAt(e.x, e.y)?.id
                 donePressed = editing && doneRect().contains(e.x, e.y)
                 downApp = if (pressedDelete == null && !donePressed) appAt(e.x, e.y) else null
+                highlightedTab = if (donePressed) -1 else tabAt(e.x, e.y)
                 if (downApp != null && !editing) postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
                 invalidate()
             }
@@ -429,7 +491,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
                 val dx = e.x - downX; val dy = e.y - downY
                 if (drag == Drag.UNDECIDED && max(abs(dx), abs(dy)) > luna.px(Params.TAP_RADIUS)) {
                     removeCallbacks(longPress)
-                    pressedDelete = null; donePressed = false
+                    pressedDelete = null; donePressed = false; highlightedTab = -1
                     val app = downApp
                     // In edit mode an icon moves with the finger; otherwise the first axis past
                     // the tap radius wins (reference §3.7).
@@ -467,7 +529,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
                     Drag.UNDECIDED -> if (e.actionMasked == MotionEvent.ACTION_UP) tap(e.x, e.y)
                     Drag.NONE -> {}
                 }
-                pressedDelete = null; donePressed = false
+                pressedDelete = null; donePressed = false; highlightedTab = -1
                 drag = Drag.NONE
                 invalidate()
             }

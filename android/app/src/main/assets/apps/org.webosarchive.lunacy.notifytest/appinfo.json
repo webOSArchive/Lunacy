@@ -1,0 +1,10 @@
+{
+	"id": "org.webosarchive.lunacy.notifytest",
+	"version": "1.0.0",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Notify Test",
+	"icon": "icon.png",
+	"uiRevision": 2
+}

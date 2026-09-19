@@ -1,0 +1,6 @@
+host.js and curl.js are Lunacy's own. They run on Node from nodejs-mobile 0.3.3
+(https://github.com/JaneaSystems/nodejs-mobile, Node.js 12.19), packaged as libnode.so by
+fetch-assets.sh. Node.js and nodejs-mobile are MIT licensed; Node bundles OpenSSL, V8, libuv
+and others under their own permissive licenses (see Node's LICENSE for v12.19.0). The
+launcher (tools/node-launcher.cpp) links libc++_shared.so from the Android NDK r21
+(Apache 2.0 with LLVM exceptions).

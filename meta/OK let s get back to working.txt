@@ -1,0 +1,13 @@
+OK, let's get back to working on app compat. You asked for the appcatalog. Here it is semi-locally:
+papyrus is a good kindle replacement that was built to be webOS and PWA friendly:
+com.palm.codepoet.papyrus_1.6.1_all.ipk
+
+Here are some good enyo1 webOS apps to test with that gently exercise the app contract. we'll try some hardware ones later:
+com.jmtk.apollo_1.2.8_all.ipk
+com.accuweather.accuweather_2.3.1_all.ipk
+com.usatoday.webos_1.4.3_all.ipk
+
+Apps are typically installed with Preware these days, but I think we'll need to provide our own "install" mechanism, so App Museum can directly install them. We can mod the App Museum code as needed, that's my repo -- just make sure we do it in a way that doesn't break the other environments it supports.
+
+By the way, its a little out of scope for this stage, but CheckMate HD bundles its own Enyo2, so its should "just work" in our environment. Worth a quick test to see how far off that is from reality, but the priority remains Enyo1:
+com.palm.webosarchive.checkmatehd_2.4.0_all.ipk","

@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+<head>
+<title>Notify Test</title>
+<script src="/usr/palm/frameworks/enyo/1.0/framework/enyo.js" type="text/javascript"></script>
+</head>
+<body>
+<script type="text/javascript">
+// Lunacy's notification test: exercises banners, dashboards and popup alerts through the
+// standard Enyo 1 APIs, so it runs the same on a TouchPad and in Lunacy.
+enyo.kind({
+	name: "NotifyTest",
+	kind: enyo.VFlexBox,
+	components: [
+		{kind: "PageHeader", content: "Notify Test"},
+		{kind: "Dashboard", name: "dash", smallIcon: "small.png", onTap: "dashTap"},
+		{kind: "VFlexBox", style: "padding: 20px", components: [
+			{kind: "Button", caption: "One banner", onclick: "oneBanner"},
+			{kind: "Button", caption: "Three banners", onclick: "threeBanners"},
+			{kind: "Button", caption: "Push dashboard layer", onclick: "pushLayer"},
+			{kind: "Button", caption: "Pop dashboard layer", onclick: "popLayer"},
+			{kind: "Button", caption: "Popup alert", onclick: "popup"},
+			{name: "log", style: "padding-top: 20px"}
+		]}
+	],
+	count: 0,
+	oneBanner: function() {
+		this.count++;
+		enyo.windows.addBannerMessage("Hello from Notify Test #" + this.count, '{"banner":' + this.count + '}', "small.png");
+	},
+	threeBanners: function() {
+		for (var i = 0; i < 3; i++) { this.oneBanner(); }
+	},
+	pushLayer: function() {
+		this.count++;
+		this.$.dash.push({icon: "dashboard-icon.png", title: "Notify Test", text: "Dashboard layer #" + this.count});
+	},
+	popLayer: function() {
+		this.$.dash.pop();
+	},
+	dashTap: function(inSender, inLayer) {
+		this.$.log.setContent("Tapped dashboard: " + inLayer.text);
+	},
+	popup: function() {
+		enyo.windows.openPopup("popup.html", "alert", {}, {}, 120);
+	}
+});
+var app = new NotifyTest();
+app.renderInto(document.body);
+// Launch parameters can drive the test ({"do": "banner" | "banners" | "push" | "pop" | "popup"}),
+// so the same steps run on a TouchPad (palm-launch -p) and in Lunacy without touching the screen.
+function act(params) {
+	var map = {banner: "oneBanner", banners: "threeBanners", push: "pushLayer", pop: "popLayer", popup: "popup"};
+	if (params && map[params["do"]]) { app[map[params["do"]]](); }
+	app.$.log.setContent("Launched with " + enyo.json.stringify(params || {}));
+}
+act(enyo.windowParams);
+enyo.applicationRelaunchHandler = function(params) { act(params); return true; };
+</script>
+</body>
+</html>

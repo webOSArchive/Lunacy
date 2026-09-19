@@ -1,0 +1,10 @@
+{
+	"id": "org.webosarchive.lunacy.probe",
+	"version": "0.0.9",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Lunacy Probe",
+	"icon": "icon.png",
+	"uiRevision": 2
+}

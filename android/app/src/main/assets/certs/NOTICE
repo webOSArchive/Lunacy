@@ -1,0 +1,9 @@
+cacerts.pem: the Mozilla CA root certificates, as packaged by Ubuntu's ca-certificates
+20260601~24.04.1 (/usr/share/ca-certificates/mozilla/*.crt, concatenated unchanged).
+
+Source: Mozilla NSS certdata.txt, https://hg.mozilla.org/projects/nss/log/tip/lib/ckfw/builtins/certdata.txt
+Copyright: Mozilla Contributors
+License: Mozilla Public License 2.0, https://mozilla.org/MPL/2.0/
+
+Lunacy trusts these roots for its own HTTP (the network shim and package downloads) in
+addition to Android's store, which on Android 5 lacks current roots such as ISRG Root X1.

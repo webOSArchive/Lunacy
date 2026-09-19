@@ -1,0 +1,21 @@
+# Personal background; keep out of the repo
+docs/motivation.md
+
+# Spike: third-party apps and upstream clones stay local; never commit or redistribute them.
+spike/vendor/
+spike/apps-src/
+spike/results/
+spike/android/app/src/main/assets/apps/
+spike/android/app/src/main/assets/fw/
+spike/android/.gradle/
+spike/android/app/build/
+spike/android/build/
+spike/android/local.properties
+
+# Lunacy app: build output and local-only assets (frameworks and apps under review, HP fonts/wallpapers)
+android/local-assets/
+android/local-jni/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties

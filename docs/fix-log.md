@@ -1,0 +1,86 @@
+# Fix log
+
+Where each compatibility fix landed. Rule 1 in [architecture.md](architecture.md) says fixes
+go into general layers: the Enyo (later Mojo) fork, the global compat layer, or the bus. A
+fix that fits nowhere general is logged as such. If the general share stops growing, the
+approach is failing.
+
+Layers: **framework** (the Enyo fork, which has its own change log), **compat** (compat.js,
+bridge.js, serve-time transforms), **bus** (a service answering as webOS did), **nowhere
+general** (a per-app setting; only the fixed-viewport fallback is allowed).
+
+## Fixes
+
+| Date | Symptom | Seen in | Cause | Landed |
+|---|---|---|---|---|
+| before 2026-09-19 | Scrollers don't move | every Enyo app | webOS delivered touches as mouse events; Chromium only synthesizes them for taps | compat (input model) |
+| before 2026-09-19 | Scrolling feels sticky, no coasting | every Enyo app | Inertia came from LunaSysMgr's `Mojo.handleGesture('flick')` | compat (flicks) |
+| before 2026-09-19 | Border-image graphics vanish | Enyo's own controls | Newer Chromium draws no border image when `border-style` is none | compat (serve-time CSS transform) |
+| before 2026-09-19 | Text in Roboto | every app | Prelude was installed system-wide on webOS | compat (`fonts.css`) |
+| 2026-09-19 | Full-screen "DIAG ERROR" overlay at startup | USA Today 1.4.3 | The app's `window.onerror` overlay catches the parse error Enyo's `enyo.WebView` throws on reading `command-resource-handlers.json`. The TouchPad throws the same error but never calls `onerror` | compat (uncaught errors reach only the console) |
+| 2026-09-19 | "Checking for filemgr" gets an error | Papyrus 1.6.1 | `applicationManager/listApps` was missing | bus |
+| 2026-09-19 | Cross-origin requests fail ("Unable to connect to Pandora", no Terms of Service) | Apollo 1.2.8, CheckMate HD 2.4.0 | webOS apps had no CORS check; pages here are on https origins | compat (network shim, `net.js` with native HTTP) |
+| 2026-09-19 | Servers see an Android browser | every app | The WebView's own user agent | compat (the TouchPad's user agent on every app WebView) |
+| 2026-09-19 | Failed service worker registrations at startup | Papyrus 1.6.1, CheckMate HD 2.4.0 | `navigator.serviceWorker` exists in Chromium, never on the TouchPad | compat (removed) |
+| 2026-09-19 | Wrong version reported | every app | `deviceInfo` said 3.0.5 and `PalmSystem.version` "3.0.5"; the TouchPad reports 3.1.0 and "Webkit4/V8; device" | compat (bridge values) |
+| 2026-09-19 | No app menu: many apps can't be configured | App Museum, most Enyo apps | The status bar title didn't relaunch the app with `open-app-menu`; relaunch passed its parameters as an argument, not in `PalmSystem.launchParams`; `PalmSystem.isActivated` was never set | shell and compat (bridge) |
+| 2026-09-19 | No keyboard for text fields | every app | The compat layer's touch handling focuses fields itself, so Android never raised its keyboard | shell and compat (bridge: webOS keyboard modes) |
+| 2026-09-19 | Pandora rejects Apollo's login | Apollo 1.2.8 | `preferences/systemProperties/Get` (`nduid`) was missing | bus |
+| 2026-09-19 | Interface stuck half-transparent over the splash, taps blocked | Apollo 1.2.8 (any Enyo 1 app: Pane fades, animators) | Enyo 1 cancels animation frames with `webkitCancelRequestAnimationFrame`, which Chromium dropped (it kept `webkitRequestAnimationFrame`). Enyo's fallback, `clearTimeout(frameId)`, cancelled the Pane fade's timer with the same number. Found by tracing `clearTimeout` over DevTools | compat (the old name mapped to `cancelAnimationFrame`) |
+| 2026-09-19 | "A network connection is not available" | Apollo 1.2.8 | `connectionmanager/getstatus` was missing, and the bridge dropped subscriptions after the first reply | bus (connection manager, subscriptions) |
+| 2026-09-19 | Tracks fail at once and retry until "Network Error" | Apollo 1.2.8 (any app using `enyo.Sound`) | `enyo.Sound` sets `src = ""` on each new sound; Chromium fires `error` for that, the TouchPad fired nothing (spike/probe 0.0.8) | compat (empty media `src` removes the attribute) |
+| 2026-09-19 | Banners on a black box, sized to their text | every banner | Lunacy's own drawing: LunaCE's StatusBarScroll draws no backing and unrolls over the notification area's full maximum width (319 px), text left-aligned | shell (matched to LunaCE and the TouchPad) |
+| 2026-09-19 | App frozen for 30 s after a tap | Plex client 1.0.0, with its server unreachable from the tablet | A synchronous XHR to a server that never answers blocks the page until the connect timeout, which was a guessed 30 s; the TouchPad gives up after about 9 s (probe 0.0.9), with an `error` event, not `timeout` | compat (network shim timeout; `timeout` only for the page's own `xhr.timeout`) |
+| 2026-09-19 | Apps with a JS service can't reach it | Sound Cloud Player 4.4.2, Plex 1.0.0 | No JS service runtime | JS services (Node, host, activity manager) |
+| 2026-09-19 | Service's buffered audio won't play ("Media load rejected by URL safety check") | toodleTasks HD 1.5.0 | Enyo 1 with db8 kinds in its package | Its kinds and permissions register at install; its watched and ordered finds answer; its sign-in screen and dashboard show. Toodledo's service itself is untested. |
+| Sound Cloud Player 4.4.2 | The page plays `file:///media/internal/…`, which an https page can't load; SoundManager2 passes it to `new Audio(url)` | compat (`file:///media/internal/` mapped to the app origin, which serves it) |
+| 2026-09-19 | Transcoded video opens the player but never plays | Plex 1.0.0 (its service's HLS playlists) | Chromium passes HLS to Android's MediaPlayer, whose own network stack can't reach app origins (`LiveSession` -1008) | compat and card host (`file:///media/internal/` media served from a loopback `MediaServer`) |
+| 2026-09-19 | db8 missing | apps storing data in db8, and every package with configuration/db files | No `com.palm.db` | bus (db8 on SQLite, measured on the TouchPad; configurator for packages' kinds) |
+| 2026-09-19 | HTTPS to Let's Encrypt and Amazon sites fails from native code | the network shim | Android 5's trust store lacks current roots | compat (bundled Mozilla roots) |
+
+## Known gaps, by the layer they belong to
+
+Found while testing the apps below; each is general, not tied to one app.
+
+- **bus, startup services:** `keys/headset` and `keys/media` status, `display/status`
+  (Apollo asks for all three, and copes without them).
+- **bus, zeroconf:** `com.palm.zeroconf/browse` (Bonjour discovery; Plex 0.8.0 looks for
+  `_plexmediasvr._tcp` with it, then falls back to servers added by hand). Android's
+  `NsdManager` could back it.
+- **system services, media indexer:** the `com.palm.media.*` kinds in db8 (Papyrus asks for
+  `com.palm.media.types:1` before its file picker; db8 itself now answers, with
+  "kind not registered").
+- **system UI:** the FilePicker cross-app UI at
+  `/usr/lib/luna/system/luna-systemui/app/FilePicker/filepicker.html` (Papyrus's import).
+- **system files:** the TouchPad answers `/usr/palm/frameworks/tellurium/tellurium_config.json`
+  with 200 and an empty body; Lunacy answers 404.
+- **visual, not yet solved:** Enyo dialogs (Apollo's, AccuWeather's) show faint lines along
+  the frame's border-image slice boundaries: the page behind shows through by a few levels.
+  Measured in Apollo: they sit exactly on the slice edges, at whole and half pixels alike,
+  and survive moving the dialog, putting it on its own layer, `image-rendering: pixelated`
+  and repeat instead of stretch. The likely cause is that this WebView rasterizes at
+  Android's density (1.33125) under a 0.75 page scale; not confirmed. Next: compare on the
+  factory WebView 37, and look for a way to raster at 1:1.
+- **app timing, to compare on the TouchPad:** AccuWeather sometimes logs
+  `this.appModel.getWeatherModel is not a function` at startup: a view updates before its
+  `appModel` is set. It runs normally afterwards.
+- **third party, nowhere general:** AccuWeather's radar loads today's Google Maps script,
+  which uses syntax WebView 64 can't parse.
+
+## Apps tested
+
+On the HP 10 G2 with WebView 64, landscape, installed from `.ipk` through the package manager
+on 2026-09-19. Not yet repeated on the factory WebView 37.
+
+| App | Kind | Result |
+|---|---|---|
+| AccuWeather 2.3.1 | Enyo 1 | Runs with live data after the Terms dialog. Radar map fails (third party). |
+| App Museum 2.9.5 | Enyo 1, bundled | App menu (Preferences, About) and search with the keyboard work. |
+| USA Today (World Today) 1.4.3 | Enyo 1 | Runs with live news once uncaught errors stopped reaching `onerror`. |
+| Apollo 1.2.8 | Enyo 1 | Logs in with the keyboard, shows its stations and plays music. |
+| Papyrus 1.6.1 | Enyo 1 | Library renders; import needs db8 and the FilePicker. |
+| CheckMate HD 2.4.0 | Enyo 2, bundled | Renders its full UI and loads its Terms of Service; webOS Account missing (honest bus error). |
+| Plex for webOS 1.0.0 | Enyo 1 with a JS service | Its service starts transcodes and writes HLS playlists; direct play and transcoded video both play. |
+| Plex for webOS 0.8.0 | Enyo 1 | Finds a server added by hand, browses its library and plays video; Bonjour discovery needs zeroconf. |
+| toodleTasks HD 1.5.0 | Enyo 1 with db8 kinds in its package | Its kinds and permissions register at install; its watched and ordered finds answer; its sign-in screen and dashboard show. Toodledo's service itself is untested. |
+| Sound Cloud Player 4.4.2 | installed from the App Museum | Installs from the live package host and launches. |

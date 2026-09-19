@@ -1,0 +1,28 @@
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+android {
+    namespace = "org.webosarchive.lunacy"
+    compileSdk = 35
+    defaultConfig {
+        applicationId = "org.webosarchive.lunacy"
+        minSdk = 21
+        targetSdk = 21
+        versionCode = 1
+        versionName = "0.1.0"
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = "17" }
+    androidResources { noCompress += listOf("js", "css", "html", "json", "png", "ttf", "jpg") }
+    // Assets that can't be committed (frameworks and apps under review, HP fonts and
+    // wallpapers) are populated by fetch-assets.sh into local-assets/, which is gitignored.
+    sourceSets["main"].assets.srcDirs("src/main/assets", "../local-assets")
+    // Node for JS services (fetch-assets.sh): 32-bit ARM, the Android 5 test devices' ABI.
+    sourceSets["main"].jniLibs.srcDirs("../local-jni")
+    packaging { jniLibs.useLegacyPackaging = true }  // installed as files, so Node can run
+}

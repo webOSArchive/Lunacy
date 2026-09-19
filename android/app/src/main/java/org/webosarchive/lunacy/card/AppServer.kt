@@ -1,0 +1,115 @@
+package org.webosarchive.lunacy.card
+
+import android.content.res.AssetManager
+import android.net.Uri
+import android.util.Log
+import android.webkit.WebResourceResponse
+import java.io.ByteArrayInputStream
+import java.io.IOException
+import java.io.InputStream
+
+/**
+ * Serves every request to an app origin: the app's own files at their webOS path, the
+ * frameworks, and Lunacy's injected scripts. See docs/architecture.md, "Card host".
+ */
+class AppServer(private val assets: AssetManager, private val files: AppFiles, private val mediaInternal: java.io.File) {
+    companion object {
+        const val TAG = "Lunacy"
+        /** Apps check location.hostname for this (the TouchPad reports ".media.cryptofs.apps..."). */
+        const val HOST_SUFFIX = ".media.cryptofs.apps"
+        /** Installed packages' tree, served from AppFiles (installed first, then bundled). */
+        const val CRYPTOFS = "media/cryptofs/apps/"
+        const val APPS = CRYPTOFS + Packages.APPS + "/"
+        const val MEDIA_INTERNAL = "media/internal/"
+
+        fun appUrl(id: String, main: String = "index.html") = "https://$id$HOST_SUFFIX/$APPS$id/$main"
+
+        /** The app id an origin belongs to, or null for any other host. */
+        fun appIdOf(url: String?): String? {
+            val host = Uri.parse(url ?: return null).host ?: return null
+            return if (host.endsWith(HOST_SUFFIX)) host.removeSuffix(HOST_SUFFIX) else null
+        }
+
+        private val FRAMEWORK = Regex("(?:^|.*/)usr/palm/frameworks/enyo/[^/]+/(.*)")
+    }
+
+    fun serve(uri: Uri): WebResourceResponse? {
+        val host = uri.host ?: return null
+        if (!host.endsWith(HOST_SUFFIX)) return null  // real network
+        val path = uri.path.orEmpty().trimStart('/')
+        if (path.startsWith("__lunacy/fonts/")) return asset("luna/fonts/" + path.removePrefix("__lunacy/fonts/"), path)
+        if (path.startsWith("__lunacy/")) return asset("lunacy/" + path.removePrefix("__lunacy/"), path)
+        val fw = FRAMEWORK.matchEntire(path)
+        val resp = when {
+            fw != null -> asset("fw/enyo/1.0/" + fw.groupValues[1], path)
+            path.startsWith(CRYPTOFS) -> files.open(path.removePrefix(CRYPTOFS))?.let { respond(it, path) }
+            // webOS's user storage, shared by apps and services (JS services write files here).
+            path.startsWith(MEDIA_INTERNAL) -> internal(path.removePrefix(MEDIA_INTERNAL))?.let { respond(it, path) }
+            else -> null
+        }
+        if (resp == null) Log.w(TAG, "404 $uri")
+        return resp ?: WebResourceResponse("text/plain", "utf-8", 404, "Not Found", emptyMap(),
+            ByteArrayInputStream(ByteArray(0)))
+    }
+
+    private fun internal(rel: String): InputStream? {
+        val f = java.io.File(mediaInternal, rel)
+        return if (f.isFile && f.canonicalPath.startsWith(mediaInternal.canonicalPath + java.io.File.separator)) f.inputStream() else null
+    }
+
+    private fun asset(assetPath: String, name: String): WebResourceResponse? {
+        val stream: InputStream = try { assets.open(assetPath) } catch (e: IOException) { return null }
+        return respond(stream, name)
+    }
+
+    private fun respond(stream: InputStream, name: String): WebResourceResponse {
+        val mime = mimeOf(name)
+        val body = when (mime) {
+            "text/html" -> injectInto(stream)
+            "text/css" -> CssTransforms.apply(stream)
+            else -> stream
+        }
+        return WebResourceResponse(mime, "utf-8", 200, "OK", mapOf("Access-Control-Allow-Origin" to "*"), body)
+    }
+
+    /** Global serve-time transform: Lunacy's scripts run first in every page. */
+    private fun injectInto(s: InputStream): InputStream {
+        val html = s.bufferedReader().readText()
+        val tag = "<link rel=\"stylesheet\" href=\"/__lunacy/fonts.css\">" +
+            "<script src=\"/__lunacy/compat.js\"></script><script src=\"/__lunacy/bridge.js\"></script>" +
+            "<script src=\"/__lunacy/net.js\"></script>"
+        val m = Regex("<head[^>]*>", RegexOption.IGNORE_CASE).find(html)
+        val out = if (m != null) html.substring(0, m.range.last + 1) + tag + html.substring(m.range.last + 1) else tag + html
+        return ByteArrayInputStream(out.toByteArray())
+    }
+
+    private fun mimeOf(p: String) = when (p.substringAfterLast('.', "").lowercase()) {
+        "html", "htm" -> "text/html"; "js" -> "application/javascript"; "css" -> "text/css"
+        "json" -> "application/json"; "png" -> "image/png"; "jpg", "jpeg" -> "image/jpeg"
+        "gif" -> "image/gif"; "svg" -> "image/svg+xml"; "ico" -> "image/x-icon"
+        "mp3" -> "audio/mpeg"; "wav" -> "audio/wav"; "ttf" -> "font/ttf"; "woff" -> "font/woff"
+        "m3u8" -> "application/vnd.apple.mpegurl"; "mp4", "m4a" -> "audio/mp4"; "aac" -> "audio/aac"; "ogg" -> "audio/ogg"
+        else -> "application/octet-stream"
+    }
+}
+
+/**
+ * Global serve-time CSS transforms. Each is a mechanical rule applied to every app's CSS;
+ * none names an app.
+ */
+object CssTransforms {
+    private val rule = Regex("\\{[^{}]*\\}")
+    private val borderImage = Regex("-webkit-border-image\\s*:(?!\\s*none)", RegexOption.IGNORE_CASE)
+
+    fun apply(s: InputStream): InputStream =
+        ByteArrayInputStream(borderImageNeedsStyle(s.bufferedReader().readText()).toByteArray())
+
+    /**
+     * 2011 WebKit drew -webkit-border-image whatever the border-style; newer Chromium
+     * computes border-width to 0 when border-style is none, so the image vanishes.
+     * Appended to the rule: Enyo's own CSS sets border-image next to `border-style: none`.
+     */
+    fun borderImageNeedsStyle(css: String): String = rule.replace(css) { m ->
+        if (borderImage.containsMatchIn(m.value)) m.value.dropLast(1) + ";border-style:solid;border-color:transparent}" else m.value
+    }
+}

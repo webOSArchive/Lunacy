@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- minSdk is 21 (Android 5): calls to newer APIs must fail the build. -->
+<lint>
+    <issue id="NewApi" severity="fatal" />
+    <!-- Lunacy is sideloaded and deliberately targets Android 5 first (docs/architecture.md, Platform target). -->
+    <issue id="ExpiredTargetSdkVersion" severity="ignore" />
+</lint>

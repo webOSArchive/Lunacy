@@ -1,0 +1,23 @@
+enyo.depends(
+	"launch/clockapp.js",
+	"main/main.js",
+	"main/alarmlist.js",
+	"main/alarmedit.js",
+	"main/prefs.js",
+	"utility/alarm.js",
+	"utility/alarmdbmanager.js",
+	"utility/audiomanager.js",
+	"utility/activitymanager.js",
+	"utility/dashboardmanager.js",
+	"utility/displaymanager.js",
+	"utility/keymanager.js",
+	"utility/powerdmanager.js",
+	"utility/prefsmanager.js",
+	"utility/utilities.js",
+	"controls/analog.js",
+	"controls/digital.js",
+	"css/clock.css",
+	"dashAlarm/dashAlarm.js",
+	"dashAlarm/dashAlarm.css"
+
+);

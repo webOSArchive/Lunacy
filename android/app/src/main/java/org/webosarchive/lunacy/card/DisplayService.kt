@@ -23,6 +23,21 @@ class DisplayService(private val context: Context) {
         bus.register(SERVICE, "control/getProperty") { _, p, reply -> reply(getProperty(p)) }
         bus.register(SERVICE, "control/setProperty") { _, p, reply -> reply(setProperty(p)) }
         bus.register(SERVICE, "control/status", Bus.CallHandler { status(it) })
+        bus.register(SERVICE, "control/setState") { _, p, reply -> reply(setState(p)) }
+    }
+
+    /**
+     * webOS's display states. Lunacy answers for the two Exhibition mode uses - Palm's
+     * Exhibition app starts it with {"state":"dock"} - and says plainly which of the others
+     * it hasn't got rather than accepting them and doing nothing.
+     */
+    var onDockMode: (Boolean) -> Unit = {}
+
+    private fun setState(p: JSONObject): String = when (p.optString("state")) {
+        "dock" -> { onDockMode(true); Bus.ok() }
+        "undock" -> { onDockMode(false); Bus.ok() }
+        "" -> Bus.error("state is required")
+        else -> Bus.error("Lunacy has no display state \"${p.optString("state")}\"")
     }
 
     /**

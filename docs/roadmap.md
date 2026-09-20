@@ -73,10 +73,17 @@ show live data. Per-app results and every fix, with the layer it landed in, are 
     doesn't serve yet (see fix-log.md).
   - Palm's settings apps stay in `local-assets/` for now: shipping Palm's code in the APK is
     codepoet's call, like Mojo's.
+- **Exhibition (2026-09-20).** Palm's Clock and Exhibition apps are bundled and run unchanged.
+  The Exhibition app's Start Exhibition button puts the shell into webOS's dock mode, where it
+  draws the Time face itself as LunaSysMgr did - all four of the reference TouchPad's faces,
+  swipeable. An app's own exhibition window is the next piece; noticing a real dock, and
+  standing in for Android's screen saver, is the integration after that.
 - **Next candidates:**
   - the remaining startup services (keys, display) and the media indexer's db8 kinds;
   - the rest of the settings apps: Date & Time, Language, Backup, Accounts, Updates, Location
     (each is one of the three cases above);
+  - an app's own Exhibition window, and `activitymanager`'s scheduled activities, which is what
+    the Clock's alarms need;
 
   - the border-image seams in Enyo dialogs;
   - a test suite from the apps in fix-log.md, run on WebView 37 and 64;

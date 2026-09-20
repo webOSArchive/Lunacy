@@ -1,0 +1,10 @@
+Palm's Clock (com.palm.app.clock 3.1.1904), as shipped on HP webOS 3.x.
+
+Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence; distributed by
+Lunacy as abandonware, like Mojo, the Prelude fonts and the TouchPad wallpapers: no owner has
+asserted rights since webOS was discontinued.
+
+Copied from the reference TouchPad, where it is pre-installed but lives in the user area of
+the filesystem (/media/cryptofs/apps). The app is here exactly as it was packaged, and Lunacy
+does not change it (rule 5 in CLAUDE.md). The build scripts and specs that shipped beside it
+(Rakefile, Gemfile, build.sh, ci_build.sh, spec/) are left out; nothing else is.

@@ -1,0 +1,40 @@
+body {
+	background:transparent;
+}
+.music-notification {
+	padding:0 5px;
+	background:transparent;
+}
+.music-notification .playback-controls .enyo-button {
+	-webkit-border-image:none;
+	background:none;
+}
+.music-notification .playback-controls .enyo-button.play .enyo-button-icon {
+	background-position:-32px 0;
+}
+.music-notification .playback-controls .enyo-button.enyo-button-down.play .enyo-button-icon {
+	background-position:-32px -32px;
+}
+.music-notification .playback-controls .enyo-button.play.paused .enyo-button-icon {
+	background-position:0 0;
+}
+.music-notification .playback-controls .enyo-button.enyo-button-down.play .enyo-button-icon {
+	background-position:0 -32px;
+}
+.music-notification .info {
+	font-size:14px;
+	line-height:1.3em;
+	margin: 0 0 0 8px;
+	color:#fff;
+}
+.music-notification .info div {
+	overflow:hidden;
+	text-overflow:ellipsis;
+	width: 100%;
+	white-space:nowrap;
+}
+.music-notification .info .title {
+	font-weight:bold;
+	font-size:16px;
+	line-height:1.4em;
+}

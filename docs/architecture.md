@@ -434,6 +434,35 @@ abandonware, like Mojo and the Prelude fonts (codepoet, 2026-09-20).
   install while Lunacy targets API 21. From API 23 it needs the user's consent, so a later
   target has to ask before Screen & Lock's brightness and timeout will take.
 
+### Exhibition
+
+webOS's Exhibition mode is what a TouchPad did on its Touchstone: the screen becomes a clock,
+or whatever app its owner chose. It is one of the things people remember about the device, so
+Lunacy has it, for use inside the environment first - noticing a real dock, or standing in for
+Android's own screen saver, comes later.
+
+- **Palm's Exhibition app runs unchanged** (`com.palm.app.exhibitionpreferences`, bundled). It
+  lists the apps that offer a face, switches them on and off, and its Start Exhibition button
+  is `com.palm.display/control/setState {"state":"dock"}` - which the shell answers by
+  entering the mode. The home button comes back out, and the screen is kept awake while it is
+  exhibiting, which is the point of a dock.
+- **The Time face is the shell's**, as it was LunaSysMgr's: the Exhibition app's own list calls
+  it "Time", adds it itself and won't let you switch it off, because no app provides it. Lunacy
+  draws it from the reference TouchPad's own QML
+  (`/usr/palm/sysmgr/uiComponents/DockModeTime`), not LunaCE's repo copy: webOS CE put a plain
+  face first and kept the three stock ones (glass analog, digital flipper, matte analog) behind
+  it, so there are four and dock mode opens on the plain one. Swipe to change face.
+- **Which apps offer a face** comes from `appinfo.json`, either way webOS accepted and both
+  present on the reference device: `"dockMode": true`, or `"exhibitionMode": true` with an
+  optional `"exhibitionModeOptions": {"title": ...}`.
+  `applicationManager/listDockModeLaunchPoints` answers with the records a TouchPad returns,
+  and `addDockModeLaunchPoint`/`removeDockModeLaunchPoint` turn one on or off, telling every
+  subscriber.
+- **Not yet:** an app's *own* exhibition view. On webOS the chosen app opened a window with
+  `attributes={"window":"dockMode"}` and the shell showed it; Lunacy shows the Time face
+  whichever app is enabled. That is the next piece, and it is the same window-type path
+  dashboards and popup alerts already take.
+
 ### System UI
 
 webOS served some UI from the OS itself, and apps reach it at its absolute path: Enyo 1's

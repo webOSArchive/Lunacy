@@ -1,0 +1,14 @@
+{
+	"debug": false,
+	"icon": "../../icon.png",
+	"id": "com.palm.app.clock",
+	"main": "../../index.html",
+	"noWindow": true,
+	"removable": false,
+	"splashicon": "../../icon-256x256.png",
+	"title": "Réveil",
+	"type": "web",
+	"uiRevision": 2,
+	"vendor": "HP",
+	"version": "3.1.1904"
+}

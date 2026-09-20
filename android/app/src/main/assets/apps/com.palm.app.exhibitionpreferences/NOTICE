@@ -1,0 +1,10 @@
+Palm's Exhibition (com.palm.app.exhibitionpreferences 1.0.0), as shipped on HP webOS 3.x.
+
+Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence; distributed by
+Lunacy as abandonware, like Mojo, the Prelude fonts and the TouchPad wallpapers: no owner has
+asserted rights since webOS was discontinued.
+
+Copied from the reference TouchPad's /usr/palm/applications. The app is here exactly as it was
+packaged, and Lunacy does not change it (rule 5 in CLAUDE.md). It lists the apps that support
+Exhibition Mode and starts it; Lunacy's shell draws the Exhibition clock itself, as
+LunaSysMgr did (see "Exhibition" in docs/architecture.md).

@@ -39,6 +39,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var displayService: org.webosarchive.lunacy.card.DisplayService
     /** The wallpaper view, reloaded when the preference changes. */
     private lateinit var wallpaperView: ImageView
+    /** /media/cryptofs/apps: installed packages first, then the apps bundled in the APK. */
+    private lateinit var files: AppFiles
     /** The webOS device Lunacy answers as, for every app-visible surface. */
     private val profile by lazy { org.webosarchive.lunacy.card.DeviceProfile.forScreen(this) }
     private lateinit var statusBar: StatusBar
@@ -48,6 +50,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var launcher: Launcher
     private var launcherOpen = false
     private lateinit var notifications: Notifications
+    /** Exhibition mode: webOS's dock-mode clock, over everything, while it is on. */
+    private lateinit var exhibition: ExhibitionLayer
+    private var exhibitionOn = false
     /** Catches taps outside the dashboard drop-down, which close it. */
     private lateinit var menuScrim: View
     private val bannerIds = java.util.concurrent.atomic.AtomicInteger(1)
@@ -61,7 +66,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
         WebView.setWebContentsDebuggingEnabled(true)
         luna = Luna(this)
-        val files = AppFiles(assets, java.io.File(filesDir, "cryptofs/apps"))
+        files = AppFiles(assets, java.io.File(filesDir, "cryptofs/apps"))
         jsServices = org.webosarchive.lunacy.card.JsServices(this, bus, files.root)
         server = AppServer(assets, files, jsServices.root)
         mediaServer = org.webosarchive.lunacy.card.MediaServer(jsServices.root)
@@ -122,6 +127,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }, onNoDashboards = { closeMenu() })
         statusBar.onNotificationTap = { if (!notifications.tapBanner()) toggleMenu() }
         root.addView(statusBar, FrameLayout.LayoutParams(MATCH_PARENT, luna.px(StatusBar.HEIGHT)))
+
+        exhibition = ExhibitionLayer(this, luna).apply {
+            visibility = View.GONE
+            onExit = { setExhibition(false) }
+        }
+        root.addView(exhibition, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
 
         setContentView(root)
         reportedOrientation = screenOrientation()
@@ -510,6 +521,36 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
     }.start()
 
+    /**
+     * Exhibition mode, which webOS entered when a TouchPad was put on its Touchstone and
+     * Palm's Exhibition app starts with display/control/setState {"state":"dock"}. The clock
+     * is the shell's own, as LunaSysMgr's was; the status bar says "Time", as a device does,
+     * and the home button comes back out.
+     */
+    private fun setExhibition(on: Boolean) {
+        if (on == exhibitionOn) return
+        exhibitionOn = on
+        if (on) {
+            closeMenu()
+            if (launcherOpen) closeLauncher()
+            exhibition.reset()
+            exhibition.visibility = View.VISIBLE
+            exhibition.bringToFront()
+            statusBar.bringToFront()
+            statusBar.title = "Time"
+            statusBar.setMode(StatusBar.Mode.APP)
+            // The screen is meant to stay on while it is exhibiting: that is the point of a dock.
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            exhibition.visibility = View.GONE
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            if (cards.maximized != null) onMaximized(cards.maximized!!) else onCardView()
+        }
+        cards.visibility = if (on) View.INVISIBLE else View.VISIBLE
+        fade(justType, !on && cards.maximized == null && !launcherOpen)
+        showDock(!on && cards.maximized == null)
+    }
+
     /** What the shell knows about the screen: real pixels, and the TouchPad px apps lay out in. */
     private fun displayInfo(): JSONObject {
         val dm = android.util.DisplayMetrics()
@@ -547,7 +588,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // webOS's preference and wallpaper store, and the two display settings Android lets
         // Lunacy really set. See docs/architecture.md, "Settings".
         displayService = org.webosarchive.lunacy.card.DisplayService(this)
+        displayService.onDockMode = { on -> runOnUiThread { setExhibition(on) } }
         displayService.register(bus)
+        org.webosarchive.lunacy.card.DockMode(this, registry).register(bus)
         systemService = org.webosarchive.lunacy.card.SystemService(jsServices.root, java.io.File(filesDir, "systemservice.json"))
         systemService.onPreferenceChanged = { key, value -> onPreferenceChanged(key, value) }
         systemService.register(bus)
@@ -558,7 +601,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         org.webosarchive.lunacy.card.ActivityManager().register(bus)
         val db8 = org.webosarchive.lunacy.card.Db8("com.palm.db", java.io.File(filesDir, "db8.sqlite")).also { it.register(bus) }
         val tempdb = org.webosarchive.lunacy.card.Db8("com.palm.tempdb", null).also { it.register(bus) }
-        configurator = org.webosarchive.lunacy.card.Configurator(packages.root, db8, tempdb)
+        configurator = org.webosarchive.lunacy.card.Configurator(files, db8, tempdb)
         configurator.run()
         bus.register("com.palm.applicationManager", "launch", launchHandler)
         bus.register("com.palm.applicationManager", "open", launchHandler)
@@ -676,6 +719,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     override fun onBackPressed() = homePressed()
 
     private fun homePressed() {
+        if (exhibitionOn) { setExhibition(false); return }
         if (notifications.menu.isOpen) { closeMenu(); return }
         notifications.popups.newest()?.let { onWindowClosed(it); return }
         if (launcher.editing || quickLaunch.editing) { exitEditMode(); return }

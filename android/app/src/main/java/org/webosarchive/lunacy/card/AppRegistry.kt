@@ -73,6 +73,19 @@ class AppFiles(private val assets: AssetManager, val root: File) {
 
     fun isInstalled(id: String) = File(root, "${Packages.APPS}/$id/appinfo.json").isFile
 
+    /**
+     * The names in a folder under /media/cryptofs/apps, installed packages and bundled apps
+     * merged, the way [open] merges files. A bundled app's configuration lives in the APK, so
+     * anything that walks an app's folders has to look in both.
+     */
+    fun list(rel: String): List<String> {
+        val installed = File(root, rel).list().orEmpty().toList()
+        val bundled = if (rel.startsWith("${Packages.APPS}/"))
+            assets.list("apps/" + rel.removePrefix("${Packages.APPS}/")).orEmpty().toList()
+        else emptyList()
+        return (installed + bundled).distinct().sorted()
+    }
+
     fun appIds(): List<String> =
         (File(root, Packages.APPS).list().orEmpty().toList() + assets.list("apps").orEmpty()).distinct().sorted()
 }

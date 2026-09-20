@@ -739,16 +739,19 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             entries += ExhibitionMenu.Entry(app.id, dockMode.title(app.id), luna.appIcon(app))
         }
         exhibitionMenu.entries = entries
-        exhibitionMenu.current = exhibitionApp
         exhibitionMenu.visibility = View.VISIBLE
         exhibitionMenu.bringToFront()
         statusBar.bringToFront()
+        // The title reads "Choose an App" while the menu is down, as it does on a device.
+        statusBar.title = "Choose an App"
         menuScrim.visibility = View.VISIBLE
     }
 
     private fun closeExhibitionMenu() {
+        if (exhibitionMenu.visibility != View.VISIBLE) return
         exhibitionMenu.visibility = View.GONE
         if (!notifications.menu.isOpen) menuScrim.visibility = View.GONE
+        statusBar.title = exhibitionApp?.let { dockMode.title(it) } ?: "Time"
     }
 
     /** A face chosen from that menu: null is the shell's own Time. */

@@ -1,0 +1,10 @@
+This keyboard is built from LunaCE's tablet keyboard.
+
+- The key art (app/src/main/assets/keyboard) is LunaCE's, Apache 2.0. See its NOTICE.
+- The layout, the alternate characters, the press-and-hold lists and the timings are ported
+  from LunaCE's Src/ime/TabletKeyboard.cpp, TabletKeymap.cpp and tabletkeymaps/en.h, also
+  Apache 2.0, Copyright (c) 2008-2012 Hewlett-Packard Development Company, L.P.
+- The Prelude fonts (app/src/main/assets/fonts) ship as abandonware. See their NOTICE.
+
+LunaCE: https://github.com/webOSArchive/LunaCE
+Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0

@@ -1,0 +1,8 @@
+These images come from LunaCE (https://github.com/webOSArchive/LunaCE), the community
+LunaSysMgr, originally released by Hewlett-Packard as Open webOS.
+Copyright (c) 2008-2012 Hewlett-Packard Development Company, L.P.
+Licensed under the Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0
+
+The key plates, icons and popups are images/keyboard-tablet. trackball.png is
+images/statusBar/slider-handle.png and menu-arrow-down.png is images/menu-arrow-down.png,
+which LunaCE's tablet keyboard borrowed for its scroll ball.

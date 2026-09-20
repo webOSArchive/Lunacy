@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The shell's own look: full screen, no action bar, drawn dark. -->
+    <style name="Theme.Lunacy" parent="@android:style/Theme.Material.NoActionBar.Fullscreen" />
+
+    <!--
+        Only ShellActivity uses this. Android paints an activity's windowBackground as the
+        starting window, before the process has even been created, so the logo is up for the
+        whole cold start - which on a fresh install is the couple of seconds the shell spends
+        unpacking its bundled apps. ShellActivity drops the drawable once its first frame is
+        drawn, so the bitmap isn't held for the session.
+    -->
+    <style name="Theme.Lunacy.Splash" parent="Theme.Lunacy">
+        <item name="android:windowBackground">@drawable/splash</item>
+    </style>
+</resources>

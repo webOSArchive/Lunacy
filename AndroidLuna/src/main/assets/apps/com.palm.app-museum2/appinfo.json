@@ -1,0 +1,23 @@
+{
+    "id": "com.palm.app-museum2",
+    "version": "2.9.5",
+    "versionNote": "LuneOS fixes and enhancements",
+    "lastModifiedTime": "2020-12-04T13:04:48-04:00",
+    "vendor": "webOS Archive",
+    "type": "web",
+    "main": "index.html",
+    "title": "WebOS App Museum II",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "splashBackground": "images/splash-screenshot-default.png",
+    "uiRevision": 2,
+    "keywords": ["Archive", "Catalog", "Museum", "Apps"],
+    "universalSearch": {
+        "search": {
+            "displayName": "WebOS App Museum II",
+            "url": "appcatalog.webosarchive.org",
+            "launchParam": { "common": { "sceneType": "search", "params": { "type": "query", "search": "#{searchTerms}" } } }
+        }
+    },
+    "requiredPermissions": ["appmanager.management", "preferences.system"]
+}

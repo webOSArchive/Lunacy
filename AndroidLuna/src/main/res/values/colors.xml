@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The background the logo artwork is composed on (Meta/Lunacy-NoBorder.jpg), so the
+         square meets the screen without a seam. -->
+    <color name="splash_background">#161f28</color>
+</resources>

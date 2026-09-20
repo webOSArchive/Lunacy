@@ -1,0 +1,6 @@
+WebOS App Museum II, by webOS Archive (https://appcatalog.webosarchive.org), as packaged for
+webOS devices and unchanged here. It is the catalogue Lunacy gets its apps from, so it is
+bundled: a fresh install has somewhere to go.
+
+The Museum is itself an Enyo app and runs in Lunacy like any other card. It carries LuneOS's
+fixes and enhancements to Palm's original App Catalog client.

@@ -1,24 +1,24 @@
 # Personal background; keep out of the repo
-docs/motivation.md
+Docs/motivation.md
 
 # Spike: third-party apps and upstream clones stay local; never commit or redistribute them.
-spike/vendor/
-spike/apps-src/
-spike/results/
-spike/android/app/src/main/assets/apps/
-spike/android/app/src/main/assets/fw/
-spike/android/.gradle/
-spike/android/app/build/
-spike/android/build/
-spike/android/local.properties
+Workbench/vendor/
+Workbench/apps-src/
+Workbench/results/
+Workbench/android/app/src/main/assets/apps/
+Workbench/android/app/src/main/assets/fw/
+Workbench/android/.gradle/
+Workbench/android/app/build/
+Workbench/android/build/
+Workbench/android/local.properties
 
-# Lunacy app: build output and local-only assets (frameworks and apps under review, HP fonts/wallpapers)
-android/local-assets/
-android/local-jni/
-android/.gradle/
-android/build/
-android/app/build/
-android/local.properties
+# Local-only assets: frameworks and apps under review, populated by AndroidLuna/fetch-assets.sh
+AndroidLuna/local-assets/
+AndroidLuna/local-jni/
 
-# Kotlin build scratch
-android/.kotlin/
+# Gradle build output and local configuration
+.gradle/
+build/
+out/
+local.properties
+.kotlin/

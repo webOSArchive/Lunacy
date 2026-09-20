@@ -2,7 +2,7 @@
 
 Lunacy runs legacy webOS apps on Android. It combines a simulated Luna shell, modernized
 Enyo/Mojo frameworks and a simulated Luna service bus. Read [README.md](README.md) and
-[docs/architecture.md](docs/architecture.md) first.
+[Docs/architecture.md](Docs/architecture.md) first.
 
 ## People
 
@@ -28,12 +28,20 @@ Enyo/Mojo frameworks and a simulated Luna service bus. Read [README.md](README.m
 7. **Third-party assets carry a NOTICE.** LunaCE images are Apache 2.0; the Prelude fonts,
    TouchPad wallpapers and Mojo ship as abandonware. Anything new copied from a device or
    another project gets a NOTICE with its source and status.
-8. **`docs/motivation.md` is personal and gitignored.** Don't copy its content into committed
+8. **`Docs/motivation.md` is personal and gitignored.** Don't copy its content into committed
    files.
 9. **A card is a window, not an app.** Apps own several windows and a lifecycle; see "App
    lifecycle" in the architecture doc.
 10. **Caller identity comes from the origin**, never from what the page claims.
 11. Ask before any outward-facing action (pushes, PRs, issues, App Museum writes).
+
+## Layout
+
+One Gradle root builds two APKs. `AndroidLuna/` is the shell; `LunaKeyboard/` is the optional
+companion keyboard and depends on nothing in Lunacy. `LunaRuntimes/enyo-1.0/` and
+`LunaRuntimes/mojo/` hold Lunacy's changes to the frameworks apps load from the OS, as patch
+series applied to a stock tree by `AndroidLuna/fetch-assets.sh`. See
+[BUILDING.md](BUILDING.md); `Docs/dev-workflow.md` has the folder-by-folder table.
 
 ## Platform
 
@@ -46,14 +54,14 @@ factory WebView Chromium 37.
   without listing them.
 - Test on the device over `adb`, and inspect cards through `chrome://inspect`.
 - Record every change made to a test device (settings, installed packages, WebView
-  versions) in [docs/android5-setup.md](docs/android5-setup.md).
+  versions) in [Docs/android5-setup.md](Docs/android5-setup.md).
 - A real TouchPad (webOS CE 3.1.0) is the reference for how webOS behaved. Reach it over
-  `novacom`; `spike/probe` is a probe app for measuring the contract.
+  `novacom`; `Workbench/probe` is a probe app for measuring the contract.
 
 ## Resuming work
 
-Start with "Where things stand" in [docs/roadmap.md](docs/roadmap.md), then
-[docs/dev-workflow.md](docs/dev-workflow.md) for devices and tools. Check every visual change
+Start with "Where things stand" in [Docs/roadmap.md](Docs/roadmap.md), then
+[Docs/dev-workflow.md](Docs/dev-workflow.md) for devices and tools. Check every visual change
 against the reference TouchPad at the same scale before calling it done.
 
 ## Priority

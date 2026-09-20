@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The gravity goes on the bitmap, not on the layer-list item: android:gravity on an <item>
+    is API 23, and Lunacy starts at 21.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splash_background" />
+    <item>
+        <bitmap android:src="@drawable/lunacy_logo" android:gravity="center" />
+    </item>
+</layer-list>

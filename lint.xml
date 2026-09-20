@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- minSdk is 21 (Android 5): calls to newer APIs must fail the build. -->
+<lint>
+    <issue id="NewApi" severity="fatal" />
+    <!-- Lunacy and the keyboard are sideloaded and deliberately target Android 5 first
+         (Docs/architecture.md, Platform target). -->
+    <issue id="ExpiredTargetSdkVersion" severity="ignore" />
+</lint>

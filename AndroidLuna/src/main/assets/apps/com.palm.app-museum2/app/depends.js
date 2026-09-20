@@ -1,0 +1,12 @@
+enyo.depends(
+	"museumApp.js",
+	"appMenu.js",
+	"preferencesPopup.js",
+	"aboutPopup.js",
+	"details.js",
+	"imageList.js",
+	"categories.js",
+	"companyAppList.js",
+	"appList.js",
+	"appItem.js"
+);

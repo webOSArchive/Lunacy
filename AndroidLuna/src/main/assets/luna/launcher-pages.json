@@ -1,0 +1,48 @@
+{
+	"_comment": [
+		"The launcher's pages, where a fresh install puts the apps it ships with, and how an app",
+		"with no place of its own finds one.",
+		"LunaCE's launcher has four built-in pages (apps, downloads, favorites, prefs) and reads",
+		"/etc/palm/launcher3/app-keywords-to-designator-map.txt for their display names and for a",
+		"keyword-to-page map; AppMonitor::pageDesignatorForWebOSApp tries an app's category first,",
+		"then each of its keywords. The reference TouchPad's own map renames favorites to GAMES and",
+		"prefs to SETTINGS, and maps webOS Archive's wosa-settings keyword to prefs.",
+		"'layout' is Lunacy's /etc/palm/default-launcher-page-layout.json, in the same shape as the",
+		"device's: the page each bundled app starts on, in the order it appears there. The device's",
+		"own file puts every settings app on prefs (Exhibition included, which carries no keywords),",
+		"the app catalogue alone on downloads, and names no favorites page at all - so Games starts",
+		"empty here too. Anything not named falls back to the keyword map, then to the first page.",
+		"Once the user moves an icon, their arrangement wins: this is only the starting point."
+	],
+	"pages": [
+		{"designator": "apps", "name": "apps"},
+		{"designator": "downloads", "name": "downloads"},
+		{"designator": "favorites", "name": "games"},
+		{"designator": "prefs", "name": "settings"}
+	],
+	"layout": [
+		{"title": "apps", "items": [
+			"com.palm.app.clock_default",
+			"org.webosarchive.lunacy.notifytest_default"
+		]},
+		{"title": "downloads", "items": [
+			"com.palm.app-museum2_default"
+		]},
+		{"title": "prefs", "items": [
+			"com.palm.app.deviceinfo_default",
+			"com.palm.app.exhibitionpreferences_default",
+			"com.palm.app.screenlock_default",
+			"com.palm.app.soundsandalerts_default",
+			"com.palm.app.wifi_default",
+			"com.palm.app.help_default"
+		]}
+	],
+	"keywords": {
+		"wosa-settings": "prefs",
+		"settings": "prefs",
+		"preferences": "prefs",
+		"help": "prefs",
+		"game": "favorites",
+		"games": "favorites"
+	}
+}

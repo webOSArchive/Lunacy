@@ -284,8 +284,19 @@ product; being "close enough" is not the goal.
   - `com.palm.preferences/systemProperties/Get` (`DMMODEL`, `PRODoID`, `boardType`,
     `deviceName`, `version`, the build fields);
   - `X-Palm-Carrier` on every request the shim sends (`c090-01`, the WiFi TouchPad's).
-  - The device's own identity is generated per install, not copied from anyone's device: an
-    HP-shaped serial (`ProdSN` and `deviceInfo.serialNumber` agree) and a 40-hex `nduid`.
+  - **The device's identity is derived, not random, and can be carried over.** webOS Archive's
+    services know a device by its `nduid` - the App Museum and the shared updater library both
+    send it as `clientid` - and app licences were tied to it, so it has to be stable: Lunacy
+    derives it (and the HP-shaped serial that `ProdSN` and `deviceInfo.serialNumber` share)
+    from this device's own hardware ids, as a SHA-1, which is 40 hex digits exactly as an
+    nduid is. Reinstalling Lunacy gives the same id back, so a service doesn't count a new
+    device each time, and the hardware ids themselves never leave the device.
+  - Someone moving off failing hardware can type their TouchPad's own id into Device Info and
+    be the same device here; "Use This Device's ID" puts back the derived one. There is no
+    "new random id": every change is one the owner asked for. Only Lunacy's own bundled apps
+    may set it (`org.webosarchive.lunacy/system/setDeviceId`), and the caller is taken from
+    the window, never from the page (rule 10), so an installed app can't change the device's
+    identity underneath its owner.
   - The screen is the real one. A TouchPad reported its own screen, and an app that lays out
     from `deviceInfo` should use the room it actually has; like a device's, the values don't
     change when the screen turns (see "Rotation" below).

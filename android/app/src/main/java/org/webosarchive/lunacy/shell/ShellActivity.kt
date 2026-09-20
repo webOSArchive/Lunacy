@@ -124,6 +124,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         root.addView(statusBar, FrameLayout.LayoutParams(MATCH_PARENT, luna.px(StatusBar.HEIGHT)))
 
         setContentView(root)
+        reportedOrientation = screenOrientation()
+        (getSystemService(DISPLAY_SERVICE) as android.hardware.display.DisplayManager)
+            .registerDisplayListener(displayListener, android.os.Handler(android.os.Looper.getMainLooper()))
         seedMediaInternal()
         watchKeyboard(root)
         statusBar.onTitleTap = { toggleAppMenu() }
@@ -131,6 +134,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         goImmersive()
 
         handleIntent(intent)
+    }
+
+    override fun onDestroy() {
+        (getSystemService(DISPLAY_SERVICE) as android.hardware.display.DisplayManager)
+            .unregisterDisplayListener(displayListener)
+        super.onDestroy()
     }
 
     /** Lunacy is single-task: later launch requests (e.g. from adb or, later, Android intents) arrive here. */
@@ -414,15 +423,35 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
     }
 
+    /** The orientation the windows have been told about. */
+    private var reportedOrientation = ""
+
     /**
-     * The screen turned. The activity handles the configuration itself (no recreate), so the
-     * shell relays out and every window learns the new orientation before its own resize
-     * event arrives, which is when Enyo reads PalmSystem.screenOrientation.
+     * The screen turned. A configuration change isn't enough on its own: turning the tablet
+     * end for end changes the rotation without changing the orientation or the size, so
+     * Android doesn't report a configuration change at all. The display listener sees every
+     * rotation, and both paths end here.
      */
+    private val displayListener = object : android.hardware.display.DisplayManager.DisplayListener {
+        override fun onDisplayChanged(displayId: Int) = updateOrientation()
+        override fun onDisplayAdded(displayId: Int) {}
+        override fun onDisplayRemoved(displayId: Int) {}
+    }
+
+    /**
+     * Every window learns the new orientation before its own resize event arrives, which is
+     * when Enyo reads PalmSystem.screenOrientation.
+     */
+    private fun updateOrientation() {
+        val o = screenOrientation()
+        if (o == reportedOrientation) return
+        reportedOrientation = o
+        running.values.flatten().forEach { it.setScreenOrientation(o) }
+    }
+
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
-        val o = screenOrientation()
-        running.values.flatten().forEach { it.setScreenOrientation(o) }
+        updateOrientation()
         goImmersive()
     }
 

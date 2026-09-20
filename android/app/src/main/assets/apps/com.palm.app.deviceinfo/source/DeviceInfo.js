@@ -37,9 +37,14 @@ enyo.kind({
 						{kind: "InfoRow", name: "battery", label: $L("Battery")},
 						{kind: "InfoRow", name: "serial", label: $L("Serial Number")}
 					]},
+					{kind: "RowGroup", caption: $L("webOS Identity"), components: [
+						{kind: "InfoRow", name: "reports", label: $L("Apps Are Told")},
+						{kind: "InfoRow", name: "webosSerial", label: $L("Serial Number")},
+						{kind: "InfoRow", name: "deviceId", label: $L("Device ID"), small: true, tapHighlight: true, onclick: "editDeviceId"}
+					]},
+					{name: "deviceIdNote", className: "note"},
 					{kind: "RowGroup", caption: $L("Lunacy"), components: [
 						{kind: "InfoRow", name: "version", label: $L("Version")},
-						{kind: "InfoRow", name: "reports", label: $L("Reports To Apps As")},
 						{kind: "InfoRow", name: "enyo", label: $L("Enyo Framework")},
 						{kind: "InfoRow", name: "node", label: $L("Node (JS Services)")},
 						{kind: "InfoRow", name: "apps", label: $L("Apps Installed")},
@@ -58,6 +63,26 @@ enyo.kind({
 				]}
 			]}
 		]},
+		// Changing the device id: a power user's migration, so it explains itself and takes the
+		// id written however it was copied off the old device.
+		// Enyo 1's own dialog, as every app's dialogs look here: it isn't centred the way the
+		// framework's openAtCenter() intends, which is worth comparing against a TouchPad -
+		// it would be the same for every app's dialogs, not just this one.
+		{kind: "Dialog", name: "idDialog", lazy: false, components: [
+			{content: $L("webOS Device ID"), className: "dialog-title"},
+			{className: "note", content: $L("webOS Archive's services and some apps know a device by this id, and old licences were tied to it. Set it to a TouchPad's own id to carry that device's history into Lunacy.")},
+			{kind: "Input", name: "idInput", className: "id-input", spellcheck: false, autocapitalize: "lowercase", hint: $L("40 hexadecimal digits")},
+			{name: "idError", className: "id-error", showing: false},
+			{className: "note", content: $L("Apps that are open keep the old id until they are closed and started again.")},
+			{layoutKind: "HFlexLayout", pack: "center", components: [
+				{kind: "Button", caption: $L("Cancel"), onclick: "closeDeviceId"},
+				// Only once an id has been carried over, and it puts back the one derived from
+				// this device rather than a new random one: a service counting devices
+				// shouldn't see a new one every time somebody taps a button.
+				{kind: "Button", name: "resetId", showing: false, caption: $L("Use This Device's ID"), onclick: "resetDeviceId"},
+				{kind: "Button", className: "enyo-button-affirmative", caption: $L("Save"), onclick: "saveDeviceId"}
+			]}
+		]},
 		{kind: "Dialog", lazy: false, components: [
 			{name: "errorText"},
 			{layoutKind: "HFlexLayout", pack: "center", components: [
@@ -72,7 +97,8 @@ enyo.kind({
 		]},
 		{kind: "PalmService", service: "palm://org.webosarchive.lunacy/", components: [
 			{name: "getEnvironment", method: "system/getEnvironment", onResponse: "gotEnvironment"},
-			{name: "openSettings", method: "android/openSettings", onResponse: "openedSettings"}
+			{name: "openSettings", method: "android/openSettings", onResponse: "openedSettings"},
+			{name: "setDeviceId", method: "system/setDeviceId", onResponse: "deviceIdSet"}
 		]}
 	],
 	create: function() {
@@ -98,9 +124,17 @@ enyo.kind({
 		this.$.battery.setValue(d.battery >= 0 ? d.battery + "%" + (d.charging ? " " + $L("(charging)") : "") : $L("unknown"));
 		this.$.serial.setValue(d.serial);
 		this.$.version.setValue(l.version ? l.version + " (" + $L("build") + " " + l.build + ")" : "");
-		// The one row that says the quiet part: apps are told this is a webOS device, because
-		// that is the contract they were written against. Nothing else here pretends.
-		this.$.reports.setValue(l.reportsAs ? l.reportsAs + ", " + l.reportsWebOS : l.reportsWebOS);
+		// The rows that say the quiet part: apps are told this is a webOS device, because that
+		// is the contract they were written against. Nothing else here pretends.
+		var w = r.webos || {};
+		this.$.reports.setValue(w.model ? w.model + ", " + w.version : l.reportsWebOS);
+		this.$.webosSerial.setValue(w.serial);
+		this.deviceId = w.nduid || "";
+		this.$.deviceId.setValue(this.deviceId);
+		this.carriedOver = w.nduidSource === "user";
+		this.$.deviceIdNote.setContent(this.carriedOver
+			? $L("This device id was carried over by you. Tap it to change it.")
+			: $L("This device id comes from this tablet's own hardware, so it stays the same if Lunacy is reinstalled. Tap it to use a TouchPad's id instead."));
 		this.$.enyo.setValue(l.enyo);
 		this.$.node.setValue(l.node || $L("not available"));
 		this.$.apps.setValue(String(l.apps));
@@ -128,6 +162,30 @@ enyo.kind({
 		var gb = n / (1024 * 1024 * 1024);
 		return gb >= 1 ? (Math.round(gb * 10) / 10) + " GB" : Math.round(n / (1024 * 1024)) + " MB";
 	},
+	editDeviceId: function() {
+		this.$.idInput.setValue(this.deviceId || "");
+		this.$.idError.setShowing(false);
+		this.$.resetId.setShowing(Boolean(this.carriedOver));
+		this.$.idDialog.open();
+	},
+	closeDeviceId: function() {
+		this.$.idDialog.close();
+	},
+	resetDeviceId: function() {
+		this.$.setDeviceId.call({reset: true});
+	},
+	saveDeviceId: function() {
+		this.$.setDeviceId.call({nduid: this.$.idInput.getValue()});
+	},
+	deviceIdSet: function(inSender, r) {
+		if (!r || !r.returnValue) {
+			this.$.idError.setContent(r && r.errorText || $L("Couldn't set the device id."));
+			this.$.idError.setShowing(true);
+			return;
+		}
+		this.$.idDialog.close();
+		this.refresh();
+	},
 	openAndroid: function() {
 		this.$.openSettings.call({panel: "about"});
 	},
@@ -149,7 +207,8 @@ enyo.kind({
 	kind: "Item",
 	tapHighlight: false,
 	layoutKind: "HFlexLayout",
-	published: {label: "", value: ""},
+	//* small: for a value too long for the row's usual size, like a 40-digit device id.
+	published: {label: "", value: "", small: false},
 	components: [
 		{name: "label", className: "info-label"},
 		{name: "value", flex: 1, className: "info-value"}
@@ -158,6 +217,7 @@ enyo.kind({
 		this.inherited(arguments);
 		this.labelChanged();
 		this.valueChanged();
+		this.$.value.addRemoveClass("info-value-small", this.small);
 	},
 	labelChanged: function() {
 		this.$.label.setContent(this.label);

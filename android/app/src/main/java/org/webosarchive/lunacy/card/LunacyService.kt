@@ -32,6 +32,7 @@ class LunacyService(
     fun register(bus: Bus) {
         bus.register(SERVICE, "system/getEnvironment") { _, _, reply -> reply(environment()) }
         bus.register(SERVICE, "files/list") { _, p, reply -> reply(listFiles(p)) }
+        bus.register(SERVICE, "system/setDeviceId") { caller, p, reply -> reply(setDeviceId(caller, p)) }
         bus.register(SERVICE, "android/openSettings") { _, p, reply -> reply(openSettings(p.optString("panel"))) }
         bus.register(SERVICE, "android/settingsPanels") { _, _, reply ->
             reply(Bus.ok(mapOf("panels" to org.json.JSONArray(PANELS.keys.sorted()))))
@@ -54,6 +55,13 @@ class LunacyService(
         j.put("android", JSONObject()
             .put("release", Build.VERSION.RELEASE).put("sdk", Build.VERSION.SDK_INT)
             .put("build", Build.DISPLAY).put("abi", abi()))
+        val profile = DeviceProfile.forScreen(context)
+        j.put("webos", JSONObject()
+            .put("model", profile.modelName)
+            .put("version", profile.versionString)
+            .put("serial", DeviceProfile.serial(context, profile))
+            .put("nduid", DeviceProfile.nduid(context))
+            .put("nduidSource", DeviceProfile.nduidSource(context)))
         j.put("device", JSONObject()
             .put("manufacturer", Build.MANUFACTURER).put("model", Build.MODEL)
             .put("serial", serial()).put("ram", totalRam())
@@ -141,6 +149,46 @@ class LunacyService(
         }.getOrDefault("")
         cachedNode = v
         return v
+    }
+
+    /**
+     * Sets webOS's device id (nduid), or goes back to this device's own with
+     * `{"reset": true}`.
+     *
+     * Why this exists: webOS Archive's services know a device by its nduid - the App Museum
+     * and the shared updater library both send it as `clientid` - and app licences were tied
+     * to it. Someone moving off a TouchPad that is failing can carry its id across and be the
+     * same device here, which is the whole point of Lunacy. On a device the id came from the
+     * hardware's token and couldn't be changed, but it was never a secret either: every app
+     * could read it.
+     *
+     * Only Lunacy's own apps may call this. The caller's id comes from the window it was
+     * called in, never from anything the page says (rule 10), so an installed app can't
+     * quietly change the device's identity underneath its owner.
+     */
+    private fun setDeviceId(caller: String, p: JSONObject): String {
+        if (!ownApp(caller)) {
+            return Bus.error("Only Lunacy's own apps can set the device id (asked by $caller)", -1)
+        }
+        // Back to the id derived from this device's hardware. Never a new random one: a
+        // service counting devices shouldn't see a new one every time somebody taps a button.
+        if (p.optBoolean("reset")) {
+            return Bus.ok(mapOf("nduid" to DeviceProfile.clearNduid(context), "source" to DeviceProfile.DERIVED))
+        }
+        val raw = p.optString("nduid")
+        if (raw.isEmpty()) return Bus.error("nduid is required")
+        val id = DeviceProfile.setNduid(context, raw)
+            ?: return Bus.error("A webOS device id is 40 hexadecimal digits; that is ${raw.trim().length} characters")
+        return Bus.ok(mapOf("nduid" to id, "source" to DeviceProfile.USER))
+    }
+
+    /**
+     * An app Lunacy ships and owns, rather than one the user installed. An installed package
+     * with the same id replaces the bundled app, so the registry has the last word.
+     */
+    private fun ownApp(appId: String): Boolean {
+        val known = appId == "com.palm.app.deviceinfo" || appId.startsWith("org.webosarchive.lunacy")
+        return known && registry.get(appId)?.userInstalled == false
     }
 
     // ---- files, for Lunacy's file picker ----

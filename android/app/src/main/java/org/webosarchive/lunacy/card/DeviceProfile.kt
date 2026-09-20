@@ -1,7 +1,7 @@
 package org.webosarchive.lunacy.card
 
 import android.content.Context
-import java.security.SecureRandom
+import android.os.Build
 
 /**
  * The webOS device Lunacy reports itself as.
@@ -117,28 +117,84 @@ enum class DeviceProfile(
             if (context.resources.configuration.smallestScreenWidthDp >= 600) TOUCHPAD else PRE3
 
         /**
-         * This install's serial, in HP's shape (prefix plus seven characters). Kept, so it
-         * doesn't change under an app that remembers it, and generated rather than copied:
-         * it says "a TouchPad", not "codepoet's TouchPad".
+         * This device's serial, in HP's shape (prefix plus seven characters). Derived from the
+         * same hardware ids as the device id, so it too survives a reinstall - some apps send
+         * it to webOS Archive's services as well - and made up rather than copied: it says
+         * "a TouchPad", not "codepoet's TouchPad".
          */
         fun serial(context: Context, profile: DeviceProfile): String {
-            val prefs = context.getSharedPreferences("device", Context.MODE_PRIVATE)
-            val key = "serial-${profile.name.lowercase()}"
-            prefs.getString(key, null)?.let { return it }
             val alphabet = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ"
-            val random = SecureRandom()
-            val serial = profile.serialPrefix + (1..7).map { alphabet[random.nextInt(alphabet.length)] }.joinToString("")
-            prefs.edit().putString(key, serial).apply()
-            return serial
+            val digest = java.security.MessageDigest.getInstance("SHA-1")
+                .digest(("lunacy-serial:" + profile.name + ":" + derivedNduid(context)).toByteArray())
+            return profile.serialPrefix + (0 until 7).map { alphabet[(digest[it].toInt() and 0xff) % alphabet.length] }.joinToString("")
         }
 
-        /** webOS's device id: 40 hex digits, one per install. */
-        fun nduid(context: Context): String {
-            val prefs = context.getSharedPreferences("device", Context.MODE_PRIVATE)
-            prefs.getString("nduid", null)?.let { return it }
-            val id = ByteArray(20).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
-            prefs.edit().putString("nduid", id).apply()
+        /**
+         * webOS's device id: 40 hex digits.
+         *
+         * This is the identity webOS Archive's services know a device by - the App Museum and
+         * the shared updater library both send it as `clientid` - and app licences were tied
+         * to it too. So two things matter about it: it has to be **stable**, and its owner has
+         * to be able to **carry one over**.
+         *
+         * Stable: it is derived from this device's own hardware ids rather than made up, so
+         * reinstalling Lunacy gives the same id back, and a service's analytics don't see a
+         * new device every time. It is a SHA-1 of them, which is 40 hex digits exactly, as a
+         * webOS nduid is; the hardware ids themselves don't leave the device.
+         *
+         * Carried over: [setNduid] stores one the owner typed in - a TouchPad's own id, say,
+         * when they are moving off hardware that is failing - and that one wins until they
+         * ask for this device's own back ([clearNduid]). On a real device the id came from the
+         * hardware's token and couldn't be changed, but it was never a secret either: every
+         * app could read it.
+         */
+        fun nduid(context: Context): String =
+            context.getSharedPreferences("device", Context.MODE_PRIVATE).getString("nduid", null)
+                ?: derivedNduid(context)
+
+        /** Whether the id is this device's own or one its owner carried over. */
+        fun nduidSource(context: Context): String =
+            if (context.getSharedPreferences("device", Context.MODE_PRIVATE).contains("nduid")) USER else DERIVED
+
+        /**
+         * This device's own id: the same after a reinstall, different on another device.
+         *
+         * ANDROID_ID survives reinstalling and changes on a factory reset, which is as close
+         * to a webOS nduid as Android offers. From API 26 it is per signing key as well, so an
+         * unsigned rebuild would land on a different id; a later target should keep the first
+         * one it computes instead (a ratchet item).
+         */
+        fun derivedNduid(context: Context): String {
+            @Suppress("HardwareIds")
+            val androidId = android.provider.Settings.Secure.getString(
+                context.contentResolver, android.provider.Settings.Secure.ANDROID_ID).orEmpty()
+            @Suppress("DEPRECATION")
+            val serial = Build.SERIAL.orEmpty()
+            val seed = "lunacy-nduid:" + androidId + ":" + serial + ":" + Build.MANUFACTURER + ":" + Build.MODEL
+            // A webOS nduid is 40 hex digits, which is exactly a SHA-1.
+            return java.security.MessageDigest.getInstance("SHA-1")
+                .digest(seed.toByteArray()).joinToString("") { "%02x".format(it) }
+        }
+
+        /**
+         * Stores an id its owner typed in. Accepts it written with spaces or dashes and in any
+         * case, which is how people copy one off an old device, and stores webOS's own form:
+         * 40 lower-case hex digits. Returns the stored id, or null if it isn't one.
+         */
+        fun setNduid(context: Context, raw: String): String? {
+            val id = raw.filterNot { it == ' ' || it == '-' || it == ':' }.lowercase()
+            if (!Regex("^[0-9a-f]{40}$").matches(id)) return null
+            context.getSharedPreferences("device", Context.MODE_PRIVATE).edit().putString("nduid", id).apply()
             return id
         }
+
+        /** Back to this device's own id. Deterministic, so nothing sees a new device. */
+        fun clearNduid(context: Context): String {
+            context.getSharedPreferences("device", Context.MODE_PRIVATE).edit().remove("nduid").apply()
+            return derivedNduid(context)
+        }
+
+        const val DERIVED = "derived"
+        const val USER = "user"
     }
 }

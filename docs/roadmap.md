@@ -296,6 +296,11 @@ corpus survey says how many apps this phase can reach, and whether it is worth d
   install rather than copied from a real device. Lunacy's own Device Info, the shell and the
   bus's service names stay truthful - the spoof is for apps, not a claim to be webOS. The
   Pre3's values are the community's record and still need measuring on hardware.
+- **The device id is derived and can be carried over** (codepoet, 2026-09-20): `nduid` and the
+  serial come from this device's own hardware ids, so a reinstall gives the same id back and
+  the services' analytics don't see a new device; and Device Info lets its owner type in a
+  TouchPad's id, so a migration off dying hardware keeps that device's history. No random
+  regeneration, for the same reason.
 - **webOS version:** Lunacy reports webOS CE 3.1.0, the community-supported version, as the
   reference TouchPad does (codepoet, 2026-09-19); a phone would report the Pre3's 2.2.4.
 - **Palm's code ships** (codepoet, 2026-09-20): Palm's own settings apps go in the APK with a

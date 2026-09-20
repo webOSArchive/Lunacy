@@ -40,3 +40,28 @@ body {
 	font-size: 14px;
 	padding: 8px 12px 20px 12px;
 }
+.dialog-title {
+	font-size: 20px;
+	padding-bottom: 8px;
+}
+.id-input {
+	width: 100%;
+	font-family: monospace;
+	font-size: 16px;
+	padding: 8px;
+	margin: 6px 0;
+	border: 1px solid #aaa;
+	border-radius: 4px;
+	background: #fff;
+	-webkit-box-sizing: border-box;
+	box-sizing: border-box;
+}
+.id-error {
+	color: #a33;
+	font-size: 14px;
+	padding: 6px 2px;
+}
+.info-value-small {
+	font-size: 13px;
+	font-family: monospace;
+}

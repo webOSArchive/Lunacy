@@ -12,11 +12,14 @@ import org.json.JSONObject
  *
  * A subscription gets the one reply and no updates, as on the TouchPad.
  */
-class SystemProperties(context: Context) {
+class SystemProperties(private val context: Context) {
     private val profile = DeviceProfile.forScreen(context)
+    /** Read afresh each time: the device id can be changed while Lunacy is running. */
+    private val live: Map<String, () -> String> = mapOf(
+        "com.palm.properties.nduid" to { DeviceProfile.nduid(context) },
+        "com.palm.properties.ProdSN" to { DeviceProfile.serial(context, profile) },
+    )
     private val values: Map<String, String> = mapOf(
-        "com.palm.properties.nduid" to DeviceProfile.nduid(context),
-        "com.palm.properties.ProdSN" to DeviceProfile.serial(context, profile),
         "com.palm.properties.version" to profile.versionString,
         "com.palm.properties.deviceName" to profile.deviceName,
         "com.palm.properties.deviceNameShort" to profile.deviceNameShort,
@@ -36,7 +39,7 @@ class SystemProperties(context: Context) {
     fun register(bus: Bus) {
         bus.register("com.palm.preferences", "systemProperties/Get") { _, p, reply ->
             val key = p.optString("key")
-            val v = values[key]
+            val v = live[key]?.invoke() ?: values[key]
             // The TouchPad's error has no errorCode.
             reply(if (v == null) JSONObject().put("returnValue", false).put("errorText", "no such key").toString()
                   else JSONObject().put(key, v).put("returnValue", true).toString())

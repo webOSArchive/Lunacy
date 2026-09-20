@@ -1,0 +1,27 @@
+{
+	"_comment": [
+		"The launcher's pages and how an app with no place of its own finds one.",
+		"LunaCE's launcher has four built-in pages (apps, downloads, favorites, prefs) and reads",
+		"/etc/palm/launcher3/app-keywords-to-designator-map.txt for their display names and for a",
+		"keyword-to-page map; AppMonitor::pageDesignatorForWebOSApp tries an app's category first,",
+		"then each of its keywords. The reference TouchPad's own map renames favorites to GAMES and",
+		"prefs to SETTINGS, and maps webOS Archive's wosa-settings keyword to prefs.",
+		"webOS also shipped /etc/palm/default-launcher-page-layout.json, which is what put Palm's",
+		"own settings apps on the prefs page. Lunacy has no such layout - it has no fixed set of",
+		"apps - so the keywords those apps already carry do the same job here."
+	],
+	"pages": [
+		{"designator": "apps", "name": "apps"},
+		{"designator": "downloads", "name": "downloads"},
+		{"designator": "favorites", "name": "games"},
+		{"designator": "prefs", "name": "settings"}
+	],
+	"keywords": {
+		"wosa-settings": "prefs",
+		"settings": "prefs",
+		"preferences": "prefs",
+		"help": "prefs",
+		"game": "favorites",
+		"games": "favorites"
+	}
+}

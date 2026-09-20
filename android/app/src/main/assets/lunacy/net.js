@@ -8,7 +8,23 @@
 	var N = window.LunacyNative, Real = window.XMLHttpRequest;
 	if (!N || !N.netSend || !Real) { return; }
 	var EVENTS = ["readystatechange", "loadstart", "progress", "load", "error", "abort", "timeout", "loadend"];
-	var inFlight = {}, nextId = 1, link = document.createElement("a");
+	var inFlight = {}, link = document.createElement("a");
+	// Request ids, like the bridge's tokens, come from one counter shared by a window's
+	// same-origin frames, and a result is handed to whichever frame is waiting for it:
+	// native answers through evaluateJavascript, which only runs in the main frame.
+	var shared = (function () {
+		try {
+			var t = window.top;
+			if (!t.__lunacyNetFrames) { t.__lunacyNetFrames = []; }
+			t.__lunacyNetFrames.push(window);
+			return t;
+		} catch (e) { return null; }
+	})();
+	function nextId() {
+		var holder = shared || window;
+		holder.__lunacyNetId = (holder.__lunacyNetId || 0) + 1;
+		return holder.__lunacyNetId;
+	}
 
 	function absolute(url) { link.href = url; return link.href; }
 	function crossOrigin(abs) {
@@ -170,17 +186,31 @@
 		if (r.user !== undefined) { req.user = r.user; req.password = r.password; }
 		this._sent = true;
 		if (!r.async) { return this._finish(JSON.parse(N.netSendSync(JSON.stringify(req))), true); }
-		this._id = nextId++;
+		this._id = nextId();
 		inFlight[this._id] = this;
 		this._fire("loadstart", 0, 0);
 		N.netSend(this._id, JSON.stringify(req));
 	};
 
-	window.__lunacyNetDone = function (id) {
+	//* This frame's request, if it is this frame's.
+	window.__lunacyNetDeliver = function (id) {
 		var x = inFlight[id];
+		if (!x) { return false; }
 		delete inFlight[id];
 		var res = JSON.parse(N.netResult(id));
-		if (x && x._id === id) { x._id = 0; x._finish(res, false); }
+		if (x._id === id) { x._id = 0; x._finish(res, false); }
+		return true;
+	};
+	//* Native calls this in the main frame; the request may be a child frame's.
+	window.__lunacyNetDone = function (id) {
+		if (window.__lunacyNetDeliver(id)) { return; }
+		var all = [];
+		try { all = (shared && shared.__lunacyNetFrames) || []; } catch (e) {}
+		for (var i = 0; i < all.length; i++) {
+			try {
+				if (all[i] !== window && all[i].__lunacyNetDeliver && all[i].__lunacyNetDeliver(id)) { return; }
+			} catch (e) {}
+		}
 	};
 
 	// Delivers a result. The TouchPad's sequence: readyState 2, then 3 with progress when there

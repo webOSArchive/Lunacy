@@ -32,11 +32,16 @@ general** (a per-app setting; only the fixed-viewport fallback is allowed).
 | 2026-09-19 | Banners on a black box, sized to their text | every banner | Lunacy's own drawing: LunaCE's StatusBarScroll draws no backing and unrolls over the notification area's full maximum width (319 px), text left-aligned | shell (matched to LunaCE and the TouchPad) |
 | 2026-09-19 | App frozen for 30 s after a tap | Plex client 1.0.0, with its server unreachable from the tablet | A synchronous XHR to a server that never answers blocks the page until the connect timeout, which was a guessed 30 s; the TouchPad gives up after about 9 s (probe 0.0.9), with an `error` event, not `timeout` | compat (network shim timeout; `timeout` only for the page's own `xhr.timeout`) |
 | 2026-09-19 | Apps with a JS service can't reach it | Sound Cloud Player 4.4.2, Plex 1.0.0 | No JS service runtime | JS services (Node, host, activity manager) |
-| 2026-09-19 | Service's buffered audio won't play ("Media load rejected by URL safety check") | toodleTasks HD 1.5.0 | Enyo 1 with db8 kinds in its package | Its kinds and permissions register at install; its watched and ordered finds answer; its sign-in screen and dashboard show. Toodledo's service itself is untested. |
-| Sound Cloud Player 4.4.2 | The page plays `file:///media/internal/…`, which an https page can't load; SoundManager2 passes it to `new Audio(url)` | compat (`file:///media/internal/` mapped to the app origin, which serves it) |
+| 2026-09-19 | Service's buffered audio won't play ("Media load rejected by URL safety check") | Sound Cloud Player 4.4.2 | The page plays `file:///media/internal/…`, which an https page can't load; SoundManager2 passes it to `new Audio(url)` | compat (`file:///media/internal/` mapped to the app origin, which serves it) |
 | 2026-09-19 | Transcoded video opens the player but never plays | Plex 1.0.0 (its service's HLS playlists) | Chromium passes HLS to Android's MediaPlayer, whose own network stack can't reach app origins (`LiveSession` -1008) | compat and card host (`file:///media/internal/` media served from a loopback `MediaServer`) |
 | 2026-09-19 | db8 missing | apps storing data in db8, and every package with configuration/db files | No `com.palm.db` | bus (db8 on SQLite, measured on the TouchPad; configurator for packages' kinds) |
 | 2026-09-19 | HTTPS to Let's Encrypt and Amazon sites fails from native code | the network shim | Android 5's trust store lacks current roots | compat (bundled Mozilla roots) |
+| 2026-09-20 | A bus call from a frame never gets its reply; a cross-origin XHR from one never finishes | every app that opens webOS's cross-app UI (`enyo.FilePicker`, `enyo.CrossAppUI`) | Replies come back through `evaluateJavascript`, which only runs in the main frame; on webOS every frame had its own `PalmServiceBridge` binding | compat (bridge and net: one token counter for a window's same-origin frames, and the reply is handed to the frame waiting for it) |
+| 2026-09-20 | "No Network Connection" although the tablet is online | Help 2.0.0 (any app that waits for a service) | `com.palm.bus/signal/registerServerStatus` was missing, so the app never went on to ask the connection manager. It is ls-hubd's own signal, not a service's | bus (the router answers it, and again when a service comes or goes) |
+| 2026-09-20 | Help picks the wrong device's content | Help 2.0.0 | `com.palm.properties.PRODoID`, which apps key off to tell webOS devices apart, was missing | bus (system properties, measured on the reference TouchPad) |
+| 2026-09-20 | Apps never learn the screen turned | every Enyo app | `PalmSystem.screenOrientation` was fixed at "up" and `Mojo.screenOrientationChanged` was never called; Enyo reads the property when the page's own resize arrives | shell and compat (bridge: the orientation is set before the relayout) |
+| 2026-09-20 | Settings apps pile onto the first launcher page | every app with a category or keywords | Apps with no place of their own all went to page 0; LunaCE places them by category, then by keyword (AppMonitor::pageDesignatorForWebOSApp) | shell (the page map in `assets/luna/launcher-pages.json`) |
+| 2026-09-20 | The Done button and the delete badge sit a pixel or two out, and the button is too tall | the launcher's edit mode | Two-state sprites were split into halves; LunaCE draws a documented rect inside a larger canvas (§3.8) | shell (the sprites' own rects, checked against the reference TouchPad's screenshot) |
 
 ## Known gaps, by the layer they belong to
 
@@ -50,8 +55,14 @@ Found while testing the apps below; each is general, not tied to one app.
 - **system services, media indexer:** the `com.palm.media.*` kinds in db8 (Papyrus asks for
   `com.palm.media.types:1` before its file picker; db8 itself now answers, with
   "kind not registered").
-- **system UI:** the FilePicker cross-app UI at
-  `/usr/lib/luna/system/luna-systemui/app/FilePicker/filepicker.html` (Papyrus's import).
+- **system UI:** ~~the FilePicker cross-app UI~~ — done 2026-09-20. Lunacy serves its own
+  picker at webOS's path (`/usr/lib/luna/system/luna-systemui/app/FilePicker/filepicker.html`),
+  so `enyo.FilePicker` works in every app. It lists the webOS tree through Lunacy's own
+  service rather than the media indexer, so it shows what is under `/media/internal`; Android's
+  own Pictures and Downloads aren't mapped in yet.
+- **bus, not implemented:** `com.palm.systemmanager` (`getSecurityPolicy`, `getDeviceLockMode`,
+  `setDevicePasscode`). Lunacy has no lock screen — Android's is the real one — so Screen &
+  Lock's Secure Unlock shows Off and gets an honest error if it is changed.
 - **system files:** the TouchPad answers `/usr/palm/frameworks/tellurium/tellurium_config.json`
   with 200 and an empty body; Lunacy answers 404.
 - **visual, not yet solved:** Enyo dialogs (Apollo's, AccuWeather's) show faint lines along
@@ -84,3 +95,20 @@ on 2026-09-19. Not yet repeated on the factory WebView 37.
 | Plex for webOS 0.8.0 | Enyo 1 | Finds a server added by hand, browses its library and plays video; Bonjour discovery needs zeroconf. |
 | toodleTasks HD 1.5.0 | Enyo 1 with db8 kinds in its package | Its kinds and permissions register at install; its watched and ordered finds answer; its sign-in screen and dashboard show. Toodledo's service itself is untested. |
 | Sound Cloud Player 4.4.2 | installed from the App Museum | Installs from the live package host and launches. |
+
+Added 2026-09-20 (same tablet and WebView):
+
+| App | Kind | Result |
+|---|---|---|
+| Device Info (Lunacy's) | Enyo 1, bundled | Reports the device, Android, the WebView, Lunacy and the display; re-reads them when the screen turns. |
+| Screen & Lock 1.0.0 (Palm's, unchanged) | Enyo 1 | Renders as on the TouchPad. Brightness and "Turn off After" set Android's own; Change Wallpaper opens Lunacy's file picker and the shell's wallpaper follows. Auto Dim sets Android's brightness mode. Secure Unlock has nothing behind it (no `com.palm.systemmanager`). |
+| Help 2.0.0 (Palm's, unchanged) | Enyo 1, `noWindow` | Starts, finds the network and opens its own card. Its articles come from `help.webosarchive.org`, which answers 404 for the path this copy asks for (see below). |
+| Wi-Fi, Sounds & Alerts | Lunacy shortcuts | Open Android's Wi-Fi and sound settings. |
+
+**Help's content, for webOS Archive rather than Lunacy.** The app asks for
+`http://help.webosarchive.org/<locale>/<carrier>/index.json` — this copy's `UrlManager` has the
+device segment commented out ("Remove device code from URL"), while the host keeps the content a
+level deeper, under the device (`/en-us/c000-01/d500-01/index.json` exists, and
+`/en-us/c000-01/index.json` is a 404). Either the app's URL or the host's layout needs to move.
+Lunacy now reports `com.palm.properties.PRODoID`, so the app resolves the TouchPad's `d500-01`
+correctly once the segment is back.

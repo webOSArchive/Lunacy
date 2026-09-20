@@ -18,6 +18,7 @@ import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewConfiguration
 import org.json.JSONArray
+import org.json.JSONObject
 import org.webosarchive.lunacy.card.AppInfo
 import kotlin.math.abs
 import kotlin.math.max
@@ -60,13 +61,17 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         const val DELETE_DY = -50f        // the TouchPad's; LunaCE's default is -47
         const val DELETE_BOX = 32f
         const val MOVE_MS = 300L          // IconReorderIconMoveAnimTime, InQuad
-        const val DONE_W = 100f           // edit-button-done.png, one state
-        const val DONE_H = 40f
-        // doneButtonHorizontalPositionAdjustPx=42 on the TouchPad, which LunaCE applies to the
-        // button's centre. Measured on the TouchPad's screen: the button's right edge is 8 px
-        // in, which here means drawing its image 6 px in.
-        const val DONE_RIGHT = 6f
-        const val DONE_TEXT_DY = -3f      // doneButtonTextVerticalPosAdjust
+        // Two-state sprites hold their states at rects inside a larger canvas, not as halves
+        // of it (reference §3.8): edit-button-done.png is 100 × 80 with the button at
+        // (1, 2, 98, 34) and its pressed state at (1, 42); edit-button-delete.png is 40 × 80
+        // with the badge at (2, 1, 32, 32) and (2, 41). Checked against the reference
+        // TouchPad's edit-mode screenshot: the button's art is 98 × 34 ending 7 px from the
+        // screen's right edge and centred in the tab bar, and the badge's centre lands on the
+        // cell centre + (-50, -50).
+        const val DONE_W = 98f
+        const val DONE_H = 34f
+        const val DONE_RIGHT = 7f         // the art's right edge, in from the bar's right edge
+        const val DONE_TEXT_DY = -1f      // the label's centre sits 1 px above the art's
         const val EDGE = 30f              // a dragged icon held this close to a side flips the page
         const val EDGE_MS = 600L
         // AppInfoDialog.qml
@@ -77,9 +82,41 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         const val DIALOG_BUTTON_H = 52f
     }
 
-    class Page(val title: String, val apps: MutableList<AppInfo> = mutableListOf()) { var scrollY = 0f }
+    class Page(val designator: String, val title: String, val apps: MutableList<AppInfo> = mutableListOf()) { var scrollY = 0f }
 
-    val pages = mutableListOf(Page("apps"), Page("downloads"), Page("favorites"), Page("settings"))
+    /**
+     * The pages, their names and the keyword map, from assets/luna/launcher-pages.json (which
+     * says where each value comes from). LunaCE's four built-in pages, named as the reference
+     * TouchPad names them: APPS, DOWNLOADS, GAMES, SETTINGS.
+     */
+    private val pageMap = runCatching {
+        JSONObject(context.assets.open("luna/launcher-pages.json").bufferedReader().use { it.readText() })
+    }.getOrDefault(JSONObject())
+
+    val pages: MutableList<Page> = pageMap.optJSONArray("pages")?.let { a ->
+        (0 until a.length()).map { i ->
+            val p = a.getJSONObject(i)
+            Page(p.optString("designator"), p.optString("name", p.optString("designator")))
+        }.toMutableList()
+    }?.takeIf { it.isNotEmpty() } ?: mutableListOf(
+        Page("apps", "apps"), Page("downloads", "downloads"), Page("favorites", "games"), Page("prefs", "settings"))
+
+    /** keyword (lower case) to page designator. */
+    private val keywordPages: Map<String, String> = pageMap.optJSONObject("keywords")?.let { o ->
+        o.keys().asSequence().associate { it.lowercase() to o.optString(it) }
+    }.orEmpty()
+
+    /**
+     * The page an app with no place of its own belongs to, as LunaCE's
+     * AppMonitor::pageDesignatorForWebOSApp works it out: its category first, then each of its
+     * keywords. Anything unrecognised goes to the first page.
+     */
+    private fun pageFor(app: AppInfo): Int {
+        val designator = keywordPages[app.category.lowercase()]
+            ?: app.keywords.firstNotNullOfOrNull { keywordPages[it.lowercase()] }
+            ?: return 0
+        return pages.indexOfFirst { it.designator == designator }.takeIf { it >= 0 } ?: 0
+    }
     /** Current page position (fractional while dragging). */
     private var pagePos = 0f
     /** Height of the dock that sits over the launcher's bottom. */
@@ -110,7 +147,9 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             val ids = saved.optJSONArray(pi) ?: continue
             for (i in 0 until ids.length()) byId[ids.optString(i)]?.takeIf { placed.add(it.id) }?.let { pages[pi].apps += it }
         }
-        pages[0].apps.addAll(apps.filter { it.id !in placed }.sortedBy { it.title.lowercase() })
+        for (app in apps.filter { it.id !in placed }.sortedBy { it.title.lowercase() }) {
+            pages[pageFor(app)].apps += app
+        }
         if (dragging != null && pages.none { dragging in it.apps }) dragging = null
         invalidate()
     }
@@ -168,6 +207,8 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val right = width - luna.px(Params.DONE_RIGHT); val top = (tabBarH() - h) / 2
         return RectF(right - w, top, right, top + h)
     }
+    /** The Done button's touch target: its art, with LunaCE's usual slack around it. */
+    private fun doneTouchRect() = RectF(doneRect()).apply { inset(-luna.px(8f), -luna.px(8f)) }
 
     // ---- icon positions, animated while reordering ----
 
@@ -241,17 +282,17 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         c.save(); c.translate(cx - layout.width / 2f, iy + half + luna.px(Params.LABEL_GAP)); layout.draw(c); c.restore()
         if (editing && app.userInstalled && app != dragging) {
             val d = deleteCentre(centre)
-            drawState(c, "launcher3/edit-button-delete.png", d.x, d.y, pressed = pressedDelete == app.id)
+            drawDelete(c, d.x, d.y, pressed = pressedDelete == app.id)
         }
     }
 
-    /** Draws one state of a two-state image (normal above pressed), at its size, centred. */
-    private fun drawState(c: Canvas, path: String, cx: Float, cy: Float, pressed: Boolean) {
-        val b = luna.image(path) ?: return
-        val h = b.height / 2
-        val src = if (pressed) Rect(0, h, b.width, b.height) else Rect(0, 0, b.width, h)
-        c.drawBitmap(b, src, RectF(cx - b.width / 2f, cy - h / 2f, cx + b.width / 2f, cy + h / 2f), null)
-    }
+    /** The delete badge, centred: 32 × 32 at (2, 1), pressed at (2, 41). */
+    private fun drawDelete(c: Canvas, cx: Float, cy: Float, pressed: Boolean) =
+        luna.sprite(c, "launcher3/edit-button-delete.png", cx, cy, 2, if (pressed) 41 else 1, 32, 32)
+
+    /** The Done button's art, centred: 98 × 34 at (1, 2), pressed at (1, 42). */
+    private fun drawDone(c: Canvas, r: RectF, pressed: Boolean) =
+        luna.sprite(c, "launcher3/edit-button-done.png", r.centerX(), r.centerY(), 1, if (pressed) 42 else 2, 98, 34)
 
     /** Centred, wrapped to at most two lines, the second elided with "…" (API 21 has no maxLines). */
     @Suppress("DEPRECATION")
@@ -281,7 +322,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         }
         if (editing) {
             val r = doneRect()
-            drawState(c, "launcher3/edit-button-done.png", r.centerX(), r.centerY(), pressed = donePressed)
+            drawDone(c, r, pressed = donePressed)
             c.drawText("DONE", r.centerX(), r.centerY() - (doneText.ascent() + doneText.descent()) / 2 + luna.px(Params.DONE_TEXT_DY), doneText)
         }
     }
@@ -481,7 +522,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
                 anim?.cancel(); drag = Drag.UNDECIDED
                 downX = e.x; downY = e.y; downPage = pagePos; downScroll = page.scrollY
                 pressedDelete = deleteAt(e.x, e.y)?.id
-                donePressed = editing && doneRect().contains(e.x, e.y)
+                donePressed = editing && doneTouchRect().contains(e.x, e.y)
                 downApp = if (pressedDelete == null && !donePressed) appAt(e.x, e.y) else null
                 highlightedTab = if (donePressed) -1 else tabAt(e.x, e.y)
                 if (downApp != null && !editing) postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
@@ -539,7 +580,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
 
     private fun tap(x: Float, y: Float) {
         if (editing) {
-            if (doneRect().contains(x, y)) { exitEditMode(); return }
+            if (doneTouchRect().contains(x, y)) { exitEditMode(); return }
             deleteAt(x, y)?.let { dialogApp = it; return }
         }
         if (y < tabBarH()) {

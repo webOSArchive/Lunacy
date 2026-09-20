@@ -35,6 +35,8 @@ interface WindowHost {
     /** The page wants the virtual keyboard shown or hidden. */
     fun keyboard(window: AppWindow, show: Boolean)
     fun deviceInfo(): String
+    /** webOS's screen orientation: "up", "down", "left" or "right". */
+    fun screenOrientation(): String
     /** Android pixels per CSS pixel: apps get TouchPad-sized pixels (docs/architecture.md, Screen size). */
     val pixelScale: Float
 }
@@ -162,6 +164,16 @@ class AppWindow(context: Context, val appId: String, private val host: WindowHos
         callMojo(if (active) "stageActivated" else "stageDeactivated")
     }
 
+    /**
+     * The screen turned. LunaSysMgr kept PalmSystem.screenOrientation current and called
+     * Mojo.screenOrientationChanged; Enyo 1 reads the property when the page's own resize
+     * event arrives (enyo.sendOrientationChange), so it is set first.
+     */
+    fun setScreenOrientation(orientation: String) {
+        evaluateJavascript("if(window.PalmSystem){PalmSystem.screenOrientation=${JSONObject.quote(orientation)}}", null)
+        callMojo("screenOrientationChanged", JSONObject.quote(orientation))
+    }
+
     /** The webOS back gesture: an ESC key event, which Enyo and Mojo turn into "back". */
     fun sendBack() = evaluateJavascript(
         "(function(){function k(t){var e=document.createEvent('Events');e.initEvent(t,true,true);e.keyCode=27;e.which=27;(document.activeElement||document).dispatchEvent(e);}k('keydown');k('keyup');})()", null)
@@ -196,6 +208,7 @@ class AppWindow(context: Context, val appId: String, private val host: WindowHos
         @JavascriptInterface fun netSendSync(request: String): String = net.sendSync(request)
         @JavascriptInterface fun netAbort(id: Int) = net.abort(id)
 
+        @JavascriptInterface fun screenOrientation(): String = host.screenOrientation()
         @JavascriptInterface fun mediaBase(): String = host.mediaBase()
         @JavascriptInterface fun activate() { main.post { host.activate(this@AppWindow) } }
         @JavascriptInterface fun keyboard(show: Boolean) { main.post { host.keyboard(this@AppWindow, show) } }

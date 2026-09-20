@@ -1,0 +1,13 @@
+{
+	"id": "com.palm.app.wifi",
+	"version": "1.0.0",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Wi-Fi",
+	"icon": "icon.png",
+	"splashicon": "icon-256x256.png",
+	"uiRevision": 2,
+	"keywords": ["Settings", "Preferences", "Wireless", "Wifi", "Networking", "wlan", "wi-fi"],
+	"lunacyAndroidSettings": "wifi"
+}

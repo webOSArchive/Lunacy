@@ -19,6 +19,16 @@ class AppInfo(
     val version: String,
     /** Installed from a package (webOS's userInstalled), rather than bundled with Lunacy. */
     val userInstalled: Boolean,
+    /**
+     * A Lunacy extension to appinfo.json, only ever used by apps Lunacy ships: the app is an
+     * icon that opens one of Android's settings screens (LunacyService.PANELS), because the
+     * setting belongs to the host OS and Lunacy would only be pretending to own it. Launching
+     * it opens no window. See docs/architecture.md, "Settings".
+     */
+    val androidSettings: String,
+    /** appinfo.json's category and keywords, which decide the launcher page an app lands on. */
+    val category: String,
+    val keywords: List<String>,
     /** The app's appinfo.json as packaged. */
     val appinfo: JSONObject,
     private val files: AppFiles,
@@ -87,6 +97,9 @@ class AppRegistry(private val files: AppFiles) {
             noWindow = j.optBoolean("noWindow", false),
             type = j.optString("type", "web"),
             version = j.optString("version", ""),
+            androidSettings = j.optString("lunacyAndroidSettings", ""),
+            category = j.optString("category", ""),
+            keywords = j.optJSONArray("keywords")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty(),
             userInstalled = files.isInstalled(dir),
             appinfo = j,
             files = files,

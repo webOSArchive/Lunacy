@@ -1,0 +1,75 @@
+/* Lunacy's file picker, in the popup enyo.FilePicker opens it in. */
+html, body {
+	height: 100%;
+	margin: 0;
+	background: #ccc;
+}
+.lunacy-filepicker {
+	height: 100%;
+	min-height: 420px;
+}
+.fp-top {
+	padding: 10px 12px;
+	background: #b4b4b4;
+	border-bottom: 1px solid #999;
+}
+.fp-selection {
+	color: #555;
+	font-size: 15px;
+	padding-left: 12px;
+	max-width: 45%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.fp-body {
+	background: #ccc;
+}
+.fp-albums {
+	padding: 6px 10px 10px 10px;
+}
+.fp-album-name {
+	color: #555;
+	font-size: 13px;
+	text-transform: uppercase;
+	padding: 10px 2px 6px 2px;
+}
+.fp-grid {
+	overflow: hidden;
+}
+.fp-tile {
+	float: left;
+	width: 104px;
+	height: 78px;
+	margin: 0 6px 6px 0;
+	background-color: #aaa;
+	background-size: cover;
+	background-position: center;
+	border: 2px solid transparent;
+	border-radius: 3px;
+}
+.fp-tile.fp-chosen {
+	border-color: #4c7ba6;
+}
+.fp-list {
+	background: #e5e5e5;
+	border-radius: 4px;
+	overflow: hidden;
+}
+.fp-file.fp-chosen {
+	background: #d0e0ee;
+}
+.fp-size {
+	color: #888;
+	font-size: 13px;
+	padding-left: 10px;
+}
+.fp-empty {
+	color: #666;
+	padding: 20px;
+}
+.fp-bottom {
+	padding: 8px;
+	background: #b4b4b4;
+	border-top: 1px solid #999;
+}

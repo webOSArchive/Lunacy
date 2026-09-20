@@ -35,6 +35,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var jsServices: org.webosarchive.lunacy.card.JsServices
     private lateinit var mediaServer: org.webosarchive.lunacy.card.MediaServer
     private lateinit var configurator: org.webosarchive.lunacy.card.Configurator
+    private lateinit var systemService: org.webosarchive.lunacy.card.SystemService
+    private lateinit var displayService: org.webosarchive.lunacy.card.DisplayService
+    /** The wallpaper view, reloaded when the preference changes. */
+    private lateinit var wallpaperView: ImageView
     private lateinit var statusBar: StatusBar
     private lateinit var cards: CardLayer
     private lateinit var justType: JustType
@@ -67,13 +71,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
         // The dock draws an icon being dragged out of it above its own bounds.
         val root = FrameLayout(this).apply { clipChildren = false }
-        val wallpaper = ImageView(this).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            val wp = luna.wallpaper()
-            if (wp != null) setImageBitmap(wp)
-            else background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.rgb(8, 24, 64), Color.rgb(20, 90, 200)))
-        }
-        root.addView(wallpaper, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        wallpaperView = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+        showWallpaper()
+        root.addView(wallpaperView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
 
         hidden = FrameLayout(this)
         root.addView(hidden, FrameLayout.LayoutParams(1, 1))
@@ -122,6 +122,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         root.addView(statusBar, FrameLayout.LayoutParams(MATCH_PARENT, luna.px(StatusBar.HEIGHT)))
 
         setContentView(root)
+        seedMediaInternal()
         watchKeyboard(root)
         statusBar.onTitleTap = { toggleAppMenu() }
         onCardView()
@@ -146,6 +147,20 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     fun launch(appId: String, params: JSONObject? = null) {
         val app = registry.get(appId) ?: run { Log.w(AppServer.TAG, "launch: no app $appId"); return }
+        // A shortcut to one of Android's settings screens: no window, no pretending that
+        // Lunacy owns the setting. Only apps Lunacy ships declare this.
+        if (app.androidSettings.isNotEmpty()) {
+            bus.call(appId, "palm://${org.webosarchive.lunacy.card.LunacyService.SERVICE}/android/openSettings",
+                JSONObject().put("panel", app.androidSettings).toString()) { reply ->
+                runOnUiThread {
+                    val r = runCatching { JSONObject(reply) }.getOrNull()
+                    if (r?.optBoolean("returnValue") != true) {
+                        systemBanner(appId, r?.optString("errorText").orEmpty().ifEmpty { "Couldn't open ${app.title}" })
+                    }
+                }
+            }
+            return
+        }
         if (!app.isWeb) {
             systemBanner(appId, "${app.title} is a native app; Lunacy can't run those yet")
             return
@@ -325,24 +340,126 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     override val pixelScale get() = luna.density
 
+    /**
+     * Like a TouchPad's, this doesn't change when the screen turns: the device reports
+     * 1024 × 768 in both orientations. So the screen's long side is the width here too, and
+     * a page that read deviceInfo at load never goes stale. Rotation reaches apps through
+     * PalmSystem.screenOrientation and the window's own resize, as it did on webOS.
+     */
     override fun deviceInfo(): String {
         // In TouchPad px, the unit apps lay out in.
         val dm = android.util.DisplayMetrics().apply {
             @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(this)
             density = luna.density
         }
+        val long = (maxOf(dm.widthPixels, dm.heightPixels) / dm.density).toInt()
+        val short = (minOf(dm.widthPixels, dm.heightPixels) / dm.density).toInt()
         return JSONObject(mapOf(
             "modelName" to "TouchPad", "modelNameAscii" to "TouchPad",
             // webOS CE 3.1.0, the community-supported version, as the reference TouchPad reports.
             "platformVersion" to "3.1.0", "platformVersionMajor" to 3, "platformVersionMinor" to 1, "platformVersionDot" to 0,
             "carrierName" to "", "serialNumber" to SystemProperties.SERIAL,
-            "screenWidth" to (dm.widthPixels / dm.density).toInt(), "screenHeight" to (dm.heightPixels / dm.density).toInt(),
-            "minimumCardWidth" to (dm.widthPixels / dm.density).toInt(), "minimumCardHeight" to 318,
-            "maximumCardWidth" to (dm.widthPixels / dm.density).toInt(), "maximumCardHeight" to ((dm.heightPixels / dm.density) - StatusBar.HEIGHT).toInt(),
+            "screenWidth" to long, "screenHeight" to short,
+            "minimumCardWidth" to long, "minimumCardHeight" to 318,
+            "maximumCardWidth" to long, "maximumCardHeight" to short - StatusBar.HEIGHT,
             "touchableRows" to 14, "keyboardAvailable" to false, "keyboardSlider" to false, "keyboardType" to "Unknown",
             "wifiAvailable" to true, "bluetoothAvailable" to false, "carrierAvailable" to false,
             "coreNaviButton" to false, "swappableBattery" to false, "dockModeEnabled" to false,
         )).toString()
+    }
+
+    /**
+     * webOS's screen orientation. The reference TouchPad reports "right" in landscape and
+     * "up" in portrait (docs/spike-1.md): its panel is portrait, as this tablet's is, so
+     * Android's display rotation maps straight onto webOS's strings.
+     */
+    override fun screenOrientation(): String {
+        @Suppress("DEPRECATION")
+        return when (windowManager.defaultDisplay.rotation) {
+            android.view.Surface.ROTATION_90 -> "left"
+            android.view.Surface.ROTATION_180 -> "down"
+            android.view.Surface.ROTATION_270 -> "right"
+            else -> "up"
+        }
+    }
+
+    /**
+     * The screen turned. The activity handles the configuration itself (no recreate), so the
+     * shell relays out and every window learns the new orientation before its own resize
+     * event arrives, which is when Enyo reads PalmSystem.screenOrientation.
+     */
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val o = screenOrientation()
+        running.values.flatten().forEach { it.setScreenOrientation(o) }
+        goImmersive()
+    }
+
+    /**
+     * The wallpaper the system service holds, else the one Lunacy ships. The reference
+     * TouchPad's own preference names a file in /media/internal/.wallpapers; Lunacy's is the
+     * same shape, so Screen & Lock's "Change Wallpaper" sets this one.
+     */
+    private fun showWallpaper() {
+        val chosen = systemService.fileOf(systemService.get("wallpaper") as? JSONObject)
+        val bmp = chosen?.let { f -> luna.decodeFull(f) } ?: luna.wallpaper()
+        if (bmp != null) {
+            wallpaperView.setImageBitmap(bmp)
+            wallpaperView.background = null
+        } else {
+            wallpaperView.setImageDrawable(null)
+            wallpaperView.background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.rgb(8, 24, 64), Color.rgb(20, 90, 200)))
+        }
+    }
+
+    /**
+     * A stored preference the shell owns. webOS worked the same way: the service keeps the
+     * key, and whoever owns the thing it names acts on it. Keys nothing here owns are kept
+     * and nothing more, as they were on a device.
+     */
+    private fun onPreferenceChanged(key: String, value: Any?) {
+        when (key) {
+            "wallpaper" -> showWallpaper()
+            // webOS's Auto Dim: the display owner acts on it, and here that is Android's.
+            "enableALS" -> displayService.setAutomaticBrightness(value == true)
+        }
+    }
+
+    /**
+     * What a device shipped with: the TouchPad's wallpapers in the user's own storage, where
+     * a picker can find them. Copied once per Lunacy build, off the main thread.
+     */
+    private fun seedMediaInternal() = Thread {
+        try {
+            val dir = java.io.File(jsServices.root, "media/internal/wallpapers")
+            val stamp = java.io.File(dir, ".lunacy-apk")
+            val apk = packageManager.getPackageInfo(packageName, 0).lastUpdateTime.toString()
+            if (stamp.isFile && stamp.readText() == apk) return@Thread
+            dir.mkdirs()
+            for (name in assets.list("luna/wallpapers").orEmpty()) {
+                if (!name.endsWith(".jpg", true) && !name.endsWith(".png", true)) continue
+                val out = java.io.File(dir, name)
+                if (out.isFile) continue
+                assets.open("luna/wallpapers/$name").use { i -> out.outputStream().use { i.copyTo(it) } }
+            }
+            stamp.writeText(apk)
+            Log.i(AppServer.TAG, "wallpapers in ${dir.path}")
+        } catch (e: Exception) {
+            Log.w(AppServer.TAG, "couldn't put the wallpapers in /media/internal", e)
+        }
+    }.start()
+
+    /** What the shell knows about the screen: real pixels, and the TouchPad px apps lay out in. */
+    private fun displayInfo(): JSONObject {
+        val dm = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(dm)
+        return JSONObject()
+            .put("width", dm.widthPixels).put("height", dm.heightPixels)
+            .put("dpi", dm.densityDpi).put("androidDensity", dm.density)
+            .put("scale", luna.density).put("orientation", screenOrientation())
+            .put("cardWidth", Math.round(cards.width / luna.density))
+            .put("cardHeight", Math.round(cards.height / luna.density))
     }
 
     private fun registerServices() {
@@ -360,6 +477,16 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             else { launch(id, params); reply(Bus.ok(mapOf("processId" to "success"))) }
         }
         SystemProperties(this).register(bus)
+        // webOS's preference and wallpaper store, and the two display settings Android lets
+        // Lunacy really set. See docs/architecture.md, "Settings".
+        displayService = org.webosarchive.lunacy.card.DisplayService(this)
+        displayService.register(bus)
+        systemService = org.webosarchive.lunacy.card.SystemService(jsServices.root, java.io.File(filesDir, "systemservice.json"))
+        systemService.onPreferenceChanged = { key, value -> onPreferenceChanged(key, value) }
+        systemService.register(bus)
+        // Lunacy's own service, on its own name: the environment it really runs in, and
+        // Android's settings screens for the settings Android owns.
+        org.webosarchive.lunacy.card.LunacyService(this, registry, jsServices, jsServices.root) { displayInfo() }.register(bus)
         org.webosarchive.lunacy.card.ConnectionManager(this).register(bus)
         org.webosarchive.lunacy.card.ActivityManager().register(bus)
         val db8 = org.webosarchive.lunacy.card.Db8("com.palm.db", java.io.File(filesDir, "db8.sqlite")).also { it.register(bus) }

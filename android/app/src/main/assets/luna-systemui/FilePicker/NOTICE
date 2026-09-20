@@ -1,0 +1,12 @@
+Lunacy's file picker.
+
+webOS served a file picker as system UI at
+/usr/lib/luna/system/luna-systemui/app/FilePicker/filepicker.html, and enyo.FilePicker (in
+Enyo 1) opens exactly that path in an iframe, passing its parameters in the query string and
+taking the result back through postMessage. Lunacy serves its own page there, so the control
+works for every app without any app being changed.
+
+Palm's picker listed what the media indexer had in db8. Lunacy has no media indexer, so this
+one reads the same folders directly, through Lunacy's own service. The code is Lunacy's; the
+contract it keeps (parameters, result shape, path) is webOS's, read from Enyo 1.0's
+FilePicker.js and CrossAppUI.js.

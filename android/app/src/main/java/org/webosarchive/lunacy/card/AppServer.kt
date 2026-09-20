@@ -31,6 +31,18 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
         }
 
         private val FRAMEWORK = Regex("(?:^|.*/)usr/palm/frameworks/enyo/[^/]+/(.*)")
+        /**
+         * webOS's own system UI, which apps reach at its absolute path: enyo.FilePicker
+         * loads /usr/lib/luna/system/luna-systemui/app/FilePicker/filepicker.html in an
+         * iframe. Lunacy serves its own pages there, so the control works in every app.
+         */
+        const val SYSTEM_UI = "usr/lib/luna/system/luna-systemui/app/"
+        /**
+         * A scaled copy of an image in the webOS tree: `?__lunacy_thumb=160` gives a JPEG
+         * whose short side is about 160 px. A picker or gallery would otherwise decode
+         * full-size photos, which 1 GB of RAM can't hold. Lunacy's own, hence the prefix.
+         */
+        const val THUMB_PARAM = "__lunacy_thumb"
     }
 
     fun serve(uri: Uri): WebResourceResponse? {
@@ -40,11 +52,16 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
         if (path.startsWith("__lunacy/fonts/")) return asset("luna/fonts/" + path.removePrefix("__lunacy/fonts/"), path)
         if (path.startsWith("__lunacy/")) return asset("lunacy/" + path.removePrefix("__lunacy/"), path)
         val fw = FRAMEWORK.matchEntire(path)
+        val thumb = runCatching { uri.getQueryParameter(THUMB_PARAM)?.toInt() }.getOrNull()
         val resp = when {
             fw != null -> asset("fw/enyo/1.0/" + fw.groupValues[1], path)
+            path.startsWith(SYSTEM_UI) -> asset("luna-systemui/" + path.removePrefix(SYSTEM_UI), path)
             path.startsWith(CRYPTOFS) -> files.open(path.removePrefix(CRYPTOFS))?.let { respond(it, path) }
             // webOS's user storage, shared by apps and services (JS services write files here).
-            path.startsWith(MEDIA_INTERNAL) -> internal(path.removePrefix(MEDIA_INTERNAL))?.let { respond(it, path) }
+            path.startsWith(MEDIA_INTERNAL) -> {
+                val rel = path.removePrefix(MEDIA_INTERNAL)
+                if (thumb != null) thumbnail(rel, thumb) else internal(rel)?.let { respond(it, path) }
+            }
             else -> null
         }
         if (resp == null) Log.w(TAG, "404 $uri")
@@ -55,6 +72,35 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
     private fun internal(rel: String): InputStream? {
         val f = java.io.File(mediaInternal, rel)
         return if (f.isFile && f.canonicalPath.startsWith(mediaInternal.canonicalPath + java.io.File.separator)) f.inputStream() else null
+    }
+
+    /** A JPEG copy of an image under /media/internal, scaled so its short side is about `size`. */
+    private fun thumbnail(rel: String, size: Int): WebResourceResponse? {
+        val f = java.io.File(mediaInternal, rel)
+        if (!f.isFile || !f.canonicalPath.startsWith(mediaInternal.canonicalPath + java.io.File.separator)) return null
+        val px = size.coerceIn(16, 1024)
+        return try {
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeFile(f.path, bounds)
+            if (bounds.outWidth <= 0) return null
+            var sample = 1
+            while (minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= px) sample *= 2
+            val bmp = android.graphics.BitmapFactory.decodeFile(f.path,
+                android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+            val scale = px.toFloat() / minOf(bmp.width, bmp.height)
+            val out = if (scale < 1f)
+                android.graphics.Bitmap.createScaledBitmap(bmp, Math.round(bmp.width * scale), Math.round(bmp.height * scale), true)
+            else bmp
+            val bytes = java.io.ByteArrayOutputStream()
+            out.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, bytes)
+            if (out !== bmp) out.recycle()
+            bmp.recycle()
+            WebResourceResponse("image/jpeg", null, 200, "OK", mapOf("Cache-Control" to "max-age=600"),
+                ByteArrayInputStream(bytes.toByteArray()))
+        } catch (e: Exception) {
+            Log.w(TAG, "thumbnail $rel: $e")
+            null
+        }
     }
 
     private fun asset(assetPath: String, name: String): WebResourceResponse? {

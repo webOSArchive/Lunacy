@@ -38,6 +38,12 @@ class Bus {
     private val handlers = HashMap<String, CallHandler>()  // "service/method"
     /** Services that take every method themselves: JS services, which answer unknown methods. */
     private val services = HashMap<String, CallHandler>()
+    /** Open registerServerStatus calls, by the service name each one is watching. */
+    private val statusWatchers = ArrayList<Pair<Bus.Call, String>>()
+
+    init {
+        register("com.palm.bus", "signal/registerServerStatus", CallHandler { serverStatus(it) })
+    }
 
     fun register(service: String, method: String, h: Handler) {
         handlers["$service/$method"] = CallHandler { c -> h.handle(c.appId, c.params, c::reply) }
@@ -45,8 +51,36 @@ class Bus {
 
     fun register(service: String, method: String, h: CallHandler) { handlers["$service/$method"] = h }
 
-    fun registerService(service: String, h: CallHandler) { services[service] = h }
-    fun unregisterService(service: String) { services.remove(service) }
+    fun registerService(service: String, h: CallHandler) { services[service] = h; serverStatusChanged(service) }
+    fun unregisterService(service: String) { services.remove(service); serverStatusChanged(service) }
+
+    /** Whether anything on this bus answers for a service name. */
+    fun has(service: String) = services.containsKey(service) || handlers.keys.any { it.startsWith("$service/") }
+
+    /**
+     * palm://com.palm.bus/signal/registerServerStatus: is this service on the bus? Apps wait
+     * for it before calling one (Palm's Help app does, before the connection manager). On
+     * webOS this is ls-hubd's own signal, so Lunacy's router answers it rather than any
+     * service. Measured on the reference TouchPad: {"serviceName":..,"connected":true|false},
+     * with no returnValue, and a subscription that answers again when that changes.
+     */
+    private fun serverStatus(call: Call) {
+        val name = call.params.optString("serviceName")
+        if (name.isEmpty()) return call.reply(error("Invalid payload."))
+        call.reply(JSONObject(mapOf("serviceName" to name, "connected" to has(name))).toString())
+        if (call.subscribe && !call.cancelled) {
+            statusWatchers += call to name
+            call.onCancel { statusWatchers.removeAll { (c, _) -> c === call } }
+        }
+    }
+
+    /** A service came or went (a package's JS services do): tell whoever is watching it. */
+    private fun serverStatusChanged(service: String) {
+        val connected = has(service)
+        statusWatchers.toList().forEach { (c, name) ->
+            if (name == service) c.reply(JSONObject(mapOf("serviceName" to name, "connected" to connected)).toString())
+        }
+    }
 
     fun call(appId: String, url: String, params: String, reply: (String) -> Unit): Call {
         val m = Regex("^(?:palm|luna)://([^/]+)/(.*?)/?$").find(url)
@@ -57,8 +91,12 @@ class Bus {
         val p = try { JSONObject(params.ifEmpty { "{}" }) } catch (e: Exception) { JSONObject() }
         val call = Call(appId, service, method, p, reply)
         if (h == null) {
-            val known = handlers.keys.any { it.startsWith("$service/") }
-            call.reply(error(if (known) "Unknown method \"$method\" for category \"/\"" else "Service does not exist: $service."))
+            // webOS names the category the method sits in: a call to
+            // com.palm.systemservice/wallpaper/listWallpapers is unknown "for category
+            // \"/wallpaper\"" (measured on the reference TouchPad).
+            val category = "/" + method.substringBeforeLast('/', "")
+            val leaf = method.substringAfterLast('/')
+            call.reply(error(if (has(service)) "Unknown method \"$leaf\" for category \"$category\"" else "Service does not exist: $service."))
         } else h.handle(call)
         return call
     }

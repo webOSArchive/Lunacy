@@ -3,7 +3,7 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-09-19)
+## Where things stand (2026-09-20)
 
 Apps now install from the App Museum and run: Apollo plays music, Plex plays direct and
 transcoded video, Sound Cloud Player streams through its JS service, AccuWeather and USA Today
@@ -48,26 +48,31 @@ show live data. Per-app results and every fix, with the layer it landed in, are 
   service package, Palm's mojoservice and foundations from the TouchPad, webOS paths, a curl
   in JS, and a loopback media server for services' HLS. See "JS services" in the
   architecture doc.
-- **Pending from the LunaCE spec agent:** a revision of
-  [luna-shell-reference.md](luna-shell-reference.md) that uses the reference TouchPad's own
-  `/etc/palm` values as authoritative. Those values are the card ratios 0.55/0.50 and its
-  `lunaAnimations.conf`. It also corrects the dock icon y from 65 to 54, as measured, and
-  should take in `/etc/palm/launcher3` (the delete decorator at -50,-50, the Done button's
-  offsets). If that revision never landed, redo it: the device files are in the local
-  `spike/vendor/touchpad/etc-palm/`. Until then, where the doc disagrees with the code, the
-  code's comments give the values measured on the device.
-- **Planned: Lunacy's own Device Info.** A built-in app, adapted from Palm's Device Info
-  (`com.palm.app.deviceinfo`, which codepoet has), that reports the state of the environment
-  rather than pretending to be webOS: Lunacy's version and build number, and the Android
-  version, WebView version, Node version and device it runs on.
-  - Palm's app is Mojo, so it either waits for phase 5 or is ported to Enyo 1 first.
-  - It gets Lunacy's details from a Lunacy service with its own name (not a webOS one), so
-    the bus stays honest about what is webOS and what isn't.
-  - It's Palm's code: the copy that ships needs a NOTICE, like Mojo's.
+- **The LunaCE spec revision landed.** [luna-shell-reference.md](luna-shell-reference.md) now
+  uses the reference TouchPad's own `/etc/palm` values as authoritative and marks what was
+  measured on the device. Where the doc and the code disagree, the code's comments give the
+  measured value.
+- **Settings (2026-09-20).** Three cases, described under "Settings" in the architecture doc:
+  Lunacy's own app where webOS's reported a webOS device, Palm's own app where Lunacy can
+  answer it, and an icon that opens Android's screen where the setting belongs to Android.
+  - **Device Info** is Lunacy's own, in Enyo 1 (Palm's is Mojo), keeping Palm's id and icons.
+    It reports the device, Android, the WebView, Lunacy's version, Node and the display, from
+    `palm://org.webosarchive.lunacy/system/getEnvironment` - Lunacy's own service name.
+  - **Screen & Lock** is Palm's, unchanged: `com.palm.systemservice` (preferences and the
+    wallpaper store) and `com.palm.display/control` (Android's brightness and screen-off
+    timeout) answer it, and Change Wallpaper works end to end.
+  - **A file picker** at webOS's own system-UI path, so `enyo.FilePicker` works in every app
+    (Papyrus's import is worth retrying now).
+  - **Wi-Fi** and **Sounds & Alerts** are shortcuts to Android's settings.
+  - **Help** is Palm's, unchanged, and runs; its articles need a path webOS Archive's help host
+    doesn't serve yet (see fix-log.md).
+  - Palm's settings apps stay in `local-assets/` for now: shipping Palm's code in the APK is
+    codepoet's call, like Mojo's.
 - **Next candidates:**
-  - the remaining startup services (keys, display), the media indexer's db8 kinds, and the
-    FilePicker (Papyrus);
-  - Lunacy's Device Info (above);
+  - the remaining startup services (keys, display) and the media indexer's db8 kinds;
+  - the rest of the settings apps: Date & Time, Language, Backup, Accounts, Updates, Location
+    (each is one of the three cases above);
+  - Android's own Pictures and Downloads in the file picker;
   - the border-image seams in Enyo dialogs;
   - a test suite from the apps in fix-log.md, run on WebView 37 and 64;
   - card stacks/groups;

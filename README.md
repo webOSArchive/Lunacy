@@ -60,7 +60,7 @@ Lunacy starts on Android 5.0.1, and newer Android versions follow.
 
 In development. The shell (card view, launcher, status bar, notifications) and Enyo apps
 such as the App Museum run on an Android 5 tablet. See [docs/roadmap.md](docs/roadmap.md)
-for where things stand. See [docs/roadmap.md](docs/roadmap.md).
+for where things stand.
 
 ## Documentation
 

@@ -14,10 +14,15 @@ class SystemProperties(context: Context) {
         // webOS's device id: 40 hex digits. Each Lunacy install makes its own and keeps it.
         "com.palm.properties.nduid" to nduid(context),
         "com.palm.properties.ProdSN" to SERIAL,
-        "com.palm.properties.version" to "webOS CE 3.1.0",
+        "com.palm.properties.version" to WEBOS_VERSION,
         "com.palm.properties.deviceName" to "HP TouchPad",
         "com.palm.properties.deviceNameShort" to "TouchPad",
         "com.palm.properties.DMMODEL" to "HSTNH-I29C",
+        // The product id apps key off to tell one webOS device from another: Palm's Help app
+        // picks its help content by it. Measured on the reference TouchPad, which reports the
+        // same string as DMMODEL.
+        "com.palm.properties.PRODoID" to "HSTNH-I29C",
+        "com.palm.properties.boardType" to "topaz-Wifi-pvt\n",
         "com.palm.properties.DMCARRIER" to "",
         "com.palm.properties.productLineVersion" to "1.0",
         "com.palm.properties.buildName" to "Nova-HP-Topaz",
@@ -38,6 +43,8 @@ class SystemProperties(context: Context) {
     companion object {
         /** deviceInfo's serialNumber and the ProdSN property. */
         const val SERIAL = "lunacy"
+        /** The webOS version Lunacy reports: the reference TouchPad's (docs/roadmap.md). */
+        const val WEBOS_VERSION = "webOS CE 3.1.0"
 
         private fun nduid(context: Context): String {
             val prefs = context.getSharedPreferences("device", Context.MODE_PRIVATE)

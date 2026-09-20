@@ -62,6 +62,11 @@ class Luna(private val context: Context) {
     val fontBold get() = font("Prelude-Bold.ttf", Typeface.BOLD)
     val fontLight get() = font("PreludeWGL-Light.ttf")
 
+    /** An image file at its own size: a wallpaper the user picked, which isn't shell art. */
+    fun decodeFull(file: java.io.File): Bitmap? = try {
+        BitmapFactory.decodeFile(file.path)
+    } catch (e: Exception) { null } catch (e: OutOfMemoryError) { null }
+
     /** A TouchPad wallpaper (assets/luna/wallpapers, shipped as abandonware). */
     fun wallpaper(name: String = DEFAULT_WALLPAPER): Bitmap? = try {
         context.assets.open("luna/wallpapers/$name").use { BitmapFactory.decodeStream(it) }
@@ -72,6 +77,19 @@ class Luna(private val context: Context) {
         val bmp = image(path) ?: return
         val k = bmp.width.toFloat() / imageTpWidth(path)
         drawNineSlice(c, bmp, dst, (l * k).toInt(), (t * k).toInt(), (r * k).toInt(), (b * k).toInt(), p, l * density, t * density, r * density, b * density)
+    }
+
+    /**
+     * Draws one rect of a Luna image, centred at (cx, cy). Source coordinates are the image's
+     * own (TouchPad) pixels: LunaCE's two-state sprites keep their states at documented rects
+     * inside a larger canvas, not as halves of it (docs/luna-shell-reference.md §3.8).
+     */
+    fun sprite(c: Canvas, path: String, cx: Float, cy: Float, x: Int, y: Int, w: Int, h: Int) {
+        val bmp = image(path) ?: return
+        val k = bmp.width.toFloat() / imageTpWidth(path)
+        val src = Rect((x * k).toInt(), (y * k).toInt(), ((x + w) * k).toInt(), ((y + h) * k).toInt())
+        val halfW = px(w / 2f); val halfH = px(h / 2f)
+        c.drawBitmap(bmp, src, RectF(cx - halfW, cy - halfH, cx + halfW, cy + halfH), null)
     }
 
     /** Tiles a Luna image over dst from its top-left, at TouchPad scale. */

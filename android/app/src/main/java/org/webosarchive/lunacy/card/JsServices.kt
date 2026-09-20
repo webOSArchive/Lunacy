@@ -55,6 +55,9 @@ class JsServices(private val context: Context, private val bus: Bus, private val
         if (names.isNotEmpty()) Log.i(AppServer.TAG, "js services: ${names.keys.sorted()}")
     }
 
+    /** The bus names installed packages' services answer to. */
+    fun names(): org.json.JSONArray = org.json.JSONArray(names.keys.sorted())
+
     private fun call(call: Bus.Call) {
         val dir = names[call.service] ?: return call.reply(Bus.error("Service does not exist: ${call.service}."))
         val p = running[dir] ?: Proc(dir, call.service).also { running[dir] = it }

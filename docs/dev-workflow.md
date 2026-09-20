@@ -12,7 +12,8 @@ out on the reference devices. Changes made to the Android device are listed sepa
 | `android/app/src/main/assets/luna/` | LunaCE images (Apache 2.0), Prelude fonts and TouchPad wallpapers (abandonware), each with a NOTICE | yes |
 | `android/app/src/main/assets/lunacy/` | Injected page scripts: `compat.js` (input model, flicks, uncaught errors), `bridge.js` (PalmSystem, PalmServiceBridge), `net.js` (network shim), `fonts.css` (generated) | yes |
 | `android/app/src/main/assets/certs/` | Mozilla CA roots for Lunacy's own HTTP (MPL 2.0), with a NOTICE | yes |
-| `android/app/src/main/assets/apps/` | Bundled apps we own: `org.webosarchive.lunacy.notifytest` | yes |
+| `android/app/src/main/assets/apps/` | Bundled apps we own: Device Info, the shortcuts to Android's settings (Wi-Fi, Sounds & Alerts), `org.webosarchive.lunacy.notifytest`. Each carries a NOTICE for the Palm icons it uses | yes |
+| `android/app/src/main/assets/luna-systemui/` | The system UI webOS served from the OS, at its own paths: Lunacy's file picker | yes |
 | `android/local-assets/` | Stock Enyo 1.0 and third-party test apps (App Museum, Glimpse, Enyo samples), populated by `android/fetch-assets.sh` | no |
 | `android/tools/gen-fonts-css.py` | Regenerates `fonts.css` from the shipped Prelude files | yes |
 | `android/tools/node-launcher.cpp` | Node's `main()`, built by `fetch-assets.sh` into `liblunacynode.so` for JS services | yes |
@@ -22,6 +23,7 @@ out on the reference devices. Changes made to the Android device are listed sepa
 | `spike/probe/` | TouchPad probe app that records the PalmSystem contract | yes |
 | `spike/*.sh`, `spike/cdp.mjs` | Device helper scripts, and DevTools from the command line (below) | yes |
 | `spike/vendor/` | Local clones: enyo-1.0, LunaCE, luna-sysmgr, webos-catalog-service, and files pulled from the TouchPad (frameworks, `/etc/palm`, fonts, wallpapers, a WebView 64 APK) | no |
+| `spike/vendor/settings-apps/` | Palm's own settings apps (Screen & Lock, Help), which are Enyo 1 and run unchanged; `fetch-assets.sh` copies them into `local-assets/apps/` | no |
 | `spike/results/` | Screenshots and logs | no |
 
 ## Build and run
@@ -70,6 +72,10 @@ adb shell am start -n org.webosarchive.lunacy/.shell.ShellActivity \
   `reset`. Android 5 has no `unplug`.
 - **Inspecting pages:** `chrome://inspect` works, because Lunacy turns on WebView
   debugging.
+- **Driving the tablet without hands:** `adb shell input tap <x> <y>`, `input swipe` (a long
+  press is a swipe that ends where it started), and `input keyevent KEYCODE_BACK` for the home
+  button. Coordinates are device pixels, which on the HP 10 G2 are TouchPad pixels. This is
+  how the launcher's edit mode and the file picker were checked against the TouchPad.
 - **DevTools from the command line:** `spike/cdp.sh` (Node 22+) forwards the running
   Lunacy's DevTools socket and talks to one page, chosen by a substring of its URL:
   - `./cdp.sh eval '<expr>' <appid>` prints the expression's value, for reading app state

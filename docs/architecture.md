@@ -130,6 +130,13 @@ product; being "close enough" is not the goal.
     v.<version>", Cancel and Remove). Remove closes the app's windows and uninstalls its
     package: the app, the services its `packageinfo.json` names, and the package record. Its
     db8 data stays for now.
+- **Launcher pages.** Four, as LunaCE has them, named as the reference TouchPad names them:
+  APPS, DOWNLOADS, GAMES, SETTINGS (its `app-keywords-to-designator-map.txt` renames favorites
+  to "games" and prefs to "settings"). An app the user hasn't placed finds its page the way
+  LunaCE's `AppMonitor::pageDesignatorForWebOSApp` does: its `appinfo.json` category first,
+  then each of its keywords, against the map in `assets/luna/launcher-pages.json`. webOS also
+  shipped a default layout naming which app started on which page; Lunacy has no fixed set of
+  apps, so the keywords those apps already carry do that job.
 - **Layouts.** Tablet and phone layouts from the start; the tablet layout is the reference.
 - **Launcher mode.** Lunacy starts as a normal full-screen app. Nothing in the shell should
   assume that, so it can later become the Android home launcher, with Android apps appearing
@@ -346,6 +353,68 @@ Following LunaCE's tablet mode (docs/luna-shell-reference.md §4 and §5):
   "popup"}`) drive it without touches, on a TouchPad (`palm-launch -p`) and in Lunacy (the
   `launch` and `params` intent extras).
 
+## Settings
+
+webOS's settings were ordinary Enyo apps talking to system services, and most of them are
+still the right UI - they just need somebody to answer. Lunacy answers only for what it
+actually owns, and each settings app falls into one of three cases:
+
+- **Lunacy's own app**, where webOS's version reported a webOS device and Lunacy isn't one.
+  Device Info is the first: it reports the device, Android, the WebView, Lunacy's own version,
+  the Node that runs JS services and the display, all from
+  `palm://org.webosarchive.lunacy/system/getEnvironment`. That service carries Lunacy's own
+  name, so nothing on a webOS service name is Lunacy pretending (see "Luna bus" above). The
+  app keeps Palm's app id and icons, so it sits where webOS users look for it.
+- **Palm's app, unchanged**, where Lunacy can answer what it asks for. Screen & Lock is the
+  first: `com.palm.systemservice` stores its preferences and holds the wallpaper,
+  `com.palm.display/control` really does set Android's brightness and screen-off timeout, and
+  Change Wallpaper opens the file picker below. What Lunacy hasn't got (a lock screen:
+  `com.palm.systemmanager`) returns the bus's honest error, and the app shows what it showed
+  on a device when a service failed.
+- **A shortcut to Android's own screen**, where the setting belongs to the host OS and a copy
+  of webOS's UI could only pretend. Wi-Fi and Sounds & Alerts are icons that open Android's
+  settings through `palm://org.webosarchive.lunacy/android/openSettings`. They declare it with
+  `"lunacyAndroidSettings": "<panel>"` in `appinfo.json` - a Lunacy extension, only ever used
+  by apps Lunacy ships - and launching one opens no window.
+
+A settings app Lunacy can neither answer nor hand over isn't shipped at all.
+
+- **The preference store.** `com.palm.systemservice` is a store, as it was on webOS: it keeps
+  whatever key an app gives it, and whoever owns the thing a key names acts on it. The shell
+  owns `wallpaper` (and `enableALS`, which is Android's brightness mode). A key nothing owns is
+  kept and nothing more, exactly as on a device - the service isn't claiming to have acted.
+  `getPreferences` returns only the keys that exist, and a subscription hears about the keys it
+  asked for, both measured on the reference TouchPad.
+- **Wallpapers.** `wallpaper/importWallpaper` copies the picked file into
+  `/media/internal/.wallpapers/` with a thumbnail beside it in `thumbs/`, and answers with
+  `{wallpaperName, wallpaperFile, wallpaperThumbFile}` - the shape the reference TouchPad's own
+  preference has. Lunacy ships the TouchPad's wallpapers into `/media/internal/wallpapers/`,
+  where a device kept them, so there is something to pick on a fresh install.
+- **Android's settings, written for real (ratchet item).** `WRITE_SETTINGS` is granted at
+  install while Lunacy targets API 21. From API 23 it needs the user's consent, so a later
+  target has to ask before Screen & Lock's brightness and timeout will take.
+
+### System UI
+
+webOS served some UI from the OS itself, and apps reach it at its absolute path: Enyo 1's
+`enyo.FilePicker` loads
+`/usr/lib/luna/system/luna-systemui/app/FilePicker/filepicker.html` in an iframe, passes its
+parameters in the query string and takes the result back through `postMessage`
+(`enyoCrossAppResult=`). Lunacy serves that path on every app origin, with its own page behind
+it, so the control works in every app without any app being changed.
+
+- Palm's picker listed what the media indexer had in db8. Lunacy has no media indexer, so its
+  picker reads the webOS tree through `palm://org.webosarchive.lunacy/files/list`, grouped by
+  folder the way Palm's showed albums.
+- Thumbnails come from `?__lunacy_thumb=<px>` on an image under `/media/internal`, which the
+  card host answers with a scaled JPEG. Full-size photos would not fit in 1 GB of RAM. The
+  parameter carries Lunacy's own prefix so no app can stumble into it.
+- **Frames can use the bus.** On webOS every frame of a window had its own `PalmServiceBridge`
+  binding. Here a reply arrives through `evaluateJavascript`, which only ever runs in the main
+  frame, so a window's same-origin frames share one token counter and the main frame hands each
+  reply to the frame that is waiting for it. The network shim does the same with its request
+  ids. A cross-origin frame can't join in, and shouldn't - see the ratchet item above.
+
 ## App lifecycle
 
 On webOS an app is not a page. The shell and the app's windows share a contract, and Enyo 1
@@ -420,6 +489,15 @@ model, so apps can't tell the difference.
     3.1.0, HP TouchPad). `nduid` is a 40-hex id each install generates and keeps, and
     `ProdSN` matches `deviceInfo`'s serial. An unknown key gets the TouchPad's
     `{"returnValue": false, "errorText": "no such key"}`.
+  - `com.palm.systemservice`: webOS's preference store and its wallpaper store, and
+    `com.palm.display/control` for the screen's brightness and timeout. See "Settings" below.
+  - `com.palm.bus/signal/registerServerStatus`: whether a service is on the bus. On webOS this
+    is ls-hubd's own signal rather than a service, so Lunacy's router answers it, and answers
+    again when a service comes or goes (a package's JS services do). Apps wait for it before
+    calling a service; Palm's Help app does, before the connection manager.
+  - `org.webosarchive.lunacy`: Lunacy's own service, under its own name - the environment
+    Lunacy runs in, Android's settings screens, and the file listing its picker needs. Nothing
+    of Lunacy's sits on a webOS service name.
   - `com.palm.downloadmanager`, used by apps like Glimpse.
   - Installs: the App Museum calls `applicationManager/open` for Preware's id
     (`org.webosinternals.preware`, or `org.webosports.app.preware` on LuneOS) with

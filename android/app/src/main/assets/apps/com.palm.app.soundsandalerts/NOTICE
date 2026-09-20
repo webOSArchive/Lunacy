@@ -1,0 +1,10 @@
+A shortcut, not Palm's app.
+
+Palm's Sounds & Alerts app sets webOS's ringtones, volumes and system sounds. Those belong to
+Android here, and ringtones need webOS's media indexer besides, so this app is an icon that
+opens Android's sound settings (appinfo.json's lunacyAndroidSettings, a Lunacy extension). It
+holds no code of its own.
+
+icon.png and icon-256x256.png are Palm's, from com.palm.app.soundsandalerts as shipped on
+webOS 3.x. Copyright Palm, Inc. / Hewlett-Packard; never released under an open licence;
+distributed by Lunacy as abandonware, like Mojo and the Prelude fonts.

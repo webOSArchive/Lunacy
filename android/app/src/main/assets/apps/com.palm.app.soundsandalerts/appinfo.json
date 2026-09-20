@@ -1,0 +1,13 @@
+{
+	"id": "com.palm.app.soundsandalerts",
+	"version": "1.0.0",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Sounds & Alerts",
+	"icon": "icon.png",
+	"splashicon": "icon-256x256.png",
+	"uiRevision": 2,
+	"keywords": ["Settings", "Preferences", "Sound", "Volume", "Ringtone", "Alerts"],
+	"lunacyAndroidSettings": "sound"
+}

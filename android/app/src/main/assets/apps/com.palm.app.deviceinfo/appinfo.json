@@ -1,0 +1,12 @@
+{
+	"id": "com.palm.app.deviceinfo",
+	"version": "1.0.0",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Device Info",
+	"icon": "icon.png",
+	"splashicon": "icon-256x256.png",
+	"uiRevision": 2,
+	"keywords": ["Settings", "Preferences", "Device", "About", "Version"]
+}

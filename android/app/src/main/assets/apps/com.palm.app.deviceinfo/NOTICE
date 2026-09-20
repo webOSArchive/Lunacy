@@ -1,0 +1,16 @@
+Lunacy's Device Info.
+
+Palm's own Device Info (com.palm.app.deviceinfo, webOS 3.x) reports a webOS device: its
+Palm profile, its webOS version, its carrier and its hardware. Lunacy is not a webOS device
+and doesn't own most of what that app reports, so this app is written for Lunacy: it reports
+the environment the apps actually run in, and hands settings that belong to Android to
+Android. It keeps Palm's app id, so it sits where webOS users expect to find it, and Palm's
+icons, so it looks like it belongs.
+
+The app's code is Lunacy's, under the same terms as the rest of Lunacy. These files are not:
+
+- icon.png, icon-256x256.png, images/header-icon-deviceinfo.png
+
+  Copyright Palm, Inc. / Hewlett-Packard, from com.palm.app.deviceinfo as shipped on webOS
+  3.x. Never released under an open licence; distributed by Lunacy as abandonware, like
+  Mojo and the Prelude fonts (no owner has asserted rights since webOS was discontinued).

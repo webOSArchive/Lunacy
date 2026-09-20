@@ -1,0 +1,42 @@
+/* Lunacy's Device Info: webOS's settings look (see the reference TouchPad's Screen & Lock). */
+body {
+	background: #e5e5e5;
+}
+.header-welcome {
+	padding: 12px;
+	text-align: center;
+}
+.header-welcome > * {
+	display: inline-block;
+	vertical-align: middle;
+	font-size: 24px;
+}
+.header-shadow {
+	height: 8px;
+	background: -webkit-gradient(linear, left top, left bottom, from(rgba(0,0,0,0.25)), to(rgba(0,0,0,0)));
+}
+.box-center {
+	max-width: 500px;
+	margin: 0 auto;
+	padding: 24px 12px 32px 12px;
+}
+.info-label {
+	color: #4c7ba6;
+	font-size: 14px;
+	text-transform: uppercase;
+	padding-right: 12px;
+	white-space: nowrap;
+}
+.info-value {
+	text-align: right;
+	color: #555;
+	font-size: 18px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.note {
+	color: #777;
+	font-size: 14px;
+	padding: 8px 12px 20px 12px;
+}

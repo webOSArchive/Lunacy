@@ -69,10 +69,14 @@ show live data. Per-app results and every fix, with the layer it landed in, are 
     Android's shared folders are mapped into `/media/internal` under webOS's own names, so it
     shows the user's real files: Papyrus now imports and reads an ePub from Downloads.
   - **Wi-Fi** and **Sounds & Alerts** are shortcuts to Android's settings.
+  - An app its owner enables now shows its own exhibition view: the shell launches it with
+    `dockMode`, which is how webOS told an app to show that view rather than its ordinary one.
   - **Help** is Palm's, unchanged, and runs; its articles need a path webOS Archive's help host
     doesn't serve yet (see fix-log.md).
   - Palm's settings apps stay in `local-assets/` for now: shipping Palm's code in the APK is
     codepoet's call, like Mojo's.
+- **Mojo runs (2026-09-20).** Flying Toasters, a Mojo app installed from a package, runs and
+  works as an Exhibition app. Phase 5 is open early; see below.
 - **Exhibition (2026-09-20).** Palm's Clock and Exhibition apps are bundled and run unchanged.
   The Exhibition app's Start Exhibition button puts the shell into webOS's dock mode, where it
   draws the Time face itself as LunaSysMgr did - all four of the reference TouchPad's faces,
@@ -256,8 +260,15 @@ inside Lunacy.
 
 ## 5: Mojo
 
-- Modernized Mojo at `/usr/palm/frameworks/mojo/…`, handled like Enyo, with its own change log.
+**Started 2026-09-20**, ahead of its phase: an Exhibition app from the Museum (Flying Toasters)
+turned out to be Mojo, and it runs. Palm's own Mojo is served from the reference TouchPad with
+its own patch series and NOTICE, as Enyo is; see "Mojo" in the architecture doc for how it is
+packaged and what had to change. One app is not a phase, though - the exit criterion stands.
+
+- ~~Modernized Mojo at `/usr/palm/frameworks/mojo/…`, handled like Enyo, with its own change
+  log.~~ Done in outline.
 - Multi-stage windows mapped to cards; scene transitions.
+- The services Mojo apps lean on that Lunacy hasn't got yet.
 
 **Exit:** a Mojo test suite of popular App Museum apps runs without per-app code.
 

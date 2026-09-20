@@ -24,17 +24,63 @@ class SystemService(private val webosRoot: File, private val store: File) {
 
     private val prefs: JSONObject = runCatching { JSONObject(store.readText()) }.getOrDefault(JSONObject())
     private val subscribers = ArrayList<Pair<Bus.Call, List<String>>>()
+    private val timeSubscribers = LinkedHashSet<Bus.Call>()
 
     private val wallpaperDir = File(webosRoot, "media/internal/.wallpapers")
     private val thumbDir = File(wallpaperDir, "thumbs")
 
     fun register(bus: Bus) {
+        bus.register(SERVICE, "time/getSystemTime", Bus.CallHandler { systemTime(it) })
         bus.register(SERVICE, "getPreferences", Bus.CallHandler { getPreferences(it) })
         bus.register(SERVICE, "setPreferences", Bus.CallHandler { setPreferences(it) })
         bus.register(SERVICE, "wallpaper/importWallpaper", Bus.CallHandler { importWallpaper(it) })
         bus.register(SERVICE, "wallpaper/info", Bus.CallHandler { wallpaperInfo(it) })
         bus.register(SERVICE, "wallpaper/deleteWallpaper", Bus.CallHandler { deleteWallpaper(it) })
         bus.register(SERVICE, "wallpaper/refresh", Bus.CallHandler { it.reply(Bus.ok()) })
+    }
+
+    // ---- the time ----
+
+    /**
+     * palm://com.palm.systemservice/time/getSystemTime: the clock, the zone and the offset.
+     * Mojo asks for it while starting, with a subscription, and so do apps that show a time.
+     * The shape is the reference TouchPad's, measured with luna-send; Lunacy fills it from
+     * Android's own clock, and tells subscribers when the time or the zone changes.
+     */
+    private fun systemTime(call: Bus.Call) {
+        call.reply(timeReply())
+        if (call.subscribe && !call.cancelled) {
+            timeSubscribers += call
+            call.onCancel { timeSubscribers.remove(call) }
+        }
+    }
+
+    /** The shell calls this when Android says the time, the zone or the day changed. */
+    fun timeChanged() {
+        val reply = timeReply()
+        timeSubscribers.toList().forEach { it.reply(reply) }
+    }
+
+    private fun timeReply(): String {
+        val now = java.util.Calendar.getInstance()
+        val zone = now.timeZone
+        val local = JSONObject()
+            .put("year", now.get(java.util.Calendar.YEAR))
+            .put("month", now.get(java.util.Calendar.MONTH) + 1)
+            .put("day", now.get(java.util.Calendar.DAY_OF_MONTH))
+            .put("hour", now.get(java.util.Calendar.HOUR_OF_DAY))
+            .put("minute", now.get(java.util.Calendar.MINUTE))
+            .put("second", now.get(java.util.Calendar.SECOND))
+        return JSONObject()
+            .put("returnValue", true)
+            .put("utc", now.timeInMillis / 1000)
+            .put("localtime", local)
+            // webOS reports the offset in minutes east of UTC, as -420 for Pacific daylight.
+            .put("offset", zone.getOffset(now.timeInMillis) / 60000)
+            .put("timezone", zone.id)
+            .put("TZ", zone.getDisplayName(zone.inDaylightTime(now.time), java.util.TimeZone.SHORT))
+            .put("timeZoneFile", "/var/luna/preferences/localtime")
+            .toString()
     }
 
     // ---- preferences ----

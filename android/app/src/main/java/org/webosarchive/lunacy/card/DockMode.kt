@@ -39,7 +39,9 @@ class DockMode(context: Context, private val registry: AppRegistry) {
             val info = app.appinfo
             val declared = info.optBoolean("dockMode", false) || info.optBoolean("exhibitionMode", false)
             if (!declared) continue
-            val title = info.optJSONObject("exhibitionModeOptions")?.optString("title").orEmpty().ifEmpty { app.title }
+            val title = info.optJSONObject("exhibitionModeOptions")?.optString("title").orEmpty()
+                .ifEmpty { info.optString("dockModeTitle") }
+                .ifEmpty { app.title }
             points.put(JSONObject()
                 .put("id", app.id).put("version", app.version).put("appId", app.id)
                 .put("vendor", info.optString("vendor", "")).put("vendorUrl", info.optString("vendorurl", ""))
@@ -55,6 +57,14 @@ class DockMode(context: Context, private val registry: AppRegistry) {
     }
 
     fun isEnabled(appId: String): Boolean = prefs.getBoolean(appId, false)
+
+    /** What the status bar calls this app while it is exhibiting. */
+    fun title(appId: String): String {
+        val app = registry.get(appId) ?: return "Time"
+        return app.appinfo.optJSONObject("exhibitionModeOptions")?.optString("title").orEmpty()
+            .ifEmpty { app.appinfo.optString("dockModeTitle") }
+            .ifEmpty { app.title }
+    }
 
     /** The app the user picked for Exhibition, if any; otherwise the shell's own Time face. */
     fun enabledApp(): String? = registry.apps.firstOrNull { isEnabled(it.id) }?.id

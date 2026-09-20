@@ -15,6 +15,7 @@ out on the reference devices. Changes made to the Android device are listed sepa
 | `android/app/src/main/assets/apps/` | The bundled apps: Lunacy's own (Device Info, the shortcuts to Android's settings, `org.webosarchive.lunacy.notifytest`) and Palm's own settings apps that ship as abandonware (Screen & Lock, Help). Each carries a NOTICE | yes |
 | `android/app/src/main/assets/luna-systemui/` | The system UI webOS served from the OS, at its own paths: Lunacy's file picker | yes |
 | `android/framework/enyo-1.0/` | Lunacy's changes to Enyo, as patches against upstream, with CHANGES.md as the fork's change log | yes |
+| `android/framework/mojo/` | Lunacy's changes to Palm's Mojo, likewise, with CHANGES.md explaining how Mojo is packaged | yes |
 | `android/local-assets/` | Stock Enyo 1.0 with those patches applied, and third-party test apps (App Museum, Glimpse, Enyo samples), populated by `android/fetch-assets.sh` | no |
 | `android/tools/gen-fonts-css.py` | Regenerates `fonts.css` from the shipped Prelude files | yes |
 | `android/tools/node-launcher.cpp` | Node's `main()`, built by `fetch-assets.sh` into `liblunacynode.so` for JS services | yes |

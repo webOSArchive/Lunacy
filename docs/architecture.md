@@ -714,10 +714,41 @@ webOS apps could ship JS services (`usr/palm/services/<id>/`, with `services.jso
   work, ABIs other than 32-bit ARM, and a jail: services run with Lunacy's own permissions
   (ratchet item).
 
+## Mojo
+
+Started 2026-09-20, ahead of its phase, because an Exhibition app from the App Museum turned
+out to be a Mojo one. Lunacy serves **Palm's own Mojo** from the reference TouchPad, as it
+serves Enyo, with its changes as a patch series
+([CHANGES.md](../android/framework/mojo/CHANGES.md)) and a NOTICE: abandonware, like the
+Prelude fonts.
+
+Mojo isn't packaged the way Enyo is, and that shapes what Lunacy has to do:
+
+- **The framework was part of the browser.** A page loads `mojo.js`, which looks for a global
+  `palmInitFramework<submission>` that webOS's WebKit provided and calls it. The submission on
+  disk carries only assets; `builtins/` carries the code, as the V8 *native* scripts the
+  browser was compiled from. Without the global, mojo.js tries to fetch a `loader.js` webOS
+  doesn't ship - which is the "The load of framework submission 506 failed" error.
+- **So the builtins are served in front of the app's own tag**, by the same kind of global
+  serve-time transform that injects Lunacy's own scripts: a page whose HTML loads
+  `/usr/palm/frameworks/mojo/mojo.js` gets Prototype and the framework before it, with the
+  submission taken from the tag's own `x-mojo-version` (1 is submission 506, as mojo.js maps
+  it). No app is named and no app is changed.
+- **The builtins are patched to load as ordinary scripts**: V8's `global`, `%SetProperty`, the
+  `$Object`-style aliases and `builtinEval` are given their plain JavaScript meanings. The
+  last one matters more than it looks - webOS's Prototype parses JSON with it, so without it
+  every `evalJSON` failed and an app never saw its launch parameters.
+- **`mojocommon`** is a framework of its own beside Mojo, which the submission symlinks into;
+  Lunacy serves it at its own path. Its files are dereferenced when they are copied, because
+  Gradle's asset merger won't take symlinks.
+- **Mojo's own device test already works**: `Mojo.Host.current` is "palm-sys-mgr" when
+  `window.palmGetResource` exists, which the bridge provides. What needed teaching was the
+  origin - Mojo knew `file://` (a device) and `http://` (a desktop), and Lunacy is `https://`.
+
 ## Later layers
 
-- **Mojo** replaces `/usr/palm/frameworks/mojo/…` the same way. Its multi-stage windows map
-  to cards.
+- **Mojo's multi-stage windows** map to cards, as Enyo's `window.open` windows do. Only the
+  single-stage path is exercised so far.
 - **PDK native apps** need a glibc/SDL 1.2/PDL loader over Android, which is roughly
   [apkenv](https://github.com/Android-to-webOS-Ports/apkenv) in reverse.
   - Current SoCs are often 64-bit only and can't run 32-bit ARM code, so recompiling may be

@@ -31,6 +31,21 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
         }
 
         private val FRAMEWORK = Regex("(?:^|.*/)usr/palm/frameworks/enyo/[^/]+/(.*)")
+        /** Mojo has no version folder: apps load /usr/palm/frameworks/mojo/mojo.js directly. */
+        private val MOJO = Regex("(?:^|.*/)usr/palm/frameworks/mojo/(.*)")
+        /** mojocommon sits beside Mojo; the submission's resources and images link into it. */
+        private val MOJO_COMMON = Regex("(?:^|.*/)usr/palm/frameworks/mojocommon/(.*)")
+        /**
+         * A page that loads Mojo. webOS's browser had the framework compiled in, and mojo.js
+         * looks for it as a global; Chromium hasn't, so the builtins that carry it are served
+         * in front of the app's own tag. The submission comes from the tag itself, as mojo.js
+         * reads it: x-mojo-version 1 is submission 506.
+         */
+        private val MOJO_TAG = Regex(
+            """<script[^>]*src="[^"]*?/usr/palm/frameworks/mojo/mojo\.js[^"]*"[^>]*>\s*</script>""",
+            RegexOption.IGNORE_CASE)
+        private val MOJO_VERSION = Regex("""x-mojo-(version|submission)="([^"]*)"""", RegexOption.IGNORE_CASE)
+        private val MOJO_SUBMISSIONS = mapOf("1" to "506", "2" to "344")
         /**
          * webOS's own system UI, which apps reach at its absolute path: enyo.FilePicker
          * loads /usr/lib/luna/system/luna-systemui/app/FilePicker/filepicker.html in an
@@ -58,9 +73,13 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
                 mapOf("Access-Control-Allow-Origin" to "*"), ByteArrayInputStream(ByteArray(0)))
         }
         val fw = FRAMEWORK.matchEntire(path)
+        val mojo = MOJO.matchEntire(path)
+        val mojoCommon = MOJO_COMMON.matchEntire(path)
         val thumb = runCatching { uri.getQueryParameter(THUMB_PARAM)?.toInt() }.getOrNull()
         val resp = when {
             fw != null -> asset("fw/enyo/1.0/" + fw.groupValues[1], path)
+            mojoCommon != null -> asset("fw/mojocommon/" + mojoCommon.groupValues[1], path)
+            mojo != null -> asset("fw/mojo/" + mojo.groupValues[1], path)
             path.startsWith(SYSTEM_UI) -> asset("luna-systemui/" + path.removePrefix(SYSTEM_UI), path)
             path.startsWith(CRYPTOFS) -> files.open(path.removePrefix(CRYPTOFS))?.let { respond(it, path) }
             // webOS's user storage, shared by apps and services (JS services write files here).
@@ -124,13 +143,32 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
 
     /** Global serve-time transform: Lunacy's scripts run first in every page. */
     private fun injectInto(s: InputStream): InputStream {
-        val html = s.bufferedReader().readText()
+        var html = s.bufferedReader().readText()
         val tag = "<link rel=\"stylesheet\" href=\"/__lunacy/fonts.css\">" +
             "<script src=\"/__lunacy/compat.js\"></script><script src=\"/__lunacy/bridge.js\"></script>" +
             "<script src=\"/__lunacy/net.js\"></script>"
         val m = Regex("<head[^>]*>", RegexOption.IGNORE_CASE).find(html)
-        val out = if (m != null) html.substring(0, m.range.last + 1) + tag + html.substring(m.range.last + 1) else tag + html
-        return ByteArrayInputStream(out.toByteArray())
+        html = if (m != null) html.substring(0, m.range.last + 1) + tag + html.substring(m.range.last + 1) else tag + html
+        return ByteArrayInputStream(mojoBuiltins(html).toByteArray())
+    }
+
+    /**
+     * Another global transform: a page that loads Mojo gets the builtins in front of it.
+     *
+     * On a device the framework was part of the browser - mojo.js calls a global
+     * palmInitFramework<submission> that WebKit provided, and falls back to fetching
+     * javascripts/loader.js, which webOS doesn't ship. Chromium has no such global, so the
+     * files that carry it (Prototype, and the framework itself) are loaded first and the
+     * app's own tag then finds what it expects. See "Mojo" in docs/architecture.md.
+     */
+    private fun mojoBuiltins(html: String): String {
+        val tag = MOJO_TAG.find(html) ?: return html
+        val version = MOJO_VERSION.find(tag.value)?.groupValues?.get(2).orEmpty()
+        val submission = MOJO_SUBMISSIONS[version] ?: version.ifEmpty { "506" }
+        val boot = "<script src=\"/usr/palm/frameworks/mojo/builtins/InstallPrototypeBuiltIn.js\"></script>" +
+            "<script src=\"/usr/palm/frameworks/mojo/builtins/palmInitFramework$submission.js\"></script>" +
+            "<script src=\"/__lunacy/mojo-boot.js\"></script>"
+        return html.substring(0, tag.range.first) + boot + html.substring(tag.range.first)
     }
 
     private fun mimeOf(p: String) = when (p.substringAfterLast('.', "").lowercase()) {

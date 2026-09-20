@@ -24,6 +24,31 @@ for a in $V/settings-apps/*; do
     id=$(basename "$a")
     [ -d "$a" ] && [ ! -d "app/src/main/assets/apps/$id" ] && cp -r "$a" $L/apps/
 done
+# Mojo, from the reference TouchPad. webOS's browser had the framework compiled in, so the
+# submission on disk carries only its assets and builtins/ carries the code; Lunacy serves
+# both. Palm's code, shipped as abandonware like the fonts (see the NOTICE it gets).
+mkdir -p $L/fw/mojo $L/fw/mojocommon
+# -L: the submission symlinks into mojocommon, and Gradle's asset merger chokes on symlinks.
+cp -rL $V/touchpad/mojo/. $L/fw/mojo/
+# mojocommon is a framework of its own beside Mojo, and the submission symlinks into it for
+# shared resources and images; Lunacy serves it at its own path so those links resolve.
+cp -rL $V/touchpad/mojocommon/. $L/fw/mojocommon/
+chmod -R u+w $L/fw/mojo $L/fw/mojocommon
+# Lunacy's changes to Mojo, as diffs against the device's own copy (framework/mojo/CHANGES.md).
+for patch in framework/mojo/patches/*.patch; do
+    [ -e "$patch" ] || continue
+    (cd $L/fw/mojo && patch -p1 --forward --silent < "../../../$patch") ||
+        { echo "fetch-assets: $patch does not apply to the TouchPad's Mojo" >&2; exit 1; }
+    echo "mojo: applied $(basename "$patch")"
+done
+cat > $L/fw/mojo/NOTICE <<'NOTICE'
+Palm's Mojo framework, copied from /usr/palm/frameworks/mojo on the reference TouchPad
+(webOS CE 3.1.0): mojo.js, submission 506's assets, and the builtins webOS's own browser
+provided (Prototype 1.6 and palmInitFramework506, the framework itself).
+Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence; distributed by
+Lunacy as abandonware: no owner has asserted rights since webOS was discontinued.
+NOTICE
+
 # Enyo samples as installable apps.
 # The SDK samples load Enyo by an SDK-tree relative path; packaging them as apps points them
 # at the framework path installed apps use (what palm-package'd samples needed on a device too).

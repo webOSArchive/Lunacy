@@ -52,6 +52,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var notifications: Notifications
     /** Exhibition mode: webOS's dock-mode clock, over everything, while it is on. */
     private lateinit var exhibition: ExhibitionLayer
+    private lateinit var dockMode: org.webosarchive.lunacy.card.DockMode
+    /** The app showing in exhibition mode, if it isn't the shell's own Time face. */
+    private var exhibitionApp: String? = null
     private var exhibitionOn = false
     /** Catches taps outside the dashboard drop-down, which close it. */
     private lateinit var menuScrim: View
@@ -533,20 +536,33 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (on) {
             closeMenu()
             if (launcherOpen) closeLauncher()
-            exhibition.reset()
-            exhibition.visibility = View.VISIBLE
-            exhibition.bringToFront()
+            // The app its owner chose, if any; otherwise the shell's own Time face. webOS
+            // launched the chosen app with dockMode set, which is how it knows to show its
+            // exhibition view rather than its ordinary one.
+            exhibitionApp = dockMode.enabledApp()
+            val app = exhibitionApp?.let { registry.get(it) }
+            if (app != null) {
+                exhibition.visibility = View.GONE
+                launch(app.id, JSONObject().put("dockMode", true).put("touchstoneMode", true))
+                statusBar.title = dockMode.title(app.id)
+            } else {
+                exhibition.reset()
+                exhibition.visibility = View.VISIBLE
+                exhibition.bringToFront()
+                statusBar.title = "Time"
+            }
             statusBar.bringToFront()
-            statusBar.title = "Time"
             statusBar.setMode(StatusBar.Mode.APP)
             // The screen is meant to stay on while it is exhibiting: that is the point of a dock.
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         } else {
             exhibition.visibility = View.GONE
+            exhibitionApp = null
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             if (cards.maximized != null) onMaximized(cards.maximized!!) else onCardView()
         }
-        cards.visibility = if (on) View.INVISIBLE else View.VISIBLE
+        // An app's exhibition view is its own card, shown as it is; the Time face replaces it.
+        cards.visibility = if (on && exhibitionApp == null) View.INVISIBLE else View.VISIBLE
         fade(justType, !on && cards.maximized == null && !launcherOpen)
         showDock(!on && cards.maximized == null)
     }
@@ -590,7 +606,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         displayService = org.webosarchive.lunacy.card.DisplayService(this)
         displayService.onDockMode = { on -> runOnUiThread { setExhibition(on) } }
         displayService.register(bus)
-        org.webosarchive.lunacy.card.DockMode(this, registry).register(bus)
+        dockMode = org.webosarchive.lunacy.card.DockMode(this, registry).also { it.register(bus) }
         systemService = org.webosarchive.lunacy.card.SystemService(jsServices.root, java.io.File(filesDir, "systemservice.json"))
         systemService.onPreferenceChanged = { key, value -> onPreferenceChanged(key, value) }
         systemService.register(bus)

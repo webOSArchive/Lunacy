@@ -1,0 +1,76 @@
+--- a/builtins/InstallPrototypeBuiltIn.js
++++ b/builtins/InstallPrototypeBuiltIn.js
+@@ -1,3 +1,18 @@
++// Lunacy: this file is one of webOS's V8 native scripts - the browser compiled it in, and
++// it is written in V8's internal syntax. `global` is V8's global object, and %SetProperty
++// registers a name on it. Both are given ordinary JavaScript meanings here so the file
++// loads as a script; nothing else about it changes.
++var global = this;
++// V8's natives context also has short aliases for the built-in constructors, which
++// these files use. In a page they are just the constructors themselves.
++var $Object = Object, $Function = Function, $Array = Array, $String = String,
++    $Number = Number, $Boolean = Boolean, $Date = Date, $RegExp = RegExp, $Math = Math,
++    $JSON = JSON, $Error = Error, $TypeError = TypeError, $RangeError = RangeError,
++    $SyntaxError = SyntaxError, $ReferenceError = ReferenceError, $EvalError = EvalError,
++    $URIError = URIError, $NaN = NaN, $Infinity = Infinity, $undefined = void 0;
++// webOS's Prototype parses JSON with builtinEval, V8's own eval. An indirect eval is the
++// same thing in a page: it evaluates in the global scope rather than the caller's.
++var builtinEval = (0, eval);
+ /*  Prototype JavaScript framework, version 1.6.0.3
+  *  (c) 2005-2008 Sam Stephenson
+  *
+@@ -3937,4 +3952,4 @@
+ 	};
+ };
+ 
+-%SetProperty(global, "InstallPrototypeBuiltIn", $InstallPrototypeBuiltIn, /* DONT_ENUM */ 1);
++global["InstallPrototypeBuiltIn"] = $InstallPrototypeBuiltIn;
+--- a/builtins/palmInitFramework506.js
++++ b/builtins/palmInitFramework506.js
+@@ -1,3 +1,15 @@
++// Lunacy: this file is one of webOS's V8 native scripts - the browser compiled it in, and
++// it is written in V8's internal syntax. `global` is V8's global object, and %SetProperty
++// registers a name on it. Both are given ordinary JavaScript meanings here so the file
++// loads as a script; nothing else about it changes.
++var global = this;
++// V8's natives context also has short aliases for the built-in constructors, which
++// these files use. In a page they are just the constructors themselves.
++var $Object = Object, $Function = Function, $Array = Array, $String = String,
++    $Number = Number, $Boolean = Boolean, $Date = Date, $RegExp = RegExp, $Math = Math,
++    $JSON = JSON, $Error = Error, $TypeError = TypeError, $RangeError = RangeError,
++    $SyntaxError = SyntaxError, $ReferenceError = ReferenceError, $EvalError = EvalError,
++    $URIError = URIError, $NaN = NaN, $Infinity = Infinity, $undefined = void 0;
+ function palmInitFramework506(window, document, navigator) {
+ 
+ with(window) {
+@@ -352,7 +364,7 @@
+ 
+ Mojo.loadAppInfo();
+ 
+-var re=/http:\/\/(.*:[0-9]+)/;
++var re=/https?:\/\/[^\/]+/;
+ match=document.baseURI.match(re);
+ if(!match){
+ Mojo.hostingPrefix="file://";
+@@ -496,10 +508,10 @@
+ 
+ appRootPath=match[0];
+ }else{
+-re=/http:\/\/.*\//;
++re=/https?:\/\/.*\//;
+ match=document.baseURI.match(re);
+ 
+-appRootPath=match[0];
++appRootPath=match&&match[0];
+ }
+ 
+ return appRootPath;
+@@ -36203,7 +36215,7 @@
+ const $palmInitFramework506 = palmInitFramework506;
+ 
+ function SetupFramework506() {
+-	%SetProperty(global, "palmInitFramework506", $palmInitFramework506, 5);
++	global["palmInitFramework506"] = $palmInitFramework506;
+ }
+ 
+ SetupFramework506();

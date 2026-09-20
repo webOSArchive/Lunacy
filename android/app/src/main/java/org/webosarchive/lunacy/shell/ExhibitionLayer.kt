@@ -51,9 +51,15 @@ class ExhibitionLayer(context: Context, private val luna: Luna) : View(context) 
         }
     }
 
-    // SimpleClock: Prelude Light 178 px over a 47 px date, the column nudged up by 11.
+    // SimpleClock: Prelude 178 px over a 47 px date, the column nudged up by 11.
+    //
+    // The QML asks for font.weight: Font.Light, but the device doesn't draw it light: the
+    // family it names ("prelude") has no Light face registered under it, so Qt falls back to
+    // the regular weight. Measured on the reference TouchPad's own screenshot, its glyphs
+    // carry about twice the ink of a Light face at the same size. So this is the regular one
+    // - what the device shows, not what the QML asks for.
     private val timePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE; typeface = luna.fontLight; textAlign = Paint.Align.CENTER
+        color = Color.WHITE; typeface = luna.fontMedium; textAlign = Paint.Align.CENTER
     }
     private val datePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.rgb(0xb4, 0xb4, 0xb4); typeface = luna.font("Prelude-Medium.ttf"); textAlign = Paint.Align.CENTER

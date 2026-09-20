@@ -224,6 +224,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     override fun onWindowClosed(window: AppWindow) {
+        // The app that was exhibiting has gone: so has exhibition mode, or the shell would sit
+        // there thinking it is still on and ignore the next press of Start Exhibition.
+        if (exhibitionOn && window.appId == exhibitionApp && running[window.appId]?.size == 1) {
+            setExhibition(false)
+        }
         cards.cards.firstOrNull { it.window == window }?.let { cards.remove(it) }
         notifications.removeDashboard(window)
         notifications.popups.remove(window)
@@ -531,7 +536,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * and the home button comes back out.
      */
     private fun setExhibition(on: Boolean) {
-        if (on == exhibitionOn) return
+        // Entering again while it is already on is not a no-op: Palm's Exhibition app sends
+        // this every time its button is pressed, and if the exhibiting app's card has since
+        // been thrown away, or the chosen app has changed, the press has to take effect.
+        // Only leaving is idempotent.
+        if (!on && !exhibitionOn) return
         exhibitionOn = on
         if (on) {
             closeMenu()

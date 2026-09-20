@@ -20,6 +20,11 @@ won.
   `font.weight: Font.Light`; the family it names has no Light face registered, so the device
   renders the regular weight - about twice the ink. Reading the source gave exactly the wrong
   answer.
+- **What the shell *sends* is part of the contract too.** Exhibition's launch parameters were
+  written from memory: `dockMode`, plus a `touchstoneMode` that exists nowhere in webOS.
+  LunaSysMgr sends `{"windowType":"dockModeWindow","dockMode":true}` and apps test both keys,
+  so they all quietly showed their ordinary view instead. The replies had been measured; the
+  messages going out had not.
 - **A screenshot beats reading, every time.** One screenshot of the real dock-mode app menu
   corrected three things at once: it is flush to the screen edge with no frame, the whole panel
   is a single gradient (what looked like a highlighted row for the current app is not - nothing

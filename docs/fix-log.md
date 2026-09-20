@@ -61,6 +61,8 @@ fixed-viewport fallback is allowed).
 | 2026-09-20 | Apps were told the wrong locale and clock format | every app | `locale` and `timeFormat` were hardcoded `en_us`/`HH12` while the shell's clock followed Android | shell and compat (both follow Android's settings now) |
 | 2026-09-20 | An app showing the network interface saw Android's | apps that show connection details | `connectionmanager` reported `wlan0`; a TouchPad's Wi-Fi is `eth0` | bus |
 | 2026-09-20 | Turning the tablet end for end doesn't reach apps at all | every Enyo app | Two layers. The shell: Android reports no configuration change when the rotation turns 180° (same orientation, same size), so `PalmSystem.screenOrientation` went stale - a display listener catches every rotation instead. Enyo: it decides the window has rotated by watching `window.resize`, which a 180° turn doesn't fire, and leaves the host's `Mojo.screenOrientationChanged` an empty stub. Its own note says why - the callback wasn't made on one of Palm's devices - and that sysmgr does make it, which Lunacy's shell does | shell, and **framework** (the stub now feeds `enyo.sendOrientationChange`, which only dispatches when the orientation really changed, so the resize path can't double up) |
+| 2026-09-20 | Exhibition shows the app's ordinary view, not its exhibition one | AccuWeather 2.3.1 | The shell launched a dock-mode app with `dockMode` and an invented `touchstoneMode`. LunaSysMgr sent `{"windowType":"dockModeWindow","dockMode":true}` (`DockModeWindowManager::launchApp`), and apps test both keys | shell (the device's own launch parameters) |
+| 2026-09-20 | An app's exhibition view is left behind as a card | AccuWeather 2.3.1 | Leaving the mode didn't close what entering it opened, as webOS's `DockModeWindowManager::closeApp` did | shell |
 
 ## Known gaps, by the layer they belong to
 
@@ -109,7 +111,7 @@ on 2026-09-19. Not yet repeated on the factory WebView 37.
 
 | App | Kind | Result |
 |---|---|---|
-| AccuWeather 2.3.1 | Enyo 1 | Runs with live data after the Terms dialog. Radar map fails (third party). Its Exhibition view is broken (codepoet, 2026-09-20) - not yet looked at; use the Time face or Flying Toasters when testing Exhibition. |
+| AccuWeather 2.3.1 | Enyo 1 | Runs with live data after the Terms dialog. Radar map fails (third party). Its Exhibition view runs. |
 | App Museum 2.9.5 | Enyo 1, bundled | App menu (Preferences, About) and search with the keyboard work. |
 | USA Today (World Today) 1.4.3 | Enyo 1 | Runs with live news once uncaught errors stopped reaching `onerror`. |
 | Apollo 1.2.8 | Enyo 1 | Logs in with the keyboard, shows its stations and plays music. |

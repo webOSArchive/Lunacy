@@ -476,10 +476,16 @@ Lunacy has it - inside the environment, and as Android's own screen saver.
     the shell back where the screen saver found it.
   - Whether to daydream at all, and with what, stays the owner's choice in Android's settings.
     Lunacy never sets it.
-- **Not yet:** an app's *own* exhibition view. On webOS the chosen app opened a window with
-  `attributes={"window":"dockMode"}` and the shell showed it; Lunacy shows the Time face
-  whichever app is enabled. That is the next piece, and it is the same window-type path
-  dashboards and popup alerts already take.
+- **An app's own exhibition view.** The chosen app is launched with exactly the parameters
+  LunaSysMgr's `DockModeWindowManager::launchApp` built - `{"windowType":"dockModeWindow",
+  "dockMode":true}` - and apps test both keys, so a launch missing either shows the app's
+  ordinary view instead (AccuWeather does exactly that). That test is Palm's own: the SDK's
+  ExhibitionMode sample is where the code comes from, and the Clock, Photos and Music apps
+  all read the same two keys, at relaunch as well as launch. Many of these apps are `noWindow`:
+  the launch runs a headless dispatcher, which opens its exhibition view as a window with
+  `attributes={"window":"dockMode"}`, the same window-type path dashboards and popup alerts
+  take. Leaving the mode closes what entering it opened - webOS's `closeApp` did - while an
+  app its owner already had open keeps its own cards and loses only its dock window.
 
 ### System UI
 

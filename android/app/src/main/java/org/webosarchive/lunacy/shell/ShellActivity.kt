@@ -57,6 +57,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var exhibitionMenu: ExhibitionMenu
     /** The app showing in exhibition mode, if it isn't the shell's own Time face. */
     private var exhibitionApp: String? = null
+    /** What this turn in Exhibition opened, and so what leaving it closes again. */
+    private val exhibitionOpened = LinkedHashSet<String>()
+    private val exhibitionWindows = LinkedHashSet<AppWindow>()
     private var exhibitionOn = false
     /** True while what is exhibiting was started by Android's screen saver (ExhibitionDream). */
     private var dreamExhibition = false
@@ -248,6 +251,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         when (child.type) {
             "dashboard" -> notifications.addDashboard(child, icon(child.attributes.optString("icon"), child.appId))
             "popupalert" -> notifications.popups.show(child, child.attributes.optInt("height", 200))
+            // An app's own Exhibition view. webOS's dock mode showed it in place of the card
+            // view, which is where a maximized card already is, so the shell only has to
+            // remember it: it is the window whose closing ends the mode, and the one to close
+            // when the mode ends.
+            "dockMode" -> { exhibitionWindows += child; showAsCard(child) }
             else -> showAsCard(child)
         }
     }
@@ -255,7 +263,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     override fun onWindowClosed(window: AppWindow) {
         // The app that was exhibiting has gone: so has exhibition mode, or the shell would sit
         // there thinking it is still on and ignore the next press of Start Exhibition.
-        if (exhibitionOn && window.appId == exhibitionApp && running[window.appId]?.size == 1) {
+        if (exhibitionOn && window.appId == exhibitionApp &&
+            (window.type == "dockMode" || running[window.appId]?.size == 1)) {
             setExhibition(false)
         }
         cards.cards.firstOrNull { it.window == window }?.let { cards.remove(it) }
@@ -623,6 +632,29 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * is the shell's own, as LunaSysMgr's was; the status bar says "Time", as a device does,
      * and the home button comes back out.
      */
+    /**
+     * The launch parameters webOS gave an app it was putting into Exhibition, exactly as
+     * LunaSysMgr's DockModeWindowManager::launchApp built them: the window type by name and
+     * `dockMode`. Apps test both - AccuWeather opens its exhibition view only when
+     * `windowType == "dockModeWindow"` *and* `dockMode == true`, and shows its ordinary
+     * interactive view otherwise - so a launch missing either one looks like the app ignoring
+     * Exhibition.
+     */
+    private fun dockModeParams() = JSONObject()
+        .put("windowType", "dockModeWindow").put("dockMode", true)
+
+    /**
+     * Puts an app on show in Exhibition. An app that wasn't already running was started for
+     * the dock, so it is remembered as this turn's, to be closed again when the mode ends -
+     * webOS closed what it had put in the dock (DockModeWindowManager::closeApp). One its
+     * owner already had open keeps its own cards; only the window it opens for the dock goes.
+     */
+    private fun exhibit(appId: String) {
+        if (running[appId] == null) exhibitionOpened += appId
+        launch(appId, dockModeParams())
+        statusBar.title = dockMode.title(appId)
+    }
+
     private fun setExhibition(on: Boolean) {
         // Entering again while it is already on is not a no-op: Palm's Exhibition app sends
         // this every time its button is pressed, and if the exhibiting app's card has since
@@ -640,8 +672,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             val app = exhibitionApp?.let { registry.get(it) }
             if (app != null) {
                 exhibition.visibility = View.GONE
-                launch(app.id, JSONObject().put("dockMode", true).put("touchstoneMode", true))
-                statusBar.title = dockMode.title(app.id)
+                exhibit(app.id)
             } else {
                 exhibition.reset()
                 exhibition.visibility = View.VISIBLE
@@ -655,7 +686,15 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         } else {
             closeExhibitionMenu()
             exhibition.visibility = View.GONE
+            // webOS closed what it had put in the dock when dock mode ended
+            // (DockModeWindowManager::closeApp), so an app's Exhibition view doesn't turn up in
+            // the card view afterwards. An app that was already running keeps its own cards:
+            // only the window it opened for the dock goes.
             exhibitionApp = null
+            exhibitionOpened.toList().forEach { id -> running[id]?.toList()?.forEach { w -> onWindowClosed(w) } }
+            exhibitionWindows.toList().forEach { onWindowClosed(it) }
+            exhibitionOpened.clear()
+            exhibitionWindows.clear()
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             if (dreamExhibition) endDreamExhibition()
             if (cards.maximized != null) onMaximized(cards.maximized!!) else onCardView()
@@ -845,8 +884,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         } else {
             exhibition.visibility = View.GONE
             cards.visibility = View.VISIBLE
-            launch(appId, JSONObject().put("dockMode", true).put("touchstoneMode", true))
-            statusBar.title = dockMode.title(appId)
+            exhibit(appId)
         }
     }
 

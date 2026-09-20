@@ -9,10 +9,13 @@ rm -rf $L && mkdir -p $L/fw/enyo $L/apps
 cp -r $V/enyo-1.0 $L/fw/enyo/1.0 && rm -rf $L/fw/enyo/1.0/.git $L/fw/enyo/1.0/support/docs
 cp -r ../spike/apps-src/com.palm.app-museum2/usr/palm/applications/com.palm.app-museum2 $L/apps/
 cp -r ../spike/apps-src/com.ingloriousapps.glimpse/usr/palm/applications/com.ingloriousapps.glimpse $L/apps/
-# Palm's own settings apps, which are Enyo 1 and run on Lunacy as they are. They stay out of
-# the repo (Palm's code, like Mojo) until shipping them in the APK is decided; Lunacy's own
-# settings apps, and the shortcuts to Android's, are in assets/apps/ instead.
-for a in $V/settings-apps/*; do [ -d "$a" ] && cp -r "$a" $L/apps/; done
+# Palm's own settings apps that Lunacy ships (Screen & Lock, Help) are committed under
+# assets/apps/ with their NOTICE, like Mojo and the fonts. Any others under
+# spike/vendor/settings-apps/ are copied here for testing and stay out of the repo.
+for a in $V/settings-apps/*; do
+    id=$(basename "$a")
+    [ -d "$a" ] && [ ! -d "app/src/main/assets/apps/$id" ] && cp -r "$a" $L/apps/
+done
 # Enyo samples as installable apps.
 # The SDK samples load Enyo by an SDK-tree relative path; packaging them as apps points them
 # at the framework path installed apps use (what palm-package'd samples needed on a device too).

@@ -1,0 +1,11 @@
+Palm's Screen & Lock (com.palm.app.screenlock), as shipped on HP webOS 3.x.
+
+Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence; distributed by
+Lunacy as abandonware, like Mojo, the Prelude fonts and the TouchPad wallpapers: no owner has
+asserted rights since webOS was discontinued.
+
+The app is here exactly as it was packaged, and Lunacy does not change it (rule 5 in
+CLAUDE.md). It runs because Lunacy answers what it asks for: com.palm.systemservice keeps its
+preferences and its wallpaper, com.palm.display/control sets Android's brightness and
+screen-off timeout, and enyo.FilePicker finds Lunacy's picker at webOS's own path. What
+Lunacy hasn't got - a lock screen, com.palm.systemmanager - returns the bus's honest error.

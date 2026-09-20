@@ -1,0 +1,154 @@
+img {
+	vertical-align: middle;
+}
+
+/* Login Pane */
+.chat-login {
+	max-width: 500px;
+	margin-left: auto;
+	margin-right: auto;	
+}
+
+.chat-login-text {
+	font-size: .9rem;
+	margin: .5em 3px 0;
+}
+
+.chat-login-text.top {
+	margin-top: 1em;
+}
+
+.chat-login-text.bottom {
+	margin-bottom: 0.5em;
+}
+
+.chat-terms-text {
+	font-size: .8rem;
+	margin: .5em 3px;
+}
+
+.chat-terms-text a {
+	color:#007dd4;
+	text-decoration:none;
+}
+
+.chat-button {
+	min-height: 32px;
+	margin-top: 8px;
+	margin-bottom: 8px;
+}
+
+.chat-debug-info {
+	margin-top: 80px;
+	color: grey;
+	font-style: italic;
+}
+
+/* Waiting Pane */
+.chat-waiting {
+	color: grey; 
+	line-height: 2em;
+}
+
+/* Hours Of Operation Pane */
+.chat-hours-text {
+	color: grey;
+	text-align: center; 
+	max-width: 500px;
+}
+
+/* Chat Pane */
+.chat-list {
+	padding: 2px 8px;
+	max-width: 768px;
+	margin-left: auto;
+	margin-right: auto;	
+}
+
+.chat-balloon {
+	padding: 5px 10px 5px 0px;
+	word-wrap: break-word !important;
+	position: relative;
+}
+
+.chat-tech-icon {
+	position: absolute;
+	width: 32px;
+	height: 32px;
+	padding-top: 8px; /* to center with the arrow */
+}
+
+.chat-balloon-received,
+.chat-balloon-sent,
+.chat-balloon-error {
+	min-height: 50px;
+	margin-left: 40px;
+	-webkit-border-radius: 10px;
+	position: relative;
+}
+
+.chat-balloon-received {
+	border: solid 1px #b3d9f2;
+	background-color:#d6edff;
+}
+
+.chat-balloon-sent {
+	border: solid 1px #d0e1cb;
+	background-color: #dcffd1;
+}
+
+.chat-balloon-error {
+	border: solid 1px #d4d4d4;
+	background-color: #f4f4f4;
+}
+
+.chat-balloon-received:after,
+.chat-balloon-sent:after {
+	content:"";
+	position:absolute;
+	display:block;
+	top:18px;
+	width:8px;
+	height:14px;
+}
+
+.chat-balloon-received:after {
+	left:-8px;
+	background:transparent url(../images/chat-balloon-received-shape.png) no-repeat 0 0;
+}
+
+.chat-balloon-sent:after {
+	right:-8px;
+	background:transparent url(../images/chat-balloon-sent-shape.png) no-repeat 0 0;
+}
+
+
+.chat-status {
+	padding-left: 8px; 
+	background-color: #eee;
+	min-height: 24px;
+}
+
+.conversation-bottom.enyo-toolbar {
+	height: auto;
+	max-height: 192px;
+}
+
+.conversation-bottom .enyo-input {
+	/*margin-left: 20px;*/
+	/*margin-right: 20px;*/
+}
+
+.sendButton.enyo-tool-button {
+	height: 19px;
+	width: 27px;
+}
+
+.sendButton.enyo-tool-button.enyo-button,
+.sendButton.enyo-tool-button.enyo-button-down {
+	-webkit-border-image: none;
+}
+
+.sendButton.enyo-button-down .enyo-button-icon {
+	background-position: 0 0;
+}

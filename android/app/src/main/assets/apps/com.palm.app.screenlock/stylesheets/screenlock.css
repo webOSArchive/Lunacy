@@ -1,0 +1,44 @@
+/* TODO: put your application-specific CSS here */
+.box-center {
+	width:500px;
+	margin:23px auto 0;
+}
+/* Header */
+.header-welcome {
+	display: -webkit-box;
+	-webkit-box-align: center;
+	-webkit-box-pack: center;
+}
+/* Footnote text */
+.accounts-body-text {
+	font-size: 16px;
+	width: 520px;
+	color:#666;
+	margin: -10px auto 0 15px;
+	padding-bottom: 24px;
+}
+
+.accounts-gestures-text {
+	font-size: 16px;
+	width: 500px;
+	color:#666;
+	margin: -10px auto 0 15px;
+}
+
+.header-shadow,
+.footer-shadow {
+	position: absolute; 
+	z-index: 100;
+	height: 3px;
+	width: 100%;
+	pointer-events: none;
+}
+.header-shadow {
+	top: 54px;
+	background:transparent url('../images/light_chrome_drop_shadow_header.png') bottom repeat-x;
+}
+.footer-shadow {
+	bottom: 0;
+	height: 57px; 
+	background:transparent url('../images/light_chrome_drop_shadow_footer.png') top repeat-x;
+}

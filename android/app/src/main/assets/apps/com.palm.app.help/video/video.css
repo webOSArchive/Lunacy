@@ -1,0 +1,90 @@
+.video-view {
+	color: white;
+	background-color: black;
+	position: relative;
+}
+
+.video-scrim {
+	background: transparent;
+	z-index: 100;
+}
+
+.video-big-play {
+	width: 176px;
+	height: 176px;
+	background: rgba(0, 0, 0, 0.5) url(images/play-large.png) center no-repeat;
+	-webkit-border-radius: 15px;
+}
+
+.video-controls-top,
+.video-controls-bottom {
+	position: absolute;
+	left: 0; right: 0;
+	height: 53px;
+	padding: 8px;
+	z-index: 200;
+	background: transparent url(images/media-toolbar.png) repeat-x;
+}
+
+.video-controls-top .enyo-button-dark {
+	padding-left: 25px;
+	margin: 0;
+	background: url(images/dark-back-arrow.png) 5px 5px no-repeat;
+}
+
+.video-controls-top {
+	-webkit-transition: top 0s;
+	top: 0;
+}
+
+.video-controls-top.hide {
+	-webkit-transition: top 0.5s;
+	top: -53px;
+}
+
+.video-controls-bottom {
+	-webkit-transition: bottom 0s;
+	bottom: 0;
+}
+
+.video-controls-bottom.hide {
+	-webkit-transition: bottom 0.5s;
+	bottom: -53px;
+}
+
+.video-time {
+	font-size: 11pt;
+	margin: 6px;
+}
+
+.video-slider {
+	padding-left: 15px;
+	padding-right: 15px;
+}
+
+.video-icon {
+	width: 32px;
+    height: 32px;
+    -webkit-border-image: none;
+}
+
+.enyo-button-down .video-icon {
+	background-position-y: -32px;
+}
+
+.video-icon.video-play {
+	background-image: url(images/icon-play.png);
+}
+
+.video-icon.video-pause {
+	background-image: url(images/icon-pause.png);
+}
+
+.video-icon.video-zoom {
+	background-image: url(images/icon-zoom.png);
+}
+
+.video-icon.video-normal {
+	background-image: url(images/icon-normal.png);
+}
+

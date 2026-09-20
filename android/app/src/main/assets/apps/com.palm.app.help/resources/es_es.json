@@ -1,0 +1,19 @@
+{
+	"#{techName} has left the chat session.": "#{techName} ha salido de la sesión de chat.",
+	"401: Authentication Required": "401: Se requiere autenticación",
+	"500: Internal Server Error": "500: Error interno del servidor",
+	"Do you need to complete the connection by signing in? Sometimes you need to enter information about an access point on a website. <strong>Launcher</strong> > <strong>Web</strong> > enter the information.": "¿Quieres completar la conexión iniciando una sesión? A veces es necesario proporcionar información sobre un punto de acceso en un sitio web. <strong>Lanzador</strong> > <strong>Web</strong> > proporciona la información.",
+	"Do you need to connect to a Wi-Fi access point? <strong>Launcher</strong> > <strong>Wi-Fi</strong> > tap a network from the list. Or tap Join network and enter the necessary information (get this information from someone who knows about the access point).": "¿Quieres conectarte a un punto de acceso Wi-Fi? <strong>Lanzador</strong> > <strong>Wi-Fi</strong> > toca una red de la lista. O toca Conectarse a la red y proporciona la información necesaria (pídele la información a alguien que sepa sobre el punto de acceso).",
+	"Download the Care Pack App to learn about HP Care Pack protection for your webOS device. With an HP Care Pack, you can extend your device warranty, with or without accidental damage protection, and receive complimentary telephone support. Purchase within the app, right from your device, and enjoy greater peace of mind knowing you are covered by the company who  knows your product best.": "Descarga la aplicación Care Pack y descubre el sistema de protección HP Care Pack para tu dispositivo webOS. Con HP Care Pack, podrás ampliar la garantía de tu dispositivo, con o sin protección frente a daños accidentales, y podrás recibir asistencia telefónica complementaria. Adquiere productos para tu dispositivo desde la aplicación y disfruta de una mayor tranquilidad sabiendo que cuentas con la garantía de la empresa que mejor conoce tu producto.",
+	"Estimated wait: <strong>#{wait} min</strong>": "Tiempo de espera estimado: <strong>#{wait} min</strong>",
+	"Fatal! You should not have seen this error!": "Error grave. No debería haber visto este error.",
+	"Is airplane mode on? Turn it off: Tap the upper-right corner of the screen, and then tap <strong>Turn off Airplane Mode.</strong>": "¿Está activado el modo Vuelo? Desactívalo: toca la esquina superior derecha de la pantalla y luego toca <strong>Desactivar modo Vuelo</strong>.",
+	"Live Chat": "Chat en vivo",
+	"No Internet Connection or Cross-Origin problem": "No hay conexión a Internet o hay un problema de orígenes cruzados",
+	"OK": "Aceptar",
+	"Unable to reconnect chat session.": "No es posible reconectar la sesión de chat.",
+	"Unable to start chat session. Please try again later.": "No es posible iniciar la sesión de chat. Inténtalo de nuevo más tarde.",
+	"Update your network settings and try again: <strong>Quick Launch</strong> > <strong>Phone </strong> > <strong>Menu </strong> > <strong>Preferences </strong> > <strong>Update Network Settings</strong> (if available).": "Actualiza la configuración de tu red y vuelve a intentarlo: <strong>Inicio rápido</strong> > <strong>Teléfono</strong> > <strong>Menú</strong> > <strong>Preferencias </strong> > <strong>Actualizar configuración de red</strong> (si aparece).",
+	"Wait a few minutes and then try again.": "Espera unos minutos y vuelve a intentarlo.",
+	"Waiting for an agent...": "Esperando a un agente…"
+}

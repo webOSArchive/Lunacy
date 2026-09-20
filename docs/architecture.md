@@ -231,8 +231,9 @@ product; being "close enough" is not the goal.
     - **Beyond the TouchPad.** The TouchPad's XHR had no `responseType`, `response`,
       `timeout` or `onloadend`; Lunacy keeps them, as the real XHR has them, so Enyo 2 apps
       get `arraybuffer`, `blob`, `json` and `document` responses.
-    - **Not the same.** The TouchPad also sent `X-Palm-Carrier`, which Lunacy has no value
-      for. Cross-origin `send()`
+    - **Not the same.** Android's HTTP client sends `Accept-Encoding: gzip` where the TouchPad
+      sent `gzip, deflate`; it is the client's own header, and setting it by hand would stop
+      the client decompressing the reply, so it stays as it is. Cross-origin `send()`
       of `FormData` or a `Blob` fails with an error logged; `fetch()`, Web Workers' XHR and
       `WebSocket` aren't shimmed.
     - **TLS.** Android 5's trust store lacks current roots (ISRG Root X1 for Let's Encrypt,
@@ -271,23 +272,37 @@ product; being "close enough" is not the goal.
     global serve-time transform.
   - **Later platforms.** When Lunacy targets them, the transport can move to
     `WebMessageListener` and document-start scripts. Nothing above the bridge changes.
-- **Device identity.**
-  - `deviceInfo` reports a TouchPad on tablet-size screens and a Pre3 on phone-size
-    screens, the only two device classes that ran Enyo 1. Screen dimensions are always the
-    real ones.
-  - Like webOS, `deviceInfo` is a JSON *string* with the same keys a TouchPad reports,
-    including the card-size and keyboard fields. See "TouchPad reference" in
-    [spike-1.md](spike-1.md) for the full `PalmSystem` surface measured on a real device.
-  - `launchParams` is `""` when there are none.
-  - The platform version is webOS CE 3.1.0 (`platformVersion` "3.1.0"), the
-    community-supported version the reference TouchPad runs. `PalmSystem.version` is
-    `"Webkit4/V8; device"`, as the TouchPad reports it.
-  - The user agent is the reference TouchPad's, measured verbatim:
-    `Mozilla/5.0 (hp-tablet; Linux; hpwOS/3.1.0; U; en-US) AppleWebKit/534.6 (KHTML, like
-    Gecko) wOSSystem/234.83 Safari/534.6 TouchPad/1.0`. It is set on every app WebView, so
-    `navigator.userAgent`, the page's own loads and the network shim all send it. Apps tell
-    webOS apart through `PalmSystem` and their framework rather than the user agent (Enyo 2
-    looks for `webOS.`, which the TouchPad's doesn't contain either).
+- **Device identity: Lunacy answers as a webOS device.** Apps were written against a device,
+  not against a browser: they branch on the model, the platform version and the user agent,
+  and the servers they talk to were built for those values. The webOS device closest to an
+  Android tablet is the TouchPad, and to a phone the Pre3, so Lunacy reports itself as one of
+  those two - completely, and from one place (`DeviceProfile.kt`), so the surfaces an app can
+  look at never disagree:
+  - `PalmSystem.deviceInfo`, a JSON *string* with the keys a TouchPad reports, including the
+    card-size and keyboard fields;
+  - the user agent, in `navigator.userAgent`, the page's own loads and the network shim;
+  - `com.palm.preferences/systemProperties/Get` (`DMMODEL`, `PRODoID`, `boardType`,
+    `deviceName`, `version`, the build fields);
+  - `X-Palm-Carrier` on every request the shim sends (`c090-01`, the WiFi TouchPad's).
+  - The device's own identity is generated per install, not copied from anyone's device: an
+    HP-shaped serial (`ProdSN` and `deviceInfo.serialNumber` agree) and a 40-hex `nduid`.
+  - The screen is the real one. A TouchPad reported its own screen, and an app that lays out
+    from `deviceInfo` should use the room it actually has; like a device's, the values don't
+    change when the screen turns (see "Rotation" below).
+  - `locale`, `localeRegion`, `phoneRegion` and `timeFormat` follow Android's settings, as
+    webOS's followed the device's, so an app formats dates and times the way the shell's own
+    clock does.
+  - `PalmSystem.version` is `"Webkit4/V8; device"`, as the TouchPad reports it - not the
+    webOS version.
+  - The Pre3's values are **not measured on hardware**; they are the community's record, and
+    the first target is a tablet, so nothing depends on them yet.
+  - **What is never spoofed:** Lunacy's own Device Info app, which reports the real device,
+    Android, WebView and Lunacy version; the shell, which is plainly Lunacy's; and the bus,
+    where Lunacy's own service carries Lunacy's name and an unimplemented service returns a
+    real error. The spoof is for apps' benefit, not a claim to be webOS.
+- **The `PalmSystem` object is a host object**, as it is on a device: none of its members
+  enumerate, so `for..in` and `Object.keys` see nothing. `getResource` and `getIdentifier` are
+  undefined here too, because they are undefined on a TouchPad (docs/spike-1.md).
 - **Caller identity.** The bridge takes the calling app's id from the WebView it is attached
   to, never from anything the page says.
 - **Frames can reach the bus (ratchet item).** A JavaScript interface is visible to every
@@ -377,7 +392,9 @@ actually owns, and each settings app falls into one of three cases:
   `"lunacyAndroidSettings": "<panel>"` in `appinfo.json` - a Lunacy extension, only ever used
   by apps Lunacy ships - and launching one opens no window.
 
-A settings app Lunacy can neither answer nor hand over isn't shipped at all.
+A settings app Lunacy can neither answer nor hand over isn't shipped at all. Palm's own
+settings apps that Lunacy ships (Screen & Lock, Help) are in the APK with a NOTICE, as
+abandonware, like Mojo and the Prelude fonts (codepoet, 2026-09-20).
 
 - **The preference store.** `com.palm.systemservice` is a store, as it was on webOS: it keeps
   whatever key an app gives it, and whoever owns the thing a key names acts on it. The shell

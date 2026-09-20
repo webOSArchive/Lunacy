@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Help</title>
+		<meta name="viewport" content="height=device-height">
+		<script src="/usr/palm/frameworks/enyo/0.10/framework/enyo.js" type="text/javascript"></script>		
+	</head>
+	<body>
+		<script type="text/javascript">
+		if (enyo.application.isTablet || !window.PalmSystem) {
+			console.log("Help App - Using Tablet UI");
+			enyo.create({kind: "help.TabletUI"}).renderInto(document.body);
+		} else {
+			console.log("Help App - Using Phone UI");
+			enyo.create({kind: "help.PhoneUI"}).renderInto(document.body);
+		}
+		</script>
+	</body>
+</html>

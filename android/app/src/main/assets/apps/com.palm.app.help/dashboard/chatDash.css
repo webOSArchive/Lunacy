@@ -1,0 +1,42 @@
+body {
+	color: white;
+	font-family: Prelude, 'Prelude Medium', 'Segoe UI', Arial, Helvetica, sans-serif;
+	background: transparent;
+	margin: 0;	
+}
+
+.chat-dashboard {
+	height: 50px;
+	line-height: 24px;
+}
+
+.chat-dashboard-icon {
+	width: 50px;
+	padding-right: 4px;
+	padding-left: 4px;
+	margin-top: 2px;
+}
+
+.chat-dashboard-divider {
+	background: url(images/notification-divider.png) left top no-repeat;
+	margin-left: -12px;
+	width: 12px;
+}
+
+.chat-dashboard-title,
+.chat-dashboard-text {
+	padding-left: 2px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	width: 270px;
+}
+
+.chat-dashboard-title {
+	font-size: 18px;
+	font-weight: bold;
+}
+
+.chat-dashboard-text {
+	font-size: 16px;
+}

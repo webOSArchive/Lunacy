@@ -288,12 +288,19 @@ corpus survey says how many apps this phase can reach, and whether it is worth d
 
 ## Decided
 
-- **User agent:** app WebViews report the reference TouchPad's, measured verbatim, to pages
-  and on the wire (codepoet, 2026-09-19). Low stakes: apps tell webOS apart through
-  `PalmSystem` and their framework, not the user agent. Phones will report a Pre3's with the
-  phone layout.
+- **Lunacy answers as a webOS device, fully** (codepoet, 2026-09-20): a TouchPad on a
+  tablet-sized screen, a Pre3 on a phone. The environment is most like a TouchPad, and with
+  that hardware dying off this is how it lives on. One place decides it (`DeviceProfile.kt`)
+  and every app-visible surface follows: `deviceInfo`, the user agent in the page and on the
+  wire, the system properties, and `X-Palm-Carrier`. The serial and `nduid` are generated per
+  install rather than copied from a real device. Lunacy's own Device Info, the shell and the
+  bus's service names stay truthful - the spoof is for apps, not a claim to be webOS. The
+  Pre3's values are the community's record and still need measuring on hardware.
 - **webOS version:** Lunacy reports webOS CE 3.1.0, the community-supported version, as the
-  reference TouchPad does (codepoet, 2026-09-19).
+  reference TouchPad does (codepoet, 2026-09-19); a phone would report the Pre3's 2.2.4.
+- **Palm's code ships** (codepoet, 2026-09-20): Palm's own settings apps go in the APK with a
+  NOTICE, as abandonware, like Mojo, the Prelude fonts and the TouchPad wallpapers. Nobody has
+  asserted rights in nearly a decade of webOS Archive doing the same.
 - **No service workers:** `navigator.serviceWorker` is hidden, as the TouchPad's WebKit had
   none (codepoet, 2026-09-19).
 - **App Museum:** bundle the real Museum app rather than write a catalog client. It installs

@@ -37,6 +37,8 @@ interface WindowHost {
     fun deviceInfo(): String
     /** webOS's screen orientation: "up", "down", "left" or "right". */
     fun screenOrientation(): String
+    /** PalmSystem's locale, localeRegion, phoneRegion and timeFormat, as JSON. */
+    fun localeInfo(): String
     /** Android pixels per CSS pixel: apps get TouchPad-sized pixels (docs/architecture.md, Screen size). */
     val pixelScale: Float
 }
@@ -65,6 +67,10 @@ class AppWindow(context: Context, val appId: String, private val host: WindowHos
     @Volatile var keyboardResizes = true
         private set
     private lateinit var net: NetShim
+    /** The webOS device this window reports itself as. */
+    private val profile = DeviceProfile.forScreen(context)
+    /** This window's "process id": webOS gave one per window, and apps print it. */
+    private val pid = nextPid.getAndIncrement()
 
     init {
         settings.apply {
@@ -80,10 +86,11 @@ class AppWindow(context: Context, val appId: String, private val host: WindowHos
             setSupportMultipleWindows(true)
             javaScriptCanOpenWindowsAutomatically = true
         }
-        // The user agent the reference TouchPad's apps had, for navigator.userAgent, the page's
-        // own loads and the network shim alike. Phones will report a Pre3 with the phone layout.
-        settings.userAgentString = TOUCHPAD_USER_AGENT
-        net = NetShim(appId, settings.userAgentString) { id ->
+        // The user agent of the webOS device Lunacy answers as (DeviceProfile): a TouchPad's on
+        // a tablet, a Pre3's on a phone. It is set for navigator.userAgent, the page's own
+        // loads and the network shim alike, so a server can't tell them apart.
+        settings.userAgentString = profile.userAgent
+        net = NetShim(appId, settings.userAgentString, profile.carrierCode) { id ->
             main.post { if (!destroyed) evaluateJavascript("window.__lunacyNetDone&&__lunacyNetDone($id)", null) }
         }
         // 1 CSS px = 1 TouchPad px, as the shell uses; the layout width follows from it.
@@ -129,12 +136,6 @@ class AppWindow(context: Context, val appId: String, private val host: WindowHos
         super.destroy()
     }
 
-    companion object {
-        /** Measured on the reference TouchPad (webOS CE 3.1.0), in apps and on the wire alike. */
-        const val TOUCHPAD_USER_AGENT = "Mozilla/5.0 (hp-tablet; Linux; hpwOS/3.1.0; U; en-US) AppleWebKit/534.6 " +
-            "(KHTML, like Gecko) wOSSystem/234.83 Safari/534.6 TouchPad/1.0"
-    }
-
     /** Ends every open call, when the page goes away. */
     private fun endCalls() {
         val open = calls.values.toList()
@@ -178,6 +179,11 @@ class AppWindow(context: Context, val appId: String, private val host: WindowHos
     fun sendBack() = evaluateJavascript(
         "(function(){function k(t){var e=document.createEvent('Events');e.initEvent(t,true,true);e.keyCode=27;e.which=27;(document.activeElement||document).dispatchEvent(e);}k('keydown');k('keyup');})()", null)
 
+    private companion object {
+        /** Plausible process ids, in the range webOS apps started at. */
+        val nextPid = java.util.concurrent.atomic.AtomicInteger(1183)
+    }
+
     inner class Native {
         @JavascriptInterface fun deviceInfo(): String = host.deviceInfo()
 
@@ -209,6 +215,10 @@ class AppWindow(context: Context, val appId: String, private val host: WindowHos
         @JavascriptInterface fun netAbort(id: Int) = net.abort(id)
 
         @JavascriptInterface fun screenOrientation(): String = host.screenOrientation()
+        /** PalmSystem's locale fields and clock format, from Android's own settings. */
+        @JavascriptInterface fun localeInfo(): String = host.localeInfo()
+        /** The process id in PalmSystem.identifier: one per window, as a device gave. */
+        @JavascriptInterface fun processId(): Int = pid
         @JavascriptInterface fun mediaBase(): String = host.mediaBase()
         @JavascriptInterface fun activate() { main.post { host.activate(this@AppWindow) } }
         @JavascriptInterface fun keyboard(show: Boolean) { main.post { host.keyboard(this@AppWindow, show) } }

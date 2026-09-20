@@ -1,0 +1,118 @@
+img {
+	vertical-align: middle;
+}
+
+/* Help App */ 
+.help-scrim {
+	background: transparent;
+	z-index: 100;
+}
+
+.help-search {
+	height: 61px;
+}
+
+.help-search .enyo-input-spacing {
+	height: 100%;
+}
+
+.help-topics {
+	width: 320px;
+}
+
+.help-toc-item-text {
+	padding-left: 10px;
+}
+
+.help-chat-button {
+	min-width: 120px;
+}
+
+.help-vertical-separator {
+	border-left: 1px solid rgba(0, 0, 0, 0.2);
+	border-right: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.help-stack-pane {
+	overflow: hidden;
+}
+
+/* No Network View */
+.help-nonetwork-button {
+	margin-top: 20px; 
+	width: 240px;
+}
+
+/* JSON View */
+.no-top-border {
+	border-top: none;
+}
+
+.no-bottom-border {
+	border-bottom: none;
+}
+
+.help-json-header {
+	height: 61px;
+}
+
+.help-json-header .enyo-button {
+	margin: auto;
+	padding: 0 8px;
+	line-height: normal;
+}
+
+.help-json-header .enyo-header-inner {
+	padding: 9px 12px;
+}
+
+.help-fail {
+	color: gray;
+	text-align: center;
+}
+
+.help-empty-view {
+	/* Magic CSS bullet - Use HW acceleration */
+	-webkit-transform: translate3d(0, 0, 0);
+	color: gray;
+}
+
+.help-empty-view-logo {
+	-webkit-transition: -webkit-transform 3s;
+}
+
+.help-empty-view-logo.wizzz {
+	-webkit-transform: rotate(-1440deg);
+}
+
+/* Article View */
+.url-progress.enyo-progress-bar {
+	position: absolute;
+	top: 0;
+	-webkit-border-image: none;
+	height: 4px;
+	background: url(../images/progress-bar.png) 0 0 repeat-x;
+	width: 100%;
+	
+	-webkit-transition: opacity 1s;
+	opacity: 1;
+}
+.url-progress .enyo-progress-bar-inner {
+	-webkit-border-image: none;
+	height: 4px;
+	background: url(../images/progress-bar-inner.png) 0 0 repeat-x;
+}
+.url-progress.invisible {
+	opacity: 0;
+}
+
+/* Care Pack View */
+.carepack-content {
+	padding: 10px 20px;
+}
+
+.carepack-button {	
+	margin: 30px auto;
+	padding-left: 20px;
+	padding-right: 20px;
+}

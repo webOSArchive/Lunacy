@@ -65,7 +65,9 @@ class ConnectionManager(private val context: Context) {
             val ip = info.ipAddress
             JSONObject().put("state", "connected")
                 .put("ipAddress", "${ip and 0xff}.${ip shr 8 and 0xff}.${ip shr 16 and 0xff}.${ip shr 24 and 0xff}")
-                .put("interfaceName", "wlan0")
+                // The TouchPad's Wi-Fi interface is eth0, and an app that shows it should see
+                // what a device showed. Android's own name for it is wlan0.
+                .put("interfaceName", "eth0")
                 .put("ssid", info.ssid.orEmpty().removeSurrounding("\""))
                 .put("bssid", info.bssid.orEmpty().uppercase())
                 .put("networkConfidenceLevel", when (WifiManager.calculateSignalLevel(info.rssi, 3)) { 2 -> "excellent"; 1 -> "fair"; else -> "poor" })

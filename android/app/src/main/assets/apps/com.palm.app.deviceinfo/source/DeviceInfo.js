@@ -98,7 +98,9 @@ enyo.kind({
 		this.$.battery.setValue(d.battery >= 0 ? d.battery + "%" + (d.charging ? " " + $L("(charging)") : "") : $L("unknown"));
 		this.$.serial.setValue(d.serial);
 		this.$.version.setValue(l.version ? l.version + " (" + $L("build") + " " + l.build + ")" : "");
-		this.$.reports.setValue(l.reportsWebOS);
+		// The one row that says the quiet part: apps are told this is a webOS device, because
+		// that is the contract they were written against. Nothing else here pretends.
+		this.$.reports.setValue(l.reportsAs ? l.reportsAs + ", " + l.reportsWebOS : l.reportsWebOS);
 		this.$.enyo.setValue(l.enyo);
 		this.$.node.setValue(l.node || $L("not available"));
 		this.$.apps.setValue(String(l.apps));

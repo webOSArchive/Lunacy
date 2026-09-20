@@ -39,6 +39,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var displayService: org.webosarchive.lunacy.card.DisplayService
     /** The wallpaper view, reloaded when the preference changes. */
     private lateinit var wallpaperView: ImageView
+    /** The webOS device Lunacy answers as, for every app-visible surface. */
+    private val profile by lazy { org.webosarchive.lunacy.card.DeviceProfile.forScreen(this) }
     private lateinit var statusBar: StatusBar
     private lateinit var cards: CardLayer
     private lateinit var justType: JustType
@@ -341,10 +343,17 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     override val pixelScale get() = luna.density
 
     /**
+     * The device an app sees. Which one is DeviceProfile's decision - a TouchPad on a
+     * tablet-sized screen, a Pre3 on a phone - and everything else an app can look at (the
+     * user agent, the system properties, X-Palm-Carrier) comes from the same place, so they
+     * can never disagree.
+     *
      * Like a TouchPad's, this doesn't change when the screen turns: the device reports
-     * 1024 × 768 in both orientations. So the screen's long side is the width here too, and
-     * a page that read deviceInfo at load never goes stale. Rotation reaches apps through
-     * PalmSystem.screenOrientation and the window's own resize, as it did on webOS.
+     * 1024 x 768 in both orientations. So the screen's long side is the width here too, and a
+     * page that read deviceInfo at load never goes stale. Rotation reaches apps through
+     * PalmSystem.screenOrientation and the window's own resize, as it did on webOS. The sizes
+     * are this screen's real ones: a TouchPad reported its own screen, and an app that lays
+     * out from them should use the room it actually has.
      */
     override fun deviceInfo(): String {
         // In TouchPad px, the unit apps lay out in.
@@ -354,18 +363,40 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
         val long = (maxOf(dm.widthPixels, dm.heightPixels) / dm.density).toInt()
         val short = (minOf(dm.widthPixels, dm.heightPixels) / dm.density).toInt()
+        val d = profile
         return JSONObject(mapOf(
-            "modelName" to "TouchPad", "modelNameAscii" to "TouchPad",
-            // webOS CE 3.1.0, the community-supported version, as the reference TouchPad reports.
-            "platformVersion" to "3.1.0", "platformVersionMajor" to 3, "platformVersionMinor" to 1, "platformVersionDot" to 0,
-            "carrierName" to "", "serialNumber" to SystemProperties.SERIAL,
+            "modelName" to d.modelName, "modelNameAscii" to d.modelNameAscii,
+            "platformVersion" to d.platformVersion, "platformVersionMajor" to d.platformVersionMajor,
+            "platformVersionMinor" to d.platformVersionMinor, "platformVersionDot" to d.platformVersionDot,
+            "carrierName" to "", "serialNumber" to org.webosarchive.lunacy.card.DeviceProfile.serial(this, d),
             "screenWidth" to long, "screenHeight" to short,
-            "minimumCardWidth" to long, "minimumCardHeight" to 318,
+            "minimumCardWidth" to long, "minimumCardHeight" to d.minimumCardHeight,
             "maximumCardWidth" to long, "maximumCardHeight" to short - StatusBar.HEIGHT,
-            "touchableRows" to 14, "keyboardAvailable" to false, "keyboardSlider" to false, "keyboardType" to "Unknown",
-            "wifiAvailable" to true, "bluetoothAvailable" to false, "carrierAvailable" to false,
-            "coreNaviButton" to false, "swappableBattery" to false, "dockModeEnabled" to false,
+            "touchableRows" to d.touchableRows,
+            "keyboardAvailable" to d.keyboardAvailable, "keyboardSlider" to d.keyboardSlider,
+            "keyboardType" to d.keyboardType,
+            "wifiAvailable" to true, "bluetoothAvailable" to d.bluetoothAvailable,
+            "carrierAvailable" to d.carrierAvailable,
+            "coreNaviButton" to d.coreNaviButton, "swappableBattery" to d.swappableBattery,
+            "dockModeEnabled" to false,
         )).toString()
+    }
+
+    /**
+     * PalmSystem's locale fields and clock format. webOS reported what the device was set to,
+     * so these follow Android's settings: an app that formats a date or a time gets the same
+     * answer as the shell's own clock.
+     */
+    override fun localeInfo(): String {
+        val locale = resources.configuration.locale
+        val language = locale.language.lowercase().ifEmpty { "en" }
+        val country = locale.country.lowercase().ifEmpty { "us" }
+        return JSONObject()
+            .put("locale", language + "_" + country)
+            .put("localeRegion", country)
+            .put("phoneRegion", country)
+            .put("timeFormat", if (android.text.format.DateFormat.is24HourFormat(this)) "HH24" else "HH12")
+            .toString()
     }
 
     /**

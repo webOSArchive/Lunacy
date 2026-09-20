@@ -15,7 +15,13 @@ import java.util.concurrent.Executors
  * cross-origin XHRs come here instead. Requests go out as the reference TouchPad sent them
  * (measured with spike/probe 0.0.7, spike/results/touchpad-net.txt). One per window.
  */
-class NetShim(private val appId: String, private val userAgent: String, private val deliver: (Int) -> Unit) {
+class NetShim(
+    private val appId: String,
+    private val userAgent: String,
+    /** X-Palm-Carrier, which the TouchPad put on every request (c090-01 on WiFi). */
+    private val carrierCode: String,
+    private val deliver: (Int) -> Unit,
+) {
     // Typed as Map: ConcurrentHashMap.keySet() compiles to a KeySetView call Android 5 lacks.
     private val results: MutableMap<Int, String> = ConcurrentHashMap()
     private val inFlight: MutableMap<Int, HttpURLConnection> = ConcurrentHashMap()
@@ -58,8 +64,10 @@ class NetShim(private val appId: String, private val userAgent: String, private 
                 for (i in 0 until a.length()) { val h = a.getJSONArray(i); headers += h.getString(0) to h.getString(1); set += h.getString(0).lowercase() }
             }
             fun default(k: String, v: String) { if (k.lowercase() !in set) headers += k to v }
-            // What the TouchPad added. It also sent X-Palm-Carrier, which Lunacy has no value for.
+            // What the TouchPad added, X-Palm-Carrier included: a server that told webOS
+            // devices apart by it sees what it saw from a device.
             default("User-Agent", userAgent)
+            if (carrierCode.isNotEmpty()) default("X-Palm-Carrier", carrierCode)
             default("Accept", "*/*")
             default("Accept-Language", "en-us,en;q=0.5")
             default("Accept-Charset", "ISO-8859-1,utf-8;q=0.7,*;q=0.3")

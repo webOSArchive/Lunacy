@@ -12,7 +12,7 @@ out on the reference devices. Changes made to the Android device are listed sepa
 | `android/app/src/main/assets/luna/` | LunaCE images (Apache 2.0), Prelude fonts and TouchPad wallpapers (abandonware), each with a NOTICE | yes |
 | `android/app/src/main/assets/lunacy/` | Injected page scripts: `compat.js` (input model, flicks, uncaught errors), `bridge.js` (PalmSystem, PalmServiceBridge), `net.js` (network shim), `fonts.css` (generated) | yes |
 | `android/app/src/main/assets/certs/` | Mozilla CA roots for Lunacy's own HTTP (MPL 2.0), with a NOTICE | yes |
-| `android/app/src/main/assets/apps/` | Bundled apps we own: Device Info, the shortcuts to Android's settings (Wi-Fi, Sounds & Alerts), `org.webosarchive.lunacy.notifytest`. Each carries a NOTICE for the Palm icons it uses | yes |
+| `android/app/src/main/assets/apps/` | The bundled apps: Lunacy's own (Device Info, the shortcuts to Android's settings, `org.webosarchive.lunacy.notifytest`) and Palm's own settings apps that ship as abandonware (Screen & Lock, Help). Each carries a NOTICE | yes |
 | `android/app/src/main/assets/luna-systemui/` | The system UI webOS served from the OS, at its own paths: Lunacy's file picker | yes |
 | `android/local-assets/` | Stock Enyo 1.0 and third-party test apps (App Museum, Glimpse, Enyo samples), populated by `android/fetch-assets.sh` | no |
 | `android/tools/gen-fonts-css.py` | Regenerates `fonts.css` from the shipped Prelude files | yes |
@@ -23,7 +23,7 @@ out on the reference devices. Changes made to the Android device are listed sepa
 | `spike/probe/` | TouchPad probe app that records the PalmSystem contract | yes |
 | `spike/*.sh`, `spike/cdp.mjs` | Device helper scripts, and DevTools from the command line (below) | yes |
 | `spike/vendor/` | Local clones: enyo-1.0, LunaCE, luna-sysmgr, webos-catalog-service, and files pulled from the TouchPad (frameworks, `/etc/palm`, fonts, wallpapers, a WebView 64 APK) | no |
-| `spike/vendor/settings-apps/` | Palm's own settings apps (Screen & Lock, Help), which are Enyo 1 and run unchanged; `fetch-assets.sh` copies them into `local-assets/apps/` | no |
+| `spike/vendor/settings-apps/` | Palm's settings apps not yet shipped; `fetch-assets.sh` copies the ones that aren't already in `assets/apps/` into `local-assets/apps/` for testing | no |
 | `spike/results/` | Screenshots and logs | no |
 
 ## Build and run

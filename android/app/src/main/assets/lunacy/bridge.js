@@ -74,25 +74,34 @@
 	var lp = location.search.match(/[?&]launchParams=([^&]*)/);
 	if (lp) { try { launchParams = JSON.stringify(JSON.parse(decodeURIComponent(lp[1]))); } catch (e) {} }
 
-	window.PalmSystem = {
+	// The locale fields and the clock format follow the device's own settings, as webOS's did.
+	var locale = { locale: "en_us", localeRegion: "us", phoneRegion: "us", timeFormat: "HH12" };
+	try { if (N.localeInfo) { locale = JSON.parse(N.localeInfo()); } } catch (e) {}
+
+	var palmSystem = {
 		deviceInfo: N.deviceInfo(),
 		launchParams: launchParams,
-		identifier: location.hostname.replace(/\.media\.cryptofs\.apps$/, "") + " 1000",
+		// "<appid> <pid>", as a device reports it.
+		identifier: location.hostname.replace(/\.media\.cryptofs\.apps$/, "") + " " + (N.processId ? N.processId() : 1000),
 		version: "Webkit4/V8; device",  // as the TouchPad reports it: not the webOS version
-		locale: "en_us",
-		localeRegion: "us",
-		phoneRegion: "us",
-		timeFormat: "HH12",
+		locale: locale.locale,
+		localeRegion: locale.localeRegion,
+		phoneRegion: locale.phoneRegion,
+		timeFormat: locale.timeFormat,
 		// The screen's orientation, kept current by the shell as LunaSysMgr did; Enyo reads it
 		// when the page's resize event arrives. "up", "down", "left" or "right".
 		screenOrientation: N.screenOrientation ? N.screenOrientation() : "up",
 		windowOrientation: "up",
+		// The shell sets this as cards gain and lose focus; a device always has it.
+		isActivated: false,
 		isMinimal: false,
 		activityId: 1,
 		stageReady: function () { N.stageReady(); },
 		setWindowOrientation: function (o) { this.windowOrientation = o; },
-		enableFullScreenMode: function () {},
-		setWindowProperties: function () {},
+		// Lunacy has no full-screen card and no window properties yet; they are logged like the
+		// rest of the surface it hasn't built, rather than silently doing nothing.
+		enableFullScreenMode: function (on) { N.log("PalmSystem.enableFullScreenMode(" + on + ") (not implemented)"); },
+		setWindowProperties: function (p) { N.log("PalmSystem.setWindowProperties (not implemented)"); },
 		// addBannerMessage(message, launchParamsJson, icon, soundClass, soundFile, duration, doNotSuppress)
 		// returns the banner's id at once, as webOS did.
 		addBannerMessage: function (msg, params, icon) {
@@ -109,7 +118,6 @@
 		markFirstUseDone: function () {},
 		setAlertSound: function () {},
 		enableDockMode: function () {},
-		getIdentifier: function () { return this.identifier; },
 		// Enyo uses these to focus inputs. On webOS the host injected a real click; the spike
 		// focuses the element under the point.
 		useSimulatedMouseClicks: function () {},
@@ -119,6 +127,28 @@
 			if (el && el.focus) { el.focus(); }
 		}
 	};
+	// On a device PalmSystem is a host object, and none of its members enumerate: a page that
+	// walks it with for..in sees nothing (measured, docs/spike-1.md). Same here, so an app that
+	// copies or inspects it behaves as it did on a TouchPad. Everything stays writable, because
+	// the shell sets isActivated and launchParams from outside.
+	function publish(obj) {
+		var host = {};
+		for (var k in obj) {
+			if (Object.prototype.hasOwnProperty.call(obj, k)) {
+				try {
+					Object.defineProperty(host, k, { value: obj[k], writable: true, configurable: true, enumerable: false });
+				} catch (e) { host[k] = obj[k]; }
+			}
+		}
+		return host;
+	}
+	function define(obj, name, value) {
+		try {
+			Object.defineProperty(obj, name, { value: value, writable: true, configurable: true, enumerable: false });
+		} catch (e) { obj[name] = value; }
+	}
+	window.PalmSystem = publish(palmSystem);
+
 	// Relaunch, as LunaSysMgr did it: the root window's launchParams become the new
 	// parameters, then Mojo.relaunch() runs. True means the app handled it (Enyo's app menu,
 	// for one: tapping the title relaunches with {"palm-command":"open-app-menu"}).
@@ -168,24 +198,29 @@
 		return nativeOpen.call(window, url, name, features);
 	};
 
+	// A missing or disallowed file gives null, and a relative path is refused: measured on a
+	// TouchPad, where local file access is restricted (docs/spike-1.md).
 	window.palmGetResource = function (path, hint) {
+		if (!/^[a-z][a-z0-9+.-]*:/i.test(String(path))) { N.log("palmGetResource needs an absolute URL: " + path); return null; }
 		var x = new XMLHttpRequest();
 		x.open("GET", path, false);
-		x.send(null);
-		if (x.status !== 200) { N.log("palmGetResource missing " + path); return undefined; }
+		try { x.send(null); } catch (e) { N.log("palmGetResource failed " + path); return null; }
+		if (x.status !== 200) { N.log("palmGetResource missing " + path); return null; }
 		if (hint && /json/.test(hint)) {
-			try { return JSON.parse(x.responseText); } catch (e) { N.log("palmGetResource bad json " + path); return undefined; }
+			try { return JSON.parse(x.responseText); } catch (e) { N.log("palmGetResource bad json " + path); return null; }
 		}
 		return x.responseText;
 	};
-	PalmSystem.getResource = window.palmGetResource;
+	// Note: no PalmSystem.getResource and no PalmSystem.getIdentifier. Both are undefined on a
+	// TouchPad (docs/spike-1.md), and an app that feature-detects one should get the same
+	// answer here.
 	// enyo.windows.activate: bring this window's card forward.
-	PalmSystem.activate = function () { N.activate(); };
-	PalmSystem.setManualKeyboardEnabled = function (manual) { manualKeyboard = Boolean(manual); };
-	PalmSystem.keyboardShow = function () { N.keyboard(true); };
-	PalmSystem.keyboardHide = function () { N.keyboard(false); };
+	define(PalmSystem, "activate", function () { N.activate(); });
+	define(PalmSystem, "setManualKeyboardEnabled", function (manual) { manualKeyboard = Boolean(manual); });
+	define(PalmSystem, "keyboardShow", function () { N.keyboard(true); });
+	define(PalmSystem, "keyboardHide", function () { N.keyboard(false); });
 	// false: the keyboard covers the card, which gets Mojo.positiveSpaceChanged instead of a resize.
-	PalmSystem.allowResizeOnPositiveSpaceChange = function (resize) { N.keyboardResizes(Boolean(resize)); };
+	define(PalmSystem, "allowResizeOnPositiveSpaceChange", function (resize) { N.keyboardResizes(Boolean(resize)); });
 
 	// The rest of the PalmSystem surface measured on a TouchPad (docs/spike-1.md). Calls with no
 	// Lunacy equivalent yet are logged no-ops, so apps don't throw; the log shows what's used.
@@ -194,7 +229,7 @@
 	 "paste", "prepareSceneTransition", "printFrame", "runAnimationLoop", "runCrossAppTransition",
 	 "runSceneTransition", "runTextIndexer", "stagePreparing"].forEach(function (name) {
 		if (!PalmSystem[name]) {
-			PalmSystem[name] = function () { N.log("PalmSystem." + name + " (not implemented)"); };
+			define(PalmSystem, name, function () { N.log("PalmSystem." + name + " (not implemented)"); });
 		}
 	});
 })();

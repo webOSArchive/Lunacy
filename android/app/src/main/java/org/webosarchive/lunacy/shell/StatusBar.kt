@@ -157,7 +157,11 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
         // System group, right to left: ▾, clock, battery, wifi, separator.
         var x = width - luna.px(3f)
         x = drawArrowLeft(c, x)
-        val clock = DateFormat.getTimeFormat(context).format(Date()).replace(" AM", "").replace(" PM", "")
+        // LunaCE's clock: %I:%M with the leading zero stripped and no AM/PM, or %H:%M when the
+        // device is set to 24 hours (reference §4.2). It follows the same setting apps are
+        // told about through PalmSystem.timeFormat.
+        val clock = android.text.format.DateFormat.format(
+            if (android.text.format.DateFormat.is24HourFormat(context)) "H:mm" else "h:mm", Date()).toString()
         x -= clockPaint.measureText(clock)
         c.drawText(clock, x, baseline(clockPaint, h), clockPaint)
         x -= luna.px(5f)

@@ -43,6 +43,10 @@ general** (a per-app setting; only the fixed-viewport fallback is allowed).
 | 2026-09-20 | Settings apps pile onto the first launcher page | every app with a category or keywords | Apps with no place of their own all went to page 0; LunaCE places them by category, then by keyword (AppMonitor::pageDesignatorForWebOSApp) | shell (the page map in `assets/luna/launcher-pages.json`) |
 | 2026-09-20 | The Done button and the delete badge sit a pixel or two out, and the button is too tall | the launcher's edit mode | Two-state sprites were split into halves; LunaCE draws a documented rect inside a larger canvas (§3.8) | shell (the sprites' own rects, checked against the reference TouchPad's screenshot) |
 | 2026-09-20 | No file to pick: the user's own files aren't in the webOS tree | Papyrus 1.6.1's ePub import, Screen & Lock's wallpaper | `/media/internal` was Lunacy's own copy only, while the files a person has are in Android's shared storage | card host (`UserFiles`: Android's folders mapped into `/media/internal` under webOS's own names) |
+| 2026-09-20 | A page could tell it wasn't on a device: `PalmSystem.getResource` and `getIdentifier` existed, its members enumerated, and `palmGetResource` returned `undefined` where a TouchPad returns `null` | every app that feature-detects | Lunacy's `PalmSystem` was a plain object with extra members | compat (bridge: a host object with nothing enumerable, and the measured surface exactly) |
+| 2026-09-20 | Servers that tell webOS devices apart didn't see one | every app on the wire | `X-Palm-Carrier` was never sent; the TouchPad puts `c090-01` on every request (spike/results/touchpad-net.txt) | compat (network shim) |
+| 2026-09-20 | Apps were told the wrong locale and clock format | every app | `locale` and `timeFormat` were hardcoded `en_us`/`HH12` while the shell's clock followed Android | shell and compat (both follow Android's settings now) |
+| 2026-09-20 | An app showing the network interface saw Android's | apps that show connection details | `connectionmanager` reported `wlan0`; a TouchPad's Wi-Fi is `eth0` | bus |
 
 ## Known gaps, by the layer they belong to
 

@@ -7,6 +7,14 @@ V=../spike/vendor
 L=local-assets
 rm -rf $L && mkdir -p $L/fw/enyo $L/apps
 cp -r $V/enyo-1.0 $L/fw/enyo/1.0 && rm -rf $L/fw/enyo/1.0/.git $L/fw/enyo/1.0/support/docs
+# Lunacy's changes to Enyo, as diffs against upstream: framework/enyo-1.0/CHANGES.md says what
+# each one is and why. A patch that no longer applies is a build failure, not a silent skip.
+for patch in framework/enyo-1.0/patches/*.patch; do
+    [ -e "$patch" ] || continue
+    (cd $L/fw/enyo/1.0 && patch -p1 --forward --silent < "../../../../$patch") ||
+        { echo "fetch-assets: $patch does not apply to stock Enyo" >&2; exit 1; }
+    echo "enyo: applied $(basename "$patch")"
+done
 cp -r ../spike/apps-src/com.palm.app-museum2/usr/palm/applications/com.palm.app-museum2 $L/apps/
 cp -r ../spike/apps-src/com.ingloriousapps.glimpse/usr/palm/applications/com.ingloriousapps.glimpse $L/apps/
 # Palm's own settings apps that Lunacy ships (Screen & Lock, Help) are committed under

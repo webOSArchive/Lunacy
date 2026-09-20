@@ -5,9 +5,11 @@ go into general layers: the Enyo (later Mojo) fork, the global compat layer, or 
 fix that fits nowhere general is logged as such. If the general share stops growing, the
 approach is failing.
 
-Layers: **framework** (the Enyo fork, which has its own change log), **compat** (compat.js,
-bridge.js, serve-time transforms), **bus** (a service answering as webOS did), **nowhere
-general** (a per-app setting; only the fixed-viewport fallback is allowed).
+Layers: **framework** (the Enyo fork: stock Enyo plus the patches in
+`android/framework/enyo-1.0/`, whose [CHANGES.md](../android/framework/enyo-1.0/CHANGES.md) is
+its change log against upstream), **compat** (compat.js, bridge.js, serve-time transforms),
+**bus** (a service answering as webOS did), **nowhere general** (a per-app setting; only the
+fixed-viewport fallback is allowed).
 
 ## Fixes
 
@@ -47,6 +49,7 @@ general** (a per-app setting; only the fixed-viewport fallback is allowed).
 | 2026-09-20 | Servers that tell webOS devices apart didn't see one | every app on the wire | `X-Palm-Carrier` was never sent; the TouchPad puts `c090-01` on every request (spike/results/touchpad-net.txt) | compat (network shim) |
 | 2026-09-20 | Apps were told the wrong locale and clock format | every app | `locale` and `timeFormat` were hardcoded `en_us`/`HH12` while the shell's clock followed Android | shell and compat (both follow Android's settings now) |
 | 2026-09-20 | An app showing the network interface saw Android's | apps that show connection details | `connectionmanager` reported `wlan0`; a TouchPad's Wi-Fi is `eth0` | bus |
+| 2026-09-20 | Turning the tablet end for end doesn't reach apps at all | every Enyo app | Two layers. The shell: Android reports no configuration change when the rotation turns 180° (same orientation, same size), so `PalmSystem.screenOrientation` went stale - a display listener catches every rotation instead. Enyo: it decides the window has rotated by watching `window.resize`, which a 180° turn doesn't fire, and leaves the host's `Mojo.screenOrientationChanged` an empty stub. Its own note says why - the callback wasn't made on one of Palm's devices - and that sysmgr does make it, which Lunacy's shell does | shell, and **framework** (the stub now feeds `enyo.sendOrientationChange`, which only dispatches when the orientation really changed, so the resize path can't double up) |
 
 ## Known gaps, by the layer they belong to
 

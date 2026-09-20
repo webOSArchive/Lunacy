@@ -158,6 +158,13 @@ product; being "close enough" is not the goal.
 - **Framework route.** Requests under `/usr/palm/frameworks/…` go to Lunacy's modernized
   frameworks, including the version aliases apps used (`enyo/0.10`, `enyo/1.0`). Apps are
   not rewritten; the path they already use gets a better library behind it.
+- **The fork is stock Enyo plus patches.** `android/framework/enyo-1.0/patches/` holds Lunacy's
+  changes as diffs against upstream, and `fetch-assets.sh` applies them after copying the
+  upstream clone, failing the build if one no longer applies. So every framework change stays
+  readable as a diff and nothing can drift in unrecorded;
+  [CHANGES.md](../android/framework/enyo-1.0/CHANGES.md) says what each one is and why. Enyo
+  serves its built file (`framework/build/enyo-build.js`) rather than `source/`, so a patch
+  changes both.
 - **Apps that bundle their own framework** (all Enyo 2 apps, and some Enyo 1 apps) never hit
   the route. They rely on the compat layer and the bus alone. Enyo 2 was written for
   ordinary browsers, so this is the easier case.

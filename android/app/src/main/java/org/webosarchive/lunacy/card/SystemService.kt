@@ -122,8 +122,11 @@ class SystemService(private val webosRoot: File, private val store: File) {
         if (raw.isEmpty()) return call.reply(Bus.error("importWallpaper: target is required"))
         val path = runCatching { java.net.URLDecoder.decode(raw, "UTF-8") }.getOrDefault(raw)
             .removePrefix("file://")
-        val source = File(webosRoot, path.trimStart('/'))
-        if (!source.isFile || !inside(source)) {
+        // A picked file can be in Lunacy's own tree or in the Android storage mapped into it.
+        val source = (if (path.startsWith("/media/internal"))
+            UserFiles.resolve(webosRoot, path.removePrefix("/media/internal"))
+        else File(webosRoot, path.trimStart('/')).takeIf { inside(it) })
+        if (source == null || !source.isFile) {
             return call.reply(Bus.error("importWallpaper: can't read $path"))
         }
         try {

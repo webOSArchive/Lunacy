@@ -42,6 +42,7 @@ general** (a per-app setting; only the fixed-viewport fallback is allowed).
 | 2026-09-20 | Apps never learn the screen turned | every Enyo app | `PalmSystem.screenOrientation` was fixed at "up" and `Mojo.screenOrientationChanged` was never called; Enyo reads the property when the page's own resize arrives | shell and compat (bridge: the orientation is set before the relayout) |
 | 2026-09-20 | Settings apps pile onto the first launcher page | every app with a category or keywords | Apps with no place of their own all went to page 0; LunaCE places them by category, then by keyword (AppMonitor::pageDesignatorForWebOSApp) | shell (the page map in `assets/luna/launcher-pages.json`) |
 | 2026-09-20 | The Done button and the delete badge sit a pixel or two out, and the button is too tall | the launcher's edit mode | Two-state sprites were split into halves; LunaCE draws a documented rect inside a larger canvas (§3.8) | shell (the sprites' own rects, checked against the reference TouchPad's screenshot) |
+| 2026-09-20 | No file to pick: the user's own files aren't in the webOS tree | Papyrus 1.6.1's ePub import, Screen & Lock's wallpaper | `/media/internal` was Lunacy's own copy only, while the files a person has are in Android's shared storage | card host (`UserFiles`: Android's folders mapped into `/media/internal` under webOS's own names) |
 
 ## Known gaps, by the layer they belong to
 
@@ -57,9 +58,11 @@ Found while testing the apps below; each is general, not tied to one app.
   "kind not registered").
 - **system UI:** ~~the FilePicker cross-app UI~~ — done 2026-09-20. Lunacy serves its own
   picker at webOS's path (`/usr/lib/luna/system/luna-systemui/app/FilePicker/filepicker.html`),
-  so `enyo.FilePicker` works in every app. It lists the webOS tree through Lunacy's own
-  service rather than the media indexer, so it shows what is under `/media/internal`; Android's
-  own Pictures and Downloads aren't mapped in yet.
+  so `enyo.FilePicker` works in every app. It lists the webOS tree through Lunacy's own service
+  rather than the media indexer, and Android's shared folders are mapped into `/media/internal`
+  under the names a webOS device used (`downloads`, `music`, `photos`, `documents`, `camera`,
+  `video`), so it shows the files the user actually has. Proved end to end: Papyrus imported
+  and read an ePub from Android's Downloads folder, unchanged.
 - **bus, not implemented:** `com.palm.systemmanager` (`getSecurityPolicy`, `getDeviceLockMode`,
   `setDevicePasscode`). Lunacy has no lock screen — Android's is the real one — so Screen &
   Lock's Secure Unlock shows Off and gets an honest error if it is changed.
@@ -89,7 +92,7 @@ on 2026-09-19. Not yet repeated on the factory WebView 37.
 | App Museum 2.9.5 | Enyo 1, bundled | App menu (Preferences, About) and search with the keyboard work. |
 | USA Today (World Today) 1.4.3 | Enyo 1 | Runs with live news once uncaught errors stopped reaching `onerror`. |
 | Apollo 1.2.8 | Enyo 1 | Logs in with the keyboard, shows its stations and plays music. |
-| Papyrus 1.6.1 | Enyo 1 | Library renders; import needs db8 and the FilePicker. |
+| Papyrus 1.6.1 | Enyo 1 | Library renders. Import works as of 2026-09-20: the file picker lists Android's Downloads folder, and the book imports into db8 and reads. |
 | CheckMate HD 2.4.0 | Enyo 2, bundled | Renders its full UI and loads its Terms of Service; webOS Account missing (honest bus error). |
 | Plex for webOS 1.0.0 | Enyo 1 with a JS service | Its service starts transcodes and writes HLS playlists; direct play and transcoded video both play. |
 | Plex for webOS 0.8.0 | Enyo 1 | Finds a server added by hand, browses its library and plays video; Bonjour discovery needs zeroconf. |

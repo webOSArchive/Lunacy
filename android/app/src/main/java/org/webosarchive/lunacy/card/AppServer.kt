@@ -12,7 +12,7 @@ import java.io.InputStream
  * Serves every request to an app origin: the app's own files at their webOS path, the
  * frameworks, and Lunacy's injected scripts. See docs/architecture.md, "Card host".
  */
-class AppServer(private val assets: AssetManager, private val files: AppFiles, private val mediaInternal: java.io.File) {
+class AppServer(private val assets: AssetManager, private val files: AppFiles, private val webosRoot: java.io.File) {
     companion object {
         const val TAG = "Lunacy"
         /** Apps check location.hostname for this (the TouchPad reports ".media.cryptofs.apps..."). */
@@ -69,15 +69,13 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
             ByteArrayInputStream(ByteArray(0)))
     }
 
-    private fun internal(rel: String): InputStream? {
-        val f = java.io.File(mediaInternal, rel)
-        return if (f.isFile && f.canonicalPath.startsWith(mediaInternal.canonicalPath + java.io.File.separator)) f.inputStream() else null
-    }
+    /** webOS's user storage, Lunacy's own and the Android folders mapped into it (UserFiles). */
+    private fun internal(rel: String): InputStream? =
+        UserFiles.resolve(webosRoot, rel)?.takeIf { it.isFile }?.inputStream()
 
     /** A JPEG copy of an image under /media/internal, scaled so its short side is about `size`. */
     private fun thumbnail(rel: String, size: Int): WebResourceResponse? {
-        val f = java.io.File(mediaInternal, rel)
-        if (!f.isFile || !f.canonicalPath.startsWith(mediaInternal.canonicalPath + java.io.File.separator)) return null
+        val f = UserFiles.resolve(webosRoot, rel)?.takeIf { it.isFile } ?: return null
         val px = size.coerceIn(16, 1024)
         return try {
             val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }

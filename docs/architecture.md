@@ -406,6 +406,12 @@ it, so the control works in every app without any app being changed.
 - Palm's picker listed what the media indexer had in db8. Lunacy has no media indexer, so its
   picker reads the webOS tree through `palm://org.webosarchive.lunacy/files/list`, grouped by
   folder the way Palm's showed albums.
+- **`/media/internal` is the user's own storage**, as it was on a device, so Android's shared
+  folders are mapped into it under the names webOS used: `downloads`, `music`, `photos`,
+  `documents`, `camera`, `video` (`UserFiles.kt`). The card host, the media server and the
+  picker all resolve paths through it, and nothing outside those folders is reachable.
+  Reading them needs `READ_EXTERNAL_STORAGE`, which Android 5 grants at install: another
+  ratchet item for API 23 and later.
 - Thumbnails come from `?__lunacy_thumb=<px>` on an image under `/media/internal`, which the
   card host answers with a scaled JPEG. Full-size photos would not fit in 1 GB of RAM. The
   parameter carries Lunacy's own prefix so no app can stumble into it.

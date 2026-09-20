@@ -61,8 +61,9 @@ show live data. Per-app results and every fix, with the layer it landed in, are 
   - **Screen & Lock** is Palm's, unchanged: `com.palm.systemservice` (preferences and the
     wallpaper store) and `com.palm.display/control` (Android's brightness and screen-off
     timeout) answer it, and Change Wallpaper works end to end.
-  - **A file picker** at webOS's own system-UI path, so `enyo.FilePicker` works in every app
-    (Papyrus's import is worth retrying now).
+  - **A file picker** at webOS's own system-UI path, so `enyo.FilePicker` works in every app.
+    Android's shared folders are mapped into `/media/internal` under webOS's own names, so it
+    shows the user's real files: Papyrus now imports and reads an ePub from Downloads.
   - **Wi-Fi** and **Sounds & Alerts** are shortcuts to Android's settings.
   - **Help** is Palm's, unchanged, and runs; its articles need a path webOS Archive's help host
     doesn't serve yet (see fix-log.md).
@@ -72,7 +73,7 @@ show live data. Per-app results and every fix, with the layer it landed in, are 
   - the remaining startup services (keys, display) and the media indexer's db8 kinds;
   - the rest of the settings apps: Date & Time, Language, Backup, Accounts, Updates, Location
     (each is one of the three cases above);
-  - Android's own Pictures and Downloads in the file picker;
+
   - the border-image seams in Enyo dialogs;
   - a test suite from the apps in fix-log.md, run on WebView 37 and 64;
   - card stacks/groups;

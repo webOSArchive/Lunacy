@@ -19,7 +19,7 @@ import kotlin.concurrent.thread
  * here. Byte ranges are supported, as players seek. The path starts with a random token.
  * See docs/architecture.md, "JS services".
  */
-class MediaServer(private val dir: File) {
+class MediaServer(private val webosRoot: File) {
     private val token = ByteArray(12).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
     @Volatile private var socket: ServerSocket? = null
 
@@ -51,12 +51,10 @@ class MediaServer(private val dir: File) {
             val method = parts.getOrNull(0) ?: ""
             val path = URLDecoder.decode(parts.getOrNull(1)?.substringBefore('?') ?: "", "UTF-8")
             val prefix = "/$token/media/internal/"
-            val file = if (path.startsWith(prefix)) File(dir, path.removePrefix(prefix)) else null
+            val file = if (path.startsWith(prefix)) UserFiles.resolve(webosRoot, path.removePrefix(prefix)) else null
             val out = c.getOutputStream()
             if (method != "GET" && method != "HEAD") return status(out, 405, "Method Not Allowed")
-            if (file == null || !file.isFile || !file.canonicalPath.startsWith(dir.canonicalPath + File.separator)) {
-                return status(out, 404, "Not Found")
-            }
+            if (file == null || !file.isFile) return status(out, 404, "Not Found")
             val len = file.length()
             val range = Regex("bytes=(\\d*)-(\\d*)").find(headers["range"] ?: "")
             var start = 0L

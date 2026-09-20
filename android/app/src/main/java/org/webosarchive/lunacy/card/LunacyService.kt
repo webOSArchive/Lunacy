@@ -153,13 +153,20 @@ class LunacyService(
     private fun listFiles(p: JSONObject): String {
         val path = p.optString("path").ifEmpty { "/media/internal" }
         val types = p.optJSONArray("types")?.let { a -> (0 until a.length()).map { a.getString(it).lowercase() } }
-        val root = File(webosRoot, path.trimStart('/'))
-        if (!root.isDirectory || !root.canonicalPath.startsWith(webosRoot.canonicalPath)) {
-            return Bus.error("No such folder: $path")
-        }
+        val internal = path.removePrefix("/media/internal").trimStart('/')
+        val root = if (path.trimEnd('/') == "/media/internal" || path.startsWith("/media/internal/")) {
+            UserFiles.resolve(webosRoot, internal)
+        } else File(webosRoot, path.trimStart('/')).takeIf { it.canonicalPath.startsWith(webosRoot.canonicalPath) }
+        if (root == null || !root.isDirectory) return Bus.error("No such folder: $path")
+        // Lunacy's own folders, then the Android ones mapped in beside them (UserFiles), which
+        // is where the files a person actually has live.
+        val subfolders = (root.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") } ?: emptyList()) +
+            (if (root == UserFiles.own(webosRoot)) UserFiles.mappedFolders().map { it.second }.filter { m ->
+                root.listFiles().orEmpty().none { it.canonicalPath == m.canonicalPath }
+            } else emptyList())
         val albums = org.json.JSONArray()
         // The folder itself first, then its subfolders, as the picker lists them.
-        for (dir in listOf(root) + (root.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") }?.sortedBy { it.name.lowercase() } ?: emptyList())) {
+        for (dir in listOf(root) + subfolders.sortedBy { it.name.lowercase() }) {
             val files = org.json.JSONArray()
             dir.listFiles()?.filter { it.isFile && !it.name.startsWith(".") }
                 ?.sortedBy { it.name.lowercase() }
@@ -168,14 +175,14 @@ class LunacyService(
                     if (types != null && type !in types) return@forEach
                     files.put(JSONObject()
                         .put("name", f.name)
-                        .put("fullPath", "/" + f.canonicalPath.removePrefix(webosRoot.canonicalPath).trimStart('/'))
+                        .put("fullPath", webosPath(f))
                         .put("attachmentType", type)
                         .put("size", f.length()))
                 }
             if (files.length() > 0) {
                 albums.put(JSONObject()
                     .put("name", if (dir == root) rootName(path) else dir.name)
-                    .put("path", "/" + dir.canonicalPath.removePrefix(webosRoot.canonicalPath).trimStart('/'))
+                    .put("path", webosPath(dir))
                     .put("files", files))
             }
         }
@@ -184,12 +191,17 @@ class LunacyService(
 
     private fun rootName(path: String) = path.trimEnd('/').substringAfterLast('/').ifEmpty { "Files" }
 
+    /** The path an app sees: a webOS one, whichever side of the mapping the file is really on. */
+    private fun webosPath(f: File): String =
+        UserFiles.webosPath(webosRoot, f) ?: ("/" + f.canonicalPath.removePrefix(webosRoot.canonicalPath).trimStart('/'))
+
     /** webOS's attachment types, by extension: what a FilePicker's fileType filters on. */
     private fun typeOf(name: String) = when (name.substringAfterLast('.', "").lowercase()) {
         "jpg", "jpeg", "png", "gif", "bmp", "webp" -> "image"
         "mp3", "m4a", "aac", "wav", "ogg", "oga", "flac" -> "audio"
         "mp4", "m4v", "mov", "avi", "mkv", "webm", "3gp" -> "video"
-        "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "rtf", "html", "htm" -> "document"
+        "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "rtf", "html", "htm",
+        "epub", "mobi", "prc", "azw", "fb2", "cbz", "cbr", "csv", "md" -> "document"
         else -> "other"
     }
 

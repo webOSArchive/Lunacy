@@ -66,7 +66,7 @@ for where things stand.
 
 - [docs/architecture.md](docs/architecture.md): components and boundaries
 - [docs/roadmap.md](docs/roadmap.md): phases and exit criteria
-- [docs/lessons.md](docs/lessons.md): what earlier attempts taught us
+- [docs/lessons.md](docs/lessons.md): the rules this and earlier attempts have paid for
 - [docs/mojo.md](docs/mojo.md): how Mojo is packaged, and what it takes to run it
 - [docs/spike-1.md](docs/spike-1.md): stock Enyo on an Android 5 tablet, first results
 - [docs/android5-setup.md](docs/android5-setup.md): what is done to an Android 5 device

@@ -16,13 +16,19 @@ be made in the built file as well as in `framework/source/`. Each patch does bot
 **Adding one:** edit `android/local-assets/fw/enyo/1.0/`, then
 
 ```sh
-cd android/local-assets/fw/enyo/1.0
-for f in <the files you changed>; do
-    diff -u ../../../../../spike/vendor/enyo-1.0/$f $f | sed "s|^--- .*|--- a/$f|; s|^+++ .*|+++ b/$f|"
-done > ../../../framework/enyo-1.0/patches/000N-name.patch
+cd android
+tools/make-enyo-patch.sh 000N-name framework/source/<file> framework/build/enyo-build.js
 ```
 
-and add an entry below.
+and add an entry below. A patch in a series has to be a diff against the tree with the
+*earlier* patches applied, not against stock, or applying them in order fails; the script
+builds that base itself so it can't be got wrong by hand.
+
+**Both copies.** An app loads either the built file or the source tree - the Enyo Sampler
+takes `framework/build/enyo-build.js`, Glimpse takes `framework/source/` - so a change has to
+be in both or it will work in some apps and not others. The built file is minified, so its
+half of a patch is written as a readable override appended to the end rather than as a
+minified diff.
 
 ## Patches
 
@@ -42,3 +48,31 @@ really changed, so the two paths can't double up.
 
 Files: `framework/source/compatibility/webosGesture.js`,
 `framework/build/enyo-build.js`.
+
+### 0002-webview-over-iframe.patch
+
+`enyo.WebView` shows web pages, over an iframe.
+
+On webOS this control was the BrowserAdapter: an NPAPI plugin (`<object
+type="application/x-palm-browser">`) talking to browserserver, another process. Lunacy has no
+such plugin, so the control rendered an object that answered nothing, and an app calling it
+got a TypeError - that is what put the "DIAG ERROR" overlay on USA Today (see fix-log.md).
+
+Everything above the plugin is Enyo's own code and still runs; only the bottom layer changes.
+The node is an iframe, `adapterReady` is "the node exists", connecting completes at once, and
+`_callBrowserAdapter` - the single point every command goes through - maps the plugin's calls
+onto what an iframe can do: `openURL`, `reloadPage`, `stopLoad`, `goBack`, `goForward`,
+`setHTML`. The load event gives `onLoadStarted`, `onLoadComplete` and `onPageTitleChanged`.
+
+What an iframe can't do is logged once per call, so an app's use of it shows up rather than
+vanishing: the filesystem calls (`saveViewToFile`, `resizeImage`, `generateIconFromFile`), the
+plugin's own dialogs, printing and find-in-page. A page on another origin keeps its window to
+itself, so history and title only work for pages Lunacy serves.
+
+Two things to know if you change this:
+- `urlTitleChanged` is the callback for a page's title; there is no `pageTitleChanged` on this
+  kind, and calling one silently stopped the load ever reaching the app.
+- The load listener is bound when a page is first opened, not in `rendered()`: something in
+  the kind machinery replaces `rendered` after the override runs.
+
+Files: `framework/source/palm/controls/BasicWebView.js`, `framework/build/enyo-build.js`.

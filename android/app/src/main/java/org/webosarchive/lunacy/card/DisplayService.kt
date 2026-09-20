@@ -17,10 +17,45 @@ import org.json.JSONObject
  * {"returnValue":true,"timeout":1800,"maximumBrightness":100}.
  */
 class DisplayService(private val context: Context) {
+    private val statusSubscribers = LinkedHashSet<Bus.Call>()
+
     fun register(bus: Bus) {
         bus.register(SERVICE, "control/getProperty") { _, p, reply -> reply(getProperty(p)) }
         bus.register(SERVICE, "control/setProperty") { _, p, reply -> reply(setProperty(p)) }
+        bus.register(SERVICE, "control/status", Bus.CallHandler { status(it) })
     }
+
+    /**
+     * Whether the screen is on, and how long it stays on. Apps ask while starting (Apollo
+     * does). The shape is the reference TouchPad's, measured with luna-send:
+     * {"returnValue":true,"event":"request","state":"on","timeout":1800,
+     *  "blockDisplay":"true","active":false,"subscribed":false} - blockDisplay really is a
+     * string there.
+     */
+    private fun status(call: Bus.Call) {
+        call.reply(statusReply(call.subscribe))
+        if (call.subscribe && !call.cancelled) {
+            statusSubscribers += call
+            call.onCancel { statusSubscribers.remove(call) }
+        }
+    }
+
+    private fun statusReply(subscribed: Boolean): String = JSONObject()
+        .put("returnValue", true).put("event", "request")
+        .put("state", if (screenOn()) "on" else "off")
+        .put("timeout", timeout()).put("blockDisplay", "false")
+        .put("active", screenOn()).put("subscribed", subscribed)
+        .toString()
+
+    /** The shell tells this when Android says the screen went on or off. */
+    fun screenChanged() {
+        val event = statusReply(true)
+        statusSubscribers.toList().forEach { it.reply(event) }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun screenOn(): Boolean =
+        (context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).isScreenOn
 
     private fun getProperty(p: JSONObject): String {
         val names = p.optJSONArray("properties")

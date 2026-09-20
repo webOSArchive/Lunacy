@@ -526,6 +526,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val launchHandler = Bus.Handler { caller, p, reply ->
             val id = p.optString("id")
             val params = p.optJSONObject("params")
+            // A link, an email, a phone number, a map: webOS's own apps owned these and Lunacy
+            // doesn't have them, so Android's answer instead. See WebosLinks.
+            val link = org.webosarchive.lunacy.card.WebosLinks.intentFor(id, params, p.optString("target"))
+            if (link != null && registry.get(id) == null) {
+                reply(org.webosarchive.lunacy.card.WebosLinks.open(this, link))
+                return@Handler
+            }
             // The App Museum installs through Preware (LuneOS's on LuneOS); Lunacy's package
             // manager answers for it. See docs/architecture.md, "Package manager and App Museum".
             if (id in INSTALLERS && registry.get(id) == null && params?.optString("type") == "install") {
@@ -555,6 +562,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         configurator.run()
         bus.register("com.palm.applicationManager", "launch", launchHandler)
         bus.register("com.palm.applicationManager", "open", launchHandler)
+        // What Enyo's CrossAppUI asks for before loading another app's UI. The reference
+        // TouchPad answers {"returnValue":true,"appId":...,"basePath":"file://…/index.html"}.
+        bus.register("com.palm.applicationManager", "getAppBasePath") { _, p, reply ->
+            val app = registry.get(p.optString("appId"))
+            reply(if (app == null) Bus.error("Application not found: ${p.optString("appId")}")
+                  else Bus.ok(mapOf("appId" to app.id, "basePath" to app.filePath())))
+        }
+        org.webosarchive.lunacy.card.Keys(this).register(bus)
         bus.register("com.palm.applicationManager", "listApps") { _, _, reply ->
             reply(Bus.ok(mapOf("apps" to org.json.JSONArray(registry.apps.map { it.listEntry() }))))
         }

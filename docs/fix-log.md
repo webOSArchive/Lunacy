@@ -44,6 +44,12 @@ fixed-viewport fallback is allowed).
 | 2026-09-20 | Apps never learn the screen turned | every Enyo app | `PalmSystem.screenOrientation` was fixed at "up" and `Mojo.screenOrientationChanged` was never called; Enyo reads the property when the page's own resize arrives | shell and compat (bridge: the orientation is set before the relayout) |
 | 2026-09-20 | Settings apps pile onto the first launcher page | every app with a category or keywords | Apps with no place of their own all went to page 0; LunaCE places them by category, then by keyword (AppMonitor::pageDesignatorForWebOSApp) | shell (the page map in `assets/luna/launcher-pages.json`) |
 | 2026-09-20 | The Done button and the delete badge sit a pixel or two out, and the button is too tall | the launcher's edit mode | Two-state sprites were split into halves; LunaCE draws a documented rect inside a larger canvas (§3.8) | shell (the sprites' own rects, checked against the reference TouchPad's screenshot) |
+| 2026-09-20 | Every app's dates, times and numbers throw: `enyo.g11n.DateFmt` dies with "Cannot read property 'longDate' of null" | every Enyo app that formats a date, a time or a number | Self-inflicted, the same morning: `palmGetResource` was tightened to refuse a path that isn't absolute, on the measurement that a TouchPad returns null for `"appinfo.json"`. It also refused `/usr/palm/...`, which is the form Enyo builds here - on a device the same file is `file:///usr/palm/...`, and only the origin makes the difference. g11n reads its format data that way | compat (bridge: a rooted path is enough, a bare relative one still isn't) |
+| 2026-09-20 | Every app's Help menu, and "open link", "share", "email us" everywhere, do nothing | every Enyo app (the Help item is in Enyo's own app menu) | `applicationManager/open` with a `target`, or with the id of one of webOS's built-in apps, had nobody to answer: those apps were part of the OS and Lunacy hasn't got them | bus (`WebosLinks`: the built-in ids and a bare target go to Android's browser, mail composer, dialer, messaging or maps) |
+| 2026-09-20 | `enyo.WebView` shows nothing and throws when called | apps with a reader or a built-in browser (USA Today's overlay came from this) | The control is webOS's BrowserAdapter, an NPAPI plugin; there is none here, so it rendered an `<object>` that answered nothing | **framework** (the control over an iframe: load, events and the commands an iframe can do; the plugin-only calls log once) |
+| 2026-09-20 | Apps' startup calls for the headset, the media keys and the screen get nothing | Apollo asks for all three while starting | `com.palm.keys/headset/status`, `keys/media/status` and `display/control/status` were missing | bus (Android-backed, in the TouchPad's measured shapes - including its own wording for a call that arrives without `subscribe`) |
+| 2026-09-20 | Enyo's cross-app UI can't find another app's files | any app opening one (the file picker takes a path instead) | `applicationManager/getAppBasePath` was missing | bus |
+| 2026-09-20 | `tellurium_config.json` 404s where a device answers | every Enyo app, at startup | The TouchPad answers that one file with 200 and an empty body | card host (system files) |
 | 2026-09-20 | No file to pick: the user's own files aren't in the webOS tree | Papyrus 1.6.1's ePub import, Screen & Lock's wallpaper | `/media/internal` was Lunacy's own copy only, while the files a person has are in Android's shared storage | card host (`UserFiles`: Android's folders mapped into `/media/internal` under webOS's own names) |
 | 2026-09-20 | A page could tell it wasn't on a device: `PalmSystem.getResource` and `getIdentifier` existed, its members enumerated, and `palmGetResource` returned `undefined` where a TouchPad returns `null` | every app that feature-detects | Lunacy's `PalmSystem` was a plain object with extra members | compat (bridge: a host object with nothing enumerable, and the measured surface exactly) |
 | 2026-09-20 | Servers that tell webOS devices apart didn't see one | every app on the wire | `X-Palm-Carrier` was never sent; the TouchPad puts `c090-01` on every request (spike/results/touchpad-net.txt) | compat (network shim) |
@@ -55,8 +61,8 @@ fixed-viewport fallback is allowed).
 
 Found while testing the apps below; each is general, not tied to one app.
 
-- **bus, startup services:** `keys/headset` and `keys/media` status, `display/status`
-  (Apollo asks for all three, and copes without them).
+- ~~**bus, startup services:** `keys/headset`, `keys/media`, `display/status`~~ — done
+  2026-09-20, Android-backed and in the measured shapes.
 - **bus, zeroconf:** `com.palm.zeroconf/browse` (Bonjour discovery; Plex 0.8.0 looks for
   `_plexmediasvr._tcp` with it, then falls back to servers added by hand). Android's
   `NsdManager` could back it.
@@ -73,8 +79,11 @@ Found while testing the apps below; each is general, not tied to one app.
 - **bus, not implemented:** `com.palm.systemmanager` (`getSecurityPolicy`, `getDeviceLockMode`,
   `setDevicePasscode`). Lunacy has no lock screen — Android's is the real one — so Screen &
   Lock's Secure Unlock shows Off and gets an honest error if it is changed.
-- **system files:** the TouchPad answers `/usr/palm/frameworks/tellurium/tellurium_config.json`
-  with 200 and an empty body; Lunacy answers 404.
+- ~~**system files:** `tellurium_config.json`~~ — done 2026-09-20.
+- **framework, enyo.WebView:** what only the plugin could do is logged, not done: saving the
+  view or an image to a file, resizing an image, the plugin's own dialogs, printing and
+  find-in-page. A page on another origin keeps its window to itself, so history and title work
+  only for pages Lunacy serves.
 - **visual, not yet solved:** Enyo dialogs (Apollo's, AccuWeather's) show faint lines along
   the frame's border-image slice boundaries: the page behind shows through by a few levels.
   Measured in Apollo: they sit exactly on the slice edges, at whole and half pixels alike,

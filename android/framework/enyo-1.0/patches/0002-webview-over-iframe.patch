@@ -1,0 +1,291 @@
+--- a/framework/source/palm/controls/BasicWebView.js
++++ b/framework/source/palm/controls/BasicWebView.js
+@@ -82,15 +82,18 @@
+ 	lastUrl: "",
+ 	style: "display: block; -webkit-transform:translate3d(0,0,0)",
+ 	//style: "border: 2px solid red;",
+-	nodeTag: "object",
++	// Lunacy: an iframe, not webOS's BrowserAdapter plugin. Everything below still runs; only
++	// the bottom layer - what the node is and how a command reaches it - changes. See
++	// android/framework/enyo-1.0/CHANGES.md.
++	nodeTag: "iframe",
+ 	//* @protected
+ 	create: function() {
+ 		this.inherited(arguments);
+ 		this.history = [];
+ 		this.callQueue = [];
+ 		this.dispatcher = enyo.dispatcher;
+-		this.domAttributes.type = "application/x-palm-browser";
+-		this.domAttributes["x-palm-cache-plugin"] = this.cacheAdapter;
++		this.domAttributes.frameborder = "0";
++		this.domAttributes.scrolling = "auto";
+ 		/*
+ 		this._mouseInInteractive = false;
+ 		this._mouseInFlash = false;
+@@ -111,6 +114,10 @@
+ 			this.node.addEventListener("touchstart", enyo.bind(this, "touchHandler"));
+ 			this.node.addEventListener("touchmove", enyo.bind(this, "touchHandler"));
+ 			this.node.addEventListener("touchend", enyo.bind(this, "touchHandler"));
++			// Lunacy: the plugin's callbacks came from browserserver; an iframe's come from
++			// its own load. A page on another origin won't give up its title, which is the
++			// one thing a plugin could see and this can't.
++			this.node.addEventListener("load", enyo.bind(this, "_frameLoaded"));
+ 			this.history = [];
+ 			this.lastUrl = "";
+ 			if (this.adapterReady()) {
+@@ -129,7 +136,8 @@
+ 	// check to make sure the adapter is ready to receive commands. when
+ 	// the node is hidden we cannot call adapter functions.
+ 	adapterReady: function() {
+-		return this.hasNode() && this.node.openURL;
++		// Lunacy: the iframe is always ready; there is no plugin to wait for.
++		return Boolean(this.hasNode());
+ 	},
+ 	// (browser adapter callback) we only get this if the view is initially
+ 	// hidden
+@@ -154,20 +162,21 @@
+ 		}
+ 	},
+ 	_connect: function() {
+-		try {
+-			this.node.setPageIdentifier(this.identifier || this.id);
+-			this.node.connectBrowserServer();
+-		} catch (e) {
+-			// eat the exception, this is expected while browserserver
+-			// is starting up
+-		}
++		// Lunacy: there is no browser server to connect to, so the view is ready at once. The
++		// normal flow follows from here (serverConnected -> initView -> urlChanged).
++		var self = this;
++		enyo.asyncMethod(this, function() {
++			if (self.hasNode()) { self.serverConnected(); }
++		});
+ 	},
+ 	initView: function() {
+ 		if (this.adapterReady() && this._serverConnected) {
+ 			this.cacheBoxSize();
+-			this.node.interrogateClicks(false);
+-			this.node.setShowClickedLink(true);
+-			this.node.pageFocused(true);
++			// Lunacy: through the adapter call, not straight at the node - an iframe has no
++			// plugin methods on it.
++			this.callBrowserAdapter("interrogateClicks", [false]);
++			this.callBrowserAdapter("setShowClickedLink", [true]);
++			this.callBrowserAdapter("pageFocused", [true]);
+ 			this.blockPopupsChanged();
+ 			this.acceptCookiesChanged();
+ 			this.enableJavascriptChanged();
+@@ -315,9 +324,80 @@
+ 		}
+ 	},
+ 	//* @protected
++	// Lunacy: what the BrowserAdapter plugin did, as far as an iframe can. Anything the plugin
++	// alone could do (the filesystem calls, dialogs, printing, find-in-page) is logged once
++	// rather than silently ignored, so an app's use of it shows up.
++	_lunacyFrame: {
++		openURL: function(url) {
++			if (!url || url === this.lastUrl) { return; }
++			this.lastUrl = url;
++			this.loadStarted();
++			this.node.setAttribute("src", url);
++		},
++		reloadPage: function() { this._frameWindow(function(w) { w.location.reload(); }); },
++		stopLoad: function() { this._frameWindow(function(w) { w.stop && w.stop(); }); },
++		goBack: function() { this._frameWindow(function(w) { w.history.back(); }); },
++		goForward: function() { this._frameWindow(function(w) { w.history.forward(); }); },
++		setHTML: function(url, body) {
++			this.lastUrl = url || "";
++			this.loadStarted();
++			this.node.setAttribute("src", "data:text/html;charset=utf-8," + encodeURIComponent(body || ""));
++		},
++		clearHistory: function() {},
++		clearCache: function() {},
++		clearCookies: function() {},
++		pageFocused: function() {},
++		interrogateClicks: function() {},
++		setShowClickedLink: function() {},
++		setPageIdentifier: function() {},
++		connectBrowserServer: function() {},
++		disconnectBrowserServer: function() {},
++		setVisibleSize: function() {},
++		setMinFontSize: function() {},
++		setEnableJavaScript: function() {},
++		setBlockPopups: function() {},
++		setAcceptCookies: function() {},
++		setIgnoreMetaTags: function() {},
++		setNetworkInterface: function() {},
++		setDNSServers: function() {},
++		addUrlRedirect: function() {},
++		setHeaderHeight: function() {}
++	},
++	// Same-origin only: a page from elsewhere keeps its window to itself.
++	_frameWindow: function(inFn) {
++		try {
++			var w = this.hasNode() && this.node.contentWindow;
++			if (w) { inFn(w); }
++		} catch (e) {
++			this.log("Lunacy: the page in this WebView is on another origin (" + e.message + ")");
++		}
++	},
++	// The plugin's callbacks came from browserserver; an iframe's come from its own load. This
++	// is bound when a page is first opened rather than in rendered(), because the kind's
++	// rendered is replaced after this file's changes are in place.
++	_lunacyWatchLoad: function() {
++		if (this._lunacyLoadBound || !this.hasNode()) { return; }
++		this._lunacyLoadBound = true;
++		this.node.addEventListener("load", enyo.bind(this, "_frameLoaded"));
++	},
++	_frameLoaded: function() {
++		var title = "";
++		try { title = (this.node.contentDocument && this.node.contentDocument.title) || ""; } catch (e) {}
++		// urlTitleChanged is the callback the plugin used; there is no pageTitleChanged on
++		// this kind, and calling one stopped the load event ever reaching the app.
++		this.urlTitleChanged(this.lastUrl, title, false, false);
++		this.documentLoadFinished();
++	},
+ 	_callBrowserAdapter: function(inFuncName, inArgs) {
+-		if (this.node[inFuncName]) {
+-			this.node[inFuncName].apply(this.node, inArgs);
++		var frame = this._lunacyFrame[inFuncName];
++		if (frame) {
++			frame.apply(this, inArgs || []);
++			return;
++		}
++		this._loggedMissing = this._loggedMissing || {};
++		if (!this._loggedMissing[inFuncName]) {
++			this._loggedMissing[inFuncName] = true;
++			this.log("Lunacy: enyo.WebView." + inFuncName + " needs webOS's browser plugin and does nothing here");
+ 		}
+ 	},
+ 	showFlashLockedMessage: function() {
+--- a/framework/build/enyo-build.js
++++ b/framework/build/enyo-build.js
+@@ -13055,3 +13055,128 @@
+ }, !1);
+ }
+ });
++
++// ---------------------------------------------------------------------------
++// Lunacy: enyo.BasicWebView over an iframe.
++//
++// The same change as in framework/source/palm/controls/BasicWebView.js, which this built file
++// is a minified copy of. An app loads one or the other - the Enyo Sampler takes this file,
++// Glimpse takes the source tree - so both carry it. It is written as an override rather than
++// a minified diff so it stays readable; android/framework/enyo-1.0/CHANGES.md says why.
++//
++// webOS drew enyo.WebView with the BrowserAdapter, an NPAPI plugin talking to browserserver.
++// There is no such plugin here, so the control rendered an <object> that answered nothing and
++// threw when an app called it. Now it renders an iframe: everything above this layer - the
++// control, its scroller, its events - is Enyo's own code, unchanged.
++// ---------------------------------------------------------------------------
++(function () {
++	if (!window.enyo || !enyo.BasicWebView) { return; }
++	var p = enyo.BasicWebView.prototype;
++
++	p.nodeTag = "iframe";
++
++	var create = p.create;
++	p.create = function () {
++		create.apply(this, arguments);
++		delete this.domAttributes.type;
++		delete this.domAttributes["x-palm-cache-plugin"];
++		this.domAttributes.frameborder = "0";
++		this.domAttributes.scrolling = "auto";
++	};
++
++	// The iframe is always ready; there is no plugin to wait for and no server to connect to.
++	p.adapterReady = function () { return Boolean(this.hasNode()); };
++	p._connect = function () {
++		var self = this;
++		enyo.asyncMethod(this, function () { if (self.hasNode()) { self.serverConnected(); } });
++	};
++
++	// initView reaches for three plugin methods straight on the node; an iframe has none, so
++	// they go through the adapter call like everything else.
++	p.initView = function () {
++		if (this.adapterReady() && this._serverConnected) {
++			this.cacheBoxSize();
++			this.callBrowserAdapter("interrogateClicks", [false]);
++			this.callBrowserAdapter("setShowClickedLink", [true]);
++			this.callBrowserAdapter("pageFocused", [true]);
++			this.blockPopupsChanged();
++			this.acceptCookiesChanged();
++			this.enableJavascriptChanged();
++			this.systemRedirectsChanged();
++			this.redirectsChanged();
++			this.updateViewportSize();
++			this.minFontSizeChanged();
++			this.urlChanged();
++		}
++	};
++
++	// The plugin's callbacks came from browserserver; an iframe's come from its own load. This
++	// is bound when a page is first opened rather than in rendered(), because the kind's
++	// rendered is replaced after this block runs.
++	p._lunacyWatchLoad = function () {
++		if (this._lunacyLoadBound || !this.hasNode()) { return; }
++		this._lunacyLoadBound = true;
++		this.node.addEventListener("load", enyo.bind(this, "_frameLoaded"));
++	};
++
++	p._frameLoaded = function () {
++		var title = "";
++		try { title = (this.node.contentDocument && this.node.contentDocument.title) || ""; } catch (e) {}
++		// urlTitleChanged is the callback the plugin used; there is no pageTitleChanged on
++		// this kind, and calling one stopped the load event ever reaching the app.
++		this.urlTitleChanged(this.lastUrl, title, false, false);
++		this.documentLoadFinished();
++	};
++
++	// Same-origin only: a page from elsewhere keeps its window to itself.
++	p._frameWindow = function (inFn) {
++		try {
++			var w = this.hasNode() && this.node.contentWindow;
++			if (w) { inFn(w); }
++		} catch (e) {
++			this.log("Lunacy: the page in this WebView is on another origin (" + e.message + ")");
++		}
++	};
++
++	// What the plugin did, as far as an iframe can.
++	var frame = {
++		openURL: function (url) {
++			if (!url || url === this.lastUrl) { return; }
++			this._lunacyWatchLoad();
++			this.lastUrl = url;
++			this.loadStarted();
++			this.node.setAttribute("src", url);
++		},
++		reloadPage: function () { this._frameWindow(function (w) { w.location.reload(); }); },
++		stopLoad: function () { this._frameWindow(function (w) { if (w.stop) { w.stop(); } }); },
++		goBack: function () { this._frameWindow(function (w) { w.history.back(); }); },
++		goForward: function () { this._frameWindow(function (w) { w.history.forward(); }); },
++		setHTML: function (url, body) {
++			this._lunacyWatchLoad();
++			this.lastUrl = url || "";
++			this.loadStarted();
++			this.node.setAttribute("src", "data:text/html;charset=utf-8," + encodeURIComponent(body || ""));
++		},
++		clearHistory: enyo.nop, clearCache: enyo.nop, clearCookies: enyo.nop,
++		pageFocused: enyo.nop, interrogateClicks: enyo.nop, setShowClickedLink: enyo.nop,
++		setPageIdentifier: enyo.nop, connectBrowserServer: enyo.nop, disconnectBrowserServer: enyo.nop,
++		setVisibleSize: enyo.nop, setMinFontSize: enyo.nop, setEnableJavaScript: enyo.nop,
++		setBlockPopups: enyo.nop, setAcceptCookies: enyo.nop, setIgnoreMetaTags: enyo.nop,
++		setNetworkInterface: enyo.nop, setDNSServers: enyo.nop, addUrlRedirect: enyo.nop,
++		setHeaderHeight: enyo.nop
++	};
++
++	// Anything only the plugin could do (the filesystem calls, its dialogs, printing,
++	// find-in-page) is logged once, so an app's use of it shows up instead of vanishing.
++	p._callBrowserAdapter = function (inFuncName, inArgs) {
++		if (frame[inFuncName]) {
++			frame[inFuncName].apply(this, inArgs || []);
++			return;
++		}
++		this._loggedMissing = this._loggedMissing || {};
++		if (!this._loggedMissing[inFuncName]) {
++			this._loggedMissing[inFuncName] = true;
++			this.log("Lunacy: enyo.WebView." + inFuncName + " needs webOS's browser plugin and does nothing here");
++		}
++	};
++})();

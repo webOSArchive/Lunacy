@@ -38,6 +38,9 @@ class AppInfo(
     val isWeb get() = type == "web"
     fun openIcon(): InputStream? = files.open("${Packages.APPS}/$id/$icon")
 
+    /** The app's main page as a file:// path, the form webOS's bus answers with. */
+    fun filePath(): String = "file:///media/cryptofs/apps/${Packages.APPS}/$id/$main"
+
     /** This app's entry in applicationManager/listApps, with the fields a TouchPad returns. */
     fun listEntry(): JSONObject {
         val dir = "/media/cryptofs/apps/${Packages.APPS}/$id/"

@@ -28,8 +28,12 @@ show live data. Per-app results and every fix, with the layer it landed in, are 
     agent and version (webOS CE 3.1.0), no service workers,
     `webkitCancelRequestAnimationFrame`, media with an empty `src`, and `file:///media/internal`
     URLs.
-  - Not yet: the `enyo.WebView` control, a test suite, runs on the factory WebView 37, and
-    the border-image seams in Enyo dialogs (see fix-log.md).
+  - The Enyo 1 contract was read end to end on 2026-09-20 - every `PalmSystem` member, every
+    `Mojo` call, every service and file the framework itself reaches for - and the gaps it
+    turned up are closed: g11n's formats, `enyo.WebView`, `applicationManager/open` and
+    `getAppBasePath`, the headset/media/display startup calls, and `tellurium_config.json`.
+  - Not yet: a test suite, runs on the factory WebView 37, and the border-image seams in Enyo
+    dialogs (see fix-log.md).
 - **Phase 2 (bus):** subscriptions and cancellation work. Answering: applicationManager
   (launch, open, listApps, Preware installs), connectionmanager, preferences
   `systemProperties/Get`, activitymanager (foreground activities), and db8 and tempdb

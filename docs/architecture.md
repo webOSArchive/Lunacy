@@ -327,8 +327,13 @@ product; being "close enough" is not the goal.
   frame in the WebView, including remote iframes. On Android 5 this is accepted. On later
   targets, the bridge moves to `WebMessageListener` restricted to `*.media.cryptofs.apps`.
 - **Enyo's `WebView` control.** On webOS, `enyo.WebView` wrapped the native `BrowserAdapter`
-  plugin. Lunacy supplies it, as an iframe or as a native WebView overlaid on the card. Apps
-  with a built-in browser or reader view need it.
+  plugin, which talked to browserserver in another process. Lunacy has no plugin, so the
+  framework fork draws the control with an iframe instead: the control, its scroller and its
+  events are Enyo's own code, and only the bottom layer - the node, and the one call every
+  command goes through - changes. Loading, the load events, the page title and back/forward
+  work; what only the plugin could do (saving to files, its dialogs, printing, find-in-page)
+  is logged once per call rather than silently ignored. See
+  [the fork's change log](../android/framework/enyo-1.0/CHANGES.md).
 - **System files.** Apps ask for files beyond the framework, e.g.
   `/usr/palm/command-resource-handlers.json`. On a TouchPad most of those requests throw,
   because apps can't read arbitrary local files. Lunacy matches that: it serves the

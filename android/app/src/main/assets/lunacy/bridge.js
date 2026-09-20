@@ -198,10 +198,21 @@
 		return nativeOpen.call(window, url, name, features);
 	};
 
-	// A missing or disallowed file gives null, and a relative path is refused: measured on a
-	// TouchPad, where local file access is restricted (docs/spike-1.md).
+	// A missing or disallowed file gives null, and a path that isn't rooted is refused: on a
+	// TouchPad, palmGetResource("appinfo.json") returns null while the same file named from
+	// the root reads fine (spike/probe, docs/spike-1.md).
+	//
+	// "Rooted" here means a full URL or a path starting with "/". On a device that path is
+	// file:///usr/palm/..., and on Lunacy's origins the same file is /usr/palm/... - Enyo
+	// builds one or the other depending on where the page is served from, and both name the
+	// file the device would have read. Refusing the second form broke enyo.g11n, which reads
+	// its date and number formats that way, so every app lost date formatting.
 	window.palmGetResource = function (path, hint) {
-		if (!/^[a-z][a-z0-9+.-]*:/i.test(String(path))) { N.log("palmGetResource needs an absolute URL: " + path); return null; }
+		var p = String(path);
+		if (!/^[a-z][a-z0-9+.-]*:/i.test(p) && p.charAt(0) !== "/") {
+			N.log("palmGetResource needs a rooted path: " + p);
+			return null;
+		}
 		var x = new XMLHttpRequest();
 		x.open("GET", path, false);
 		try { x.send(null); } catch (e) { N.log("palmGetResource failed " + path); return null; }

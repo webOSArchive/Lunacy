@@ -51,6 +51,12 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
         val path = uri.path.orEmpty().trimStart('/')
         if (path.startsWith("__lunacy/fonts/")) return asset("luna/fonts/" + path.removePrefix("__lunacy/fonts/"), path)
         if (path.startsWith("__lunacy/")) return asset("lunacy/" + path.removePrefix("__lunacy/"), path)
+        // The TouchPad answers this one with 200 and an empty body; Enyo's Tellurium hooks
+        // read it while starting, and a 404 makes them throw where a device doesn't.
+        if (path == "usr/palm/frameworks/tellurium/tellurium_config.json") {
+            return WebResourceResponse("application/json", "utf-8", 200, "OK",
+                mapOf("Access-Control-Allow-Origin" to "*"), ByteArrayInputStream(ByteArray(0)))
+        }
         val fw = FRAMEWORK.matchEntire(path)
         val thumb = runCatching { uri.getQueryParameter(THUMB_PARAM)?.toInt() }.getOrNull()
         val resp = when {

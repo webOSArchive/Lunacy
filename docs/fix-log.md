@@ -109,7 +109,7 @@ on 2026-09-19. Not yet repeated on the factory WebView 37.
 
 | App | Kind | Result |
 |---|---|---|
-| AccuWeather 2.3.1 | Enyo 1 | Runs with live data after the Terms dialog. Radar map fails (third party). |
+| AccuWeather 2.3.1 | Enyo 1 | Runs with live data after the Terms dialog. Radar map fails (third party). Its Exhibition view is broken (codepoet, 2026-09-20) - not yet looked at; use the Time face or Flying Toasters when testing Exhibition. |
 | App Museum 2.9.5 | Enyo 1, bundled | App menu (Preferences, About) and search with the keyboard work. |
 | USA Today (World Today) 1.4.3 | Enyo 1 | Runs with live news once uncaught errors stopped reaching `onerror`. |
 | Apollo 1.2.8 | Enyo 1 | Logs in with the keyboard, shows its stations and plays music. |

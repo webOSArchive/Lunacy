@@ -716,6 +716,8 @@ webOS apps could ship JS services (`usr/palm/services/<id>/`, with `services.jso
 
 ## Mojo
 
+What was learned bringing it up, in full: [mojo.md](mojo.md).
+
 Started 2026-09-20, ahead of its phase, because an Exhibition app from the App Museum turned
 out to be a Mojo one. Lunacy serves **Palm's own Mojo** from the reference TouchPad, as it
 serves Enyo, with its changes as a patch series

@@ -53,6 +53,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     /** Exhibition mode: webOS's dock-mode clock, over everything, while it is on. */
     private lateinit var exhibition: ExhibitionLayer
     private lateinit var dockMode: org.webosarchive.lunacy.card.DockMode
+    /** The drop-down the title opens while exhibiting, for changing face. */
+    private lateinit var exhibitionMenu: ExhibitionMenu
     /** The app showing in exhibition mode, if it isn't the shell's own Time face. */
     private var exhibitionApp: String? = null
     private var exhibitionOn = false
@@ -118,7 +120,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         statusBar = StatusBar(this, luna)
         val popups = PopupLayer(this, luna)
         root.addView(popups, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
-        menuScrim = View(this).apply { visibility = View.GONE; setOnClickListener { closeMenu() } }
+        menuScrim = View(this).apply {
+            visibility = View.GONE
+            setOnClickListener { closeMenu(); closeExhibitionMenu() }
+        }
         root.addView(menuScrim, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         val menu = DashboardMenu(this, luna) { w -> notifications.removeDashboard(w); closeWindow(w) }
         root.addView(menu, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
@@ -137,13 +142,22 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
         root.addView(exhibition, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
 
+        exhibitionMenu = ExhibitionMenu(this, luna).apply {
+            visibility = View.GONE
+            onChoose = { appId -> chooseExhibition(appId) }
+        }
+        root.addView(exhibitionMenu, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = luna.px(StatusBar.HEIGHT); gravity = android.view.Gravity.TOP or android.view.Gravity.START
+        })
+
         setContentView(root)
         reportedOrientation = screenOrientation()
         (getSystemService(DISPLAY_SERVICE) as android.hardware.display.DisplayManager)
             .registerDisplayListener(displayListener, android.os.Handler(android.os.Looper.getMainLooper()))
         seedMediaInternal()
         watchKeyboard(root)
-        statusBar.onTitleTap = { toggleAppMenu() }
+        statusBar.onTitleTap = { if (exhibitionOn) toggleExhibitionMenu() else toggleAppMenu() }
         onCardView()
         goImmersive()
 
@@ -565,6 +579,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             // The screen is meant to stay on while it is exhibiting: that is the point of a dock.
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         } else {
+            closeExhibitionMenu()
             exhibition.visibility = View.GONE
             exhibitionApp = null
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -712,6 +727,52 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     /**
+     * The title while exhibiting drops down the faces to choose from: the shell's own Time,
+     * and every app its owner turned on in Palm's Exhibition app. webOS drew the same menu
+     * from the same place, so the mode can be changed without leaving it.
+     */
+    private fun toggleExhibitionMenu() {
+        if (exhibitionMenu.visibility == View.VISIBLE) { closeExhibitionMenu(); return }
+        val entries = mutableListOf(ExhibitionMenu.Entry(null, "Time", luna.image("dockmode/time-icon-48x48.png")))
+        for (app in registry.apps) {
+            if (!dockMode.isEnabled(app.id)) continue
+            entries += ExhibitionMenu.Entry(app.id, dockMode.title(app.id), luna.appIcon(app))
+        }
+        exhibitionMenu.entries = entries
+        exhibitionMenu.current = exhibitionApp
+        exhibitionMenu.visibility = View.VISIBLE
+        exhibitionMenu.bringToFront()
+        statusBar.bringToFront()
+        menuScrim.visibility = View.VISIBLE
+    }
+
+    private fun closeExhibitionMenu() {
+        exhibitionMenu.visibility = View.GONE
+        if (!notifications.menu.isOpen) menuScrim.visibility = View.GONE
+    }
+
+    /** A face chosen from that menu: null is the shell's own Time. */
+    private fun chooseExhibition(appId: String?) {
+        closeExhibitionMenu()
+        if (appId == exhibitionApp) return
+        // The app that was exhibiting stops being the one on show; webOS left it running.
+        exhibitionApp = appId
+        if (appId == null) {
+            exhibition.reset()
+            exhibition.visibility = View.VISIBLE
+            exhibition.bringToFront()
+            statusBar.bringToFront()
+            statusBar.title = "Time"
+            cards.visibility = View.INVISIBLE
+        } else {
+            exhibition.visibility = View.GONE
+            cards.visibility = View.VISIBLE
+            launch(appId, JSONObject().put("dockMode", true).put("touchstoneMode", true))
+            statusBar.title = dockMode.title(appId)
+        }
+    }
+
+    /**
      * The title's ▾: LunaSysMgr relaunched the maximized card's app with
      * {"palm-command":"open-app-menu"}, and Enyo and Mojo open their app menu on that.
      */
@@ -744,6 +805,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     override fun onBackPressed() = homePressed()
 
     private fun homePressed() {
+        if (exhibitionMenu.visibility == View.VISIBLE) { closeExhibitionMenu(); return }
         if (exhibitionOn) { setExhibition(false); return }
         if (notifications.menu.isOpen) { closeMenu(); return }
         notifications.popups.newest()?.let { onWindowClosed(it); return }

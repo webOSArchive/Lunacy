@@ -458,6 +458,10 @@ Android's own screen saver, comes later.
   `applicationManager/listDockModeLaunchPoints` answers with the records a TouchPad returns,
   and `addDockModeLaunchPoint`/`removeDockModeLaunchPoint` turn one on or off, telling every
   subscriber.
+- **The title changes face.** While exhibiting, the status bar's title drops down the faces to
+  choose from - the shell's Time, and every app its owner turned on - and picking one switches
+  without leaving the mode, as LunaSysMgr's DockModeAppMenu did. Rows are LunaCE's 70 px, icon
+  and dock title, in the same menu frame as the notification drop-down.
 - **Not yet:** an app's *own* exhibition view. On webOS the chosen app opened a window with
   `attributes={"window":"dockMode"}` and the shell showed it; Lunacy shows the Time face
   whichever app is enabled. That is the next piece, and it is the same window-type path

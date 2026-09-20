@@ -438,8 +438,7 @@ abandonware, like Mojo and the Prelude fonts (codepoet, 2026-09-20).
 
 webOS's Exhibition mode is what a TouchPad did on its Touchstone: the screen becomes a clock,
 or whatever app its owner chose. It is one of the things people remember about the device, so
-Lunacy has it, for use inside the environment first - noticing a real dock, or standing in for
-Android's own screen saver, comes later.
+Lunacy has it - inside the environment, and as Android's own screen saver.
 
 - **Palm's Exhibition app runs unchanged** (`com.palm.app.exhibitionpreferences`, bundled). It
   lists the apps that offer a face, switches them on and off, and its Start Exhibition button
@@ -462,6 +461,21 @@ Android's own screen saver, comes later.
   choose from - the shell's Time, and every app its owner turned on - and picking one switches
   without leaving the mode, as LunaSysMgr's DockModeAppMenu did. Rows are LunaCE's 70 px, icon
   and dock title, in the same menu frame as the notification drop-down.
+- **Android's screen saver is Exhibition** (`ExhibitionDream`). Android starts a dream when a
+  device is docked or charging and left alone, which is the same occasion a Touchstone was, so
+  Lunacy offers itself as one: Settings > Display > Daydream > **Lunacy Exhibition**. The
+  service draws nothing of its own - it starts the shell with `exhibition` set and stands
+  down, so there is one way into the mode and an exhibiting app is a real card with the whole
+  bus behind it. The gear beside the entry opens Palm's Exhibition app, because which app
+  exhibits is webOS's setting, not an Android one.
+  - **The mode outlasts the dream, deliberately.** Android ends a dream at the first touch;
+    webOS's Exhibition survived being touched, and its faces are swiped between. So the shell
+    takes on the rest of a dream's job while it stands in for one: the screen is held on, the
+    window shows over the lock screen (without dismissing it), and the mode ends when the
+    device comes off its charger - which is also what leaving a Touchstone did. Leaving puts
+    the shell back where the screen saver found it.
+  - Whether to daydream at all, and with what, stays the owner's choice in Android's settings.
+    Lunacy never sets it.
 - **Not yet:** an app's *own* exhibition view. On webOS the chosen app opened a window with
   `attributes={"window":"dockMode"}` and the shell showed it; Lunacy shows the Time face
   whichever app is enabled. That is the next piece, and it is the same window-type path

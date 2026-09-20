@@ -80,8 +80,12 @@ show live data. Per-app results and every fix, with the layer it landed in, are 
 - **Exhibition (2026-09-20).** Palm's Clock and Exhibition apps are bundled and run unchanged.
   The Exhibition app's Start Exhibition button puts the shell into webOS's dock mode, where it
   draws the Time face itself as LunaSysMgr did - all four of the reference TouchPad's faces,
-  swipeable. An app's own exhibition window is the next piece; noticing a real dock, and
-  standing in for Android's screen saver, is the integration after that.
+  swipeable. An app's own exhibition window is the next piece.
+- **Exhibition is Android's screen saver (2026-09-20).** Lunacy offers itself as a Daydream;
+  choosing it means the tablet on its charger shows what a TouchPad on its Touchstone showed,
+  the chosen app included. Verified on the reference tablet: the dream starts the shell, the
+  gear in Android's settings opens Palm's Exhibition app, coming off the charger leaves the
+  mode, and leaving returns to whatever the screen saver interrupted.
 - **Next candidates:**
   - the remaining startup services (keys, display) and the media indexer's db8 kinds;
   - the rest of the settings apps: Date & Time, Language, Backup, Accounts, Updates, Location

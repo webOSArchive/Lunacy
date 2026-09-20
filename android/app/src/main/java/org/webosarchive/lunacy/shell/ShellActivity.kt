@@ -58,6 +58,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     /** The app showing in exhibition mode, if it isn't the shell's own Time face. */
     private var exhibitionApp: String? = null
     private var exhibitionOn = false
+    /** True while what is exhibiting was started by Android's screen saver (ExhibitionDream). */
+    private var dreamExhibition = false
+    /** Whether the shell was out of sight when the screen saver put it into exhibition. */
+    private var dreamFromBackground = false
+    /** Whether the shell is the activity in front, which decides the two above. */
+    private var inFront = false
     /** Catches taps outside the dashboard drop-down, which close it. */
     private lateinit var menuScrim: View
     private val bannerIds = java.util.concurrent.atomic.AtomicInteger(1)
@@ -167,6 +173,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     override fun onDestroy() {
         (getSystemService(DISPLAY_SERVICE) as android.hardware.display.DisplayManager)
             .unregisterDisplayListener(displayListener)
+        if (watchingPower) { unregisterReceiver(powerReceiver); watchingPower = false }
         super.onDestroy()
     }
 
@@ -176,11 +183,19 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         handleIntent(intent)
     }
 
-    /** Extras for development over adb: launch <appid> [params <json>], install <url or path>. */
+    /**
+     * Android's screen saver asking for Exhibition (ExhibitionDream), and extras for
+     * development over adb: launch <appid> [params <json>], install <url or path>.
+     */
     private fun handleIntent(intent: android.content.Intent) {
         intent.getStringExtra("install")?.let { install(it) }
         intent.getStringExtra("launch")?.let { launch(it, intent.getStringExtra("params")?.let { p -> JSONObject(p) }) }
+        if (intent.getBooleanExtra(EXTRA_EXHIBITION, false)) startDreamExhibition()
     }
+
+    override fun onResume() { super.onResume(); inFront = true }
+
+    override fun onPause() { inFront = false; super.onPause() }
 
     // ---- apps ----
 
@@ -544,6 +559,65 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }.start()
 
     /**
+     * Exhibition as Android's screen saver. The dream itself has stood down by now (it would
+     * end at the first touch, and webOS's Exhibition survived being touched), so the shell
+     * takes on the rest of a dream's job for as long as it is standing in for one.
+     */
+    private fun startDreamExhibition() {
+        // Where to go back to when it ends: out of sight again if the screen saver is what
+        // brought the shell forward, and nowhere if its owner was already using it.
+        dreamFromBackground = !inFront
+        dreamExhibition = true
+        // A dream shows over the lock screen, and so did a TouchPad in its dock. The keyguard
+        // is not dismissed with it: leaving exhibition puts the shell back where it came from,
+        // so the lock comes back too.
+        window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
+        // Android ends a dream when the device comes off its charger. Nothing else would end
+        // this one - the screen is held on - so the shell watches for that itself, which is
+        // also what a TouchPad did when it was lifted off its Touchstone.
+        if (!watchingPower) {
+            // The battery's broadcast is sticky, and registering hands back the one last sent,
+            // so the charger is known now rather than at the next change.
+            dreamPlugged = plugged(registerReceiver(powerReceiver,
+                android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)))
+            watchingPower = true
+        }
+        Log.i(AppServer.TAG, "exhibition: Android's screen saver; on a charger = $dreamPlugged")
+        setExhibition(true)
+    }
+
+    private fun endDreamExhibition() {
+        dreamExhibition = false
+        dreamPlugged = false
+        if (watchingPower) { unregisterReceiver(powerReceiver); watchingPower = false }
+        window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
+        if (dreamFromBackground) moveTaskToBack(true)
+    }
+
+    private var watchingPower = false
+    /** Whether the device has been on a charger since the screen saver started exhibiting. */
+    private var dreamPlugged = false
+
+    /**
+     * The charger, watched through the battery's own broadcast rather than
+     * ACTION_POWER_DISCONNECTED: this one is sticky, so registering says at once whether the
+     * device is on a charger now, and it is the one a device really sends. (The reference
+     * tablet never broadcasts ACTION_POWER_DISCONNECTED for a simulated charger, so watching
+     * for that instead would be untestable over adb; see docs/android5-setup.md.)
+     */
+    private val powerReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
+            if (plugged(intent)) { dreamPlugged = true; return }
+            if (!dreamPlugged) return
+            Log.i(AppServer.TAG, "exhibition: off the charger, leaving")
+            setExhibition(false)
+        }
+    }
+
+    private fun plugged(battery: android.content.Intent?): Boolean =
+        (battery?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
+
+    /**
      * Exhibition mode, which webOS entered when a TouchPad was put on its Touchstone and
      * Palm's Exhibition app starts with display/control/setState {"state":"dock"}. The clock
      * is the shell's own, as LunaSysMgr's was; the status bar says "Time", as a device does,
@@ -583,6 +657,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             exhibition.visibility = View.GONE
             exhibitionApp = null
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            if (dreamExhibition) endDreamExhibition()
             if (cards.maximized != null) onMaximized(cards.maximized!!) else onCardView()
         }
         // An app's exhibition view is its own card, shown as it is; the Time face replaces it.
@@ -880,6 +955,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         const val FADE_MS = 200L       // quickLaunchFadeDuration
         /** Long enough for the launch glow to be drawn before the card work starts. */
         const val LAUNCH_DELAY_MS = 60L
+        /** Android's screen saver asking for Exhibition; see ExhibitionDream. */
+        const val EXTRA_EXHIBITION = "exhibition"
         /** Package installers apps hand .ipks to: Preware on webOS, and LuneOS's Preware. */
         val INSTALLERS = setOf("org.webosinternals.preware", "org.webosports.app.preware")
     }

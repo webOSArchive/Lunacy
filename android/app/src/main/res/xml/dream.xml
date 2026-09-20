@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android's screensaver metadata. The gear beside the entry in Settings opens Palm's
+     Exhibition app, which is where webOS kept this choice: see ExhibitionSettingsActivity. -->
+<dream xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="org.webosarchive.lunacy/.shell.ExhibitionSettingsActivity" />

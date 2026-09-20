@@ -33,7 +33,21 @@ not rooted, no Google account.
 | Setting | Why | State left |
 |---|---|---|
 | `accelerometer_rotation` / `user_rotation` | Fixed orientations for screenshot comparisons | Auto-rotate back on (`accelerometer_rotation 1`) |
-| `dumpsys battery set …` | Testing the status bar battery icon | `dumpsys battery reset` |
+| `dumpsys battery set …` | Testing the status bar battery icon, and leaving Exhibition when the charger goes | `dumpsys battery reset` |
+| Daydream on, screen saver set to **Lunacy Exhibition** | Settings → Display → Daydream; testing the Exhibition dream | Left on and selected (`screensaver_components org.webosarchive.lunacy/…ExhibitionDream`) |
+
+## Driving the tablet over adb
+
+- `adb shell input tap x y` takes **display** coordinates, and `adb exec-out screencap`
+  gives the **framebuffer**. On a tablet held the other way up these differ by 180 degrees,
+  so a tap read off a screenshot has to be turned round: `x' = width - x`, `y' = height - y`.
+  A tap that lands on the wrong control can look like a control that doesn't work.
+- `adb shell am start -n com.android.systemui/.Somnambulator` starts the current screen saver,
+  which is how the Exhibition dream is tested without waiting for the device to go idle.
+- `adb shell dumpsys battery unplug` does **nothing** on this MediaTek build - the dump still
+  reads "USB powered: true" and no `ACTION_POWER_DISCONNECTED` is broadcast. `dumpsys battery
+  set usb 0` does work, and is how coming off the charger is simulated. `dumpsys battery reset`
+  afterwards.
 
 ## Logging
 

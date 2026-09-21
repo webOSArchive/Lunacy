@@ -105,13 +105,37 @@ Found while testing the apps below; each is general, not tied to one app.
   view or an image to a file, resizing an image, the plugin's own dialogs, printing and
   find-in-page. A page on another origin keeps its window to itself, so history and title work
   only for pages Lunacy serves.
-- **visual, not yet solved:** Enyo dialogs (Apollo's, AccuWeather's) show faint lines along
-  the frame's border-image slice boundaries: the page behind shows through by a few levels.
-  Measured in Apollo: they sit exactly on the slice edges, at whole and half pixels alike,
-  and survive moving the dialog, putting it on its own layer, `image-rendering: pixelated`
-  and repeat instead of stretch. The likely cause is that this WebView rasterizes at
-  Android's density (1.33125) under a 0.75 page scale; not confirmed. Next: compare on the
-  factory WebView 37, and look for a way to raster at 1:1.
+- **visual, not yet solved:** faint lines along a frame's border-image slice boundaries.
+  First seen in Enyo dialogs (Apollo's, AccuWeather's); Mojo's widgets have them too, which
+  is what sent this round of measuring (codepoet, 2026-09-21: "when the keyboard is down I
+  see seams between assets; when the keyboard is up they seem to go away").
+
+  What is now **measured** rather than guessed:
+  - *They are real, and Lunacy's own.* The same Mojo dialog frame at 1:1 on the reference
+    TouchPad and on the HP 10 G2: the device's background gradient runs
+    `… 193 192 192 192 191 191 191 191 191 190 190 189 …`, Lunacy's runs
+    `… 193 193 193 176 191 190 189 …`. One anomalous row, against an otherwise monotonic ramp.
+  - *They move with the widget.* The same button drawn at two different y positions
+    rasterizes differently. That is the whole of the keyboard effect: raising the keyboard
+    resizes the card, the dialog moves up, and the frame lands on a different sub-pixel
+    phase. A widget that does **not** move (MeTube's buttons) is pixel-identical with the
+    keyboard up and down - checked, zero differing pixels.
+  - *Not Lunacy's border-style transform.* The compat layer adds `border-style: solid;
+    border-color: transparent` so Chromium draws the image at all. Painting that border box
+    magenta instead shows **zero** magenta pixels: the nine pieces cover it completely, so
+    nothing is showing through a gap.
+  - *Not simply the device scale factor.* With `wm density 160` the WebView reports
+    `devicePixelRatio` 1 and `innerWidth` 1280, an exact 1:1 grid - and the same button's
+    border profile is unchanged to within a level or two. The earlier guess (rasterizing at
+    1.33125 under a 0.75 page scale) is therefore not the whole story.
+  - *Landscape is off the device-pixel grid, portrait is on it.* Landscape lays out 1281 CSS
+    px across a 1280 px screen; portrait lays out 800 across 800. A 1 px test grid drawn in
+    the page bears it out: 389 of 1280 columns are blends in landscape, 80 of 800 in portrait.
+
+  What is left: Chromium 37 draws each of the nine border-image pieces into its own
+  destination rect, and those rects land on fractional device pixels, so adjacent pieces
+  don't share their edge samples. Next: get landscape onto an exact grid (the card is 1 CSS
+  px wider than the screen), and compare on the factory WebView 37.
 - **app timing, to compare on the TouchPad:** AccuWeather sometimes logs
   `this.appModel.getWeatherModel is not a function` at startup: a view updates before its
   `appModel` is set. It runs normally afterwards.

@@ -101,3 +101,22 @@ again.
 
 The reference **TouchPad** has the same five apps installed (`palm-install`), plus the three
 probe apps. drPodder there has taken its default feeds, as it would on any first run.
+
+## Display density
+
+The tablet is 213 dpi, which Android reports as a density of 1.33125. Chromium lays a card's
+page out in density-independent pixels and multiplies back, so a 1280 px card comes out as
+1281 CSS px drawn into 1280: the page is scaled by 0.99922, and every border-image join lands
+a hundredth of a pixel short of a whole one. That is where the seams in Mojo's and Enyo's
+frames come from ("border-image seams" in [fix-log.md](fix-log.md)).
+
+```sh
+adb shell wm density 160     # 1 css px = 1 device px; adb shell wm density reset to undo
+```
+
+At 160 the same widget's profile matches the reference TouchPad's to the level. **Lunacy
+itself is unaffected either way** - the shell rounds its own density to a whole number and
+decodes its artwork at 1:1, and LunaKeyboard decodes with `inScaled = false` - so the only
+thing that changes is the size of Android's own UI, which gets smaller. On a tablet given
+over to Lunacy that is arguably what you want; it is codepoet's call, and it is not set on
+the reference device.

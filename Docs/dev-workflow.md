@@ -22,7 +22,7 @@ out on the reference devices. Changes made to the Android device are listed sepa
 | `AndroidLuna/tools/node-launcher.cpp` | Node's `main()`, built by `fetch-assets.sh` into `liblunacynode.so` for JS services | yes |
 | `AndroidLuna/local-jni/` | `libnode.so` (nodejs-mobile 0.3.3), `libc++_shared.so` and the launcher, from `fetch-assets.sh` | no |
 | `Workbench/probe/` | TouchPad probe apps that record the contract: `…lunacy.probe` (PalmSystem, the input model, WebSQL, the text indexer), `…lunacy.netprobe` (the network, from a 2.2.4 phone) and `…lunacy.htmlprobe` (how the device's parser reads a self-closed tag) | yes |
-| `Workbench/*.sh`, `Workbench/cdp.mjs` | Device helper scripts, and DevTools from the command line (below) | yes |
+| `Workbench/*.sh`, `Workbench/cdp.mjs`, `Workbench/seams.py` | Device helper scripts, DevTools from the command line, and the border-image seam finder (both below) | yes |
 | `Workbench/vendor/` | Local clones: enyo-1.0, LunaCE, luna-sysmgr, webos-catalog-service, and files pulled from the TouchPad (frameworks, `/etc/palm`, fonts, wallpapers, a WebView 64 APK) | no |
 | `Workbench/vendor/palm-apps/` | Palm's own apps pulled off the reference TouchPad (Clock, Exhibition, Video Player), before they are bundled | no |
 | `Workbench/vendor/touchpad/sysmgr-qml/` | The device's own `/usr/palm/sysmgr/uiComponents` QML, which is what the shell's Exhibition faces are drawn from | no |
@@ -167,6 +167,12 @@ Workbench/tp.sh 'for p in /proc/[0-9]*; do tr "\0" " " < $p/cmdline; echo; done 
 ```
 
 `ps` under `novaterm` truncates its output, which makes this look like the device is empty.
+
+- **Border-image seams:** `Workbench/seams.sh <appid-substring> <name>` screenshots the
+  tablet, reads every border-imaged widget's geometry out of the running card, and reports
+  the slice boundaries that show a one-pixel step. It *locates* candidates; the verdict is a
+  reference comparison, because such a step can equally be the artwork's own highlight. See
+  "border-image seams" in [fix-log.md](fix-log.md) for what that measurement settled.
 
 ## How changes are checked
 

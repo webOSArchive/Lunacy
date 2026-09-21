@@ -212,6 +212,7 @@ enyo.kind({
 enyo.kind({
 	name: "InfoRow",
 	kind: "Item",
+	className: "info-row",
 	tapHighlight: false,
 	layoutKind: "HFlexLayout",
 	//* small: for a value too long for the row's usual size, like a 40-digit device id.

@@ -85,3 +85,19 @@ downloads, so it can only be fetched by hand in a browser. Not yet tested.
 - **Root.**
 - **A Google account.** Only needed for WebView updates from Play.
 - **Google Play services.**
+
+## Apps installed for testing (2026-09-21)
+
+The Mojo suite, installed into Lunacy from packages (`--es install`), not into Android:
+drPodder Redux 1.6.0, IAmA reddit 0.3.0, MeTube 2.3.0, Check Mate (1.2.6, then 1.3.0 as
+`com.palm.codepoet.checkmate`), SimpleChat (1.8.5, then 1.9.2 as
+`com.palm.app.codepoet.simplechat`) and Palm's Video Player 1.0.0. They live in the app's own
+data, so `adb shell pm clear org.webosarchive.lunacy` removes them all.
+
+Two Android settings were changed for screenshots and left that way:
+`settings put system accelerometer_rotation 0` and `user_rotation 3` (upright landscape), and
+`screen_off_timeout 1800000`. Put `accelerometer_rotation 1` back to let the tablet rotate
+again.
+
+The reference **TouchPad** has the same five apps installed (`palm-install`), plus the three
+probe apps. drPodder there has taken its default feeds, as it would on any first run.

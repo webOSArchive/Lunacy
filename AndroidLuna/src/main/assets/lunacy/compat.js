@@ -148,3 +148,93 @@ window.__lunacyFileUrl = function (u, media) {
 		}
 	});
 })();
+
+// WebSQL, which is where Mojo apps keep their data. Two things about the reference TouchPad's
+// (WebKit 534.6, Workbench/probe 0.1.0) differ from Chromium's, and an app meets both while
+// starting.
+//
+// 1. openDatabase took a name and a version. Its arity there is 0 - nothing is required -
+//    and `openDatabase("x", "1.0")` opens a database at version 1.0. The standard made the
+//    display name and the size hint required, and Chromium throws "4 arguments required, but
+//    only 2 present". Neither missing argument is observable here: both only ever appeared in
+//    the quota prompts a desktop browser showed and webOS did not, so they are filled in with
+//    the database's own name and webOS's 5 MB allowance.
+//
+// 2. An SQLError's message was SQLite's own: the probe's failing SELECT reported
+//    `{"code":5,"message":"no such table: nosuchtable"}`, where Chromium reports "could not
+//    prepare statement (1 no such table: nosuchtable)". Apps read that message. drPodder
+//    creates its tables on the strength of `error.message === "no such table: feed"`, so
+//    under Chromium's wording it opened an empty database and sat at "Loading Feeds" for
+//    ever. The wrapper is stripped back off, leaving the message the app was written against.
+(function () {
+	var open = window.openDatabase;
+	if (!open) { return; }
+	var WEBOS_QUOTA = 5 * 1024 * 1024;
+	var WRAPPED = /^could not [a-z ]+ \(\d+ ([\s\S]*)\)$/;
+
+	// SQLError has no constructor on the window, so its class is reached through an instance.
+	function unwrapMessage(e) {
+		var proto = e && typeof e === "object" && typeof e.code === "number" && e.SYNTAX_ERR !== undefined ?
+			Object.getPrototypeOf(e) : null;
+		var d = proto && Object.getOwnPropertyDescriptor(proto, "message");
+		if (!d || !d.get || d.get.__lunacy) { return; }
+		var get = function () {
+			var m = d.get.call(this), w = WRAPPED.exec(m);
+			return w ? w[1] : m;
+		};
+		get.__lunacy = true;
+		try {
+			Object.defineProperty(proto, "message", { configurable: true, enumerable: d.enumerable, get: get });
+		} catch (err) {}
+	}
+
+	// Every callback the app hands to WebSQL may be given an SQLError; the first one to
+	// arrive fixes the class for all of them.
+	function guard(fn) {
+		if (typeof fn !== "function") { return fn; }
+		return function () {
+			for (var i = 0; i < arguments.length; i++) { unwrapMessage(arguments[i]); }
+			return fn.apply(this, arguments);
+		};
+	}
+
+	function patchTransaction(tx) {
+		var proto = tx && Object.getPrototypeOf(tx);
+		if (!proto || proto.__lunacySql || typeof proto.executeSql !== "function") { return; }
+		proto.__lunacySql = true;
+		var exec = proto.executeSql;
+		proto.executeSql = function (sql, args, ok, fail) {
+			return exec.call(this, sql, args, ok, guard(fail));
+		};
+	}
+
+	function patchDatabase(db) {
+		var proto = db && Object.getPrototypeOf(db);
+		if (!proto || proto.__lunacySql) { return db; }
+		proto.__lunacySql = true;
+		["transaction", "readTransaction", "changeVersion"].forEach(function (name) {
+			var orig = proto[name];
+			if (typeof orig !== "function") { return; }
+			proto[name] = function () {
+				var args = Array.prototype.slice.call(arguments), seen = false;
+				for (var i = 0; i < args.length; i++) {
+					if (typeof args[i] !== "function") { continue; }
+					// The first function is the one the transaction itself runs; the rest
+					// report on it, and are where an SQLError arrives.
+					args[i] = seen ? guard(args[i]) : (function (cb) {
+						return function (tx) { patchTransaction(tx); return cb.apply(this, arguments); };
+					})(args[i]);
+					seen = true;
+				}
+				return orig.apply(this, args);
+			};
+		});
+		return db;
+	}
+
+	window.openDatabase = function (name, version, displayName, size, creation) {
+		if (arguments.length >= 4) { return patchDatabase(open.apply(window, arguments)); }
+		return patchDatabase(open.call(window, name, version,
+			displayName === undefined ? name : displayName, WEBOS_QUOTA, creation));
+	};
+})();

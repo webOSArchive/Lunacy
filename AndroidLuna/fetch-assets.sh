@@ -45,9 +45,32 @@ done
 cat > $L/fw/mojo/NOTICE <<'NOTICE'
 Palm's Mojo framework, copied from /usr/palm/frameworks/mojo on the reference TouchPad
 (webOS CE 3.1.0): mojo.js, submission 506's assets, and the builtins webOS's own browser
-provided (Prototype 1.6 and palmInitFramework506, the framework itself).
+provided (Prototype 1.6, palmInitFramework506 and palmInitFramework2205 - the Mojo 1 and
+Mojo 2 frameworks - and the libraries MojoLoader hands out).
 Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence; distributed by
 Lunacy as abandonware: no owner has asserted rights since webOS was discontinued.
+NOTICE
+
+# The rest of /usr/palm/frameworks, at their own paths. Mojo 2 apps - Palm's own Video
+# Player is one - load mojo2/mojo.js, which pulls in mojoloader.js and asks MojoLoader for
+# mojo.core; Prototype comes from its own framework there rather than from a builtin. Only
+# the frameworks something has needed are copied.
+mkdir -p $L/fw/frameworks
+for f in mojo2 prototype mojo.core underscore foundations globalization mojoloader.js \
+         metascene.base metascene.videos metascene.videos.share \
+         mediastream mediaextension mediacapture imagethumbnail mojodbshim media; do
+    cp -rL $V/touchpad/$f $L/fw/frameworks/
+done
+chmod -R u+w $L/fw/frameworks
+cat > $L/fw/frameworks/NOTICE <<'NOTICE'
+Palm's frameworks, copied from /usr/palm/frameworks on the reference TouchPad
+(webOS CE 3.1.0): mojo2 (submission 205), prototype, mojo.core, foundations, globalization,
+mojoloader.js, the metascene frameworks the Video Player's scenes come from, and the media
+frameworks they and other apps ask MojoLoader for. `media` is /usr/lib/luna/luna-media-shim,
+which the frameworks folder symlinks to.
+Copyright Palm, Inc. / Hewlett-Packard, except underscore, which is MIT (Jeremy Ashkenas),
+and prototype, which is MIT (Sam Stephenson). Palm's own is never released under an open
+licence; distributed by Lunacy as abandonware, like Mojo itself.
 NOTICE
 
 # Enyo samples as installable apps.

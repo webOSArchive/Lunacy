@@ -66,6 +66,15 @@ fixed-viewport fallback is allowed).
 | 2026-09-20 | Every app listed twice in Exhibition, and again on each toggle | Exhibition 1.0.0 | `listDockModeLaunchPoints` pushed the whole list to subscribers whenever a launch point was enabled or disabled. A TouchPad sends nothing: measured with `luna-send` - subscribe, then add and remove, and exactly one reply arrives. Palm's app means to clear its list before redrawing and writes the old contents straight back (`this.dockApps.splice(0, len)` returns what it removed), so any second reply draws everything again | bus (the list changes when apps are installed or removed, not when one is switched on) |
 | 2026-09-21 | A phone-shaped screen answers as a Pre3 that never existed | every app on a phone, and any server that tells webOS devices apart | `DeviceProfile.PRE3` was built from the community's record, not hardware: `PRODoID` was a retail SKU (`P160UNA`), the user agent was missing its `Linux; ` prefix and named the wrong product token, and `deviceInfo` reported phone-sized cards the device doesn't report. Measured on a Pre3 (Docs/pre3.md) | compat and shell (the profile, and the three places that read it: deviceInfo, systemProperties, the network shim) |
 | 2026-09-21 | An app is told the tablet has no Bluetooth and no dock mode | every app that feature-detects either | `deviceInfo` reported `bluetoothAvailable: false` and `dockModeEnabled: false`; the reference TouchPad reports both `true`, and Lunacy has had dock mode since Exhibition landed. Neither value had been checked against the device | shell (the profile, and deviceInfo) |
+| 2026-09-21 | A page loads nothing but its first script: no stylesheet, no body | drPodder Redux 1.6.0, any app whose HTML is XHTML-shaped | `<script src="…" />` does not close in HTML, so the script swallowed the rest of the file as its own text content. webOS's WebKit keeps the pre-HTML5 tokenizer, which honoured the trailing slash on any tag: measured with a probe page in drPodder's shape, which reported `selfClosed=true`, its marker element present and its stylesheet applied, with `document.xmlVersion` null - so the device was parsing HTML and simply closed the tag | card host (a global HTML transform closes a self-closed non-void tag, in pages and templates alike, skipping script and style content) |
+| 2026-09-21 | Every Mojo widget with a template throws: `_Menu widget 'undefined' setup(): Cannot read property 'parentNode' of null` | Check Mate 1.2.6, IAmA reddit 0.3.0, every Mojo app | `palmGetResource` fetched through the card host, which injects Lunacy's boot scripts into anything it serves as HTML. Mojo reads every widget template and every scene that way, so the rendered node's first element was the injected `<link>` and the widget's own lookup found nothing. On a device the call read the file off the disk; no browser was involved | compat and card host (`palmGetResource` marks the request as a file read, and the host then serves the file as it is) |
+| 2026-09-21 | "Error Creating DB!" and the app never starts | drPodder Redux 1.6.0, any app opening its database webOS's way | `openDatabase(name, version)`: the standard made the display name and size hint required and Chromium throws "4 arguments required". The reference TouchPad's arity is 0 and the two-argument call opens at that version (Workbench/probe 0.1.0) | compat (the two missing arguments filled in with the database's own name and webOS's 5 MB allowance) |
+| 2026-09-21 | The database opens but stays empty: "Loading Feeds" for ever | drPodder Redux 1.6.0 | The app creates its tables when `error.message === "no such table: feed"`. The TouchPad reports SQLite's own message; Chromium wraps it as "could not prepare statement (1 no such table: feed)" (probe 0.1.0) | compat (the wrapper stripped back off, so the message is the one apps were written against) |
+| 2026-09-21 | The chat log never renders; every poll throws `Cannot read property 'length' of undefined` | webOS SimpleChat 1.9.2, any app whose text goes through `Mojo.Format.runTextIndexer` | `PalmSystem.runTextIndexer` was a logged no-op returning undefined. On the TouchPad it returns the text with web addresses, e-mail addresses and telephone numbers wrapped in anchors and everything else untouched (probe 0.1.2, ten shapes) | compat (bridge: the linkifier, in one naive pass as the device's own) |
+| 2026-09-21 | Video hands off to webOS's Video Player, which Lunacy hasn't got | MeTube 2.3.0 (both its playback strategies), any app that plays video through the OS | Palm's Video Player is a **Mojo 2** app, and Mojo 2 was unbuilt: its loader pulls in `mojoloader.js` and asks MojoLoader for `mojo.core`, and the framework itself is another V8 native script | **framework** (Mojo 2's builtins patched like Mojo 1's, a route for the rest of `/usr/palm/frameworks`, and the library builtins served in front of a Mojo 2 page so MojoLoader finds them) |
+| 2026-09-21 | The screen goes out during a film | MeTube 2.3.0, Palm's Video Player, any app that blocks the screen timeout | `PalmSystem.setWindowProperties` was a logged no-op | shell and compat (`blockScreenTimeout` holds Android's screen on while any window asks; the other properties are still logged) |
+| 2026-09-21 | An uncaught TypeError appears in the app's console at every card open | every app with a `window.open` window | Lunacy's own page-finished diagnostic read `document.body` unguarded, and a window.open transport finishes with no body. It looked like the app's fault | shell (guarded) |
+| 2026-09-21 | The shell crashes at startup and keeps crashing | development over adb, with a malformed `--es params` | The activity is singleTask, so Android replays the intent that crashed it; `JSONObject(params)` threw out of `onCreate` | shell (a bad `params` is reported and the app launches without them) |
 
 ## Known gaps, by the layer they belong to
 
@@ -106,6 +115,25 @@ Found while testing the apps below; each is general, not tied to one app.
   `appModel` is set. It runs normally afterwards.
 - **third party, nowhere general:** AccuWeather's radar loads today's Google Maps script,
   which uses syntax WebView 64 can't parse.
+- **bus, download manager:** `com.palm.downloadmanager/download` and its subscription.
+  drPodder fetches album art and episodes with it, and MeTube's "download first" strategy uses
+  it too; both get an honest error. It writes into the webOS tree, so it belongs beside
+  `UserFiles` and the media server.
+- **bus, power:** `com.palm.power/timeout/set` and `/clear` (webOS's wake-up alarms, keyed by
+  a string) and `activityStart`/`activityEnd`. SimpleChat's half-hourly refresh, reddit's
+  message check and drPodder's feed update all ask for them. Android's `AlarmManager` is the
+  obvious backing, and it is the same want as the Clock's alarms
+  (`activitymanager`'s scheduled activities).
+- **bus, audio:** `com.palm.audio/media/lockVolumeKeys`, which Palm's Video Player subscribes
+  to while it plays, and the `com.palm.audio/*` endpoints apps set volume through.
+- **bus, accounts:** `com.palm.accountservices/getAccountToken`. Check Mate 1.3.0 and
+  SimpleChat 1.9.2 both offer to sign in with a webOS Community Account and ask for it first;
+  both carry on when it fails. What a Lunacy account would even mean is codepoet's call.
+- **card host, the rest of `/usr/palm/frameworks`:** the tree is served now, but only the
+  frameworks something has needed are copied into the APK. `mediaextension` (drPodder asks
+  MojoLoader for it) and the other libraries 404 until they are added to `fetch-assets.sh`.
+- **shell, full-screen cards:** `PalmSystem.enableFullScreenMode` is still a logged no-op, so
+  a video player's card keeps the status bar where a device hides it.
 
 ## Apps tested
 
@@ -144,3 +172,15 @@ level deeper, under the device (`/en-us/c000-01/d500-01/index.json` exists, and
 `/en-us/c000-01/index.json` is a 404). Either the app's URL or the host's layout needs to move.
 Lunacy now reports `com.palm.properties.PRODoID`, so the app resolves the TouchPad's `d500-01`
 correctly once the segment is back.
+
+Added 2026-09-21 (same tablet and WebView). The Mojo suite codepoet named as the apps that
+must work, plus the system app two of them hand off to:
+
+| App | Kind | Result |
+|---|---|---|
+| drPodder Redux 1.6.0 | Mojo, `noWindow`, installed from a package | Runs. Loaded nothing at all before the self-closing-tag fix (its index.html is XHTML throughout), then stopped at "Error Creating DB!", then at "Loading Feeds". Now: first run offers the default feeds, fetches them, and lists episodes with their counts. Album art doesn't arrive - it comes through `com.palm.downloadmanager`, which nobody answers - and `MojoLoader.require({name: "mediaextension"})` 404s until that framework is served. |
+| IAmA reddit 0.3.0 | Mojo, `noWindow`, `dockMode` | Runs: the split front page loads and lists articles with their thumbnails. The empty pane's banding is the app's own 480 x 480 background tile repeating over a wider card, not a rendering fault. `com.palm.power/timeout/clear` gets an honest error. |
+| MeTube 2.3.0 | Mojo | Runs end to end: search, the server-side conversion with its progress, and playback - which it hands to `com.palm.app.videoplayer`, below. |
+| Check Mate 1.2.6 → 1.3.0 | Mojo | Updates from the App Museum (the update changes the app id to `com.palm.codepoet.checkmate`, so the old one stays until it is removed). A new account, the terms, the assigned credentials, logging in, adding a task and the write reaching the service all work. `com.palm.accountservices/getAccountToken` gets an honest error, which is what the app's optional webOS Account login asks for. |
+| webOS SimpleChat 1.8.5 → 1.9.2 | Mojo, `noWindow` | Updates from the Museum (again a new app id, `com.palm.app.codepoet.simplechat`). The chat log renders and the compose box is there. Its half-hourly refresh alarm asks `com.palm.power/timeout/set`, which gets an honest error. |
+| Video Player 1.0.0 (Palm's, unchanged) | **Mojo 2**, `noWindow`, not in the launcher | Runs, which is the first Mojo 2 app in Lunacy. Launched by another app with a `target`, it opens its own card, plays the stream and shows the transport controls, title bar and its own error dialog. `com.palm.audio/media/lockVolumeKeys` and `com.palm.bus/signal/addmatch` get honest errors, and `PalmSystem.enableFullScreenMode` is still a logged no-op, so its card keeps the status bar. |

@@ -36,16 +36,31 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
         /** mojocommon sits beside Mojo; the submission's resources and images link into it. */
         private val MOJO_COMMON = Regex("(?:^|.*/)usr/palm/frameworks/mojocommon/(.*)")
         /**
-         * A page that loads Mojo. webOS's browser had the framework compiled in, and mojo.js
-         * looks for it as a global; Chromium hasn't, so the builtins that carry it are served
-         * in front of the app's own tag. The submission comes from the tag itself, as mojo.js
-         * reads it: x-mojo-version 1 is submission 506.
+         * The rest of /usr/palm/frameworks, at their own paths: mojo2, prototype, mojo.core,
+         * the libraries MojoLoader hands out, and mojoloader.js itself. Enyo, Mojo and
+         * mojocommon are matched first and come from their own trees.
+         */
+        private val FRAMEWORKS = Regex("(?:^|.*/)usr/palm/frameworks/(.*)")
+        /**
+         * A page that loads Mojo, either version. webOS's browser had the framework compiled
+         * in, and mojo.js looks for it as a global; Chromium hasn't, so the builtins that
+         * carry it are served in front of the app's own tag. The submission comes from the
+         * tag itself, as mojo.js reads it: for Mojo 1, x-mojo-version 1 is submission 506;
+         * Mojo 2's own loader defaults to 205 and takes only x-mojo-submission.
          */
         private val MOJO_TAG = Regex(
-            """<script[^>]*src="[^"]*?/usr/palm/frameworks/mojo/mojo\.js[^"]*"[^>]*>\s*</script>""",
+            """<script[^>]*src="[^"]*?/usr/palm/frameworks/(mojo|mojo2)/mojo\.js[^"]*"[^>]*>\s*</script>""",
             RegexOption.IGNORE_CASE)
         private val MOJO_VERSION = Regex("""x-mojo-(version|submission)="([^"]*)"""", RegexOption.IGNORE_CASE)
         private val MOJO_SUBMISSIONS = mapOf("1" to "506", "2" to "344")
+        /**
+         * What MojoLoader looks for on the window: a builtin library is `palm<name>Version<v>`
+         * with the dots turned to underscores. A Mojo 2 page gets them all in front of its own
+         * tag, because MojoLoader asks for mojo.core before the framework itself loads.
+         */
+        private val MOJO2_LIBRARIES = listOf(
+            "palmunderscoreVersion1_0", "palmfoundationsVersion1_0",
+            "palmglobalizationVersion1_0", "palmmojo_coreVersion1_0")
         /**
          * webOS's own system UI, which apps reach at its absolute path: enyo.FilePicker
          * loads /usr/lib/luna/system/luna-systemui/app/FilePicker/filepicker.html in an
@@ -58,12 +73,22 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
          * full-size photos, which 1 GB of RAM can't hold. Lunacy's own, hence the prefix.
          */
         const val THUMB_PARAM = "__lunacy_thumb"
+        /**
+         * `?__lunacy_res=1`: this request is an app *reading a file*, not the browser loading
+         * a page. `palmGetResource` in the bridge adds it, because on a device that call read
+         * the file off the disk and no browser was involved - so the file must come back as
+         * it is, without Lunacy's own scripts in front of it. Mojo reads every widget
+         * template and every scene this way, and a template with Lunacy's boot scripts at the
+         * front is not the template the framework wrote.
+         */
+        const val RESOURCE_PARAM = "__lunacy_res"
     }
 
     fun serve(uri: Uri): WebResourceResponse? {
         val host = uri.host ?: return null
         if (!host.endsWith(HOST_SUFFIX)) return null  // real network
         val path = uri.path.orEmpty().trimStart('/')
+        val resource = runCatching { uri.getQueryParameter(RESOURCE_PARAM) != null }.getOrDefault(false)
         if (path.startsWith("__lunacy/fonts/")) return asset("luna/fonts/" + path.removePrefix("__lunacy/fonts/"), path)
         if (path.startsWith("__lunacy/")) return asset("lunacy/" + path.removePrefix("__lunacy/"), path)
         // The TouchPad answers this one with 200 and an empty body; Enyo's Tellurium hooks
@@ -75,17 +100,19 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
         val fw = FRAMEWORK.matchEntire(path)
         val mojo = MOJO.matchEntire(path)
         val mojoCommon = MOJO_COMMON.matchEntire(path)
+        val frameworks = FRAMEWORKS.matchEntire(path)
         val thumb = runCatching { uri.getQueryParameter(THUMB_PARAM)?.toInt() }.getOrNull()
         val resp = when {
-            fw != null -> asset("fw/enyo/1.0/" + fw.groupValues[1], path)
-            mojoCommon != null -> asset("fw/mojocommon/" + mojoCommon.groupValues[1], path)
-            mojo != null -> asset("fw/mojo/" + mojo.groupValues[1], path)
-            path.startsWith(SYSTEM_UI) -> asset("luna-systemui/" + path.removePrefix(SYSTEM_UI), path)
-            path.startsWith(CRYPTOFS) -> files.open(path.removePrefix(CRYPTOFS))?.let { respond(it, path) }
+            fw != null -> asset("fw/enyo/1.0/" + fw.groupValues[1], path, resource)
+            mojoCommon != null -> asset("fw/mojocommon/" + mojoCommon.groupValues[1], path, resource)
+            mojo != null -> asset("fw/mojo/" + mojo.groupValues[1], path, resource)
+            frameworks != null -> asset("fw/frameworks/" + frameworks.groupValues[1], path, resource)
+            path.startsWith(SYSTEM_UI) -> asset("luna-systemui/" + path.removePrefix(SYSTEM_UI), path, resource)
+            path.startsWith(CRYPTOFS) -> files.open(path.removePrefix(CRYPTOFS))?.let { respond(it, path, resource) }
             // webOS's user storage, shared by apps and services (JS services write files here).
             path.startsWith(MEDIA_INTERNAL) -> {
                 val rel = path.removePrefix(MEDIA_INTERNAL)
-                if (thumb != null) thumbnail(rel, thumb) else internal(rel)?.let { respond(it, path) }
+                if (thumb != null) thumbnail(rel, thumb) else internal(rel)?.let { respond(it, path, resource) }
             }
             else -> null
         }
@@ -126,30 +153,41 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
         }
     }
 
-    private fun asset(assetPath: String, name: String): WebResourceResponse? {
+    private fun asset(assetPath: String, name: String, resource: Boolean = false): WebResourceResponse? {
         val stream: InputStream = try { assets.open(assetPath) } catch (e: IOException) { return null }
-        return respond(stream, name)
+        return respond(stream, name, resource)
     }
 
-    private fun respond(stream: InputStream, name: String): WebResourceResponse {
+    private fun respond(stream: InputStream, name: String, resource: Boolean = false): WebResourceResponse {
         val mime = mimeOf(name)
         val body = when (mime) {
-            "text/html" -> injectInto(stream)
+            "text/html" -> html(stream, resource)
             "text/css" -> CssTransforms.apply(stream)
             else -> stream
         }
         return WebResourceResponse(mime, "utf-8", 200, "OK", mapOf("Access-Control-Allow-Origin" to "*"), body)
     }
 
+    /**
+     * Every piece of HTML Lunacy serves gets the parser fix ([HtmlTransforms.selfClosingTags]),
+     * because that is how the device's own parser read it, whether the file is a page or a
+     * template an app reads. Lunacy's own scripts go only into a page: a file read through
+     * `palmGetResource` ([RESOURCE_PARAM]) comes back as it is on disk.
+     */
+    private fun html(s: InputStream, resource: Boolean): InputStream {
+        val text = HtmlTransforms.selfClosingTags(s.bufferedReader().readText())
+        return ByteArrayInputStream((if (resource) text else injectInto(text)).toByteArray())
+    }
+
     /** Global serve-time transform: Lunacy's scripts run first in every page. */
-    private fun injectInto(s: InputStream): InputStream {
-        var html = s.bufferedReader().readText()
+    private fun injectInto(source: String): String {
+        var html = source
         val tag = "<link rel=\"stylesheet\" href=\"/__lunacy/fonts.css\">" +
             "<script src=\"/__lunacy/compat.js\"></script><script src=\"/__lunacy/bridge.js\"></script>" +
             "<script src=\"/__lunacy/net.js\"></script>"
         val m = Regex("<head[^>]*>", RegexOption.IGNORE_CASE).find(html)
         html = if (m != null) html.substring(0, m.range.last + 1) + tag + html.substring(m.range.last + 1) else tag + html
-        return ByteArrayInputStream(mojoBuiltins(html).toByteArray())
+        return mojoBuiltins(html)
     }
 
     /**
@@ -163,10 +201,24 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
      */
     private fun mojoBuiltins(html: String): String {
         val tag = MOJO_TAG.find(html) ?: return html
-        val version = MOJO_VERSION.find(tag.value)?.groupValues?.get(2).orEmpty()
-        val submission = MOJO_SUBMISSIONS[version] ?: version.ifEmpty { "506" }
-        val boot = "<script src=\"/usr/palm/frameworks/mojo/builtins/InstallPrototypeBuiltIn.js\"></script>" +
-            "<script src=\"/usr/palm/frameworks/mojo/builtins/palmInitFramework$submission.js\"></script>" +
+        val two = tag.groupValues[1].equals("mojo2", ignoreCase = true)
+        val attr = MOJO_VERSION.find(tag.value)?.groupValues
+        // Mojo 2's loader has no version map and ignores x-mojo-version: it defaults to
+        // submission 205 and takes only x-mojo-submission, and the builtin it then looks for
+        // is palmInitFramework2 + that number. Mojo 1 maps x-mojo-version through its own table.
+        val submission = if (two)
+            "2" + (attr?.takeIf { it[1].equals("submission", true) }?.get(2)).orEmpty().ifEmpty { "205" }
+        else {
+            val version = attr?.get(2).orEmpty()
+            MOJO_SUBMISSIONS[version] ?: version.ifEmpty { "506" }
+        }
+        // Mojo 2 takes Prototype from its own framework, through the app's own script tag;
+        // only Mojo 1 needs the builtin copy. It does need MojoLoader's libraries first,
+        // because the framework asks for mojo.core while it is still loading.
+        val libraries = if (two) MOJO2_LIBRARIES else listOf("InstallPrototypeBuiltIn")
+        val boot = libraries.joinToString("") {
+            "<script src=\"/usr/palm/frameworks/mojo/builtins/$it.js\"></script>"
+        } + "<script src=\"/usr/palm/frameworks/mojo/builtins/palmInitFramework$submission.js\"></script>" +
             "<script src=\"/__lunacy/mojo-boot.js\"></script>"
         return html.substring(0, tag.range.first) + boot + html.substring(tag.range.first)
     }
@@ -178,6 +230,86 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
         "mp3" -> "audio/mpeg"; "wav" -> "audio/wav"; "ttf" -> "font/ttf"; "woff" -> "font/woff"
         "m3u8" -> "application/vnd.apple.mpegurl"; "mp4", "m4a" -> "audio/mp4"; "aac" -> "audio/aac"; "ogg" -> "audio/ogg"
         else -> "application/octet-stream"
+    }
+}
+
+/**
+ * Global serve-time HTML transforms. One mechanical rule applied to every app's HTML; no app
+ * is named.
+ */
+object HtmlTransforms {
+    /** Elements HTML closes on its own, where `<x />` already means what it looks like. */
+    private val VOID = setOf(
+        "area", "base", "basefont", "bgsound", "br", "col", "command", "embed", "frame", "hr",
+        "img", "input", "isindex", "keygen", "link", "meta", "param", "source", "track", "wbr")
+    /** Parsed through rather than tokenized: their content is not markup. */
+    private val RAW_TEXT = setOf("script", "style", "textarea", "title")
+
+    /**
+     * `<script src="x.js" />` closes the element, as it did on the device.
+     *
+     * webOS's WebKit is old enough to keep the pre-HTML5 tokenizer, which honoured a trailing
+     * slash on *any* tag. Chromium follows the standard instead: only void elements close
+     * that way, so `<script src="x.js" />` opens a script that swallows the rest of the file
+     * as its (ignored) text content. An app written that way - drPodder's index.html is, and
+     * it is XHTML throughout - then loses every tag after the first such script: its
+     * stylesheet, its other scripts and its whole body.
+     *
+     * Measured on the reference TouchPad, not assumed (Docs/mojo.md, "Self-closing tags"):
+     * a probe page in drPodder's shape reported `selfClosed=true`, the marker element present
+     * and its stylesheet applied, with `document.xmlVersion` null - so the device was parsing
+     * HTML, and simply closed the tag.
+     *
+     * Applies to every piece of HTML Lunacy serves, pages and templates alike, because the
+     * device's parser read both. Script and style content is skipped: a string like
+     * `"<div/>"` in an app's JavaScript is not markup.
+     */
+    fun selfClosingTags(html: String): String {
+        if (!html.contains("/>")) return html
+        val out = StringBuilder(html.length + 64)
+        var i = 0
+        while (true) {
+            val lt = html.indexOf('<', i)
+            if (lt < 0) { out.append(html, i, html.length); break }
+            out.append(html, i, lt)
+            if (html.startsWith("<!--", lt)) {
+                val end = html.indexOf("-->", lt + 4)
+                val stop = if (end < 0) html.length else end + 3
+                out.append(html, lt, stop); i = stop; continue
+            }
+            var j = lt + 1
+            while (j < html.length && (html[j].isLetterOrDigit() || html[j] == '-')) j++
+            val name = html.substring(lt + 1, j).lowercase()
+            if (name.isEmpty()) { out.append('<'); i = lt + 1; continue }
+            // To the tag's own '>', ignoring one inside a quoted attribute value.
+            var k = j
+            var quote = ' '
+            while (k < html.length) {
+                val c = html[k]
+                if (quote != ' ') { if (c == quote) quote = ' ' }
+                else if (c == '"' || c == '\'') quote = c
+                else if (c == '>') break
+                k++
+            }
+            if (k >= html.length) { out.append(html, lt, html.length); i = html.length; continue }
+            var slash = k - 1
+            while (slash > j && html[slash].isWhitespace()) slash--
+            val closes = slash >= j && html[slash] == '/'
+            if (closes && name !in VOID) {
+                out.append(html, lt, slash).append("></").append(name).append('>')
+                i = k + 1
+            } else {
+                out.append(html, lt, k + 1)
+                i = k + 1
+            }
+            // A raw-text element the tag left open: its content is text, so copy it through.
+            if (name in RAW_TEXT && !closes) {
+                val close = Regex("</$name\\b", RegexOption.IGNORE_CASE).find(html, i)
+                val stop = close?.range?.first ?: html.length
+                out.append(html, i, stop); i = stop
+            }
+        }
+        return out.toString()
     }
 }
 

@@ -21,10 +21,10 @@ out on the reference devices. Changes made to the Android device are listed sepa
 | `AndroidLuna/tools/gen-fonts-css.py` | Regenerates `fonts.css` from the shipped Prelude files | yes |
 | `AndroidLuna/tools/node-launcher.cpp` | Node's `main()`, built by `fetch-assets.sh` into `liblunacynode.so` for JS services | yes |
 | `AndroidLuna/local-jni/` | `libnode.so` (nodejs-mobile 0.3.3), `libc++_shared.so` and the launcher, from `fetch-assets.sh` | no |
-| `Workbench/probe/` | TouchPad probe app that records the PalmSystem contract | yes |
+| `Workbench/probe/` | TouchPad probe apps that record the contract: `…lunacy.probe` (PalmSystem, the input model, WebSQL, the text indexer), `…lunacy.netprobe` (the network, from a 2.2.4 phone) and `…lunacy.htmlprobe` (how the device's parser reads a self-closed tag) | yes |
 | `Workbench/*.sh`, `Workbench/cdp.mjs` | Device helper scripts, and DevTools from the command line (below) | yes |
 | `Workbench/vendor/` | Local clones: enyo-1.0, LunaCE, luna-sysmgr, webos-catalog-service, and files pulled from the TouchPad (frameworks, `/etc/palm`, fonts, wallpapers, a WebView 64 APK) | no |
-| `Workbench/vendor/palm-apps/` | Palm's own apps pulled off the reference TouchPad (Clock, Exhibition), before they are bundled | no |
+| `Workbench/vendor/palm-apps/` | Palm's own apps pulled off the reference TouchPad (Clock, Exhibition, Video Player), before they are bundled | no |
 | `Workbench/vendor/touchpad/sysmgr-qml/` | The device's own `/usr/palm/sysmgr/uiComponents` QML, which is what the shell's Exhibition faces are drawn from | no |
 | `Workbench/vendor/settings-apps/` | Palm's settings apps not yet shipped; `fetch-assets.sh` copies the ones that aren't already in `assets/apps/` into `local-assets/apps/` for testing | no |
 | `Workbench/results/` | Screenshots and logs | no |
@@ -115,14 +115,18 @@ the note in [luna-shell-reference.md](luna-shell-reference.md). `novacom -l` nam
 - **Log reading:** `/var/log/messages` rotates fast. Use `palm-log -f <appid>` while
   launching.
 - **Copying trees off the device:** `novacom run file:///bin/tar -- cf - -C <dir> <name> |
-  tar xf -`. `novacom get` handles single files.
+  tar xf -`. `novacom get` handles single files. The frameworks `fetch-assets.sh` copies into
+  the APK come from there: `-C /usr/palm/frameworks` for `mojo`, `mojocommon`, `mojo2`,
+  `prototype`, `mojoloader.js`, `mojo.core`, `underscore`, `foundations`, `globalization`,
+  the `metascene.*` and the media ones, into `Workbench/vendor/touchpad/`. `media` there is a
+  symlink to `/usr/lib/luna/luna-media-shim`, so copy that instead and name it `media`.
 - **If novacom hangs:** `novacom -l` times out when the daemon is stuck. Restart it with
   `sudo systemctl restart novacomd`, which works non-interactively here.
 - **Driving the test app without touches:** `palm-launch -p '{"do":"push"}'
   org.webosarchive.lunacy.notifytest`. Actions are `banner`, `banners`, `push`, `pop` and
   `popup`. In Lunacy, pass the same JSON with `--es params`.
 - **Package and install our apps:** `palm-package <dir>`, then `palm-install <ipk>`.
-- **The probe app** (`Workbench/probe`, 0.0.9 on the reference TouchPad) records the contract
+- **The probe app** (`Workbench/probe`, 0.1.2 on the reference TouchPad) records the contract
   to `palm-log`. `net.js` in it measures cross-origin XHR against `httpbin.org`, which echoes
   what the server saw. Install the same `.ipk` in Lunacy (`adb push` it to
   `/data/local/tmp`, then `--es install`) and compare the two logs line by line. Run `palm-log -f org.webosarchive.lunacy.probe`, then `palm-launch` it, and
@@ -140,6 +144,29 @@ reports is written up in [pre3.md](pre3.md).
   `.orig`.
 - **`systemProperties/Get` takes one `key`** on 2.2.4, not the TouchPad's `keys` array.
 - **No `takeScreenShot`** was tried here; the TouchPad's screenshot route is untested on 2.2.4.
+
+## Reading a probe's output when palm-log won't
+
+`palm-log -f <appid>` holds the novacom connection, and `palm-launch` then times out behind
+it. The way round is to launch over the bus and read the log file afterwards, in one go:
+
+```sh
+Workbench/tp.sh 'luna-send -n 1 palm://com.palm.applicationManager/launch "{\"id\":\"<appid>\"}" >/dev/null
+                 sleep 8; grep LUNACYPROBE /var/log/messages | grep user.notice |
+                 sed "s/.*<appid>: //;s/, file:.*//"'
+```
+
+`user.notice` is `console.log`; the same line comes again as `user.crit` for `console.error`,
+which is the only level webOS 2.2.4 carries (see [pre3.md](pre3.md)).
+
+**If an app launches but no card appears**, `WebAppMgr` has died - `LunaSysMgr` stays up and
+keeps logging, so the device looks healthy. Check for it, and reboot if it is gone:
+
+```sh
+Workbench/tp.sh 'for p in /proc/[0-9]*; do tr "\0" " " < $p/cmdline; echo; done | grep -c WebAppMgr'
+```
+
+`ps` under `novaterm` truncates its output, which makes this look like the device is empty.
 
 ## How changes are checked
 

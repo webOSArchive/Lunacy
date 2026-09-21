@@ -199,7 +199,18 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      */
     private fun handleIntent(intent: android.content.Intent) {
         intent.getStringExtra("install")?.let { install(it) }
-        intent.getStringExtra("launch")?.let { launch(it, intent.getStringExtra("params")?.let { p -> JSONObject(p) }) }
+        // Say so and launch without them rather than throwing: the activity is singleTask, so
+        // a bad `params` would otherwise be replayed on every restart and the shell could
+        // never start again. Quoting one of these on a command line is easy to get wrong.
+        intent.getStringExtra("launch")?.let { id ->
+            val raw = intent.getStringExtra("params")
+            val params = raw?.let {
+                runCatching { JSONObject(it) }
+                    .onFailure { e -> Log.w(AppServer.TAG, "launch $id: params is not JSON ($e): $raw") }
+                    .getOrNull()
+            }
+            launch(id, params)
+        }
         if (intent.getBooleanExtra(EXTRA_EXHIBITION, false)) startDreamExhibition()
     }
 
@@ -370,6 +381,22 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private val imm by lazy { getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager }
     /** The keyboard's height in Android px, 0 when hidden. */
     private var keyboardHeight = 0
+
+    /**
+     * Windows holding the screen awake. webOS let an app ask for this per window, and a video
+     * player asks for it while it plays; Android's equivalent is a flag on the activity, so
+     * the flag is on while any window still wants it.
+     */
+    private val screenAwake = java.util.Collections.newSetFromMap(java.util.WeakHashMap<AppWindow, Boolean>())
+
+    override fun blockScreenTimeout(window: AppWindow, block: Boolean) {
+        if (block) screenAwake.add(window) else screenAwake.remove(window)
+        if (screenAwake.isEmpty()) {
+            this.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            this.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
 
     /** Only the maximized card's window gets the keyboard, as on webOS. */
     override fun keyboard(window: AppWindow, show: Boolean) {

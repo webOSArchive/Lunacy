@@ -1,0 +1,9 @@
+{
+	"id": "org.webosarchive.lunacy.htmlprobe",
+	"version": "0.0.1",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "HTML Probe",
+	"icon": "icon.png"
+}

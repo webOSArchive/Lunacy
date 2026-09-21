@@ -785,6 +785,19 @@ Mojo isn't packaged the way Enyo is, and that shapes what Lunacy has to do:
 - **Mojo's own device test already works**: `Mojo.Host.current` is "palm-sys-mgr" when
   `window.palmGetResource` exists, which the bridge provides. What needed teaching was the
   origin - Mojo knew `file://` (a device) and `http://` (a desktop), and Lunacy is `https://`.
+- **Mojo 2 is a second framework beside it**, at `/usr/palm/frameworks/mojo2`, with its own
+  loader, its own submission (205) and MojoLoader handing out libraries from
+  `/usr/palm/frameworks/<name>/version/<v>/`. Palm's Video Player is one, and apps hand video
+  to it. The card host serves the whole frameworks tree for it, and the same builtin
+  injection puts Mojo 2's framework and libraries in front of such a page.
+- **Reading a file is not loading a page.** Mojo reads every widget template and every scene
+  with `palmGetResource`, which on a device read the file off the disk. That call marks its
+  request so the card host serves the file as it is, without the serve-time script injection
+  a *page* gets; otherwise every template arrives with Lunacy's boot scripts at the front.
+- **The parser is older than the standard.** webOS's WebKit closes `<script src="x" />`, and
+  a whole app's markup can sit after such a tag. A global transform closes self-closed
+  non-void tags in every piece of HTML Lunacy serves - measured on the device, see
+  [mojo.md](mojo.md).
 
 ## Later layers
 

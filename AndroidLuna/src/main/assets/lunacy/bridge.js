@@ -101,7 +101,20 @@
 		// Lunacy has no full-screen card and no window properties yet; they are logged like the
 		// rest of the surface it hasn't built, rather than silently doing nothing.
 		enableFullScreenMode: function (on) { N.log("PalmSystem.enableFullScreenMode(" + on + ") (not implemented)"); },
-		setWindowProperties: function (p) { N.log("PalmSystem.setWindowProperties (not implemented)"); },
+		// webOS's window properties. blockScreenTimeout is the one Lunacy answers - a video
+		// player asks for it while it plays, and Android's screen would otherwise go out
+		// mid-film. The rest (fastAccelerometer, overlayNotificationsPosition,
+		// suppressBannerMessages and the others) are logged, like the rest of the surface
+		// Lunacy hasn't built.
+		setWindowProperties: function (p) {
+			var props = p || {};
+			var rest = [];
+			for (var k in props) {
+				if (k === "blockScreenTimeout") { N.blockScreenTimeout(Boolean(props[k])); }
+				else if (Object.prototype.hasOwnProperty.call(props, k)) { rest.push(k); }
+			}
+			if (rest.length) { N.log("PalmSystem.setWindowProperties " + rest.join(",") + " (not implemented)"); }
+		},
 		// addBannerMessage(message, launchParamsJson, icon, soundClass, soundFile, duration, doNotSuppress)
 		// returns the banner's id at once, as webOS did.
 		addBannerMessage: function (msg, params, icon) {
@@ -213,8 +226,14 @@
 			N.log("palmGetResource needs a rooted path: " + p);
 			return null;
 		}
+		// Ask the card host for the file as it is on disk. On a device this call read the
+		// file; no browser was involved, so none of the transforms that belong to loading a
+		// *page* apply. Mojo reads every widget template and every scene this way, and a
+		// template that arrives with Lunacy's boot scripts in front of it is not the
+		// template the framework wrote: Mojo's menu widget looks up an element inside the
+		// rendered node, finds the injected <link> instead and throws.
 		var x = new XMLHttpRequest();
-		x.open("GET", path, false);
+		x.open("GET", p + (p.indexOf("?") < 0 ? "?" : "&") + "__lunacy_res=1", false);
 		try { x.send(null); } catch (e) { N.log("palmGetResource failed " + path); return null; }
 		if (x.status !== 200) { N.log("palmGetResource missing " + path); return null; }
 		if (hint && /json/.test(hint)) {
@@ -233,12 +252,46 @@
 	// false: the keyboard covers the card, which gets Mojo.positiveSpaceChanged instead of a resize.
 	define(PalmSystem, "allowResizeOnPositiveSpaceChange", function (resize) { N.keyboardResizes(Boolean(resize)); });
 
+	// webOS's linkifier: the text comes back with web addresses, e-mail addresses and
+	// telephone numbers wrapped in anchors, and everything else untouched. Mojo hands every
+	// piece of user text through it (Mojo.Format.runTextIndexer), and an app then works on
+	// what comes back - SimpleChat reads .length off it - so a no-op returning undefined
+	// stops the app dead.
+	//
+	// Measured on the reference TouchPad (Workbench/probe 0.1.2):
+	//   "call 555-1234"            -> 'call <a href="tel:555-1234">555-1234</a>'
+	//   "www.example.com"          -> '<a href="http://www.example.com">www.example.com</a>'
+	//   "a@b.com"                  -> '<a href="mailto:a@b.com">a@b.com</a>'
+	//   "(555) 123-4567"           -> the href keeps the number exactly as written
+	//   "2026-09-21", "100-200", "1234", a newline, "<b>bold</b> & 'quoted'" -> unchanged
+	// The device's is a single naive pass over the whole string: text already inside an
+	// anchor's href gets linkified again there too, and & is not escaped. This does the same
+	// in one pass, so it can't re-process what it just inserted either. The telephone shapes
+	// are the four the device was seen to match; webOS's own indexer may know more.
+	var INDEXER = new RegExp([
+		"(?:[a-z][a-z0-9+.\\-]*://|www\\.)[^\\s<>\"']+",
+		"[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}",
+		"\\(\\d{3}\\)[\\s.\\-]?\\d{3}[\\s.\\-]?\\d{4}",
+		"\\b(?:\\d{3}[\\s.\\-]\\d{3}[\\s.\\-]\\d{4}|\\d{10}|\\d{3}[\\s.\\-]\\d{4})\\b"
+	].join("|"), "gi");
+	define(PalmSystem, "runTextIndexer", function (text) {
+		if (typeof text !== "string" || !text) { return text === undefined ? "" : String(text); }
+		return text.replace(INDEXER, function (m) {
+			var href;
+			if (/^[a-z][a-z0-9+.\-]*:\/\//i.test(m)) { href = m; }
+			else if (/^www\./i.test(m)) { href = "http://" + m; }
+			else if (m.indexOf("@") >= 0) { href = "mailto:" + m; }
+			else { href = "tel:" + m; }
+			return '<a href="' + href + '">' + m + '</a>';
+		});
+	});
+
 	// The rest of the PalmSystem surface measured on a TouchPad (docs/spike-1.md). Calls with no
 	// Lunacy equivalent yet are logged no-ops, so apps don't throw; the log shows what's used.
 	["deactivate", "addNewContentIndicator", "removeNewContentIndicator", "cancelCrossAppScene",
 	 "cancelSceneTransition", "crossAppSceneActive", "decrypt", "editorFocused", "encrypt", "hideSpellingWidget",
 	 "paste", "prepareSceneTransition", "printFrame", "runAnimationLoop", "runCrossAppTransition",
-	 "runSceneTransition", "runTextIndexer", "stagePreparing"].forEach(function (name) {
+	 "runSceneTransition", "stagePreparing"].forEach(function (name) {
 		if (!PalmSystem[name]) {
 			define(PalmSystem, name, function () { N.log("PalmSystem." + name + " (not implemented)"); });
 		}

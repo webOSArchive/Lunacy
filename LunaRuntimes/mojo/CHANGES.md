@@ -56,3 +56,28 @@ Lunacy's bridge provides, so the framework takes the device path and keeps the l
 parameters the shell passes.
 
 Files: `builtins/InstallPrototypeBuiltIn.js`, `builtins/palmInitFramework506.js`.
+
+### 0002-mojo2-builtins.patch
+
+The same treatment for **Mojo 2**, which Palm's own Video Player loads and which nothing had
+run before. Mojo 2 is packaged differently again: its submission (205) *does* carry
+`javascripts/` on disk, but `mojo2/mojo.js` still prefers the builtin when one is on the
+window, and MojoLoader hands out the libraries the framework asks for (`underscore`,
+`foundations`, `globalization`, `mojo.core`) from builtins of their own. All of them are V8
+native scripts, so all of them get the same four substitutions as submission 506, plus one
+more the 506 files didn't need: `$Object`, V8's alias for the constructor.
+
+Two host assumptions are corrected as well, the same ones patch 0001 fixed in 506:
+
+- `palmInitFramework2205.js` works out `Mojo.hostingPrefix` from `/http:\/\/(.*:[0-9]+)/`,
+  which matches nothing on an https origin.
+- `palmmojo_coreVersion1_0.js` works out the app's own folder from the document URI and knows
+  only `file:///` (a device) and `http://` (a desktop browser); the `http` branch is
+  unguarded, so on Lunacy it threw before `Mojo.Core.App.path` was ever set.
+
+Files: `builtins/palmInitFramework2205.js`, `builtins/palmmojo_coreVersion1_0.js`,
+`builtins/palmunderscoreVersion1_0.js`, `builtins/palmfoundationsVersion1_0.js`,
+`builtins/palmglobalizationVersion1_0.js`, `builtins/palmcontactsVersion1_0.js`.
+
+`palmcontactsVersion1_0.js` is patched with the others for consistency; nothing has loaded it
+yet.

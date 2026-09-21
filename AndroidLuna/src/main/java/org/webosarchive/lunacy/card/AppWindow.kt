@@ -34,6 +34,11 @@ interface WindowHost {
     fun activate(window: AppWindow)
     /** The page wants the virtual keyboard shown or hidden. */
     fun keyboard(window: AppWindow, show: Boolean)
+    /**
+     * PalmSystem.setWindowProperties({"blockScreenTimeout": true}): hold the screen on while
+     * this window wants it. A video player asks for it for as long as it is playing.
+     */
+    fun blockScreenTimeout(window: AppWindow, block: Boolean)
     fun deviceInfo(): String
     /** webOS's screen orientation: "up", "down", "left" or "right". */
     fun screenOrientation(): String
@@ -121,7 +126,13 @@ class AppWindow(context: Context, val appId: String, private val host: WindowHos
             override fun onPageFinished(view: WebView, url: String) {
                 // The window.open transport resets the background; apply transparency again.
                 if (type == "dashboard" || type == "popupalert") view.setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                view.evaluateJavascript("window.innerWidth+'x'+window.innerHeight+' dpr '+window.devicePixelRatio+' bg html '+getComputedStyle(document.documentElement).backgroundColor+' body '+getComputedStyle(document.body).backgroundColor+' first '+(document.body.firstElementChild?document.body.firstElementChild.className+' '+getComputedStyle(document.body.firstElementChild).backgroundColor:'')") {
+                // Guarded: a window.open transport finishes with no body, and an unguarded
+                // read throws into the app's own console, where it looks like the app's fault.
+                view.evaluateJavascript("(function(){var b=document.body;if(!b){return 'no body';}" +
+                    "return window.innerWidth+'x'+window.innerHeight+' dpr '+window.devicePixelRatio" +
+                    "+' bg html '+getComputedStyle(document.documentElement).backgroundColor" +
+                    "+' body '+getComputedStyle(b).backgroundColor" +
+                    "+' first '+(b.firstElementChild?b.firstElementChild.className+' '+getComputedStyle(b.firstElementChild).backgroundColor:'');})()") {
                     Log.i(AppServer.TAG, "[$appId] loaded $url viewport $it")
                 }
             }
@@ -223,6 +234,8 @@ class AppWindow(context: Context, val appId: String, private val host: WindowHos
         @JavascriptInterface fun activate() { main.post { host.activate(this@AppWindow) } }
         @JavascriptInterface fun keyboard(show: Boolean) { main.post { host.keyboard(this@AppWindow, show) } }
         @JavascriptInterface fun keyboardResizes(resize: Boolean) { keyboardResizes = resize }
+        @JavascriptInterface
+        fun blockScreenTimeout(block: Boolean) { main.post { host.blockScreenTimeout(this@AppWindow, block) } }
 
         @JavascriptInterface fun log(msg: String) { Log.i(AppServer.TAG, "[$appId] palm $msg") }
 

@@ -1,0 +1,203 @@
+--- a/builtins/palmInitFramework2205.js
++++ b/builtins/palmInitFramework2205.js
+@@ -1,3 +1,8 @@
++// Lunacy: this file is one of webOS's V8 native scripts - the browser compiled it in, and
++// it is written in V8's internal syntax. `global` is V8's global object, and %SetProperty
++// registers a name on it. Both are given ordinary JavaScript meanings here so the file
++// loads as a script; nothing else about it changes.
++var global = this;
+ function palmInitFramework2205(window, document, navigator) {
+ 
+ with(window) {
+@@ -1409,7 +1414,7 @@
+ this.controller.attributes.dataSource},setCount:function(count){if(this.filterField)this.filterField.mojo.setCount(count)},renderWidget:function(){var listAttributes=this.controller.attributes;var model=this.controller.model;var listTemplate;var attributes=this.controller.attributes;var content;var methodsList=["getList"];listTemplate=this.useFilterField?"/filterlist/filterlist":"/filterlist/onlylist";model.divPrefix=this.divPrefix;content=Mojo.View.render({object:model,template:Mojo.Widget.getSystemTemplatePath(listTemplate)});
+ this.controller.element.innerHTML=content;if(this.useFilterField){attributes.filterFieldName=this.filterFieldName;attributes.delay=this.controller.attributes.delay;this.filterField=this.controller.get(this.filterFieldId);this.controller.scene.setupWidget(this.filterFieldId,attributes,model);methodsList=methodsList.concat("close","open","setCount")}this.listElement=this.controller.get(this.listId);this.controller.scene.setupWidget(this.listId,listAttributes,this.controller.model);this.controller.instantiateChildWidgets(this.controller.element);
+ if(!this.controller.element.mojo){this.controller.element.mojo=_.clone(this.listElement.mojo);this.controller.exposeMethods(methodsList)}},handleFilter:function(e){var filter=e.filterString;if(filter===this.filterString)Mojo.Log.info("Got 2 of the same filterString in a row but this should never happen");this.filterString=filter;this.dataSource.getCount(this.setCount);this.dataSource.setFilterString(this.filterString);this.listElement.mojo.invalidate()}};(function(){var config=Mojo.Config;function loadFrameworkConfigurationFrom(configSource){var moreFrameworkConfig=Mojo.Load.JSONFile(configSource+"framework_config.json",true);_.extend(Mojo.Environment.frameworkConfiguration,moreFrameworkConfig)}function loadFrameworkConfiguration(){var placesToLook,defaultLoggingLevel=Mojo.Log.LOG_LEVEL_ERROR;if(Mojo.Host.current===Mojo.Host.browser)defaultLoggingLevel=Mojo.Log.LOG_LEVEL_INFO;Mojo.Environment.frameworkConfiguration={logLevel:defaultLoggingLevel};
+-placesToLook=[config.MOJO_FRAMEWORK_HOME+"/",Mojo.appPath];_.each(placesToLook,loadFrameworkConfigurationFrom);Mojo.Environment.applyConfiguration(Mojo.Environment.frameworkConfiguration)}function calculateAppName(){if(Mojo.appPath===undefined)Mojo.appPath=Mojo.Core.App.path;var re=/\/+.*\/(.*)\/$/,match=Mojo.appPath.match(re),appName="unknown";if(match)appName=Mojo.appPath.match(re)[1];return appName}function loadFramework(){Mojo.appName=calculateAppName();var re=/http:\/\/(.*:[0-9]+)/,match=document.baseURI.match(re);
++placesToLook=[config.MOJO_FRAMEWORK_HOME+"/",Mojo.appPath];_.each(placesToLook,loadFrameworkConfigurationFrom);Mojo.Environment.applyConfiguration(Mojo.Environment.frameworkConfiguration)}function calculateAppName(){if(Mojo.appPath===undefined)Mojo.appPath=Mojo.Core.App.path;var re=/\/+.*\/(.*)\/$/,match=Mojo.appPath.match(re),appName="unknown";if(match)appName=Mojo.appPath.match(re)[1];return appName}function loadFramework(){Mojo.appName=calculateAppName();var re=/https?:\/\/[^\/]+/,match=document.baseURI.match(re);
+ if(!match)Mojo.hostingPrefix="file://";else Mojo.hostingPrefix=match[0];Mojo.loadStylesheets()}function continueSetupFramework(){Mojo.View.setup(document);Mojo.Gesture.setup(document);Mojo.SteOptions.setup(window);Mojo.Controller.setup();Mojo.Format.setup()}function loadApplicationSources(){var sourcesText=palmGetResource(Mojo.appPath+"sources.json",true);if(sourcesText){Mojo.sourcesList=JSON.parse(sourcesText);Mojo.Load._addToScriptQueue(Mojo.sourcesList,continueSetupFramework)}else continueSetupFramework()}
+ function setupFramework(){loadFrameworkConfiguration();console.info("Requested submission : "+Mojo.MOJO_BUILD);Mojo.Locale.set(PalmSystem.locale,PalmSystem.localeRegion);loadApplicationSources()}loadFramework();window.addEventListener("DOMContentLoaded",function(e){setupFramework()})})();
+ }
+@@ -1418,7 +1423,7 @@
+ const $palmInitFramework2205 = palmInitFramework2205;
+ 
+ function SetupFramework205() {
+-	%SetProperty(global, "palmInitFramework2205", $palmInitFramework2205, 5);
++	global["palmInitFramework2205"] = $palmInitFramework2205;
+ }
+ 
+ SetupFramework205();
+--- a/builtins/palmmojo_coreVersion1_0.js
++++ b/builtins/palmmojo_coreVersion1_0.js
+@@ -1,3 +1,10 @@
++// Lunacy: this file is one of webOS's V8 native scripts - the browser compiled it in, and
++// it is written in V8's internal syntax. `global` is V8's global object; %SetProperty
++// registers a name on it, %ToFastProperties and %FunctionSetPrototype are optimisation
++// hints, and $Object is V8's alias for the built-in constructor. All are given ordinary
++// JavaScript meanings here so the file loads as a script; nothing else about it changes.
++var global = this;
++var $Object = Object;
+ 
+ function Setuppalmmojo_coreVersion1_0() {
+ 	
+@@ -44,7 +51,7 @@
+ 
+ 	
+ 	function setPrototype(fn, proto) {
+-		;%FunctionSetPrototype(fn, proto);
++		;fn.prototype = proto;
+ 	}
+ 
+ 	
+@@ -151,7 +158,7 @@
+ this.el.scrollHeight-this.el.offsetHeight,animate)},revealElement:function(el,animate){assertElement(el);if(!this.el.contains(el))throw new Error("scrollable element does not contain element to reveal");var currentTop=-getScrollPosition(this.el).y;var currentBottom=currentTop+getUsableDimensions(this.el).height;var elHeight=el.offsetHeight;var elOffset=positionedOffset(el);var currentlyShowing=currentBottom-elOffset.y;var remainingToShow=elHeight-currentlyShowing;if(Math.abs(remainingToShow)>0)this.adjustBy(0,
+ remainingToShow);return remainingToShow},adjustBy:function(dx,dy){this.engine.move({x:dx,y:dy},{x:Object.create(DragAnimator),y:Object.create(DragAnimator)})},scrollTo:function(x,y,animate){var animator=animate?FlickAnimator:DragAnimator;var movement={x:x!==undefined?-(this.el.scrollLeft-x):x,y:y!==undefined?-(this.el.scrollTop-y):y};this.engine.move(movement,{x:Object.create(animator),y:Object.create(animator)})},getScrollPosition:function(){return{top:this.el.scrollTop,left:this.el.scrollLeft}}});
+ var module={createScrollableElement:function(el,direction){return new ScrollableElement(el,direction)},makeViewportScrollable:function(doc,axes){if(!(doc&&doc.nodeType==9))throw new TypeError("must pass a document to make scrollable");var children=Array.prototype.slice.call(doc.body.childNodes);var contentEl=doc.createElement("div");function setDimensions(){contentEl.style.height=doc.documentElement.clientHeight+"px";contentEl.style.width=doc.documentElement.clientWidth+"px"}function cleanup(){doc.defaultView.removeEventListener("resize",
+-setDimensions);doc.defaultView.removeEventListener("unload",cleanup)}contentEl.name="mojo-core-viewport-scroller";setDimensions();doc.body.appendChild(contentEl);for(var i=0;i<children.length;i++)contentEl.appendChild(children[i]);doc.defaultView.addEventListener("resize",setDimensions);doc.defaultView.addEventListener("unload",cleanup);return module.createScrollableElement(contentEl,axes)}};for(key in events)module[key]=events[key];exports.Scroll=module;return module}();var App=function(){var module={setup:function(){var jsonText;var match=document.baseURI.match(/file:\/\/\/.*\/(.*)\//);if(match)this.path=match[0];else this.path=document.baseURI.match(/http:\/\/.*\//)[0];jsonText=palmGetResource(this.path+"appinfo.json");if(jsonText)this.info=JSON.parse(jsonText);else if(window.opener)this.info=window.opener.mojoAppInfo;else this.info={};mojoAppInfo=this.info;if(!("noWindow"in this.info))this.info.noWindow=false}};exports.App=module;return module}();var AppMenu=function(){var request;return{setup:function(config){request=Service.createRequest("palm://com.palm.applicationManager/launch",{id:"com.palm.systemui",params:{action:"configureAppMenu",appId:App.info.id,config:config||{}}},function(){request=null});if(typeof document!=="undefined")document.addEventListener(Event.relaunch,function(e){if(e.params&&e.params.appMenuCommand){Event.send(document,"mojo-app-menu-command",{command:e.params.appMenuCommand});Event.stop(e)}})}}}();
++setDimensions);doc.defaultView.removeEventListener("unload",cleanup)}contentEl.name="mojo-core-viewport-scroller";setDimensions();doc.body.appendChild(contentEl);for(var i=0;i<children.length;i++)contentEl.appendChild(children[i]);doc.defaultView.addEventListener("resize",setDimensions);doc.defaultView.addEventListener("unload",cleanup);return module.createScrollableElement(contentEl,axes)}};for(key in events)module[key]=events[key];exports.Scroll=module;return module}();var App=function(){var module={setup:function(){var jsonText;var match=document.baseURI.match(/file:\/\/\/.*\/(.*)\//);if(match)this.path=match[0];else this.path=document.baseURI.match(/https?:\/\/.*\//)[0];jsonText=palmGetResource(this.path+"appinfo.json");if(jsonText)this.info=JSON.parse(jsonText);else if(window.opener)this.info=window.opener.mojoAppInfo;else this.info={};mojoAppInfo=this.info;if(!("noWindow"in this.info))this.info.noWindow=false}};exports.App=module;return module}();var AppMenu=function(){var request;return{setup:function(config){request=Service.createRequest("palm://com.palm.applicationManager/launch",{id:"com.palm.systemui",params:{action:"configureAppMenu",appId:App.info.id,config:config||{}}},function(){request=null});if(typeof document!=="undefined")document.addEventListener(Event.relaunch,function(e){if(e.params&&e.params.appMenuCommand){Event.send(document,"mojo-app-menu-command",{command:e.params.appMenuCommand});Event.stop(e)}})}}}();
+ exports.AppMenu=AppMenu;var AltChar=function(){var SYM_CODE=17;var request,target;function showAltCharPicker(){request=Service.createRequest("palm://com.palm.applicationManager/launch",{id:"com.palm.systemui",params:{action:"showAltChar"}},function(){request=null})}function sendFakeKey(type,charCode){var e=document.createEvent("Events");e.initEvent(type,true,true);e.keyCode=charCode;e.charCode=charCode;e.which=charCode;target.dispatchEvent(e);return e}return{setup:function(){if(typeof document!=="undefined"){document.addEventListener("keydown",
+ function(e){if(e.keyCode===SYM_CODE){target=e.target;console.log("saving off target: "+target);showAltCharPicker()}});document.addEventListener(Event.relaunch,function(e){var selection,newEvent,charCode;if(e.params&&e.params.altCharSelected){selection=window.getSelection();if(selection&&selection.rangeCount>0&&selection.getRangeAt(0))document.execCommand("insertText",true,e.params.altCharSelected);charCode=e.params.altCharSelected.charCodeAt(0);sendFakeKey("keydown",charCode);sendFakeKey("keypress",
+ charCode);sendFakeKey("keyup",charCode);Event.stop(e)}})}}}}();exports.AltChar=AltChar;
+@@ -173,8 +180,8 @@
+ 	};
+ 
+ 	
+-	;%ToFastProperties(exports);
+-	;%SetProperty(global, "palmmojo_coreVersion1_0", exports, 2);
++	;
++	;global["palmmojo_coreVersion1_0"] = exports;
+ }
+ 
+ Setuppalmmojo_coreVersion1_0();
+--- a/builtins/palmunderscoreVersion1_0.js
++++ b/builtins/palmunderscoreVersion1_0.js
+@@ -1,3 +1,10 @@
++// Lunacy: this file is one of webOS's V8 native scripts - the browser compiled it in, and
++// it is written in V8's internal syntax. `global` is V8's global object; %SetProperty
++// registers a name on it, %ToFastProperties and %FunctionSetPrototype are optimisation
++// hints, and $Object is V8's alias for the built-in constructor. All are given ordinary
++// JavaScript meanings here so the file loads as a script; nothing else about it changes.
++var global = this;
++var $Object = Object;
+ 
+ function SetuppalmunderscoreVersion1_0() {
+ 	
+@@ -44,7 +51,7 @@
+ 
+ 	
+ 	function setPrototype(fn, proto) {
+-		;%FunctionSetPrototype(fn, proto);
++		;fn.prototype = proto;
+ 	}
+ 
+ 	
+@@ -142,8 +149,8 @@
+ 	};
+ 
+ 	
+-	;%ToFastProperties(exports);
+-	;%SetProperty(global, "palmunderscoreVersion1_0", exports, 2);
++	;
++	;global["palmunderscoreVersion1_0"] = exports;
+ }
+ 
+ SetuppalmunderscoreVersion1_0();
+--- a/builtins/palmfoundationsVersion1_0.js
++++ b/builtins/palmfoundationsVersion1_0.js
+@@ -1,3 +1,10 @@
++// Lunacy: this file is one of webOS's V8 native scripts - the browser compiled it in, and
++// it is written in V8's internal syntax. `global` is V8's global object; %SetProperty
++// registers a name on it, %ToFastProperties and %FunctionSetPrototype are optimisation
++// hints, and $Object is V8's alias for the built-in constructor. All are given ordinary
++// JavaScript meanings here so the file loads as a script; nothing else about it changes.
++var global = this;
++var $Object = Object;
+ 
+ function SetuppalmfoundationsVersion1_0() {
+ 	
+@@ -44,7 +51,7 @@
+ 
+ 	
+ 	function setPrototype(fn, proto) {
+-		;%FunctionSetPrototype(fn, proto);
++		;fn.prototype = proto;
+ 	}
+ 
+ 	
+@@ -222,8 +229,8 @@
+ 	};
+ 
+ 	
+-	;%ToFastProperties(exports);
+-	;%SetProperty(global, "palmfoundationsVersion1_0", exports, 2);
++	;
++	;global["palmfoundationsVersion1_0"] = exports;
+ }
+ 
+ SetuppalmfoundationsVersion1_0();
+--- a/builtins/palmglobalizationVersion1_0.js
++++ b/builtins/palmglobalizationVersion1_0.js
+@@ -1,3 +1,10 @@
++// Lunacy: this file is one of webOS's V8 native scripts - the browser compiled it in, and
++// it is written in V8's internal syntax. `global` is V8's global object; %SetProperty
++// registers a name on it, %ToFastProperties and %FunctionSetPrototype are optimisation
++// hints, and $Object is V8's alias for the built-in constructor. All are given ordinary
++// JavaScript meanings here so the file loads as a script; nothing else about it changes.
++var global = this;
++var $Object = Object;
+ 
+ function SetuppalmglobalizationVersion1_0() {
+ 	
+@@ -44,7 +51,7 @@
+ 
+ 	
+ 	function setPrototype(fn, proto) {
+-		;%FunctionSetPrototype(fn, proto);
++		;fn.prototype = proto;
+ 	}
+ 
+ 	
+@@ -320,8 +327,8 @@
+ 	};
+ 
+ 	
+-	;%ToFastProperties(exports);
+-	;%SetProperty(global, "palmglobalizationVersion1_0", exports, 2);
++	;
++	;global["palmglobalizationVersion1_0"] = exports;
+ }
+ 
+ SetuppalmglobalizationVersion1_0();
+--- a/builtins/palmcontactsVersion1_0.js
++++ b/builtins/palmcontactsVersion1_0.js
+@@ -1,3 +1,10 @@
++// Lunacy: this file is one of webOS's V8 native scripts - the browser compiled it in, and
++// it is written in V8's internal syntax. `global` is V8's global object; %SetProperty
++// registers a name on it, %ToFastProperties and %FunctionSetPrototype are optimisation
++// hints, and $Object is V8's alias for the built-in constructor. All are given ordinary
++// JavaScript meanings here so the file loads as a script; nothing else about it changes.
++var global = this;
++var $Object = Object;
+ 
+ function SetuppalmcontactsVersion1_0() {
+ 	
+@@ -44,7 +51,7 @@
+ 
+ 	
+ 	function setPrototype(fn, proto) {
+-		;%FunctionSetPrototype(fn, proto);
++		;fn.prototype = proto;
+ 	}
+ 
+ 	
+@@ -584,8 +591,8 @@
+ 	};
+ 
+ 	
+-	;%ToFastProperties(exports);
+-	;%SetProperty(global, "palmcontactsVersion1_0", exports, 2);
++	;
++	;global["palmcontactsVersion1_0"] = exports;
+ }
+ 
+ SetuppalmcontactsVersion1_0();

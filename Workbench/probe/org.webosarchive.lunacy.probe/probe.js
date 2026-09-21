@@ -116,6 +116,54 @@
 		return "sent";
 	});
 
+	// WebSQL, which Mojo apps keep their data in. Two things about it differ between hosts
+	// and both decide whether an app runs: how many arguments openDatabase insists on, and
+	// what an SQLError's message says. drPodder creates its tables on the strength of
+	// error.message === "no such table: feed".
+	safe("openDatabase arity", function () { return window.openDatabase.length; });
+	safe("openDatabase(name, version)", function () {
+		var db = openDatabase("lunacyprobe2", "1.0");
+		return db ? "opened, version " + db.version : "null";
+	});
+	safe("sql error", function () {
+		var db = openDatabase("lunacyprobe4", "1.0", "Lunacy probe", 65536);
+		db.transaction(function (t) {
+			t.executeSql("SELECT * FROM nosuchtable", [], function () { rec("sql error", "unexpectedly succeeded"); },
+				function (t2, e) { rec("sql error", { code: e.code, message: e.message }); });
+		});
+		return "sent";
+	});
+
+	// PalmSystem.runTextIndexer: webOS's linkifier. Mojo hands it every chat message, and
+	// an app then reads .length off what comes back, so what it returns matters.
+	safe("runTextIndexer plain", function () {
+		return ps && ps.runTextIndexer ? ps.runTextIndexer("hello there") : "(absent)";
+	});
+	safe("runTextIndexer rich", function () {
+		return ps && ps.runTextIndexer ?
+			ps.runTextIndexer("call 555-1234 or see http://example.com or mail a@b.com") : "(absent)";
+	});
+	safe("runTextIndexer html", function () {
+		return ps && ps.runTextIndexer ? ps.runTextIndexer("a <b>bold</b> & 'quoted'") : "(absent)";
+	});
+	safe("runTextIndexer empty", function () {
+		return ps && ps.runTextIndexer ? ps.runTextIndexer("") : "(absent)";
+	});
+
+	[
+		"2026-09-21 was a Monday",
+		"see www.example.com and https://a.b/c?d=1&e=2",
+		"(555) 123-4567 and 5551234567 and 1234",
+		"line one\nline two",
+		"already <a href=\"http://x\">linked</a> and http://y",
+		"100-200 range"
+	].forEach(function (t, i) {
+		safe("runTextIndexer case " + i + " in", function () { return t; });
+		safe("runTextIndexer case " + i + " out", function () {
+			return ps && ps.runTextIndexer ? ps.runTextIndexer(t) : "(absent)";
+		});
+	});
+
 	// Input model: which events does a touch produce? Drag on the blue square.
 	var seq = [], pad = document.getElementById("pad");
 	["touchstart", "touchmove", "touchend", "mousedown", "mousemove", "mouseup", "click", "mouseover", "mouseout"].forEach(function (t) {

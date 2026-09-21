@@ -1,13 +1,15 @@
 # Mojo
 
-What was learned bringing Palm's Mojo up in Lunacy on 2026-09-20, when an Exhibition app from
-the App Museum (Flying Toasters 1.1.2) turned out to be a Mojo app and ran. Phase 5 is not
-done — one app is not a framework — but the packaging is understood and written down here so
-the next person doesn't have to work it out again.
+What was learned bringing Palm's Mojo up in Lunacy. It started on 2026-09-20, when an
+Exhibition app from the App Museum (Flying Toasters 1.1.2) turned out to be a Mojo app and
+ran, and went on through 2026-09-21 with the suite codepoet named as the apps that must work:
+drPodder Redux, IAmA reddit, MeTube, Check Mate and SimpleChat, which brought in Palm's own
+Video Player and with it **Mojo 2**. All six run; what each one turned up is in
+[fix-log.md](fix-log.md).
 
 Everything below was read from the reference TouchPad's own copy (webOS CE 3.1.0,
-`/usr/palm/frameworks/mojo`, vendored at `Workbench/vendor/touchpad/mojo`) or measured on the
-device. Where something is a guess, it says so.
+`/usr/palm/frameworks`, vendored at `Workbench/vendor/touchpad/`) or measured on the device.
+Where something is a guess, it says so.
 
 ## The one thing to know
 
@@ -59,6 +61,9 @@ What is actually on disk:
   No app is named; no app is changed.
 - **Patches the builtins so a browser can load them**, as a patch series against the device's
   copy: [LunaRuntimes/mojo/CHANGES.md](../LunaRuntimes/mojo/CHANGES.md).
+- **Serves the rest of `/usr/palm/frameworks`** at their own paths (`mojo2`, `prototype`,
+  `mojoloader.js`, `mojo.core`, the metascene and media frameworks), which is what a Mojo 2
+  app and MojoLoader need. Only the frameworks something has asked for are copied.
 
 ## The V8 natives, and the one that hurt
 
@@ -120,30 +125,142 @@ Mojo wraps its calls with an `$activity` parameter (`{"subscribe": true, "$activ
 {"activityId": 1}}`); the bus ignores it, as webOS's services did for a call that doesn't
 need one.
 
+## Self-closing tags
+
+**`<script src="x.js" />` closes the element on webOS.** Chromium follows the standard, where
+only void elements do, so the script opens and swallows the rest of the file as its (ignored)
+text content. drPodder Redux's index.html is XHTML throughout, with its stylesheet, its other
+scripts and its whole body after that tag; in Lunacy it loaded nothing at all, and the app was
+a 4 x 4 blank window.
+
+Measured rather than assumed, with a probe page in drPodder's shape
+(`Workbench/probe/org.webosarchive.lunacy.htmlprobe`), on the reference TouchPad:
+
+| | |
+|---|---|
+| `selfClosed` (did the script after it run?) | **true** |
+| the body's own markup | present, `bodyKids=5` |
+| the stylesheet after the tag | applied (`background-color: rgb(1, 2, 3)`) |
+| `document.xmlVersion` | **null** |
+| `document.compatMode` | `CSS1Compat` |
+
+`xmlVersion` being null is the interesting one: this is an **HTML** document, not an XHTML one.
+webOS's WebKit is old enough to keep the pre-HTML5 tokenizer, which honoured a trailing slash
+on any tag. So Lunacy does the same, as a global serve-time transform
+(`HtmlTransforms.selfClosingTags`): a self-closed non-void tag becomes an open and close pair.
+It runs on every piece of HTML Lunacy serves, pages and templates alike, because the device's
+parser read both; script and style content is skipped, so a string like `"<div/>"` in an app's
+JavaScript is left alone.
+
+## Reading a file is not loading a page
+
+Mojo reads **every widget template and every scene** with `palmGetResource`. On a device that
+call read the file off the disk and no browser was involved. In Lunacy it is an XHR against
+the card host, which was injecting Lunacy's own boot scripts into anything it served as HTML -
+so a template's rendered node began with the injected `<link>`, and every widget that looks
+something up inside its own template found nothing:
+
+```
+Error: Caught exception in _Menu widget 'undefined' setup():
+TypeError: Cannot read property 'parentNode' of null
+```
+
+`palmGetResource` now marks its request (`?__lunacy_res=1`) and the host serves the file as it
+is. The parser fix above still applies, because that is the parser, not the page.
+
+## Mojo 2
+
+Palm's own **Video Player** (`com.palm.app.videoplayer`) is a Mojo 2 app, and MeTube hands
+every video to it, so Mojo 2 had to work. It is packaged differently again:
+
+- The page loads `/usr/palm/frameworks/mojo2/mojo.js`, which ignores `x-mojo-version` and
+  takes only `x-mojo-submission`, defaulting to **205**.
+- That loader `document.write`s `/usr/palm/frameworks/mojoloader.js`, and on load asks
+  `MojoLoader.require({name: "mojo.core", version: "1.0"})` before the framework itself.
+- Then it looks for `palmInitFramework2` + the submission - `palmInitFramework2205`, which is
+  in Mojo 1's `builtins/` folder, beside 506.
+- **MojoLoader** finds each library either as a builtin on the window
+  (`palm<name>Version<v>`, dots to underscores) or by reading `manifest.json` under
+  `/usr/palm/frameworks/<name>/version/<v>/` and evaluating `concatenated.js`. Lunacy serves
+  the tree, so both routes work; the builtins win, as they did on the device.
+- Prototype comes from `/usr/palm/frameworks/prototype/` through the app's own script tag, not
+  from a builtin, so a Mojo 2 page gets only the four libraries and the framework in front of
+  it.
+
+What Lunacy added for it: a route for the rest of `/usr/palm/frameworks` (`fw/frameworks/` in
+the assets), the frameworks themselves copied off the device by `fetch-assets.sh`, and
+[patch 0002](../LunaRuntimes/mojo/CHANGES.md) for the V8 natives and the two `http://`
+assumptions. `mojo-boot.js` already wrapped *every* `palmInitFramework*` global for the
+argument order, so 2205 needed nothing there.
+
+The submission mapping in `mojo.js` for Mojo 1 (`{"1": "506", "2": "344"}`) turns out to be a
+red herring: a Mojo 2 app doesn't load `mojo/mojo.js` at all, it loads `mojo2/mojo.js`, which
+has its own default. Submission 344 is still unaccounted for and nothing on the device has it.
+
+## What a browser gets wrong about WebSQL
+
+Both measured on the reference TouchPad (`Workbench/probe` 0.1.0):
+
+| | TouchPad | Chromium |
+|---|---|---|
+| `openDatabase.length` | 0 | 4 |
+| `openDatabase("x", "1.0")` | opens at version 1.0 | throws "4 arguments required, but only 2 present" |
+| a failing statement's `error.message` | `no such table: nosuchtable` | `could not prepare statement (1 no such table: nosuchtable)` |
+
+Both matter, and both stopped drPodder: the first at "Error Creating DB!", the second at
+"Loading Feeds" for ever, because the app creates its tables when it sees SQLite's own message
+and never saw it. The compat layer fills in the two missing arguments and strips the wrapper
+back off the message.
+
+## PalmSystem.runTextIndexer
+
+webOS's linkifier, which Mojo hands every piece of user text through
+(`Mojo.Format.runTextIndexer`). It was a logged no-op returning undefined, and SimpleChat -
+which reads `.length` off what comes back - showed an empty chat log for ever.
+
+Measured on the TouchPad (probe 0.1.2), ten shapes:
+
+| in | out |
+|---|---|
+| `hello there` | unchanged |
+| `call 555-1234` | `call <a href="tel:555-1234">555-1234</a>` |
+| `www.example.com` | `<a href="http://www.example.com">www.example.com</a>` |
+| `a@b.com` | `<a href="mailto:a@b.com">a@b.com</a>` |
+| `(555) 123-4567`, `5551234567` | linked; the `tel:` href keeps the number exactly as written |
+| `1234`, `100-200`, `2026-09-21` | unchanged - it is a telephone grammar, not a digit count |
+| `a <b>bold</b> & 'quoted'` | unchanged; `&` is **not** escaped |
+| `already <a href="http://x">linked</a>` | the href's own text is linkified again inside it |
+
+That last row says what kind of thing it is: one naive pass over the whole string, markup and
+all. Lunacy's does the same, in a single pass so it can't re-process what it just inserted.
+
 ## Still unknown
 
 Honest list, for whoever picks this up:
 
-- **Only one app has run.** Single stage, two scenes, a slider and a canvas. Multi-stage
-  windows, scene transitions, the widget set, dashboards and banners from Mojo, and Mojo's own
-  service wrappers are all untried.
-- **Submission 2 is unresolved.** `mojo.js` maps `x-mojo-version="2"` to submission **344**,
-  and the device has neither `submissions/344` nor a `palmInitFramework344`. It does have
-  `palmInitFramework2205.js`, which is presumably a later Mojo 2.x build, but nothing has been
-  tested against it. A v2 app will currently 404 on the builtin and fail. Worth checking on a
-  device what a real Mojo 2 app loads.
-- **The other builtins** (`foundations`, `globalization`, `underscore`, `contacts`,
-  `mojo_core`) have never been loaded. They are V8 native scripts too and will need the same
-  treatment when something asks for them.
-- **Stage and window handling.** Mojo's multi-stage model maps onto cards the way Enyo's
-  `window.open` does, but none of that path has been exercised.
+- **Submission 344** is still unaccounted for: `mojo/mojo.js` maps `x-mojo-version="2"` to it
+  and the device has neither the submission nor a builtin. Nothing has asked for it.
+- **`palmcontactsVersion1_0`** is patched with the other builtins but has never been loaded.
+- **Scene transitions.** `PalmSystem.prepareSceneTransition` and `runSceneTransition` are
+  logged no-ops, so a scene change cuts rather than slides.
+- **Full-screen cards.** `PalmSystem.enableFullScreenMode` is a logged no-op, so the Video
+  Player's card keeps the status bar where a device hides it.
+- **Multi-stage windows** map onto cards the way Enyo's `window.open` does; only the Video
+  Player's own card has exercised that path.
+- **The frameworks MojoLoader can reach** are only the ones something has needed so far.
+  `mediaextension`, which drPodder asks for, still 404s.
 
 ## How to debug a Mojo app here
 
 - The bus log names every call: `adb logcat -v brief Lunacy:V '*:S'` and look for
   `bus [<appid>] <service>/<method>` with `UNHANDLED` on the ones nobody answers.
-- `Workbench/cdp.sh eval '<expr>' <appid>` reaches into the page. Useful ones:
-  `Mojo.Host.current`, `Mojo.getLaunchParameters()`,
-  `Mojo.Controller.getAppController().getActiveStageController().topScene().sceneName`.
-- `Mojo.Log.info` output only appears when the app's own logging is on; absence of a log line
-  proves nothing about whether the code ran.
+- `Workbench/cdp.sh eval '<expr>' <appid>` reaches into the page. Note that a card is a
+  *second* page: `index.html?…&window=card` holds the scenes and the assistants, while the
+  plain `index.html` is the app's root window, and each has its own `Mojo`. In the card,
+  `Mojo.Controller.stageController.topScene()` is the scene, and
+  `topScene().getWidgetSetup("<id>")` shows a widget's attributes and model.
+- `Mojo.Log.info` output only appears when the app's own logging is on
+  (`framework_config.json`'s `logLevel`); absence of a log line proves nothing about whether
+  the code ran.
+- Mojo catches an exception in a widget's `setup()` and reports it as a string with no stack.
+  If something fails in a way that makes no sense, look for a swallowed exception first.

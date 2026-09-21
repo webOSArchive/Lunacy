@@ -88,6 +88,18 @@ show live data. Per-app results and every fix, with the layer it landed in, are 
     codepoet's call, like Mojo's.
 - **Mojo runs (2026-09-20).** Flying Toasters, a Mojo app installed from a package, runs and
   works as an Exhibition app. Phase 5 is open early; see below.
+- **The Mojo suite runs (2026-09-21).** drPodder Redux, IAmA reddit, MeTube, Check Mate and
+  SimpleChat - the apps codepoet named as the ones that must work - all run, and so does
+  Palm's own **Video Player**, which is a **Mojo 2** app and which MeTube hands every video
+  to. MeTube works end to end: search, the server-side conversion, and playback in the Video
+  Player's own card. Check Mate creates an account, logs in and syncs a task; SimpleChat
+  shows the live chat log; both updated themselves from the App Museum on the way (each
+  update changes the app id, so the old copy stays until it is removed). Nine fixes, all in
+  general layers, three of them settled by measuring the reference TouchPad: what webOS's
+  parser does with `<script src="x" />`, what WebSQL's `openDatabase` and `SQLError.message`
+  look like there, and what `PalmSystem.runTextIndexer` returns. [mojo.md](mojo.md) has them;
+  [fix-log.md](fix-log.md) has the rest, and the services these apps still ask for that
+  nobody answers.
 - **Exhibition (2026-09-20).** Palm's Clock and Exhibition apps are bundled and run unchanged.
   The Exhibition app's Start Exhibition button puts the shell into webOS's dock mode, where it
   draws the Time face itself as LunaSysMgr did - all four of the reference TouchPad's faces,
@@ -299,14 +311,27 @@ inside Lunacy.
 **Started 2026-09-20**, ahead of its phase: an Exhibition app from the Museum (Flying Toasters)
 turned out to be Mojo, and it runs. Palm's own Mojo is served from the reference TouchPad with
 its own patch series and NOTICE, as Enyo is; see "Mojo" in the architecture doc for how it is
-packaged and what had to change. One app is not a phase, though - the exit criterion stands.
+packaged, and [mojo.md](mojo.md) for everything measured.
+
+**2026-09-21:** the suite codepoet named as the apps that must work all run - drPodder Redux,
+IAmA reddit, MeTube, Check Mate and SimpleChat - and with them **Mojo 2**, because MeTube
+hands every video to Palm's own Video Player, which is a Mojo 2 app. Every fix landed in a
+general layer; none names an app. See [fix-log.md](fix-log.md) for the nine, and for what
+each app still asks for that nobody answers.
 
 - ~~Modernized Mojo at `/usr/palm/frameworks/mojo/…`, handled like Enyo, with its own change
   log.~~ Done in outline.
-- Multi-stage windows mapped to cards; scene transitions.
-- The services Mojo apps lean on that Lunacy hasn't got yet.
+- ~~Mojo 2 (`mojo2`, submission 205), MojoLoader and the frameworks tree.~~ Done; the
+  frameworks copied into the APK are only the ones something has needed.
+- Multi-stage windows mapped to cards; scene transitions
+  (`PalmSystem.prepareSceneTransition` and `runSceneTransition` are logged no-ops).
+- Full-screen cards (`PalmSystem.enableFullScreenMode`), which a video player wants.
+- The services Mojo apps lean on that Lunacy hasn't got yet: the download manager,
+  `com.palm.power`'s timeouts, `com.palm.audio`, `com.palm.accountservices`.
 
-**Exit:** a Mojo test suite of popular App Museum apps runs without per-app code.
+**Exit:** a Mojo test suite of popular App Museum apps runs without per-app code. The suite
+exists as a list in [fix-log.md](fix-log.md); what it still needs is to be *run* rather than
+driven by hand, which is the same missing test suite phase 1 is waiting on.
 
 ## 6: JS services (brought forward, running; see the architecture doc)
 

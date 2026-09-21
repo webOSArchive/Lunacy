@@ -150,6 +150,39 @@ Found while testing the apps below; each is general, not tied to one app.
   down). The keyboard changes which widgets are on screen, and, behind a translucent Mojo
   dialog, what shows through it.
 
+  **The artwork can't fix it** (codepoet asked, 2026-09-21). Taking Enyo's `radiobutton.png`,
+  the asset behind the profile above:
+  - the source is **uniform** `(44, 100, 154)` for twenty columns either side of the slice
+    line, and **fully opaque** there, so the seam's colour is in neither the pixels nor the
+    alpha;
+  - nothing leaks through from behind: painting the element's border box magenta leaves the
+    seam pixel bit-identical, so the nine pieces do cover it;
+  - narrowing the middle slice from eight source columns to one, served as a data URL,
+    changes the rendering not at all - so it isn't the interpolation across the stretch;
+  - and the clincher: the *same* source pixel comes out **99** where it is drawn 1:1 in a cap
+    and **96** where it is drawn stretched in the middle. Which of the nine pieces a pixel
+    belongs to decides its colour, and no edit to the image can reach that.
+
+  **A different WebView doesn't fix it either.** The factory WebView 37 and WebView 64 are
+  wrong in different ways, neither matching the device (the caps are columns 0-15 and 36-51,
+  the stretched middle lies between):
+
+  | | across the button |
+  |---|---|
+  | reference TouchPad | `99 99 99  99 99 99 99 99 99 99 99  99 99 99` |
+  | WebView 37 | `99 99 99  ` **`96 96 96 96 96 96 96 96`** ` 99 99 99` |
+  | WebView 64 | `97 97 97  ` **`92`** ` 97 97 97 97 97 97 ` **`92`** ` 97 97 97` |
+
+  37 draws the caps exactly and tints the stretched middle three levels; 64 draws the whole
+  widget two levels off and puts a one-pixel line at each join. (Palm's Clock does render
+  correctly on the factory WebView 37, which is the first time the shipped app has been seen
+  on it - phase 1's "runs on WebView 37" is closer than the roadmap says.)
+
+  So the only thing that removes it is an exact one-to-one mapping, and the only lever on
+  that is the display density. What would also work, and is not worth it for three levels of
+  grey, is not using `-webkit-border-image` for these frames at all - re-authoring Enyo's and
+  Mojo's theme CSS widget by widget, changing how they look in the process.
+
   `Workbench/seams.sh` finds the candidates in a running card; the verdict is still a
   reference comparison, because a one-pixel step at a slice boundary can equally be the
   artwork's own highlight.

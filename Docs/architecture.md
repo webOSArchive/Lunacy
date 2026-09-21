@@ -190,6 +190,16 @@ product; being "close enough" is not the goal.
     taps only, not drags, so without help no scroller moves. A global script converts
     touches into `mousedown`/`mousemove`/`mouseup` and `click`, and cancels native touch
     handling. Spike 1 showed it fixes every scroller at once.
+  - *The keyboard, the other half of that model.* LunaSysMgr's virtual keyboard put real key
+    events into the page, so a keystroke arrived as `keydown`, `keypress` and `keyup` with
+    the character's own code. Android's keyboards are input methods: a soft keyboard commits
+    text through the IME, `keydown` and `keyup` carry 229 (the "ask the IME" sentinel) and
+    **no `keypress` is dispatched at all**. Code written for webOS reads `keypress`, so with
+    a soft keyboard it never runs - Mojo hides a text field's hint from its keypress handler,
+    which is why an app's placeholder stayed behind what was being typed. The compat layer
+    sends the keypress a device sent, from the `textInput` event: it fires before the text is
+    inserted and is cancelable, where a device's keypress sat, so a listener that stops it
+    still keeps the character out. Only when no real keypress came.
   - *Flicks.* Enyo's and Mojo's scrollers only coast after a flick the host reports. On
     webOS, LunaSysMgr measured it (FlickGestureRecognizer: the last 3 samples, above
     500 px/s, velocity = displacement ÷ (elapsed × samples)). WindowedWebApp then called

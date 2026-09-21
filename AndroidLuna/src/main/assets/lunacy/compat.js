@@ -74,6 +74,50 @@
 	document.addEventListener("touchcancel", end, opts);
 })();
 
+// The other half of the webOS input model: the keyboard. LunaSysMgr's virtual keyboard put
+// real key events into the page, so a keystroke arrived as keydown, keypress and keyup with
+// the character's own code. Android's keyboards are input methods, and a soft keyboard
+// commits text through the IME instead. Measured on the HP 10 G2, typing "a":
+//
+//   soft keyboard   keydown keyCode=229 -> textInput data="a" -> input -> keyup keyCode=229
+//   key injection   keydown keyCode=82  -> keypress keyCode=charCode=114 -> textInput -> input -> keyup
+//
+// 229 is the standard "ask the IME" sentinel, and **no keypress is dispatched at all**. Code
+// written for webOS reads keypress, so with a soft keyboard it simply never runs: Mojo hides
+// a text field's hint text from its keypress handler, so an app's placeholder stayed behind
+// what was being typed, and the same handler's charsAllow filter never rejected anything.
+//
+// So the character is delivered as the keypress a device sent. textInput fires before the
+// text is inserted and is cancelable, which is where a device's keypress sat too, so a
+// listener that stops the event still keeps the character out. A real keypress means a real
+// key: the synthetic one is only sent when none came.
+(function () {
+	var sawKeypress = false;
+	document.addEventListener("keydown", function () { sawKeypress = false; }, true);
+	document.addEventListener("keypress", function () { sawKeypress = true; }, true);
+	document.addEventListener("textInput", function (e) {
+		if (sawKeypress) { return; }
+		var data = e.data;
+		if (typeof data !== "string" || !data.length) { return; }
+		var target = e.target || document.activeElement;
+		if (!target || !target.dispatchEvent) { return; }
+		// An IME can commit several characters at once (a predicted word, an autocorrection).
+		// Each gets its own keypress, as typing them would have; one refusal stops the lot,
+		// because half a commit can't be inserted.
+		for (var i = 0; i < data.length; i++) {
+			var code = data.charCodeAt(i);
+			var ev = document.createEvent("Events");
+			ev.initEvent("keypress", true, true);
+			// A generic Event has no key fields of its own, so these are plain properties -
+			// which is what a listener reads.
+			ev.keyCode = code;
+			ev.charCode = code;
+			ev.which = code;
+			if (!target.dispatchEvent(ev)) { e.preventDefault(); return; }
+		}
+	}, true);
+})();
+
 // Uncaught script errors reach only the console. The reference TouchPad (WebKit 534.6)
 // has window.onerror but never calls it, and dispatches no "error" event to window listeners
 // (Workbench/probe 0.0.5). Some apps install onerror overlays that were never seen on a device.

@@ -75,6 +75,7 @@ fixed-viewport fallback is allowed).
 | 2026-09-21 | The screen goes out during a film | MeTube 2.3.0, Palm's Video Player, any app that blocks the screen timeout | `PalmSystem.setWindowProperties` was a logged no-op | shell and compat (`blockScreenTimeout` holds Android's screen on while any window asks; the other properties are still logged) |
 | 2026-09-21 | An uncaught TypeError appears in the app's console at every card open | every app with a `window.open` window | Lunacy's own page-finished diagnostic read `document.body` unguarded, and a window.open transport finishes with no body. It looked like the app's fault | shell (guarded) |
 | 2026-09-21 | The shell crashes at startup and keeps crashing | development over adb, with a malformed `--es params` | The activity is singleTask, so Android replays the intent that crashed it; `JSONObject(params)` threw out of `onCreate` | shell (a bad `params` is reported and the app launches without them) |
+| 2026-09-21 | Typed text lands on top of a field's placeholder, which never goes away | webOS SimpleChat 1.9.2 (any Mojo text field with `hintText`, and any app that reads `keypress`) | LunaSysMgr's virtual keyboard put real key events into the page; Android's soft keyboards are input methods, so `keydown`/`keyup` carry 229 and **no `keypress` is dispatched**. Mojo hides the hint from its keypress handler, and the same handler's `charsAllow` filter never ran either. Measured on the HP 10 G2: the soft keyboard gives `keydown 229 → textInput → input → keyup 229`, key injection gives `keydown → keypress → textInput → input → keyup` | compat (the character is delivered as the keypress a device sent, from `textInput`, and only when no real keypress came) |
 | 2026-09-21 | An app meant to be invisible gets a launcher icon | Palm's Video Player (any app with `"visible": "false"`) | `appinfo.json`'s `visible` was never read. webOS used it for apps that are part of the platform and are launched by another app | shell (the launcher and the dock draw only the visible apps; `listApps` and launching by id are unchanged, as on a device) |
 
 ## Known gaps, by the layer they belong to
@@ -135,6 +136,10 @@ Found while testing the apps below; each is general, not tied to one app.
   MojoLoader for it) and the other libraries 404 until they are added to `fetch-assets.sh`.
 - **shell, full-screen cards:** `PalmSystem.enableFullScreenMode` is still a logged no-op, so
   a video player's card keeps the status bar where a device hides it.
+- **compat, Enter from a soft keyboard:** the keypress fix covers printable characters,
+  which is what the IME swallows. Enter still arrives as a real `keydown`/`keyup` with
+  keyCode 13 and no `keypress`, where a device sent one. Mojo reads Enter on keyup, so the
+  suite is unaffected, but an app that submits on a keypress of 13 would not.
 
 ## Apps tested
 

@@ -82,6 +82,16 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     val cards = ArrayList<Card>()
     var maximized: Card? = null
         private set
+    /** The card being maximized, while its animation runs. */
+    private var activating: Card? = null
+    /**
+     * The card that owns the screen: the maximized one, or the one on its way there. webOS
+     * drew the same distinction - CardWindow::slotShowIME asks for the *active* window, not
+     * the maximized one, "to handle cases where keyboard is being brought up when an app is
+     * being maximized", which is exactly what an app that focuses a field as its first scene
+     * is built does.
+     */
+    val active: Card? get() = maximized ?: activating
     /** Card-view scroll position, in cards. */
     private var position = 0f
     private var anim: ValueAnimator? = null
@@ -185,6 +195,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         if (i < 0) return
         cards.removeAt(i); removeView(card)
         if (maximized == card) maximized = null
+        if (activating == card) activating = null
         position = min(position, max(cards.size - 1f, 0f))
     }
 
@@ -219,7 +230,9 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         position = i.toFloat()
         cards.forEach { it.visibility = View.VISIBLE }
         card.bringToFront()
+        activating = card
         animateTo(Params.MAXIMIZE_MS, { j -> if (j == i) Triple(width / 2f, height / 2f, 1f) else cardViewTarget(j) }, Easing.OutQuart) {
+            activating = null
             maximized = card
             cards.forEach { if (it != card) it.visibility = View.INVISIBLE }
             listener.onMaximized(card)
@@ -229,6 +242,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     fun showCardView() {
         val was = maximized
         maximized = null
+        activating = null
         cards.forEach { it.visibility = View.VISIBLE }
         if (was != null) position = cards.indexOf(was).toFloat()
         animateTo(Params.MINIMIZE_MS, ::cardViewTarget, Easing.OutCubic)

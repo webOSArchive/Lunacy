@@ -159,6 +159,17 @@ class AppWindow(context: Context, val appId: String, private val host: WindowHos
         evaluateJavascript("(function(){try{if(window.Mojo&&Mojo.$fn){Mojo.$fn($argsJson);}}catch(e){console.error('Mojo.$fn: '+e);}})()", null)
 
     /**
+     * Drops the page's input focus, the way webOS put its keyboard away. Dismissing the
+     * virtual keyboard there didn't hide a view: IMEController::hideIME asked the web app to
+     * removeInputFocus, WebKit blurred the focused node and the keyboard went with it. So an
+     * app that watches its field's focus - and that is all Mojo gives it - hears about the
+     * keyboard going down. Android's IME just hides, leaving the field focused, so the shell
+     * has to do this part itself.
+     */
+    fun removeInputFocus() = evaluateJavascript(
+        "(function(){try{if(window.__lunacyRemoveInputFocus){__lunacyRemoveInputFocus();}}catch(e){console.error('removeInputFocus: '+e);}})()", null)
+
+    /**
      * Relaunches the app as LunaSysMgr did: launchParams become params (JSON, or "" for none),
      * then Mojo.relaunch() runs. done gets whether the app handled it; if not, the shell
      * brings the app's first card forward.

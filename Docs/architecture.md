@@ -582,8 +582,15 @@ apps depend on it as much as Mojo apps do.
 - **Back gesture.** Delivered to the focused card as the Escape key event Enyo and Mojo
   expect. Android's back maps to the same event.
 - **Keyboard.** The Android keyboard follows webOS's two modes (Enyo's `enyo.keyboard`).
-  In automatic mode, the default, it shows while a text field in the maximized card has
-  focus, and a tap on a focused field brings it back. In manual mode
+  In automatic mode, the default, it shows while a text field in the active card has focus -
+  whoever focused it, the app itself as much as a tap - and a tap on an already focused field
+  brings it back. "Active" includes a card still animating open, because an app often focuses
+  a field as its first scene is built; LunaSysMgr made the same allowance. The active card's
+  window holds Android's focus, without which a WebView dispatches no focus events at all.
+  Putting the keyboard away takes the field's focus with it, which is how webOS did it:
+  `IMEController::hideIME` asked the page to `removeInputFocus` and the keyboard followed the
+  blur, rather than the other way round. That matters because Mojo gives an app no other way
+  to notice the keyboard. In manual mode
   (`PalmSystem.setManualKeyboardEnabled(true)`) only `keyboardShow` and `keyboardHide` move
   it. While it shows, the card shrinks to the space above it: `Mojo.keyboardShown(true)`
   comes first, and on hiding the card grows back before `Mojo.keyboardShown(false)`. A

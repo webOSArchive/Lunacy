@@ -398,14 +398,28 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
     }
 
-    /** Only the maximized card's window gets the keyboard, as on webOS. */
+    /** A window that asked for the keyboard before its card had finished opening. */
+    private var keyboardWanted: AppWindow? = null
+
+    /**
+     * Only the active card's window gets the keyboard, as on webOS - and "active" means the
+     * card on its way to maximized as well as the one already there. An app that focuses a
+     * field while its first scene is built (webOS SimpleChat's compose box) asks for the
+     * keyboard during the open animation; LunaSysMgr made the same allowance, in so many
+     * words (CardWindow::slotShowIME). The request is repeated once the card has settled,
+     * because the view can't take focus while it is still being animated into place.
+     */
     override fun keyboard(window: AppWindow, show: Boolean) {
         if (show) {
-            if (cards.maximized?.window != window) return
+            if (cards.active?.window != window) return
+            keyboardWanted = if (cards.maximized?.window == window) null else window
             window.requestFocus()
             imm.showSoftInput(window, 0)
-        } else if (keyboardHeight > 0 && cards.maximized?.window == window) {
-            imm.hideSoftInputFromWindow(window.windowToken, 0)
+        } else {
+            keyboardWanted = null
+            if (keyboardHeight > 0 && cards.maximized?.window == window) {
+                imm.hideSoftInputFromWindow(window.windowToken, 0)
+            }
         }
     }
 
@@ -414,7 +428,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * visible frame gives its height. As LunaSysMgr did: Mojo.keyboardShown(true), then the
      * card shrinks to the space above the keyboard (or, for a window that asked not to be
      * resized, Mojo.positiveSpaceChanged reports that space); on hiding, the card grows back
-     * and Mojo.keyboardShown(false) follows.
+     * and Mojo.keyboardShown(false) follows, and the page's input focus goes with the
+     * keyboard, which is how webOS put it away (AppWindow.removeInputFocus).
      */
     private fun watchKeyboard(root: View) = root.viewTreeObserver.addOnGlobalLayoutListener {
         val r = android.graphics.Rect()
@@ -433,6 +448,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             lp.bottomMargin = 0; cards.layoutParams = lp
             if (w != null && !resized) w.callMojo("positiveSpaceChanged", "${Math.round(cards.width / luna.density)},${Math.round(cards.height / luna.density)}")
             w?.let { win -> cards.post { win.callMojo("keyboardShown", "false") } }
+            w?.removeInputFocus()
             goImmersive()  // Android shows its bars with the keyboard and leaves them up
         }
     }
@@ -903,12 +919,22 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     override fun onMaximized(card: Card) {
         quickLaunch.cancelLaunchFeedback()
+        // A keyboard asked for while this card was still opening (see keyboard()).
+        if (keyboardWanted == card.window) {
+            keyboardWanted = null
+            card.window.requestFocus()
+            imm.showSoftInput(card.window, 0)
+        }
         statusBar.title = registry.get(card.window.appId)?.title ?: card.window.appId
         statusBar.setMode(StatusBar.Mode.APP)
         if (launcherOpen) closeLauncher()
         fade(justType, false); showDock(false)
         card.window.setStageActive(true)
         cards.cards.filter { it != card }.forEach { it.window.setStageActive(false) }
+        // The active card's page holds the focus, as webOS's did. Without it document.hasFocus()
+        // is false, and Chromium then sets activeElement without dispatching focus or focusin -
+        // so an app that focuses a field itself is invisible to the bridge and gets no keyboard.
+        card.window.requestFocus()
     }
 
     /**

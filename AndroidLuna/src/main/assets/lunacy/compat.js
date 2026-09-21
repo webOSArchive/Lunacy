@@ -64,13 +64,13 @@
 	 * text field listens for a tap on its widget and calls focus(), so blurring here took the
 	 * focus straight back off it and SimpleChat's compose box could not be typed into.
 	 *
-	 * So: if something took focus, the keyboard follows it (the bridge's focusin listener
-	 * would normally do that, but Mojo focuses through a reference to the field's own focus
-	 * method taken while the widget was built, and no focusin arrives from it). If nothing
-	 * did, a tap away from the focused field puts the keyboard down, as a device did - and a
-	 * tap *inside* that field's own widget is not a tap away from it. Mojo draws a field's
-	 * hint text as a sibling of the input, so tapping the hint of an already-focused field
-	 * has to raise the keyboard, not dismiss it.
+	 * So: if something took focus, the keyboard follows it - the bridge's focusin listener
+	 * does that on its own. If nothing did, a tap away from the focused field puts the
+	 * keyboard down, as a device did - and a tap *inside* that field's own widget is not a
+	 * tap away from it. Mojo draws a field's hint text as a sibling of the input, so tapping
+	 * the hint of an already-focused field has to raise the keyboard, not dismiss it; that
+	 * tap changes nothing about focus, so no focusin comes and the keyboard has to be asked
+	 * for here.
 	 */
 	function afterTap(target, before) {
 		setTimeout(function () {
@@ -161,6 +161,28 @@
 			if (!target.dispatchEvent(ev)) { e.preventDefault(); return; }
 		}
 	}, true);
+})();
+
+// Putting the keyboard away takes the field's focus with it, as webOS did.
+//
+// On webOS the keyboard was never simply hidden. Dismissing it - its hide key, a swipe down,
+// an app asking - reached IMEController::hideIME, which didn't hide anything: it asked the
+// web app to removeInputFocus, WebKit blurred the focused node, and the keyboard went away
+// because nothing was focused any more. Android's IME is the other way round: it hides, and
+// the field keeps focus and its caret.
+//
+// That difference is visible, because a Mojo app has no other way to hear about the keyboard.
+// Mojo has no keyboardShown of its own, so an app watches its field's focus instead:
+// SimpleChat sizes its chat log from document.activeElement (bottomBuffer 600 with the field
+// focused, 260 without), so with the field still focused the space stayed reserved for a
+// keyboard that wasn't there. The shell calls this when the keyboard goes down.
+(function () {
+	window.__lunacyRemoveInputFocus = function () {
+		var el = document.activeElement;
+		if (!el || el === document.body || !el.blur) { return; }
+		if (!/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && !el.isContentEditable) { return; }
+		el.blur();
+	};
 })();
 
 // The focused field stays in view while the keyboard is up.

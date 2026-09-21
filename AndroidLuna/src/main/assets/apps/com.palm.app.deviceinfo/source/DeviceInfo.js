@@ -212,7 +212,9 @@ enyo.kind({
 enyo.kind({
 	name: "InfoRow",
 	kind: "Item",
-	className: "info-row",
+	// enyo-item is Item's own class and carries the row's padding; naming a class here
+	// replaces it rather than adding to it, so it has to be spelled out.
+	className: "enyo-item info-row",
 	tapHighlight: false,
 	layoutKind: "HFlexLayout",
 	//* small: for a value too long for the row's usual size, like a 40-digit device id.

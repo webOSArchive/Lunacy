@@ -24,33 +24,42 @@ body {
  * A row, matched to the rows Palm's own Device Info draws on the reference TouchPad. Those
  * are Mojo's, and its stylesheet is the measurement (submission 506, global-lists.css):
  *
- *   .palm-row        { min-height: 51px }
- *   .palm-row .label { font-size: 14px; color: #1f75bf;
- *                      text-shadow: #ffffff 0px 1px 0px; margin: 18px 12px 0 0 }
- *   .palm-row .title { font-size: 20px; padding: 13px 14px 15px 14px }
+ *   .palm-row.disabled { color: #898989 }
+ *   .palm-row          { min-height: 51px }
+ *   .palm-row .label.left { font-size: 14px; color: #1f75bf;
+ *                      text-shadow: #ffffff 0px 1px 0px; margin: 18px 0 0 12px }
+ *   .palm-row .title   { font-size: 20px; padding: 13px 14px 15px 14px }
+ *
+ * Palm's own Device Info draws every one of these rows as `palm-row disabled` - they are
+ * read-only, not tappable - so the value's grey is the disabled colour and comes from the
+ * row, not the value. (app/views/list/item.html on the reference TouchPad.)
  *
  * The white shadow under the label is what makes it read as solid rather than thin, and the
  * label is set down from the top of the row rather than centred in it - on the device its
  * ink sits just below the row's middle, not above it.
  */
 .info-row {
+	/* Enyo's own item brings 10px of padding; the offsets below are Mojo's, less that. */
+	color: #898989;
 	min-height: 51px;
+	-webkit-box-sizing: border-box;
+	box-sizing: border-box;
 	-webkit-box-align: start;
 }
 .info-label {
 	color: #1f75bf;
 	text-shadow: #ffffff 0px 1px 0px;
 	font-size: 14px;
-	margin-top: 18px;
+	margin: 8px 0 0 2px;
 	text-transform: uppercase;
 	padding-right: 12px;
 	white-space: nowrap;
 }
 .info-value {
 	text-align: right;
-	color: #555;
 	font-size: 20px;
-	margin-top: 13px;
+	margin-top: 3px;
+	padding-right: 4px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;

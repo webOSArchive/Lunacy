@@ -29,12 +29,12 @@ class SystemProperties(private val context: Context) {
         // DMMODEL.
         "com.palm.properties.PRODoID" to profile.model,
         "com.palm.properties.boardType" to profile.boardType,
-        "com.palm.properties.DMCARRIER" to "",
-        "com.palm.properties.productLineVersion" to "1.0",
+        "com.palm.properties.DMCARRIER" to profile.carrierName,
+        "com.palm.properties.productLineVersion" to profile.productLineVersion,
         "com.palm.properties.buildName" to profile.buildName,
         "com.palm.properties.buildNumber" to profile.buildNumber,
-        "com.palm.properties.browserOsName" to "hpwOS",
-    )
+        // 2.2.4 hasn't got browserOsName at all, so a Pre3 must answer "no such key" for it.
+    ) + listOfNotNull(profile.browserOsName?.let { "com.palm.properties.browserOsName" to it })
 
     fun register(bus: Bus) {
         bus.register("com.palm.preferences", "systemProperties/Get") { _, p, reply ->

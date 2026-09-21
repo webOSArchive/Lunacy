@@ -438,21 +438,30 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val long = (maxOf(dm.widthPixels, dm.heightPixels) / dm.density).toInt()
         val short = (minOf(dm.widthPixels, dm.heightPixels) / dm.density).toInt()
         val d = profile
+        // Which side the device calls its width: a TouchPad names its screen 1024 x 768, a
+        // Pre3 names its own 480 x 800. Measured on both (Docs/pre3.md).
+        val w = if (d.naturalLandscape) long else short
+        val h = if (d.naturalLandscape) short else long
         return JSONObject(mapOf(
             "modelName" to d.modelName, "modelNameAscii" to d.modelNameAscii,
             "platformVersion" to d.platformVersion, "platformVersionMajor" to d.platformVersionMajor,
             "platformVersionMinor" to d.platformVersionMinor, "platformVersionDot" to d.platformVersionDot,
-            "carrierName" to "", "serialNumber" to org.webosarchive.lunacy.card.DeviceProfile.serial(this, d),
-            "screenWidth" to long, "screenHeight" to short,
-            "minimumCardWidth" to long, "minimumCardHeight" to d.minimumCardHeight,
-            "maximumCardWidth" to long, "maximumCardHeight" to short - StatusBar.HEIGHT,
+            "carrierName" to d.carrierName,
+            "serialNumber" to org.webosarchive.lunacy.card.DeviceProfile.serial(this, d),
+            "screenWidth" to w, "screenHeight" to h,
+            "minimumCardWidth" to w, "minimumCardHeight" to d.minimumCardHeight,
+            "maximumCardWidth" to w, "maximumCardHeight" to h - d.positiveSpaceTopPadding,
             "touchableRows" to d.touchableRows,
             "keyboardAvailable" to d.keyboardAvailable, "keyboardSlider" to d.keyboardSlider,
             "keyboardType" to d.keyboardType,
             "wifiAvailable" to true, "bluetoothAvailable" to d.bluetoothAvailable,
-            "carrierAvailable" to d.carrierAvailable,
+            // The TouchPad has this member between bluetoothAvailable and coreNaviButton; the
+            // Pre3 hasn't got it at all, and a page that enumerates deviceInfo would see it.
+            *(if (d.reportsCarrierAvailable) arrayOf("carrierAvailable" to d.carrierAvailable) else emptyArray()),
             "coreNaviButton" to d.coreNaviButton, "swappableBattery" to d.swappableBattery,
-            "dockModeEnabled" to false,
+            // True on both reference devices, and Lunacy has dock mode: the Exhibition app
+            // puts the shell into it, and Android's screen saver starts it.
+            "dockModeEnabled" to true,
         )).toString()
     }
 

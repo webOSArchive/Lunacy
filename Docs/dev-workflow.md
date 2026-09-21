@@ -96,6 +96,11 @@ adb shell am start -n org.webosarchive.lunacy/.shell.ShellActivity \
 
 Reached over novacom (`novacom`, `novaterm` and the `palm-*` SDK tools).
 
+A **bone-stock TouchPad (HP webOS 3.0.5)** is available too, and is the control for telling
+HP's behaviour from LunaCE's. Its `/etc/palm` is byte-identical to the reference device's; see
+the note in [luna-shell-reference.md](luna-shell-reference.md). `novacom -l` names them
+`topaz-linux` either way, so connect one at a time.
+
 - **`luna-send` needs a pty.** Its output is lost under `novacom run`. `Workbench/tp.sh
   '<command>' [wait]` runs a command through `novaterm`.
 - **Screenshots:** `Workbench/tpshot.sh <name> [rotation]` (`-90` for portrait; `90`, then
@@ -122,6 +127,19 @@ Reached over novacom (`novacom`, `novaterm` and the `palm-*` SDK tools).
   what the server saw. Install the same `.ipk` in Lunacy (`adb push` it to
   `/data/local/tmp`, then `--es install`) and compare the two logs line by line. Run `palm-log -f org.webosarchive.lunacy.probe`, then `palm-launch` it, and
   add a check to `probe.js` when a question comes up.
+
+## Reference Pre3 (HP webOS 2.2.4)
+
+An AT&T Pre3, reached over novacom exactly as the TouchPad is — `Workbench/tp.sh` and
+`novacom get` both work against it unchanged. It is the phone-shaped reference, and what it
+reports is written up in [pre3.md](pre3.md).
+
+- **It is patched, not upgraded** (community patches through Preware, no Luna or OS upgrade),
+  so `/etc/palm` mixes stock and patched files. Modification time tells them apart: the build
+  date is stock, and a patched file leaves a `.webosinternals.orig` beside it. Read the
+  `.orig`.
+- **`systemProperties/Get` takes one `key`** on 2.2.4, not the TouchPad's `keys` array.
+- **No `takeScreenShot`** was tried here; the TouchPad's screenshot route is untested on 2.2.4.
 
 ## How changes are checked
 

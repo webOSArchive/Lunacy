@@ -25,6 +25,20 @@ linked to the line it came from. Links have the form
   `card-shadow-tile`, `Just type` are present); (3) diffed against the open-webOS
   `luna-sysmgr` tree (HP's 2012 source release, later edited by LG). Where only (3) was
   available the tag says so.
+* **Config files: stock and CE are the same file.** Settled on hardware on 2026-09-21 by
+  diffing a bone-stock TouchPad (HP webOS 3.0.5, `Nova-HP-Topaz` build 86) against the
+  reference device (webOS CE 3.1.0). `luna.conf`, `luna-platform.conf`, `lunaAnimations.conf`,
+  `notificationPolicy.conf`, `persistentWindows.conf`, `defaultPreferences-platform.txt` and
+  `default-launcher-page-layout.json` are **byte-identical**. So every geometry, ratio and
+  easing value this document takes from the reference device's `/etc/palm` is HP's own, not a
+  LunaCE change, and needs no `[LunaCE]`/`[stock]` judgement.
+
+  CE's only config change is three added lines in `defaultPreferences.txt`:
+  `x_palm_virtualkeyboard_settings` (`{"keyboard size": -1}`),
+  `sysUiUseCustomCarrierString` (`true`) and `sysUiCarrierString` (`"webOS CE"`) — which is the
+  mechanism Lunacy already uses for its own "Lunacy" carrier text. The tagging above still
+  matters for behaviour compiled into the binary; it no longer matters for the config.
+
 * Qt `QEasingCurve::Type` values appear as integers in the animation config. Mapping
   (Qt 4.8 enum order — **external**, from the Qt docs, not LunaCE:
   <https://doc.qt.io/archives/qt-4.8/qeasingcurve.html#Type-enum>):

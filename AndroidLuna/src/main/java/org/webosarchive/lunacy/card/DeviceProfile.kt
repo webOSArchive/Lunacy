@@ -21,25 +21,37 @@ import android.os.Build
  * A device's own identity - its serial and its nduid - is made up per install rather than
  * copied from anyone's device: it is a TouchPad-shaped serial, not a particular TouchPad's.
  *
- * The TouchPad's values are measured on the reference device (Docs/spike-1.md,
- * Workbench/results/touchpad-net.txt, luna-send on the device). The Pre3's are from the
- * community's record and have **not** been measured on hardware here; the first target is a
- * tablet, so nothing depends on them yet. Confirm them on a Pre3 before trusting them.
+ * Both devices' values are measured on hardware: the TouchPad's on the reference device
+ * (Docs/spike-1.md, Workbench/results/touchpad-net.txt, luna-send on the device), the Pre3's
+ * on 2026-09-21 (Docs/pre3.md). The Pre3 measured was an AT&T unit, so the values that
+ * carriers change - buildName, carrierName, carrierCode - are that unit's; an unlocked Pre3
+ * will differ, and Docs/pre3.md says so.
  */
 enum class DeviceProfile(
+    /** deviceInfo.modelName. Palm branded the phone "Pre" with a macron, so this isn't ASCII. */
     val modelName: String,
+    /** deviceInfo.modelNameAscii, and the deviceNameShort property. */
+    val modelNameAscii: String,
     val deviceName: String,
     /** DMMODEL and PRODoID, which apps key off to tell webOS devices apart. */
     val model: String,
     val boardType: String,
     val platformVersion: String,
     val userAgent: String,
-    /** X-Palm-Carrier, sent on every request. c090-01 is the WiFi TouchPad's. */
+    /** X-Palm-Carrier, sent on every request. c090-01 is the WiFi TouchPad's, c001-01 an AT&T Pre3's. */
     val carrierCode: String,
+    /** deviceInfo.carrierName and the DMCARRIER property. Empty on a WiFi TouchPad, "ATT" on that Pre3. */
+    val carrierName: String,
+    /** The productLineVersion property, which is also the device version the user agent ends with. */
+    val productLineVersion: String,
+    /** The browserOsName property. 2.2.4 hasn't got it, so null means "don't answer that key". */
+    val browserOsName: String?,
     val buildName: String,
     val buildNumber: String,
     /** The shape of an HP serial for this device: prefix plus random, per install. */
     val serialPrefix: String,
+    /** Characters after the prefix. A TouchPad serial is 10 long, the Pre3's 14. */
+    val serialBodyLength: Int,
     val keyboardAvailable: Boolean,
     val keyboardSlider: Boolean,
     val keyboardType: String,
@@ -47,13 +59,28 @@ enum class DeviceProfile(
     val carrierAvailable: Boolean,
     val coreNaviButton: Boolean,
     val swappableBattery: Boolean,
-    /** A phone's card fills the screen below the status bar; a tablet's has a minimum. */
     val minimumCardHeight: Int,
     val touchableRows: Int,
+    /**
+     * Whether deviceInfo reports the screen's long side as its width. A TouchPad says
+     * 1024 x 768 whichever way up it is; a Pre3 says 480 x 800. Neither changes when the
+     * screen turns - rotation reaches apps through screenOrientation - so this is just which
+     * way round the device names its own screen.
+     */
+    val naturalLandscape: Boolean,
+    /**
+     * PositiveSpaceTopPadding from the device's luna-platform.conf, which is what
+     * deviceInfo.maximumCardHeight is short of the screen: 28 on the TouchPad (its status bar
+     * height), 42 on the Pre3.
+     */
+    val positiveSpaceTopPadding: Int,
+    /** Whether deviceInfo carries a carrierAvailable member at all. The Pre3's hasn't got one. */
+    val reportsCarrierAvailable: Boolean,
 ) {
     /** Measured on the reference TouchPad (webOS CE 3.1.0). */
     TOUCHPAD(
         modelName = "TouchPad",
+        modelNameAscii = "TouchPad",
         deviceName = "HP TouchPad",
         model = "HSTNH-I29C",
         boardType = "topaz-Wifi-pvt\n",
@@ -61,52 +88,83 @@ enum class DeviceProfile(
         userAgent = "Mozilla/5.0 (hp-tablet; Linux; hpwOS/3.1.0; U; en-US) AppleWebKit/534.6 " +
             "(KHTML, like Gecko) wOSSystem/234.83 Safari/534.6 TouchPad/1.0",
         carrierCode = "c090-01",
+        carrierName = "",
+        productLineVersion = "1.0",
+        browserOsName = "hpwOS",
         buildName = "Nova-HP-Topaz",
         buildNumber = "86",
         serialPrefix = "5CL",
+        serialBodyLength = 7,
         keyboardAvailable = false,
         keyboardSlider = false,
         keyboardType = "Unknown",
-        bluetoothAvailable = false,
+        // The TouchPad has Bluetooth and reports it, whatever Lunacy can do with it: a service
+        // an app then calls gets an honest error, as any unimplemented one does.
+        bluetoothAvailable = true,
         carrierAvailable = false,
         coreNaviButton = false,
         swappableBattery = false,
         minimumCardHeight = 318,
         touchableRows = 14,
+        naturalLandscape = true,
+        positiveSpaceTopPadding = 28,
+        reportsCarrierAvailable = true,
     ),
 
-    /** Not measured on hardware: from the community's record. See the note above. */
+    /**
+     * Measured on an AT&T Pre3 (HP webOS 2.2.4) on 2026-09-21: Docs/pre3.md. The user agent
+     * and X-Palm-Carrier were read off the wire from an app context, the rest from
+     * PalmSystem.deviceInfo and systemProperties/Get on the device.
+     *
+     * Carrier-specific, and this unit's rather than every Pre3's: buildName, carrierName and
+     * carrierCode. An unlocked Pre3 would report its own; none was available to measure.
+     */
     PRE3(
-        modelName = "Pre3",
+        // Palm's own branding, and what deviceInfo reports: "Pre" with a macron.
+        modelName = "Prē3",
+        modelNameAscii = "Pre3",
         deviceName = "HP Pre3",
-        model = "P160UNA",
-        boardType = "mantaray-pvt\n",
+        model = "HSTNH-F30CN",
+        // No trailing newline, where the TouchPad's boardType has one.
+        boardType = "mantaray-pvt",
         platformVersion = "2.2.4",
-        userAgent = "Mozilla/5.0 (webOS/2.2.4; U; en-US) AppleWebKit/534.6 (KHTML, like Gecko) " +
-            "wOSBrowser/221.56 Safari/534.6 Pre/3.0",
-        carrierCode = "c000-01",
-        buildName = "Nova-Palm-Mantaray",
-        buildNumber = "1",
-        serialPrefix = "PRE",
+        // 2.2.4 names the product token webOSSystem, where 3.x uses wOSSystem, and has no
+        // device-class field before "Linux".
+        userAgent = "Mozilla/5.0 (Linux; webOS/2.2.4; U; en-US) AppleWebKit/534.6 " +
+            "(KHTML, like Gecko) webOSSystem/221.56 Safari/534.6 Pre/3.0",
+        carrierCode = "c001-01",
+        carrierName = "ATT",
+        productLineVersion = "3.0",
+        // 2.2.4 answers "no such key" for browserOsName.
+        browserOsName = null,
+        buildName = "Nova-ATT-Mantaray",
+        buildNumber = "2211",
+        // One unit's shape: four characters and ten more. Confirm on a second Pre3.
+        serialPrefix = "MTRE",
+        serialBodyLength = 10,
         keyboardAvailable = true,
         keyboardSlider = true,
         keyboardType = "QWERTY",
         bluetoothAvailable = true,
-        carrierAvailable = true,
-        coreNaviButton = true,
+        carrierAvailable = false,
+        // False on the device, though the Pre3 has a gesture area with a light bar.
+        coreNaviButton = false,
         swappableBattery = true,
-        minimumCardHeight = 0,
-        touchableRows = 8,
+        minimumCardHeight = 318,
+        touchableRows = 14,
+        naturalLandscape = false,
+        positiveSpaceTopPadding = 42,
+        // The Pre3's deviceInfo has no carrierAvailable member at all.
+        reportsCarrierAvailable = false,
     );
 
-    val modelNameAscii get() = modelName
-    val deviceNameShort get() = modelName
+    val deviceNameShort get() = modelNameAscii
     val platformVersionMajor get() = platformVersion.substringBefore('.').toInt()
     val platformVersionMinor get() = platformVersion.split('.').getOrElse(1) { "0" }.toInt()
     val platformVersionDot get() = platformVersion.split('.').getOrElse(2) { "0" }.toInt()
 
     /** What systemProperties/Get reports for com.palm.properties.version. */
-    val versionString get() = if (this == TOUCHPAD) "webOS CE $platformVersion" else "webOS $platformVersion"
+    val versionString get() = if (this == TOUCHPAD) "webOS CE $platformVersion" else "HP webOS $platformVersion"
 
     companion object {
         /**
@@ -117,7 +175,7 @@ enum class DeviceProfile(
             if (context.resources.configuration.smallestScreenWidthDp >= 600) TOUCHPAD else PRE3
 
         /**
-         * This device's serial, in HP's shape (prefix plus seven characters). Derived from the
+         * This device's serial, in HP's shape for this profile. Derived from the
          * same hardware ids as the device id, so it too survives a reinstall - some apps send
          * it to webOS Archive's services as well - and made up rather than copied: it says
          * "a TouchPad", not "codepoet's TouchPad".
@@ -126,7 +184,7 @@ enum class DeviceProfile(
             val alphabet = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ"
             val digest = java.security.MessageDigest.getInstance("SHA-1")
                 .digest(("lunacy-serial:" + profile.name + ":" + derivedNduid(context)).toByteArray())
-            return profile.serialPrefix + (0 until 7).map { alphabet[(digest[it].toInt() and 0xff) % alphabet.length] }.joinToString("")
+            return profile.serialPrefix + (0 until profile.serialBodyLength).map { alphabet[(digest[it].toInt() and 0xff) % alphabet.length] }.joinToString("")
         }
 
         /**

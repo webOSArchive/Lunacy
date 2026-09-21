@@ -36,9 +36,9 @@ show live data. Per-app results and every fix, with the layer it landed in, are 
     dialogs (see fix-log.md).
 - **Phase 2 (bus):** subscriptions and cancellation work. Answering: applicationManager
   (launch, open, listApps, Preware installs), connectionmanager, preferences
-  `systemProperties/Get`, activitymanager (foreground activities), and db8 and tempdb
-  ([db8.md](db8.md)). Everything else returns webOS's own errors. Not yet: keys, display,
-  zeroconf (codepoet: never worked, skip), background activities, the media indexer.
+  `systemProperties/Get`, activitymanager (foreground activities), keys (headset and media),
+  display, and db8 and tempdb ([db8.md](db8.md)). Everything else returns webOS's own errors.
+  Not yet: zeroconf (codepoet: never worked, skip), background activities, the media indexer.
 - **Phase 3 (shell):** well along. Card view, launcher, dock, status bar, banners (now
   matching the TouchPad), dashboards and popup alerts. The launcher has the launch glow and
   edit mode: reordering, moving icons between tabs (with the tab highlight), removing
@@ -98,8 +98,29 @@ show live data. Per-app results and every fix, with the layer it landed in, are 
   the chosen app included. Verified on the reference tablet: the dream starts the shell, the
   gear in Android's settings opens Palm's Exhibition app, coming off the charger leaves the
   mode, and leaving returns to whatever the screen saver interrupted.
+- **The Pre3 measured (2026-09-21).** A reference Pre3 was connected and surveyed:
+  [pre3.md](pre3.md). It settles the phone profile's values, and several of the community's
+  records it was built from are wrong (`PRODoID` is `HSTNH-F30CN`, not `P160UNA`; the user
+  agent carries a `Linux; ` prefix). It also shows the Pre3 runs LunaSysMgr's **tablet UI
+  path** at `ScaleFactor=1.5`, not the old phone shell, with its own card ratios (0.659/0.61).
+  `DeviceProfile.PRE3` is corrected from it, and the TouchPad profile's output is unchanged.
+  The user agent and `X-Palm-Carrier` were read off the wire from an app: the phone's product
+  token is `webOSSystem`, not the TouchPad's `wOSSystem`, so it could not have been reasoned
+  out. Two discrepancies in the *TouchPad* profile turned up on the way and are left alone,
+  corrected too: `bluetoothAvailable` and `dockModeEnabled` both disagreed with the reference
+  device. The TouchPad profile now reproduces that device's `deviceInfo` member for member,
+  checked on the HP 10 G2 against the reference device's recorded output.
+- **Stock 3.0.5 compared with CE 3.1.0 (2026-09-21).** A bone-stock TouchPad was connected
+  and its `/etc/palm` diffed against the reference device's. Every shell config file is
+  **byte-identical**; CE's only change is three added lines in `defaultPreferences.txt`
+  (the custom carrier string, which reads "webOS CE", and a virtual-keyboard setting). So the
+  geometry and easing values [luna-shell-reference.md](luna-shell-reference.md) takes from the
+  reference device are HP's own, not LunaCE's - a standing doubt in that doc, now closed.
+  `PRODoID` (`HSTNH-I29C`) and `boardType` (`topaz-Wifi-pvt\n`, newline included) are the same
+  on both; only `com.palm.properties.version` differs (`HP webOS 3.0.5` against
+  `webOS CE 3.1.0`).
 - **Next candidates:**
-  - the remaining startup services (keys, display) and the media indexer's db8 kinds;
+  - the media indexer's db8 kinds;
   - the rest of the settings apps: Date & Time, Language, Backup, Accounts, Updates, Location
     (each is one of the three cases above);
   - `activitymanager`'s scheduled activities, which is what the Clock's alarms need;
@@ -332,7 +353,8 @@ corpus survey says how many apps this phase can reach, and whether it is worth d
   wire, the system properties, and `X-Palm-Carrier`. The serial and `nduid` are generated per
   install rather than copied from a real device. Lunacy's own Device Info, the shell and the
   bus's service names stay truthful - the spoof is for apps, not a claim to be webOS. The
-  Pre3's values are the community's record and still need measuring on hardware.
+  Pre3's values were **measured on hardware on 2026-09-21** ([pre3.md](pre3.md)) and several
+  of the community's are wrong - `DeviceProfile.PRE3` has not been corrected yet.
 - **The device id is derived and can be carried over** (codepoet, 2026-09-20): `nduid` and the
   serial come from this device's own hardware ids, so a reinstall gives the same id back and
   the services' analytics don't see a new device; and Device Info lets its owner type in a

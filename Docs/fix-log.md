@@ -76,6 +76,9 @@ fixed-viewport fallback is allowed).
 | 2026-09-21 | An uncaught TypeError appears in the app's console at every card open | every app with a `window.open` window | Lunacy's own page-finished diagnostic read `document.body` unguarded, and a window.open transport finishes with no body. It looked like the app's fault | shell (guarded) |
 | 2026-09-21 | The shell crashes at startup and keeps crashing | development over adb, with a malformed `--es params` | The activity is singleTask, so Android replays the intent that crashed it; `JSONObject(params)` threw out of `onCreate` | shell (a bad `params` is reported and the app launches without them) |
 | 2026-09-21 | Typed text lands on top of a field's placeholder, which never goes away | webOS SimpleChat 1.9.2 (any Mojo text field with `hintText`, and any app that reads `keypress`) | LunaSysMgr's virtual keyboard put real key events into the page; Android's soft keyboards are input methods, so `keydown`/`keyup` carry 229 and **no `keypress` is dispatched**. Mojo hides the hint from its keypress handler, and the same handler's `charsAllow` filter never ran either. Measured on the HP 10 G2: the soft keyboard gives `keydown 229 → textInput → input → keyup 229`, key injection gives `keydown → keypress → textInput → input → keyup` | compat (the character is delivered as the keypress a device sent, from `textInput`, and only when no real keypress came) |
+| 2026-09-21 | Tapping a text field doesn't focus it, so there is no keyboard and no way to type | webOS SimpleChat's compose box (every Mojo text field whose tap lands on its hint text rather than the input) | Lunacy's own. Mojo's text field focuses itself from the tap gesture it gets on `mouseup`; the compat layer's touch handling then blurred whatever was focused, one line later, because the tapped element was the field's *hint* and not the input - Mojo draws the hint as a sibling. Traced with a patched `HTMLElement.blur`: `BLUR TEXTAREA <- compat.js:65` | compat (the tap's effect on focus is decided after the tap has been handled, not during it: if something took focus it stands, and a tap inside the focused field's own widget is not a tap away from it) |
+| 2026-09-21 | A field focused by the app itself gets no keyboard | every Mojo text field | The bridge raises the keyboard from `focusin`. Mojo focuses through a reference to the field's own `focus` method taken while the widget was built (`inputArea.originalFocus`), and no `focusin` arrives from it | compat (a tap that leaves a field focused raises the keyboard, whoever focused it) |
+| 2026-09-21 | The field being typed into sits under the app's own toolbar once the keyboard is up | webOS SimpleChat's compose box | The card shrinks to the space above the keyboard, as LunaSysMgr did (`CardWindowManagerState::resizeWindow`), and Mojo re-lays the scene out - but this card has less room than a TouchPad's (see below), so the scene overflows and an app's bottom-anchored bar lands on the field | compat (a focused field that has fallen to the bottom edge is scrolled clear of it) |
 | 2026-09-21 | An app meant to be invisible gets a launcher icon | Palm's Video Player (any app with `"visible": "false"`) | `appinfo.json`'s `visible` was never read. webOS used it for apps that are part of the platform and are launched by another app | shell (the launcher and the dock draw only the visible apps; `listApps` and launching by id are unchanged, as on a device) |
 
 ## Known gaps, by the layer they belong to
@@ -227,6 +230,37 @@ Found while testing the apps below; each is general, not tied to one app.
   MojoLoader for it) and the other libraries 404 until they are added to `fetch-assets.sh`.
 - **shell, full-screen cards:** `PalmSystem.enableFullScreenMode` is still a logged no-op, so
   a video player's card keeps the status bar where a device hides it.
+- **shell, the card has less room than a TouchPad's while the keyboard is up.** Measured on
+  SimpleChat, landscape, field focused, against the reference device:
+
+  | | TouchPad | HP 10 G2 |
+  |---|---|---|
+  | screen | 1024 x 768 | 1280 x 800 |
+  | keyboard | 291 | 338 |
+  | Android's navigation bar | - | 48 |
+  | card left for the app | 449 | 385 |
+  | `deviceInfo.screenHeight` the app reads | 768 | 800 |
+  | the app's own `screenHeight - 600` chat log | 168 | 200 |
+  | scene it then builds | ~431 | 463 |
+
+  Three separate differences, all Lunacy's side of the line:
+  - **`deviceInfo` reports this screen, not the TouchPad's.** webOS's own formula is
+    `hardwareScreenWidth / screenDensity` (`DeviceInfo.cpp`), so 1280 x 800 is right *by that
+    formula* - but an app that has been told it is on a TouchPad and subtracts a TouchPad-sized
+    constant gets a number no TouchPad could give it. Reporting 1024 x 768 makes this app's
+    chat log exactly the device's 168 (tried, and it does); the cost is that `maximumCardWidth`
+    would then be 1024 while the card really is 1280. Which way round that should go is
+    codepoet's call.
+  - **The keyboard is 338 px tall where the device's landscape keyboard is 291.** LunaKeyboard
+    draws its art at a fixed height (`keyboard-bg.png` is 340); webOS set the height per
+    orientation (`m_keyboardHeight` in `Src/ime/`), shorter in landscape where the keys are wider.
+  - **Android's navigation bar takes another 48 px** that no webOS device has, and it cannot be
+    suppressed while an IME is up on Android 5 - asking for immersive again on the keyboard's
+    way up changes nothing (tried).
+
+  Neither of the first two alone closes the 78 px gap; together they would, with about a pixel
+  to spare. Until then the compat layer scrolls the focused field clear of the bottom edge, so
+  what is being typed into is always visible.
 - **compat, Enter from a soft keyboard:** the keypress fix covers printable characters,
   which is what the IME swallows. Enter still arrives as a real `keydown`/`keyup` with
   keyCode 13 and no `keypress`, where a device sent one. Mojo reads Enter on keyup, so the

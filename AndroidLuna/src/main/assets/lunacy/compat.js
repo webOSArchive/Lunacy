@@ -56,14 +56,59 @@
 		fire("mousemove", t, under(t));
 		ev.preventDefault();
 	}, opts);
+	/**
+	 * What a tap that didn't land on a field itself means for the keyboard, decided once the
+	 * tap has been handled rather than during it.
+	 *
+	 * A framework focuses a field from the tap *it* is given, and this code runs first: Mojo's
+	 * text field listens for a tap on its widget and calls focus(), so blurring here took the
+	 * focus straight back off it and SimpleChat's compose box could not be typed into.
+	 *
+	 * So: if something took focus, the keyboard follows it (the bridge's focusin listener
+	 * would normally do that, but Mojo focuses through a reference to the field's own focus
+	 * method taken while the widget was built, and no focusin arrives from it). If nothing
+	 * did, a tap away from the focused field puts the keyboard down, as a device did - and a
+	 * tap *inside* that field's own widget is not a tap away from it. Mojo draws a field's
+	 * hint text as a sibling of the input, so tapping the hint of an already-focused field
+	 * has to raise the keyboard, not dismiss it.
+	 */
+	function afterTap(target, before) {
+		setTimeout(function () {
+			var now = document.activeElement;
+			var tell = window.__lunacyFieldTapped;
+			if (now !== before) {
+				if (focusable(now) && tell) { tell(now); }
+				if (window.__lunacyKeepFieldVisible) { window.__lunacyKeepFieldVisible(); }
+				return;
+			}
+			if (!now || now === document.body || !focusable(now)) { return; }
+			var widget = now.parentNode || now;
+			if (widget.contains && widget.contains(target)) {
+				if (tell) { tell(now); }
+				return;
+			}
+			now.blur();
+		}, 0);
+	}
+
 	function end(ev) {
 		if (!st) { return; }
 		var t = ev.changedTouches[0], target = under(t);
+		// Read before the mouse events go out: that is when a framework may focus a field.
+		var before = document.activeElement;
 		fire("mouseup", t, target);
 		if (!st.moved && ev.type === "touchend") {
 			var f = focusable(st.target);
-			if (f) { f.focus(); if (window.__lunacyFieldTapped) { window.__lunacyFieldTapped(f); } } else if (document.activeElement && document.activeElement !== document.body && focusable(document.activeElement)) { document.activeElement.blur(); }
+			if (f) { f.focus(); if (window.__lunacyFieldTapped) { window.__lunacyFieldTapped(f); } }
 			fire("click", t, st.target);
+			// Tapping away from a field puts the keyboard down, as a device did. It can't be
+			// decided here, though: a framework focuses a field from the tap *it* is being
+			// given, and this runs first. Mojo's text field does exactly that - its widget
+			// listens for a tap and calls focus() - and SimpleChat's compose box could not be
+			// typed into, because the field was focused and then blurred a line later.
+			// So the decision waits until the tap has been handled, and stands only if
+			// nothing took focus in the meantime.
+			if (!f) { afterTap(st.target, before); }
 		}
 		fire("mouseout", t, target);
 		if (st.moved && ev.type === "touchend") { flick(t); }
@@ -116,6 +161,48 @@
 			if (!target.dispatchEvent(ev)) { e.preventDefault(); return; }
 		}
 	}, true);
+})();
+
+// The focused field stays in view while the keyboard is up.
+//
+// The card shrinks to the space above the keyboard and the page is re-laid out, which is what
+// a device did; an app whose own layout doesn't give all of that space back then leaves its
+// field under the keyboard. SimpleChat's compose box does: its scene stays 463 px tall in a
+// 385 px card, so the box a person is typing into sits below the fold. Typing into something
+// you can't see is the one thing that must not happen, so the field is brought back into view
+// once the resize has settled. Where an app does reflow properly this finds nothing to do.
+(function () {
+	function typing(el) {
+		if (!el || el === document.body) { return false; }
+		return /^(INPUT|TEXTAREA)$/.test(el.tagName) || el.isContentEditable;
+	}
+	/** The nearest ancestor that has somewhere to scroll to. */
+	function scroller(el) {
+		for (var n = el.parentNode; n && n.nodeType === 1; n = n.parentNode) {
+			if (n.scrollHeight - n.clientHeight > 1) { return n; }
+		}
+		return null;
+	}
+	function keepVisible() {
+		var el = document.activeElement;
+		if (!typing(el)) { return; }
+		var box = scroller(el);
+		if (!box) { return; }
+		var e = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+		// Clear of the bottom edge by the field's own height: an app's own bar sits down
+		// there (SimpleChat's Photo button does), and a field tucked right against the edge
+		// is under it. Above that, leave the scroll alone.
+		var margin = 48;
+		var over = e.bottom + margin - b.bottom;
+		if (over > 0) { box.scrollTop = Math.min(box.scrollTop + over, box.scrollHeight - box.clientHeight); }
+		else if (e.top < b.top) { box.scrollTop = Math.max(0, box.scrollTop - (b.top - e.top)); }
+	}
+	// Twice: the card's resize arrives before the page has finished re-laying itself out, so
+	// the first pass often has nothing to measure yet.
+	window.__lunacyKeepFieldVisible = function () { setTimeout(keepVisible, 0); setTimeout(keepVisible, 150); };
+	window.addEventListener("resize", window.__lunacyKeepFieldVisible);
+	// And when a field is focused while the keyboard is already up, which fires no resize.
+	document.addEventListener("focusin", window.__lunacyKeepFieldVisible, true);
 })();
 
 // Uncaught script errors reach only the console. The reference TouchPad (WebKit 534.6)

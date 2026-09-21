@@ -20,6 +20,12 @@ class AppInfo(
     /** Installed from a package (webOS's userInstalled), rather than bundled with Lunacy. */
     val userInstalled: Boolean,
     /**
+     * appinfo.json's `visible`. False means the app has no launcher icon: it is part of the
+     * platform and another app launches it, as Palm's Video Player is. It still runs, still
+     * answers `listApps` and can still be launched by id, exactly as on a device.
+     */
+    val visible: Boolean,
+    /**
      * A Lunacy extension to appinfo.json, only ever used by apps Lunacy ships: the app is an
      * icon that opens one of Android's settings screens (LunacyService.PANELS), because the
      * setting belongs to the host OS and Lunacy would only be pretending to own it. Launching
@@ -99,6 +105,9 @@ class AppRegistry(private val files: AppFiles) {
 
     fun get(id: String) = apps.firstOrNull { it.id == id }
 
+    /** The apps with an icon: what the launcher and the dock draw. See [AppInfo.visible]. */
+    val launchPoints get() = apps.filter { it.visible }
+
     private fun load(): List<AppInfo> = files.appIds().mapNotNull { read(it) }
 
     private fun read(dir: String): AppInfo? = try {
@@ -117,6 +126,8 @@ class AppRegistry(private val files: AppFiles) {
             category = j.optString("category", ""),
             keywords = j.optJSONArray("keywords")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty(),
             userInstalled = files.isInstalled(dir),
+            // Palm wrote it as the string "false"; optBoolean reads either spelling.
+            visible = j.optBoolean("visible", true),
             appinfo = j,
             files = files,
         )

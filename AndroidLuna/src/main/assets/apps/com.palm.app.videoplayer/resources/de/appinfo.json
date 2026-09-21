@@ -1,0 +1,15 @@
+{
+	"icon": "../../icon.png",
+	"id": "com.palm.app.videoplayer",
+	"main": "../../index.html",
+	"noWindow": true,
+	"splashBackground": "../../images/splash-screenshot-default.png",
+	"splashicon": "../../icon-256x256.png",
+	"theme": "palm-dark",
+	"title": "Videos",
+	"type": "web",
+	"uiRevision": 2,
+	"vendor": "Palm, Inc.",
+	"version": "1.0.0",
+	"visible": "false"
+}

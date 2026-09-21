@@ -1,0 +1,14 @@
+Palm's Video Player (com.palm.app.videoplayer 1.0.0), as shipped on HP webOS 3.x.
+
+Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence; distributed by
+Lunacy as abandonware, like Mojo, Palm's other bundled apps, the Prelude fonts and the
+TouchPad wallpapers: no owner has asserted rights since webOS was discontinued.
+
+Copied from the reference TouchPad (/usr/palm/applications/com.palm.app.videoplayer), exactly
+as it was packaged; Lunacy does not change it (rule 5 in CLAUDE.md).
+
+It is here because it is part of the platform rather than an app someone chooses: webOS apps
+play video by launching it with a target, and MeTube - among others - has no player of its
+own. It is a Mojo 2 app, and the only one Lunacy has run; it needs the mojo2, mojo.core,
+metascene.* and media frameworks that AndroidLuna/fetch-assets.sh copies off the device.
+Its appinfo.json says "visible": "false", so it has no launcher icon, as on a device.

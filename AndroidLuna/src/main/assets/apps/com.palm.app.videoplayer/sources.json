@@ -1,0 +1,12 @@
+[
+  {
+    "source": "app\/controllers\/mainmenu-assistant.js",
+	"scenes": ["mainmenu"]
+  },
+  {
+    "source": "app\/controllers\/app-assistant.js"
+  }, 
+  {
+    "source": "app\/controllers\/stub-nowplaying-assistant.js"
+  }  
+]

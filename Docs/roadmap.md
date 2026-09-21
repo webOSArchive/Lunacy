@@ -86,6 +86,10 @@ show live data. Per-app results and every fix, with the layer it landed in, are 
     doesn't serve yet (see fix-log.md).
   - Palm's settings apps stay in `local-assets/` for now: shipping Palm's code in the APK is
     codepoet's call, like Mojo's.
+  - **Palm's Video Player is bundled (2026-09-21)**, on codepoet's call: it is platform
+    rather than an app someone chooses, and apps that play video launch it by id. It has no
+    launcher icon, because its `appinfo.json` says `"visible": "false"` and Lunacy now reads
+    that, as webOS did.
 - **Mojo runs (2026-09-20).** Flying Toasters, a Mojo app installed from a package, runs and
   works as an Exhibition app. Phase 5 is open early; see below.
 - **The Mojo suite runs (2026-09-21).** drPodder Redux, IAmA reddit, MeTube, Check Mate and

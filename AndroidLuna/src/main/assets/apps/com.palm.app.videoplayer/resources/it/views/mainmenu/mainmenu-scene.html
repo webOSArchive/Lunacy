@@ -1,0 +1,57 @@
+<div class="palm-scene palm-dark videos-landing">
+	<div class="video-library" id="video-library-container">
+		<div x-mojo-scroll-fade="top" class="videos-fade-top"></div>
+		<div x-mojo-scroll-fade="bottom" class="videos-fade-bottom"></div>
+	</div>
+
+	<div id="option-list" class="palm-list">
+		<div class="albums-view-row palm-row first" style="display:none" id="videoroll" x-mojo-tap-highlight="momentary">
+			<div class="palm-row-wrapper">
+				<div class="thumbnail-previews">
+					<div id="videoroll-thumb-right" class="thumb-right">
+						<img width="85" height="65" />
+					</div>
+					<div id="videoroll-thumb-center"  class="thumb-center">
+						<img width="85" height="65" />
+					</div>
+					<div id="videoroll-thumb-left" class="thumb-left">
+						<img width="85" height="65"/>
+					</div>
+					<div class="thumbnail-overlay"></div>
+				</div>             
+				<div class="title album-name-title truncating-text"><span>Sequenza video</span></div>
+			</div>
+		</div>
+		<div class="albums-view-row palm-row last" style="display:none" id="loaded" x-mojo-tap-highlight="momentary">
+			<div class="palm-row-wrapper">
+				<div class="thumbnail-previews">
+					<div id="loaded-thumb-right" class="thumb-right">
+						<img width="85" height="65" />
+					</div>
+					<div id="loaded-thumb-center" class="thumb-center">
+						<img width="85" height="65" />
+					</div>
+					<div id="loaded-thumb-left" class="thumb-left">
+						<img width="85" height="65"/>
+					</div>
+					<div class="thumbnail-overlay"></div>
+				</div>
+				<div class="title album-name-title truncating-text"><span>Video caricati</span></div>
+			</div>
+		</div>
+	</div>
+	
+	<div id="empty-library-message" style="display:none;">
+    	<div class="palm-fullscreen">
+    		<div class="palm-fullscreen-cont">
+    			<div class="large-icon large-videos-icon"></div>
+    			<div class="fullscreen-message">Il catalogo video è vuoto.</div>
+    		</div>
+    	</div>
+    </div>
+
+	<div id="indexing-div" class="palm-scrim" style="display: none;">
+		<div x-mojo-element="Spinner" id="scan-spinner"></div>
+	</div>
+    
+</div>

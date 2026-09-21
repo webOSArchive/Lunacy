@@ -106,7 +106,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // The icon glows first; the launch follows a frame later, so the glow is seen.
         launcher = Launcher(this, luna) { app -> launcher.postDelayed({ launch(app.id); closeLauncher() }, LAUNCH_DELAY_MS) }
         launcher.onRemove = { app -> remove(app) }
-        launcher.setApps(registry.apps)
+        launcher.setApps(registry.launchPoints)
         launcher.dockHeight = luna.px(QuickLaunch.HEIGHT).toFloat()
         launcher.visibility = View.INVISIBLE
         root.addView(launcher, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
@@ -318,7 +318,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             registry.reload()
             configurator.run()
             jsServices.reload()
-            launcher.setApps(registry.apps)
+            launcher.setApps(registry.launchPoints)
             dockMode.launchPointsChanged()
             val app = r.appIds.firstNotNullOfOrNull { registry.get(it) }
             when {
@@ -828,7 +828,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             registry.reload()
             configurator.run()
             jsServices.reload()
-            launcher.setApps(registry.apps)
+            launcher.setApps(registry.launchPoints)
             dockMode.launchPointsChanged()
             showDock()
             systemBanner("", if (error == null) "${app.title} removed" else "Couldn't remove ${app.title}: $error")
@@ -842,7 +842,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     /** The dock's apps, as the user arranged them; at first, the first five apps. */
     private fun dock(): List<String> {
         val saved = dockPrefs.getString("dock", null)
-            ?: return registry.apps.take(QuickLaunch.MAX_ITEMS).map { it.id }
+            ?: return registry.launchPoints.take(QuickLaunch.MAX_ITEMS).map { it.id }
         val a = runCatching { org.json.JSONArray(saved) }.getOrDefault(org.json.JSONArray())
         return (0 until a.length()).map { a.optString(it) }
     }

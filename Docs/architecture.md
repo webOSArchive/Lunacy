@@ -434,6 +434,14 @@ A settings app Lunacy can neither answer nor hand over isn't shipped at all. Pal
 settings apps that Lunacy ships (Screen & Lock, Help) are in the APK with a NOTICE, as
 abandonware, like Mojo and the Prelude fonts (codepoet, 2026-09-20).
 
+**Palm's Video Player** is in the APK on the same terms, and for a different reason: it is
+part of the platform rather than an app someone chooses. webOS apps play video by launching
+`com.palm.app.videoplayer` with a target, and MeTube - among others - has no player of its
+own, so without it those apps get an honest error and no film. Its `appinfo.json` says
+`"visible": "false"`, which is how webOS kept it out of the launcher; Lunacy reads that too,
+so it has no icon but still runs, still answers `listApps` and can still be launched by id
+(codepoet, 2026-09-21).
+
 - **The preference store.** `com.palm.systemservice` is a store, as it was on webOS: it keeps
   whatever key an app gives it, and whoever owns the thing a key names acts on it. The shell
   owns `wallpaper` (and `enableALS`, which is Android's brightness mode). A key nothing owns is

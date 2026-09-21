@@ -12,7 +12,7 @@ out on the reference devices. Changes made to the Android device are listed sepa
 | `AndroidLuna/src/main/assets/luna/` | LunaCE images (Apache 2.0), Prelude fonts and TouchPad wallpapers (abandonware), each with a NOTICE | yes |
 | `AndroidLuna/src/main/assets/lunacy/` | Injected page scripts: `compat.js` (input model, flicks, uncaught errors), `bridge.js` (PalmSystem, PalmServiceBridge), `net.js` (network shim), `fonts.css` (generated) | yes |
 | `AndroidLuna/src/main/assets/certs/` | Mozilla CA roots for Lunacy's own HTTP (MPL 2.0), with a NOTICE | yes |
-| `AndroidLuna/src/main/assets/apps/` | The bundled apps: Lunacy's own (Device Info, the shortcuts to Android's settings, `org.webosarchive.lunacy.notifytest`) and Palm's own settings apps that ship as abandonware (Screen & Lock, Help, Exhibition, Clock), and webOS Archive's App Museum. Each carries a NOTICE | yes |
+| `AndroidLuna/src/main/assets/apps/` | The bundled apps: Lunacy's own (Device Info, the shortcuts to Android's settings, `org.webosarchive.lunacy.notifytest`), Palm's own that ship as abandonware (Screen & Lock, Help, Exhibition, Clock, and the Video Player, which has no icon and is launched by other apps), and webOS Archive's App Museum. Each carries a NOTICE | yes |
 | `AndroidLuna/src/main/assets/luna-systemui/` | The system UI webOS served from the OS, at its own paths: Lunacy's file picker | yes |
 | `LunaRuntimes/enyo-1.0/` | Lunacy's changes to Enyo, as patches against upstream, with CHANGES.md as the fork's change log | yes |
 | `LunaRuntimes/mojo/` | Lunacy's changes to Palm's Mojo, likewise, with CHANGES.md explaining how Mojo is packaged | yes |

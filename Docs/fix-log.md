@@ -129,6 +129,23 @@ Found while testing the apps below; each is general, not tied to one app.
   The last row is the device's own profile, to the level. So an exact one-to-one mapping
   removes it completely.
 
+  **It is per axis, and per screen size, not a property of the screen.** The chain is
+  `dip = round(px / density)`, `css = round(dip * density)`, and the seams appear on whichever
+  axis doesn't come back the number it started from. The same tablet is off in landscape
+  across the width (1280 -> 1281) and exact down the height, and in portrait exact across the
+  width and off down the height (1252 -> 1251) - so the portrait row above is clean because
+  the scan was horizontal. Most configurations land exactly: 1920x1200 at 240 dpi, 2560x1600
+  and 2048x1536 at 320 dpi, anything at 160 dpi, and 1920 at this tablet's own 213 dpi all
+  come back unchanged. 1280 at 213 dpi is close to the worst case there is - 1280/1.33125 is
+  961.5, a perfect half. Higher density does not make it worse; it makes the seam physically
+  smaller, and the awkward cases are fractional densities that happen to round badly at a
+  particular width.
+
+  Lunacy now says which it is: `pixelGrid` in `getEnvironment`, shown on Device Info's **Card**
+  row as "1280 x 772 TouchPad px - page 1281 x 772" when they don't match, and nothing extra
+  when they do. A screen Lunacy has not run on before reports it rather than leaving it to be
+  found in the artwork.
+
   **Three fixes tried inside Lunacy, none of which work**, so none is in the tree:
   - laying the card's window out 1281 px wide, so that the page's own 1281 css px land on
     whole pixels: Chromium still rounds through dip and the seam stays (and moves by one);

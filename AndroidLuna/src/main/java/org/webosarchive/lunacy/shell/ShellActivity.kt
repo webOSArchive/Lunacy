@@ -759,6 +759,32 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             .put("scale", luna.density).put("orientation", screenOrientation())
             .put("cardWidth", Math.round(cards.width / luna.density))
             .put("cardHeight", Math.round(cards.height / luna.density))
+            .put("pixelGrid", pixelGrid(cards.width, cards.height))
+    }
+
+    /**
+     * Whether a card's CSS pixels land on whole device pixels, and what they come out as
+     * when they don't.
+     *
+     * Chromium lays a page out in density-independent pixels: it divides the view by the
+     * display's density, rounds to whole dip, and multiplies back. Where that doesn't return
+     * the number it started from, the page is drawn through a scale a hair off 1, and a
+     * border-image's nine pieces stop landing on whole pixels - which is where the seams in
+     * Mojo's and Enyo's frames come from ("border-image seams" in Docs/fix-log.md). It is a
+     * rounding coincidence rather than a property of the screen: on the reference tablet
+     * 1280 px comes back as 1281 while 800 px comes back as 800, so the same device is off
+     * in landscape and exact in portrait.
+     *
+     * Reported so that a screen Lunacy has not run on before says which it is, in Device
+     * Info, rather than leaving it to be noticed in the artwork. "1:1" when they land, and
+     * the size the page comes out as when they don't.
+     */
+    private fun pixelGrid(w: Int, h: Int): String {
+        val dm = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(dm)
+        fun css(px: Int) = if (px <= 0 || dm.density <= 0f) px else Math.round(Math.round(px / dm.density) * dm.density)
+        val cw = css(w); val ch = css(h)
+        return if (cw == w && ch == h) "1:1" else "$cw \u00d7 $ch"
     }
 
     private fun registerServices() {

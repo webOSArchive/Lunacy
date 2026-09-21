@@ -140,7 +140,14 @@ enyo.kind({
 		this.$.apps.setValue(String(l.apps));
 		this.$.services.setValue(this.services(l.services));
 		this.$.screen.setValue(s.width ? s.width + " × " + s.height + " px, " + s.dpi + " dpi" : "");
-		this.$.card.setValue(s.cardWidth ? s.cardWidth + " × " + s.cardHeight + " " + $L("TouchPad px") : "");
+		// The card's size, and - when the page's own pixels don't land on the screen's - what
+		// they come out as instead. That is what puts the faint seams in framework artwork,
+		// and it is a rounding coincidence of the screen rather than anything Lunacy chose.
+		var card = s.cardWidth ? s.cardWidth + " × " + s.cardHeight + " " + $L("TouchPad px") : "";
+		if (card && s.pixelGrid && s.pixelGrid !== "1:1") {
+			card += " — " + $L("page") + " " + s.pixelGrid;
+		}
+		this.$.card.setValue(card);
 		this.$.scale.setValue(s.scale ? s.scale + "×" : "");
 		this.$.orientation.setValue(s.orientation);
 		this.$.pane.selectViewByName("info");

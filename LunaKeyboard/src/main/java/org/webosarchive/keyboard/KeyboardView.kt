@@ -83,6 +83,23 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
     private var symbols = false
     private var lastShiftTap = 0L
 
+    /**
+     * Whether a key types its alternate character, which is webOS's rule and not an obvious
+     * one (LunaCE's `TabletKeymap::map`, the line that reads "for letters, use alternate
+     * layout when symbol is active, for non-letter, use alternate layout when shift is
+     * active"). So a letter reaches its alternate through the symbol key - shift only
+     * capitalises it - while the number row and the punctuation reach theirs through shift.
+     *
+     * Caps lock is not shift here. webOS separated `isShiftActive` from `isCapActive`: locked,
+     * the letters come out capital and the number row still types numbers.
+     */
+    private fun usesAlt(key: Key): Boolean {
+        if (key.alt == key.main && key.altText == null) return false
+        val main = key.main.toChar()
+        val letter = main.isLetter() && !main.isDigit() && !key.alt.toChar().isDigit()
+        return if (letter) symbols else shift == Shift.ONCE
+    }
+
     private var pressed: Key? = null
 
     /** The press-and-hold popup: the characters offered, and which one the finger is over. */
@@ -211,18 +228,22 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
         if (stacked && box.height().toInt() / 3 < size - 2) { stacked = false; across = true; nudge = 2f }
         val capitalised = shift != Shift.OFF
         val face = if (capitalised) main.uppercaseChar().toString() else main.toString()
+        // Which of the two the key would type right now - shift for the number row and the
+        // punctuation, the symbol key for the letters. See usesAlt.
+        val live = usesAlt(key)
 
         if (!across && !stacked) {
-            val t = if (symbols && alt != null) alt else face
+            val t = if (live && alt != null) alt else face
             label(c, t, box, activeColor, if (t.length > 1) 22f else 26f, t.length > 1)
             return
         }
-        // On the symbol page the alternate character is the one being typed, so it takes the
-        // dark colour and the full size, and the plain character fades back.
-        val mainColor = if (symbols) disabledColor else activeColor
-        val altColor = if (symbols) activeColor else disabledColor
+        // The character that would be typed takes the dark colour and the full size; the other
+        // one fades back, as webOS drew it (TabletKeyboard::drawKeyCap swaps the two colours
+        // when the mapped key isn't the plain one).
+        val mainColor = if (live) disabledColor else activeColor
+        val altColor = if (live) activeColor else disabledColor
         if (across) {
-            val lead = if (symbols) 5f else 4f
+            val lead = if (live) 5f else 4f
             val r = RectF(box.left + lead, box.top + 1, box.right - (9 - lead), box.bottom + 1)
             val half = r.width() / 2
             val mainLeft = r.left + half - nudge
@@ -470,13 +491,12 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
             Fn.HIDE -> { host.onHide(); return }
             Fn.TRACKBALL, Fn.NONE -> return
         }
-        val out = when {
-            symbols && key.altText != null -> key.altText
-            symbols -> key.alt.toChar().toString()
-            shift != Shift.OFF -> key.main.toChar().uppercaseChar().toString()
-            else -> key.main.toChar().toString()
-        }
-        host.onText(out)
+        // webOS mapped the key first and capitalised whatever came out (TabletKeyboard sends
+        // QChar(key).toUpper() while caps are active), which leaves a symbol alone.
+        val mapped =
+            if (usesAlt(key)) key.altText ?: key.alt.toChar().toString()
+            else key.main.toChar().toString()
+        host.onText(if (shift != Shift.OFF) mapped.uppercase() else mapped)
         if (shift == Shift.ONCE) shift = Shift.OFF
     }
 

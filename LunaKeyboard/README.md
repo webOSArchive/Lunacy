@@ -14,7 +14,11 @@ webOS's tablet keyboard, rebuilt as an `InputMethodService`:
 - Palm's **US QWERTY tablet layout**, key for key.
 - LunaCE's **key art**, drawn at the sizes webOS drew it.
 - **Press and hold** a key for its accents and alternates, in Palm's own order.
-- The **symbol page** behind `+ = [ ]`, and shift / shift-lock on a double tap.
+- The **symbol page** behind `+ = [ ]`, and shift / shift-lock on a double tap. Which of the
+  two the keys reach is webOS's rule and not the obvious one (`TabletKeymap::map`): a letter
+  takes its alternate from the symbol key, and shift only capitalises it; the number row and
+  the punctuation take theirs from **shift**, so shift on `1` gives `!` and the symbol page
+  leaves them alone. Shift-lock capitalises the letters and still types numbers.
 - The **scroll ball**: the little ball in the top right corner that drags the insertion
   point around. Hold shift while you drag it and it selects instead.
 

@@ -69,12 +69,34 @@ adb shell am start -n org.webosarchive.lunacy/.shell.ShellActivity \
 - **Every page load logs its viewport** (`[appid] loaded … viewport WxH dpr …`), which is
   useful for checking the scale.
 - **Screen recording:** `adb shell screenrecord --time-limit 4 /sdcard/x.mp4`, then
-  `ffmpeg -vf fps=8` to get frames. Use it for motion checks such as flick inertia.
+  `ffmpeg -vf fps=8` to get frames. Use it for motion checks such as flick inertia. For
+  "does it still pop in?", extract both runs at `fps=10`, `montage` the same frame numbers
+  side by side, and - to put a number on it - measure each frame's difference from the last
+  one over a region that holds only the chrome you care about; the frame where that settles
+  is when the UI stopped assembling.
 - **Rotation for tests:** set `settings put system accelerometer_rotation 0`, then
   `user_rotation 0` (portrait) or `3` (landscape, upright in screenshots; `1` is upside
   down). Put `accelerometer_rotation 1` back afterwards.
 - **Fake battery states:** `dumpsys battery set level N`, `set usb 0` and `set ac 0`, then
   `reset`. Android 5 has no `unplug`.
+- **Measuring smoothness.** SurfaceFlinger's own present times are the ground truth for what
+  the screen showed, and they need no developer-options switch:
+  `adb shell "dumpsys SurfaceFlinger --latency 'org.webosarchive.lunacy/…ShellActivity'"`
+  gives 128 rows of `desired actual ready` in nanoseconds; the gaps between the *actual*
+  column are the frames people see (17 ms is one vsync). Trigger the thing under test with
+  `input keyevent 4` rather than `input swipe` where you can - `input` starts a whole JVM, and
+  a 250 ms swipe overlaps what you are measuring.
+  `dumpsys gfxinfo org.webosarchive.lunacy` (after `setprop debug.hwui.profile true`) breaks a
+  frame into Draw/Prepare/Process/Execute, but on this device a blocked WebView shows up as
+  "Process" and looks like drawing cost when it is really waiting. For that,
+  `adb shell atrace -b 16384 -t 4 gfx view hwui webview` and pair the `B|`/`E|` marks: if the
+  work inside a frame is small and the *gaps between frames* are large, something is blocking
+  the pipeline rather than drawing slowly.
+- **Measuring what a page waits for.** `./cdp.sh eval` with
+  `performance.getEntriesByType("resource")` gives every request's `startTime` and
+  `responseEnd` against `performance.timing`. That is how the framework art's arrival was
+  timed, and it separates "the file is slow" from "the page asked late" - which turned out to
+  be the whole story.
 - **Inspecting pages:** `chrome://inspect` works, because Lunacy turns on WebView
   debugging.
 - **Driving the tablet without hands:** `adb shell input tap <x> <y>`, `input swipe` (a long

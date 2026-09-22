@@ -3,12 +3,25 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-09-20)
+## Where things stand (2026-09-21)
 
 Apps now install from the App Museum and run: Apollo plays music, Plex plays direct and
 transcoded video, Sound Cloud Player streams through its JS service, AccuWeather and USA Today
 show live data. Per-app results and every fix, with the layer it landed in, are in
 [fix-log.md](fix-log.md).
+
+**2026-09-21, Mojo and fidelity.** The five Mojo apps codepoet named all run, and Palm's own
+Video Player with them (Mojo 2). Then a pass on how it *feels*, each fix measured against the
+reference TouchPad or against LunaCE's own source rather than guessed at: the active card now
+holds the page's focus (without it a WebView dispatches no focus events at all, so nothing an
+app focused itself raised the keyboard); putting the keyboard away takes the field's focus with
+it, as `IMEController::hideIME` did, which is the only way a Mojo app can tell; the keyboard's
+shift reaches the number row's symbols, as `TabletKeymap::map` says it should; Device Info's
+rows take their metrics and their disabled grey from Mojo; and a framework's widget art is
+asked for before the page needs it, which is what stopped the widgets popping in. Two
+differences are recorded and accepted rather than fixed - the card animations' dropped frames,
+and the space the keyboard and Android's navigation bar cost a card. Both are in
+[fix-log.md](fix-log.md), with the numbers.
 
 - **Spike 1:** done, on Chromium 37 and 64, with a TouchPad reference probe. The probe
   (`Workbench/probe`, 0.0.9 on the TouchPad) has since measured uncaught errors, the network
@@ -327,6 +340,13 @@ each app still asks for that nobody answers.
   log.~~ Done in outline.
 - ~~Mojo 2 (`mojo2`, submission 205), MojoLoader and the frameworks tree.~~ Done; the
   frameworks copied into the APK are only the ones something has needed.
+**2026-09-21, later:** a fidelity pass over the same suite. The faults it turned up were all
+Lunacy's, and all general: no card's page held Android's focus, so a WebView dispatched no
+focus events at all and nothing an app focused itself raised the keyboard; the keyboard hid
+without taking the field's focus, which is the only signal Mojo gives an app that it has gone;
+and the framework's widget art was asked for only once a widget wanted it. See
+[fix-log.md](fix-log.md).
+
 - Multi-stage windows mapped to cards; scene transitions
   (`PalmSystem.prepareSceneTransition` and `runSceneTransition` are logged no-ops).
 - Full-screen cards (`PalmSystem.enableFullScreenMode`), which a video player wants.
@@ -375,6 +395,11 @@ corpus survey says how many apps this phase can reach, and whether it is worth d
 
 ## Decided
 
+- **The card animations stay as they are for now** (codepoet, 2026-09-21): a card's minimize
+  drops its first four frames because Chromium re-rasters a live WebView when the card's
+  transform changes, and Android 5 has no cheap way to draw a snapshot instead. Measured, with
+  everything else ruled out, in [fix-log.md](fix-log.md). Accepted on the HP 10 G2 and worth
+  revisiting on a faster device, where the same frames may simply fit.
 - **`deviceInfo` reports this screen, accurately** (codepoet, 2026-09-21): 1280 x 800 on the
   HP 10 G2, not the TouchPad's 1024 x 768, because more devices are coming and the number has
   to mean the screen. An app that subtracts a TouchPad-sized constant from it therefore gets a

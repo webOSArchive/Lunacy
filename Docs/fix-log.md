@@ -255,13 +255,14 @@ Found while testing the apps below; each is general, not tied to one app.
   `WebView.onPause()`, and the CPU governor - with all four cores online at 1.3 GHz the four
   frames still cost 51-84 ms.
 
-  **Landed nowhere yet.** The fix webOS itself used is to draw a *texture*: LunaSysMgr's card
-  view showed each card's last painted buffer, not a live page, which is also why a TouchPad
-  could hold a dozen cards. Android 5 has no cheap way to snapshot a hardware-accelerated
-  WebView - `PixelCopy` is API 24 - and the software path costs, measured on the App Museum,
-  385 ms at full size, 130 ms at card-view scale and 85 ms at a third. So it has to be taken
-  ahead of time rather than when the gesture starts, which changes what card view *is* (frozen
-  pages, refreshed when?) and is codepoet's call.
+  **Landed nowhere, and left there on purpose** (codepoet, 2026-09-21): accepted on this
+  device, to be looked at again when a faster one arrives. The fix webOS itself used is to draw
+  a *texture*: LunaSysMgr's card view showed each card's last painted buffer, not a live page,
+  which is also why a TouchPad could hold a dozen cards. Android 5 has no cheap way to snapshot
+  a hardware-accelerated WebView - `PixelCopy` is API 24 - and the software path costs,
+  measured on the App Museum, 385 ms at full size, 130 ms at card-view scale and 85 ms at a
+  third, so it would have to be taken ahead of the gesture and would change what card view
+  *is*. On a device that can draw a transformed WebView in a frame, none of that is needed.
 
 - **shell, the card has less room than a TouchPad's while the keyboard is up.** Measured on
   SimpleChat, landscape, field focused, against the reference device:

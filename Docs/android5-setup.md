@@ -36,6 +36,13 @@ not rooted, no Google account.
 | `dumpsys battery set …` | Testing the status bar battery icon, and leaving Exhibition when the charger goes | `dumpsys battery reset` |
 | LunaKeyboard enabled and selected | `adb shell ime enable`/`ime set org.webosarchive.keyboard/.KeyboardService`; testing the companion keyboard | Left selected. Was `com.google.android.inputmethod.latin/.LatinIME`; `ime set` that to put it back |
 | Daydream on, screen saver set to **Lunacy Exhibition** | Settings → Display → Daydream; testing the Exhibition dream | Left on and selected (`screensaver_components org.webosarchive.lunacy/…ExhibitionDream`) |
+| `setprop debug.hwui.profile true` | Per-frame timings for the card animations (`dumpsys gfxinfo`) | Set back to `false`. It is a property, so a reboot clears it anyway |
+
+The **CPU governor cannot be changed** on this device: there is no `su`, and
+`/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor` is MediaTek's `hotplug` (idling at
+598 MHz with cores offline). Loading the CPU from `adb shell` does bring all four cores up at
+1.3 GHz, which is enough to rule the governor in or out of a measurement. `yes` is not on this
+build; `dd if=/dev/urandom of=/dev/null` is.
 
 ## Driving the tablet over adb
 

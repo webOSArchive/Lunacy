@@ -325,7 +325,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             registry.get(w.appId)?.let { CardSplash(this, luna, luna.splashIcon(it)) })
         card.fullScreen = w.fullScreen && !w.emulated
         cards.add(card)
-        cards.openMaximized(card)
+        cards.openLaunching(card)
     }
 
     /** appinfo.json's requestedWindowOrientation, which every card of the app starts with. */
@@ -463,12 +463,27 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (cards.cards.isEmpty()) onCardView()
     }
 
-    /** The app has drawn into its window: the loading placeholder can go. */
-    override fun onStageReady(window: AppWindow) {}
+    /**
+     * When a launching card's app counts as ready, as WindowedWebApp decided it: when the page
+     * calls stageReady, or - a page that never does - 3 s after it finished loading
+     * (kShowWindowTimeoutMs). Having drawn doesn't count: measured with the slow probe, the
+     * reference TouchPad kept a page that had painted but not called stageReady off the screen
+     * until it did. The placeholder over a card still waits for the first frame (onPageDrawn).
+     */
+    override fun onPageLoaded(window: AppWindow) {
+        cards.postDelayed({
+            if (!window.stageReady) cards.cards.firstOrNull { it.window == window }?.let { cards.ready(it) }
+        }, SHOW_WINDOW_TIMEOUT_MS)
+    }
+
+    /** The framework says the app is ready: a launching card can maximize (its placeholder stays until it draws). */
+    override fun onStageReady(window: AppWindow) {
+        cards.cards.firstOrNull { it.window == window }?.let { cards.ready(it) }
+    }
 
     /** The app has drawn: the loading placeholder on its card can go. */
     override fun onPageDrawn(window: AppWindow) {
-        cards.cards.firstOrNull { it.window == window }?.appIsReady()
+        cards.cards.firstOrNull { it.window == window }?.drawn = true
     }
 
     override fun mediaBase() = mediaServer.base()
@@ -1201,6 +1216,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         cards.cards.forEach { it.window.setStageActive(false) }
     }
 
+    /** Card view, while a launching card waits in it: the dock and the pill stay away, as on a device. */
+    override fun onPreparing(card: Card) {
+        if (launcherOpen) closeLauncher()
+        onCardView()
+        fade(justType, false)
+        showDock(false)
+    }
+
     override fun onThrownAway(card: Card) {
         card.window.evaluateJavascript("try{window.close()}catch(e){}", null)
         closeWindow(card.window)
@@ -1291,6 +1314,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         /** Android's screen saver asking for Exhibition; see ExhibitionDream. */
         const val EXTRA_EXHIBITION = "exhibition"
         const val MEMORY_CHECK_MS = 10_000L
+        /** WindowedWebApp's kShowWindowTimeoutMs: how long a loaded page gets to call stageReady. */
+        const val SHOW_WINDOW_TIMEOUT_MS = 3000L
         const val MEMORY_CALM_MS = 30_000L
         /** Package installers apps hand .ipks to: Preware on webOS, and LuneOS's Preware. */
         val INSTALLERS = setOf("org.webosinternals.preware", "org.webosports.app.preware")

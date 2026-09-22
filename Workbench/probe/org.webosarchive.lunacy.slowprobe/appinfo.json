@@ -1,0 +1,10 @@
+{
+	"id": "org.webosarchive.lunacy.slowprobe",
+	"version": "0.0.1",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Slow Probe",
+	"icon": "icon.png",
+	"uiRevision": 2
+}

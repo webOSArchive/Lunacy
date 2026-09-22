@@ -39,8 +39,19 @@ class Card(
     /** The loading placeholder, over the page until the app has drawn; see [CardSplash]. */
     private val splash: CardSplash? = null,
 ) : FrameLayout(context) {
-    /** The app has drawn: fade the placeholder away. Does nothing once it has gone. */
-    fun appIsReady() = splash?.dismiss()
+    /** The app counts as ready (stageReady, or loaded and out of time); see [CardLayer.ready]. */
+    var ready = false
+        set(v) { field = v; lift() }
+    /** The page has put a frame on the screen. */
+    var drawn = false
+        set(v) { field = v; lift() }
+    /**
+     * The placeholder fades once the app is ready *and* has drawn: LunaSysMgr took its loading
+     * overlay away when the window was added, so a card waiting in the card view keeps the
+     * app's pulsing icon even if the page behind it has painted, and a card that is ready but
+     * blank keeps it until there is something to show. Does nothing once it has gone.
+     */
+    private fun lift() { if (ready && drawn) splash?.dismiss() }
 
     /**
      * The phone an emulated card's page sits in, drawn centred on the page exactly as
@@ -99,6 +110,11 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     interface Listener {
         fun onMaximized(card: Card)
         fun onCardView()
+        /**
+         * A launching card ran out of time before its app drew, and has gone to the card view
+         * to wait there; it maximizes by itself when the app is ready.
+         */
+        fun onPreparing(card: Card)
         fun onThrownAway(card: Card)
     }
 
@@ -122,6 +138,8 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         const val MINIMIZE_MS = 200L          // active group on minimize, OutCubic (hard-coded)
         const val SLIDE_MS = 300L             // cardSlideDuration, OutQuart
         const val DELETE_MS = 300L            // cardDeleteDuration, OutCubic
+        const val PREPARE_MS = 150L           // cardPrepareAddDuration: held off-screen for the first frame
+        const val ADD_MAX_MS = 750L           // cardAddMaxDuration: then this long more before the card view
         const val EDGE = 15f                  // kGestureBorderSize
         const val TRIGGER = 15f               // kGestureTriggerDistance
         // Throw away: CardWindowManager kVelocityThreshold/kDistanceThreshold/kMinimumVelocity,
@@ -156,7 +174,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
      * being maximized", which is exactly what an app that focuses a field as its first scene
      * is built does.
      */
-    val active: Card? get() = maximized ?: activating
+    val active: Card? get() = maximized ?: activating ?: lastLaunched?.takeIf { it in launching }
     /** Card-view scroll position, in cards. */
     private var position = 0f
     private var anim: ValueAnimator? = null
@@ -261,6 +279,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         val i = cards.indexOf(card)
         if (i < 0) return
         cards.removeAt(i); removeView(card)
+        launching.remove(card)
         if (maximized == card) maximized = null
         if (activating == card) activating = null
         position = min(position, max(cards.size - 1f, 0f))
@@ -294,6 +313,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     fun maximize(card: Card) {
         val i = cards.indexOf(card)
         if (i < 0) return
+        launching.remove(card)
         position = i.toFloat()
         cards.forEach { it.visibility = View.VISIBLE }
         card.bringToFront()
@@ -316,13 +336,50 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         listener.onCardView()
     }
 
-    /** Puts a newly added card straight into the maximized state, as a launch does. */
-    fun openMaximized(card: Card) {
-        if (width == 0) { post { openMaximized(card) }; return }
+    /** Launching cards whose apps haven't drawn yet: held off-screen, or waiting in the card view. */
+    private val launching = HashSet<Card>()
+    /** The newest of them: the card on its way to owning the screen, for [active]. */
+    private var lastLaunched: Card? = null
+
+    /**
+     * A launch, as LunaSysMgr ran one (reference §2.5, measured on the reference TouchPad with
+     * Workbench/probe's slowprobe). The new card waits full size just below the screen for its
+     * app to be ready - cardPrepareAddDuration and then cardAddMaxDuration, 900 ms in all - and
+     * maximizes upward the moment it is. An app that takes longer gets its card slid up into
+     * the card view instead, where it pulses with the app's icon until the app is ready, and
+     * then maximizes by itself. [ready] is called by the shell; see [ready].
+     */
+    fun openLaunching(card: Card) {
+        if (width == 0) { post { openLaunching(card) }; return }
         settleCardView()
-        // A new card starts full size just below the screen and maximizes upward (reference §2.5).
         card.cx = width / 2f; card.cy = height * 1.5f; card.scale = 1f
         applyTransforms()
+        if (card.ready) { maximize(card); return }
+        launching += card
+        lastLaunched = card
+        postDelayed({
+            if (card in launching && card in cards && activating == null && drag == Drag.NONE) timedOut(card)
+        }, Params.PREPARE_MS + Params.ADD_MAX_MS)
+    }
+
+    private fun timedOut(card: Card) {
+        maximized = null
+        position = cards.indexOf(card).toFloat()
+        cards.forEach { it.visibility = View.VISIBLE }
+        card.bringToFront()
+        animateTo(Params.SLIDE_MS, ::cardViewTarget, Easing.OutQuart)
+        listener.onPreparing(card)
+    }
+
+    /**
+     * The card's app is ready. A launching card maximizes now, unless something else has
+     * been maximized since or the card view is being handled.
+     */
+    fun ready(card: Card) {
+        card.ready = true
+        if (!launching.remove(card) || card !in cards) return
+        if (maximized != null && maximized != card) return
+        if (drag != Drag.NONE) return
         maximize(card)
     }
 

@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+<head>
+<title>Slow Probe</title>
+<style>
+html, body { margin: 0; background: #5c1d4d; color: #fff; font: 40px sans-serif; }
+#b { position: fixed; left: 0; top: 0; right: 0; bottom: 0; border: 6px solid #00e0ff; box-sizing: border-box; }
+</style>
+</head>
+<body>
+<div id="b"></div>
+<div id="t" style="padding: 40px">waiting</div>
+<script>
+// Lunacy's slow-launch probe (Docs/luna-deltas.md A7): no framework, and PalmSystem.stageReady()
+// only after 4 s, so the shell's launch timeouts (150 ms, then 750 ms) run out first.
+console.log("LUNACYPROBE slow loaded");
+setTimeout(function () {
+	document.getElementById("t").innerHTML = "stageReady";
+	console.log("LUNACYPROBE slow stageReady");
+	if (window.PalmSystem) { PalmSystem.stageReady(); }
+}, 4000);
+</script>
+</body>
+</html>

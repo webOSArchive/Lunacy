@@ -34,6 +34,8 @@ interface WindowHost {
     fun clearBanners(window: AppWindow)
     fun onWindowClosed(window: AppWindow)
     fun onStageReady(window: AppWindow)
+    /** The page has finished loading; see [ShellActivity.onPageLoaded]. */
+    fun onPageLoaded(window: AppWindow)
     /** Where media players fetch /media/internal files: MediaServer's loopback base URL. */
     fun mediaBase(): String
     /**
@@ -190,6 +192,7 @@ class AppWindow(
                 pageReady = false; told = null
             }
             override fun onPageFinished(view: WebView, url: String) {
+                host.onPageLoaded(this@AppWindow)
                 // The window.open transport resets the background; apply transparency again.
                 if (type == "dashboard" || type == "popupalert") view.setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 // Guarded: a window.open transport finishes with no body, and an unguarded

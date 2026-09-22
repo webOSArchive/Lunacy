@@ -115,7 +115,9 @@ probe apps. drPodder there has taken its default feeds, as it would on any first
 download manager's contract was measured into `/media/internal/lunacyprobe` on the TouchPad
 and that folder was deleted afterwards. drPodder on the **tablet** has since fetched its
 feeds' album art into `files/webos/media/internal/drPodder/.albumArt`, which is the download
-manager working and goes with a `pm clear` like the rest.
+manager working and goes with a `pm clear` like the rest. The CSS probe on the **TouchPad**
+is 0.0.3, which adds two coloured swatches for the camera; nothing else on either device
+changed.
 
 ## Display density
 

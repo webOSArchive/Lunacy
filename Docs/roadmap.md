@@ -10,6 +10,28 @@ transcoded video, Sound Cloud Player streams through its JS service, AccuWeather
 show live data. Per-app results and every fix, with the layer it landed in, are in
 [fix-log.md](fix-log.md).
 
+**2026-09-22, a second pass on the same two apps.** codepoet looked again and found five more
+differences. Four were separate causes, and two of those were general:
+
+- **`-webkit-palm-mouse-target: ignore`** is a webOS CSS property for an element that takes no
+  touches, and Mojo's stylesheets use it nineteen times. Chromium has never heard of it, so
+  those elements swallowed touches meant for what is behind them - a scene's back button sits
+  under the title, so tapping it ran the title's handler. Translated at serve time to
+  `pointer-events: none`.
+- **`position: fixed` was measured against the page, not the card.** This WebView widens the
+  box fixed elements are measured against when a page lays out wider than the window, which is
+  a mobile browser's idea and not webOS's. Every piece of fixed chrome in a portrait card went
+  off the edge, including the spinner that says an article is loading.
+- **extractfs**, webOS's thumbnailer, had nobody to answer it, so drPodder's lists were full
+  of broken covers. It was a FUSE filesystem rather than a service; the card host serves the
+  same paths now.
+- The other two were **Lunacy's own, in yesterday's background fix**: it was applied to every
+  element rather than only to the card's background, which put a dark block under reddit's
+  search bar, and it read its own output back on the next pass, so a card kept the background
+  size of the orientation it had been in. Both corrected, and the measurement that settles the
+  first is in [fix-log.md](fix-log.md): on an ordinary element the reference device sizes a
+  percentage background against the element's own box, exactly as this WebView does.
+
 **2026-09-22, Mojo parity.** codepoet reported three things that look wrong beside a
 TouchPad, and asked for the systemic causes rather than the symptoms. There were four, all in
 general layers, and none of them was Mojo's CSS meeting a stricter parser:

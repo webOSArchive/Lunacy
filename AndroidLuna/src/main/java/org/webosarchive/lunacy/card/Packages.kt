@@ -18,10 +18,13 @@ class Packages(val root: File, private val cache: File) {
     private val worker = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
 
-    /** source is an http(s) URL, a file:// URL or a path on the device. */
-    fun install(source: String, done: (Result) -> Unit) {
+    /**
+     * source is an http(s) URL, a file:// URL or a path on the device. [progress] hears 0…100
+     * on the main thread as it goes: the download, then 100 once it is unpacked.
+     */
+    fun install(source: String, progress: (Int) -> Unit = {}, done: (Result) -> Unit) {
         worker.execute {
-            val r = try { Result(source, installNow(source), null) } catch (e: Exception) {
+            val r = try { Result(source, installNow(source) { p -> main.post { progress(p) } }, null) } catch (e: Exception) {
                 Log.w(AppServer.TAG, "install $source failed", e)
                 Result(source, emptyList(), e.message ?: e.javaClass.simpleName)
             }
@@ -57,8 +60,8 @@ class Packages(val root: File, private val cache: File) {
         }
     }
 
-    private fun installNow(source: String): List<String> {
-        val (ipk, temporary) = fetch(source)
+    private fun installNow(source: String, progress: (Int) -> Unit): List<String> {
+        val (ipk, temporary) = fetch(source, progress)
         val staging = File(root.parentFile, "staging").apply { deleteRecursively(); mkdirs() }
         try {
             val files = Ipk.extract(ipk, staging)
@@ -74,6 +77,7 @@ class Packages(val root: File, private val cache: File) {
                 }
             }
             mergeInto(staging, root)
+            progress(100)
             return apps
         } finally {
             staging.deleteRecursively()
@@ -89,7 +93,7 @@ class Packages(val root: File, private val cache: File) {
     }
 
     /** The package as a local file, and whether it is a download to delete afterwards. */
-    private fun fetch(source: String): Pair<File, Boolean> {
+    private fun fetch(source: String, progress: (Int) -> Unit): Pair<File, Boolean> {
         val scheme = source.substringBefore("://", "").lowercase()
         if (scheme == "") return File(source) to false
         if (scheme == "file") return File(java.net.URI(source).path) to false
@@ -99,7 +103,17 @@ class Packages(val root: File, private val cache: File) {
             if (c.responseCode != 200) throw IOException("HTTP ${c.responseCode} for ${c.url}")
             cache.mkdirs()
             val out = File.createTempFile("pkg", ".ipk", cache)
-            c.inputStream.use { i -> out.outputStream().use { i.copyTo(it) } }
+            // The download is the first nine tenths of the progress; unpacking is the rest.
+            val total = c.contentLength.toLong()
+            var got = 0L; var last = -1
+            c.inputStream.use { i -> out.outputStream().use { o ->
+                val buf = ByteArray(16 * 1024)
+                while (true) {
+                    val n = i.read(buf); if (n < 0) break
+                    o.write(buf, 0, n); got += n
+                    if (total > 0) { val p = (got * 90 / total).toInt(); if (p != last) { last = p; progress(p) } }
+                }
+            } }
             return out to true
         } finally { c.disconnect() }
     }

@@ -72,8 +72,36 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         const val DONE_H = 34f
         const val DONE_RIGHT = 7f         // the art's right edge, in from the bar's right edge
         const val DONE_TEXT_DY = -1f      // the label's centre sits 1 px above the art's
-        const val EDGE = 30f              // a dragged icon held this close to a side flips the page
-        const val EDGE_MS = 600L
+        // LayoutSettings' page border activation areas and DynamicsSettings' timings: held this
+        // close to a side, a dragged icon pans to the next page after pagePanForIconMoveDelayMs;
+        // held this close to the top or bottom, the page scrolls pageScrollAmount every
+        // pageScrollDelayMs, each step pageScrollAnimTime long.
+        const val EDGE = 50f
+        const val EDGE_MS = 1500L
+        const val VEDGE = 20f
+        const val VSCROLL = 150f
+        const val VSCROLL_EVERY_MS = 800L
+        const val VSCROLL_MS = 300L
+        // KineticScroller: a flick's velocity (FlickGestureRecognizer's, a third of px/s) over
+        // sFlickScalar is px/ms, slowed by kDefaultFriction px/ms²; at most 100 px of overscroll,
+        // corrected over kOverScrollCorrectionTimeOut.
+        const val FLICK_SCALAR = 2225f * 3f
+        const val FRICTION = 8e-4f
+        const val MAX_OVERSCROLL = 100f
+        const val OVERSCROLL_FIX_MS = 350L
+        const val OVERSCROLL_SNAP_MS = 500L
+        // The empty page (ReorderableLayout on the reference TouchPad): the message in a
+        // 350 × 200 box 190 px below the page's centre, Prelude 18 px bold #AAAAAA, over
+        // launcher-empty-page.png at the centre.
+        const val EMPTY_TEXT = "Tap and hold any app to drag it to this page."
+        const val EMPTY_BOX_W = 350f
+        const val EMPTY_BOX_H = 200f
+        const val EMPTY_DY = 190f
+        // The installing decorator: loading-strip.png, 19 frames of 32 × 32, at (+50, −50)
+        // from the cell centre, over the icon at half opacity.
+        const val INSTALL_FRAMES = 19
+        const val INSTALL_DX = 50f
+        const val INSTALL_DY = -50f
         // AppInfoDialog.qml
         const val DIALOG_EDGE = 11f
         const val DIALOG_MARGIN = 6f
@@ -129,9 +157,24 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private fun pageFor(app: AppInfo): Int {
         val designator = keywordPages[app.category.lowercase()]
             ?: app.keywords.firstNotNullOfOrNull { keywordPages[it.lowercase()] }
-            ?: return 0
+            // LauncherObject::pageIndexForAppByPredefinedDesignators: an app the user installed
+            // goes on the downloads page (installedAppsPageIndex), as every installed app does
+            // on the reference TouchPad; the rest on the first.
+            ?: if (app.userInstalled) "downloads" else return 0
         return pages.indexOfFirst { it.designator == designator }.takeIf { it >= 0 } ?: 0
     }
+
+    // ---- packages being installed ----
+
+    /** A package on its way in: shown on the downloads page, its icon faded, with its progress. */
+    private class Installing(val title: String, var progress: Int)
+    private val installs = LinkedHashMap<String, Installing>()
+    private fun installPage() = pages.indexOfFirst { it.designator == "downloads" }.takeIf { it >= 0 } ?: 0
+    private fun installsOn(page: Page) = if (pages.indexOf(page) == installPage()) installs.values.toList() else emptyList()
+
+    fun startInstall(key: String, title: String) { installs[key] = Installing(title, 0); invalidate() }
+    fun installProgress(key: String, percent: Int) { installs[key]?.progress = percent.coerceIn(0, 100); invalidate() }
+    fun endInstall(key: String) { installs.remove(key); invalidate() }
     /** Current page position (fractional while dragging). */
     private var pagePos = 0f
     /** Height of the dock that sits over the launcher's bottom. */
@@ -219,7 +262,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val row = max(0, ((y - pageTop() - luna.px(Params.TOP_MARGIN)) / rowPitch()).toInt())
         return (row * columns() + col).coerceIn(0, max(0, count - 1))
     }
-    private fun contentHeight(p: Page) = luna.px(Params.TOP_MARGIN) + ((p.apps.size + columns() - 1) / columns()) * rowPitch()
+    private fun contentHeight(p: Page) = luna.px(Params.TOP_MARGIN) + ((p.apps.size + installsOn(p).size + columns() - 1) / columns()) * rowPitch()
     private fun maxScroll(p: Page) = max(0f, contentHeight(p) - (pageBottom() - pageTop()))
     private fun tabWidth() = min(width.toFloat() / pages.size, luna.px(Params.TAB_MAX_W))
     private fun currentPage() = pages[pagePos.roundToInt().coerceIn(0, pages.size - 1)]
@@ -270,12 +313,19 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         pages.forEachIndexed { pi, page ->
             val dx = (pi - pagePos) * width
             if (abs(dx) >= width) return@forEachIndexed
-            c.save(); c.translate(dx, -page.scrollY)
+            c.save(); c.translate(dx, 0f)
+            // Page::paintShadows, under the icons: tab-shadow.png along the top,
+            // quicklaunch-shadow.png along the bottom.
+            luna.tile(c, "launcher3/tab-shadow.png", RectF(0f, pageTop(), width.toFloat(), pageTop() + luna.px(8f)))
+            luna.tile(c, "launcher3/quicklaunch-shadow.png", RectF(0f, pageBottom() - luna.px(8f), width.toFloat(), pageBottom()))
+            val installing = installsOn(page)
+            if (page.apps.isEmpty() && installing.isEmpty()) drawEmptyPage(c)
+            c.translate(0f, -page.scrollY)
             page.apps.forEachIndexed { i, app -> if (app != dragging) drawIcon(c, app, drawnCentre(app, i)) }
+            installing.forEachIndexed { i, inst -> drawInstalling(c, inst, cellCentre(page.apps.size + i)) }
             c.restore()
         }
         c.restore()
-        luna.tile(c, "launcher3/tab-shadow.png", RectF(0f, pageTop(), width.toFloat(), pageTop() + luna.px(8f)))
         luna.tile(c, "launcher3/launcher-scrollfade-top.png", RectF(0f, pageTop(), width.toFloat(), pageTop() + luna.px(10f)))
         luna.tile(c, "launcher3/launcher-scrollfade-bottom.png", RectF(0f, pageBottom() - luna.px(20f), width.toFloat(), pageBottom()))
 
@@ -283,6 +333,33 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         // The dragged icon, over everything, under the finger.
         dragging?.let { drawIcon(c, it, PointF(dragX - grabDx, dragY - grabDy)) }
         dialogApp?.let { drawDialog(c, it) }
+    }
+
+    private val emptyText = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = luna.px(18f); typeface = luna.fontBold; color = Color.rgb(0xAA, 0xAA, 0xAA) }
+    private val emptyLayout by lazy {
+        @Suppress("DEPRECATION")
+        StaticLayout(Params.EMPTY_TEXT, emptyText, luna.px(Params.EMPTY_BOX_W).toInt(), Layout.Alignment.ALIGN_CENTER, 1f, 0f, false)
+    }
+
+    /** ReorderablePage's empty page: the picture at the centre, the message below it. */
+    private fun drawEmptyPage(c: Canvas) {
+        val cx = width / 2f; val cy = pageTop() + (pageBottom() - pageTop()) / 2f
+        luna.image("launcher3/launcher-empty-page.png")?.let { c.drawBitmap(it, cx - it.width / 2f, cy - it.height / 2f, null) }
+        // Centred in its box, which is centred on the offset point.
+        val ty = cy + luna.px(Params.EMPTY_DY) - emptyLayout.height / 2f
+        c.save(); c.translate(cx - emptyLayout.width / 2f, ty); emptyLayout.draw(c); c.restore()
+    }
+
+    /** A package being installed: the default icon at half opacity, its name, and the progress strip. */
+    private fun drawInstalling(c: Canvas, inst: Installing, centre: PointF) {
+        val half = luna.px(Params.ICON) / 2
+        val iy = centre.y + luna.px(Params.ICON_DY)
+        val faded = Paint(Paint.FILTER_BITMAP_FLAG).apply { alpha = 128 }
+        luna.image("default-app-icon.png")?.let { c.drawBitmap(it, null, RectF(centre.x - half, iy - half, centre.x + half, iy + half), faded) }
+        val layout = labels.getOrPut("installing:" + inst.title) { twoLineLabel(inst.title) }
+        c.save(); c.translate(centre.x - layout.width / 2f, iy + half + luna.px(Params.LABEL_GAP)); layout.draw(c); c.restore()
+        val frame = (inst.progress * (Params.INSTALL_FRAMES - 1) / 100).coerceIn(0, Params.INSTALL_FRAMES - 1)
+        luna.sprite(c, "loading-strip.png", centre.x + luna.px(Params.INSTALL_DX), centre.y + luna.px(Params.INSTALL_DY), 0, frame * 32, 32, 32)
     }
 
     /** centre is the cell centre: the icon sits above it, its label below. */
@@ -398,7 +475,10 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             if (i in pages.indices && i != currentPage().let { pages.indexOf(it) }) moveDragged(i)
             invalidate(); return
         }
-        if (y > pageBottom()) { removeCallbacks(edgeFlip); invalidate(); return }
+        if (y > pageBottom()) { removeCallbacks(edgeFlip); removeCallbacks(vScroll); vSide = 0; invalidate(); return }
+        val vedge = luna.px(Params.VEDGE)
+        val v = if (y < pageTop() + vedge) -1 else if (y > pageBottom() - vedge) 1 else 0
+        if (v != vSide) { vSide = v; removeCallbacks(vScroll); if (v != 0) postDelayed(vScroll, Params.VSCROLL_EVERY_MS) }
         val edge = luna.px(Params.EDGE)
         val side = if (x < edge) -1 else if (x > width - edge) 1 else 0
         if (side != edgeSide) { edgeSide = side; removeCallbacks(edgeFlip); if (side != 0) postDelayed(edgeFlip, Params.EDGE_MS) }
@@ -410,6 +490,22 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     }
 
     private var edgeSide = 0
+    private var vSide = 0
+    /** Held at the page's top or bottom edge, the page scrolls 150 px at a time (Page's scroll FSM). */
+    private val vScroll: Runnable = Runnable {
+        val page = currentPage()
+        if (dragging == null || vSide == 0) return@Runnable
+        val to = (page.scrollY + vSide * luna.px(Params.VSCROLL)).coerceIn(0f, maxScroll(page))
+        if (to != page.scrollY) {
+            anim?.cancel()
+            anim = ValueAnimator.ofFloat(page.scrollY, to).apply {
+                duration = Params.VSCROLL_MS; interpolator = Easing.OutCubic
+                addUpdateListener { page.scrollY = it.animatedValue as Float; dragTo(dragX, dragY) }
+                start()
+            }
+        }
+        postDelayed(vScroll, Params.VSCROLL_EVERY_MS)
+    }
     private val edgeFlip: Runnable = Runnable {
         val target = pages.indexOf(currentPage()) + edgeSide
         if (dragging != null && edgeSide != 0 && target in pages.indices) { moveDragged(target); postDelayed(edgeFlip, Params.EDGE_MS) }
@@ -427,6 +523,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private fun drop() {
         val app = dragging ?: return
         removeCallbacks(edgeFlip); edgeSide = 0
+        removeCallbacks(vScroll); vSide = 0
         highlightedTab = -1
         if (dragY > pageBottom()) {
             // Onto the dock: it takes the app; the icon stays where it was in the launcher.
@@ -623,14 +720,53 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         }
     }
 
-    /** Kinetic vertical scroll, then snap back inside the page (500 ms OutCubic). */
+    /** The velocity of the flick still running, for LunaCE's "keep increasing velocity". */
+    private var flickV = 0f
+
+    /**
+     * KineticScroller: a flick starts at its velocity over sFlickScalar and slows under a
+     * constant friction, eased OutCubic over the time it takes to stop; a flick in the same
+     * direction as one still running adds to it. Past the end it may run on up to 100 px, then
+     * comes back over 350 ms; let go while overscrolled without a flick, 500 ms OutCubic.
+     */
     private fun fling(page: Page, v: Float) {
         anim?.cancel()
         val m = maxScroll(page)
         val start = page.scrollY
-        val target = (start + v * 0.35f).coerceIn(0f, m)
-        val ms = if (start < 0 || start > m) 500L else (min(1200f, abs(target - start) / max(abs(v), 1f) * 2500f)).toLong().coerceAtLeast(200L)
+        if (abs(v) < luna.px(500f)) {
+            flickV = 0f
+            if (start < 0 || start > m) settle(page, Params.OVERSCROLL_SNAP_MS)
+            return
+        }
+        // In TouchPad px per ms.
+        var v0 = (v / luna.density) / Params.FLICK_SCALAR
+        // flickV is only still set if the last flick was stopped by this touch, not run out.
+        if (flickV != 0f && Math.signum(flickV) == Math.signum(v0)) v0 += flickV
+        v0 = v0.coerceIn(-100f, 100f)
+        flickV = v0
+        val t = abs(v0) / Params.FRICTION
+        val distance = v0 * v0 / (2 * Params.FRICTION) * Math.signum(v0) * luna.density
+        val over = luna.px(Params.MAX_OVERSCROLL)
+        val target = (start + distance).coerceIn(-over, m + over)
         anim = ValueAnimator.ofFloat(start, target).apply {
+            duration = t.toLong().coerceAtLeast(1L); interpolator = Easing.OutCubic
+            addUpdateListener { page.scrollY = it.animatedValue as Float; invalidate() }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                var cancelled = false
+                override fun onAnimationCancel(a: android.animation.Animator) { cancelled = true }
+                override fun onAnimationEnd(a: android.animation.Animator) {
+                    if (cancelled) return
+                    flickV = 0f
+                    if (page.scrollY < 0 || page.scrollY > m) settle(page, Params.OVERSCROLL_FIX_MS)
+                }
+            })
+            start()
+        }
+    }
+
+    private fun settle(page: Page, ms: Long) {
+        val m = maxScroll(page)
+        anim = ValueAnimator.ofFloat(page.scrollY, page.scrollY.coerceIn(0f, m)).apply {
             duration = ms; interpolator = Easing.OutCubic
             addUpdateListener { page.scrollY = it.animatedValue as Float; invalidate() }
             start()

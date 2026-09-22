@@ -329,6 +329,8 @@ device animates, and is missing a few states.
 
 Everything here is §3; Lunacy's is `Launcher.kt`.
 
+**Stock items done 2026-09-22** (empty page, bottom shadow, kinetic scroll, auto-scroll, side-edge flip at the source's 50 px / 1500 ms - the 600 ms was chosen, not measured - installing). Found on the way and fixed: a user-installed app belongs on DOWNLOADS (`installedAppsPageIndex`), which is where the reference TouchPad has every one, and the status bar reads "Launcher" while the launcher is up. Column spacing: compared on both machines in portrait (5 icons a row), same positions within a pixel or two, so left as it is. The LunaCE extras (tab editing, app groups) are below.
+
 | What | LunaCE | Lunacy today | Do |
 |---|---|---|---|
 | Empty page | "Tap and hold any app to drag it to this page." 18 px `#AAAAAA` in a 350 px box centred +190 px, over `launcher-empty-page.png` (280×220) | nothing | draw in `onDraw` when `page.apps.isEmpty()`; §3.6, [reorderablepage.cpp#L65](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/launcher/elements/page/reorderablepage.cpp#L65) |

@@ -431,7 +431,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun install(source: String, requester: String = "") {
         val name = android.net.Uri.decode(source.substringAfterLast('/'))
         systemBanner(requester, "Installing $name")
-        packages.install(source) { r ->
+        // LunaSysMgr showed the package on the launcher while it installed, with its progress.
+        launcher.startInstall(source, name.removeSuffix(".ipk").substringBefore('_'))
+        packages.install(source, progress = { p -> launcher.installProgress(source, p) }) { r ->
+            launcher.endInstall(source)
             registry.reload()
             configurator.run()
             jsServices.reload()
@@ -1318,8 +1321,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun openLauncher() {
         if (cards.maximized != null) return
         launcherOpen = true
-        // SystemUiController::setLauncherShown.
+        // SystemUiController::setLauncherShown, and the launcher's own title in the bar
+        // (updateStatusBarTitle: "Launcher", with no ▾).
         sounds.feedback("LauncherOpenApp")
+        statusBar.title = LAUNCHER_TITLE
         launcher.visibility = View.VISIBLE
         statusBar.setMode(StatusBar.Mode.LAUNCHER)
         launcher.translationY = launcher.height.toFloat()
@@ -1335,7 +1340,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         cards.visibility = View.VISIBLE
         launcher.animate().translationY(launcher.height.toFloat()).setDuration(LAUNCHER_MS).setInterpolator(Easing.InOutQuint)
             .withEndAction { if (!launcherOpen) { launcher.visibility = View.INVISIBLE; launcher.cancelLaunchFeedback(); exitEditMode() } }.start()
-        if (cards.maximized == null) { fade(justType, true); statusBar.setMode(StatusBar.Mode.CARDS) }
+        if (cards.maximized == null) { fade(justType, true); statusBar.setMode(StatusBar.Mode.CARDS); statusBar.title = StatusBar.CARRIER_TEXT }
     }
 
     private fun fade(v: View, show: Boolean) {
@@ -1369,6 +1374,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     companion object {
+        /** The launcher's launch point title, com.palm.launcher's on the reference TouchPad. */
+        const val LAUNCHER_TITLE = "Launcher"
         const val LAUNCHER_MS = 350L   // reference TouchPad lunaAnimations.conf: launcherDuration 350, curve 15
         const val DOCK_MS = 350L       // quickLaunchDuration
         const val FADE_MS = 200L       // quickLaunchFadeDuration

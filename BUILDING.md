@@ -42,13 +42,13 @@ and `./gradlew clean` empties `out/` along with the modules' build folders.
 
 It fills `AndroidLuna/local-assets/`, which is **not committed**: a stock Enyo 1.0 tree with
 `LunaRuntimes/enyo-1.0/patches/` applied, Palm's Mojo from a reference TouchPad with its own
-patches, and Node for JS services. Test apps (Glimpse, the Enyo samples, settings apps not yet
-shipped) go to `AndroidLuna/local-test-apps/`, also not committed, and are in the APK only when
-the build asks for them:
+patches, third-party test apps, and Node for JS services. Glimpse is the exception: it goes to
+`AndroidLuna/local-test-apps/`, also not committed, and is in the APK only when the build asks
+for it:
 
 ```sh
-./gradlew assembleDebug              # what users get: no test apps
-./gradlew assembleDebug -PtestApps   # a development build, with them
+./gradlew assembleDebug              # what users get: no Glimpse
+./gradlew assembleDebug -PtestApps   # a development build, with it
 ```
 
 A release is always built without `-PtestApps`. A patch that no longer applies is a

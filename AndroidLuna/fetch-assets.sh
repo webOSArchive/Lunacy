@@ -1,8 +1,8 @@
 #!/bin/sh
-# Populates AndroidLuna/local-assets/ from the workbench's local clones (the frameworks every
-# build ships), and AndroidLuna/local-test-apps/ with the test apps (Glimpse, the Enyo samples,
-# settings apps not yet shipped), which only a build asked for them includes: ./gradlew
-# assembleDebug -PtestApps. A release build leaves them out. Nothing here is committed.
+# Populates AndroidLuna/local-assets/ from the workbench's local clones: the frameworks and the
+# apps that aren't bundled. Glimpse goes to AndroidLuna/local-test-apps/ instead, which only a
+# build that asks for it includes (./gradlew assembleDebug -PtestApps): it is a test app that
+# users shouldn't get (codepoet). Nothing here is committed.
 # See Docs/android5-setup.md and Docs/roadmap.md.
 set -e
 cd "$(dirname "$0")"
@@ -10,7 +10,7 @@ HERE=$(pwd)
 V=../Workbench/vendor
 L=local-assets
 T=local-test-apps
-rm -rf $L $T && mkdir -p $L/fw/enyo $T/apps
+rm -rf $L $T && mkdir -p $L/fw/enyo $L/apps $T/apps
 cp -r $V/enyo-1.0 $L/fw/enyo/1.0 && rm -rf $L/fw/enyo/1.0/.git $L/fw/enyo/1.0/support/docs
 # Lunacy's changes to Enyo, as diffs against upstream: LunaRuntimes/enyo-1.0/CHANGES.md says what
 # each one is and why. A patch that no longer applies is a build failure, not a silent skip.
@@ -26,7 +26,7 @@ cp -r ../Workbench/apps-src/com.ingloriousapps.glimpse/usr/palm/applications/com
 # Workbench/vendor/settings-apps/ are copied here for testing and stay out of the repo.
 for a in $V/settings-apps/*; do
     id=$(basename "$a")
-    [ -d "$a" ] && [ ! -d "src/main/assets/apps/$id" ] && cp -r "$a" $T/apps/
+    [ -d "$a" ] && [ ! -d "src/main/assets/apps/$id" ] && cp -r "$a" $L/apps/
 done
 # Mojo, from the reference TouchPad. webOS's browser had the framework compiled in, so the
 # submission on disk carries only its assets and builtins/ carries the code; Lunacy serves
@@ -81,9 +81,9 @@ NOTICE
 # at the framework path installed apps use (what palm-package'd samples needed on a device too).
 for s in Sampler HelloWorld; do
     id=com.palmdts.enyo.$(echo $s | tr A-Z a-z)
-    cp -r $V/enyo-1.0/support/examples/$s $T/apps/$id
-    sed -i 's#"../../../../1.0/framework/enyo.js"#"/usr/palm/frameworks/enyo/1.0/framework/enyo.js"#' $T/apps/$id/index.html
-    sed -i "s#\"id\": *\"[^\"]*\"#\"id\": \"$id\"#" $T/apps/$id/appinfo.json
+    cp -r $V/enyo-1.0/support/examples/$s $L/apps/$id
+    sed -i 's#"../../../../1.0/framework/enyo.js"#"/usr/palm/frameworks/enyo/1.0/framework/enyo.js"#' $L/apps/$id/index.html
+    sed -i "s#\"id\": *\"[^\"]*\"#\"id\": \"$id\"#" $L/apps/$id/appinfo.json
 done
 
 # JS services. Node is nodejs-mobile 0.3.3 (Node 12.19): the last release whose libnode.so loads

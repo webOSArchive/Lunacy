@@ -452,64 +452,47 @@ window.__lunacyFileUrl = function (u, media) {
 	}
 })();
 
-// A background fixed to the viewport is sized against the viewport.
+// The card's own background covers the card.
 //
-// With background-attachment: fixed the background positioning area is the viewport, so a
-// percentage background-size is a percentage of the viewport. This WebView resolves it
-// against the element's own box instead, and the two are rarely the same: an element taller
-// than the card stretches the image over its whole height and the card shows a slice of it,
-// and one shorter than the card - Mojo gives every body min-height: 480px and height: 100%,
-// which comes to 480 whenever a page's own content doesn't fill it - tiles the image down
-// the card with a seam at every repeat.
+// An app paints the card's background on its body, almost always as one image stretched to
+// fill it: background-size: 100% 100%, usually with background-attachment: fixed so it
+// doesn't scroll with the content. That background is propagated to the canvas, and the area
+// it is sized against should be the whole card.
 //
-// webOS IAmA reddit is the case: its body carries the app's background gradient at
-// background-size: 100% 100% with background-attachment: fixed, which on the reference
-// TouchPad is one smooth gradient over the whole card (measured: a monotonic ramp from 96
-// down to 17 with no step in it). Here it came out as flat blocks with hard edges between
-// them, which is what codepoet reported as a "sliced up blob".
+// This WebView sizes it against the body's own box, and Mojo gives every body
+// `min-height: 480px; height: 100%` (global-base.css), which comes to exactly 480 whenever a
+// page's own content doesn't fill the card - a scene whose panes are floats, say. So the
+// image is squeezed into 480 px and then tiled down the rest of the card, with a seam at
+// every repeat. webOS IAmA reddit is the case codepoet reported as a "sliced up blob"; the
+// reference TouchPad draws one smooth ramp over the whole card.
 //
-// One mechanical rule for every app, not a fix for that one: whatever declares a fixed
-// background with a percentage size gets the size the viewport gives it, recomputed whenever
-// the card resizes. An app that already sizes its background in pixels is untouched.
+// **Only the card's background.** An ordinary element with a fixed background is left exactly
+// alone, because there the device agrees with this WebView: both size it against the
+// element's own box. Measured on reddit's own `#bar`, a 1030 x 15 strip carrying a 400 x 60
+// shadow gradient at 100% 100% - the reference device draws a soft line a few pixels deep,
+// which is the gradient squeezed into 15 px, and so does Lunacy. Sizing that one against the
+// viewport instead put a flat dark block under the search bar, which is what this rule did
+// when it was written to apply to everything.
 (function () {
 	var PCT = /%/;
-	/** Everything a percentage background-size could have been declared on, once. */
-	function candidates() {
-		var found = [document.documentElement, document.body], seen = found.slice();
-		for (var i = 0; i < document.styleSheets.length; i++) {
-			var rules;
-			try { rules = document.styleSheets[i].cssRules; } catch (e) { continue; }
-			if (!rules) { continue; }
-			for (var j = 0; j < rules.length; j++) {
-				var r = rules[j];
-				if (!r.selectorText || !/fixed/.test(r.style.cssText)) { continue; }
-				var list;
-				try { list = document.querySelectorAll(r.selectorText); } catch (e) { continue; }
-				for (var k = 0; k < list.length; k++) {
-					if (seen.indexOf(list[k]) < 0) { seen.push(list[k]); found.push(list[k]); }
-				}
-			}
-		}
-		return found;
-	}
-	var watched = null;
 	function apply() {
 		if (!document.body) { return; }
-		if (!watched) { watched = candidates(); }
+		// Whichever of the two paints the canvas: the root's background if it has one, else
+		// the body's, which is propagated to the root. Nothing else is touched.
+		var els = [document.documentElement, document.body];
 		var w = document.documentElement.clientWidth, h = document.documentElement.clientHeight;
-		for (var i = 0; i < watched.length; i++) {
-			var el = watched[i];
-			if (!el) { continue; }
+		for (var i = 0; i < els.length; i++) {
+			var el = els[i];
+			// Read the size the app declared, not the one this wrote last time: with the
+			// pixels still on the element the computed value has no percentage in it any
+			// more, and a card that had been rotated would keep the size of the orientation
+			// it was in - which is what codepoet saw as the page not re-flowing, the
+			// background sitting in a band across the middle of a portrait card.
+			el.style.backgroundSize = "";
+			el.style.backgroundRepeat = "";
 			var cs = window.getComputedStyle(el);
-			if (cs.backgroundAttachment.indexOf("fixed") < 0) { continue; }
-			// The declared size, not the one already corrected: read it back off the rule the
-			// page set, which is what el.style would otherwise overwrite on the second pass.
-			var size = el.__lunacyBgSize;
-			if (size === undefined) {
-				size = cs.backgroundSize;
-				if (!PCT.test(size)) { el.__lunacyBgSize = null; continue; }
-				el.__lunacyBgSize = size;
-			}
+			if (cs.backgroundImage === "none") { continue; }
+			var size = PCT.test(cs.backgroundSize) ? cs.backgroundSize : null;
 			if (!size) { continue; }
 			var parts = size.split(/\s*,\s*/), out = [], covers = true;
 			for (var p = 0; p < parts.length; p++) {
@@ -519,13 +502,12 @@ window.__lunacyFileUrl = function (u, media) {
 				out.push(sx + " " + sy);
 			}
 			el.style.backgroundSize = out.join(", ");
-			// A background sized to cover the viewport has nothing to repeat inside it, so
-			// saying so costs nothing - and it is the only way to stop this WebView tiling a
-			// fixed background anyway. Measured on the HP 10 G2 with reddit's card: with the
-			// exact size alone the gradient still came back in blocks that repeated every
-			// 264 px; with no-repeat it is one smooth ramp, 104 down to 23 against the
-			// reference TouchPad's 102 down to 23. A small repeating texture (a size that
-			// doesn't cover) is left to tile, which is what it is for.
+			// A background sized to cover the card has nothing to repeat inside it, so saying
+			// so costs nothing - and it is the only thing that stops this WebView tiling one
+			// that is fixed. Measured on the HP 10 G2 with reddit's card: with the exact size
+			// alone the gradient still came back in blocks repeating every 264 px; with
+			// no-repeat it is one smooth ramp, 104 down to 23 against the reference
+			// TouchPad's 102 down to 23.
 			if (covers) { el.style.backgroundRepeat = "no-repeat"; }
 		}
 	}
@@ -533,18 +515,16 @@ window.__lunacyFileUrl = function (u, media) {
 		var m = /^([\d.]+)%$/.exec(v);
 		return m ? Math.round(parseFloat(m[1]) / 100 * basis) + "px" : v;
 	}
-	function rescan() { watched = null; apply(); }
-	window.__lunacyFixedBackgrounds = rescan;
+	window.__lunacyCardBackground = apply;
 	// A framework gives the body its classes when it builds its first scene, which is after
 	// load: Mojo's palm-default - the class reddit hangs its background on - isn't there when
-	// the page finishes loading. So the scan is repeated over the first few seconds rather
-	// than run once. Each pass is a handful of computed-style reads, and an app whose
-	// background never changes settles on the first.
-	rescan();
-	document.addEventListener("DOMContentLoaded", rescan);
+	// the page finishes loading. So this is repeated over the first few seconds rather than
+	// run once. Each pass is two computed-style reads.
+	apply();
+	document.addEventListener("DOMContentLoaded", apply);
 	window.addEventListener("load", function () {
-		rescan();
-		[100, 400, 1200, 3000].forEach(function (ms) { setTimeout(rescan, ms); });
+		apply();
+		[100, 400, 1200, 3000].forEach(function (ms) { setTimeout(apply, ms); });
 	});
 	window.addEventListener("resize", apply);
 })();

@@ -106,10 +106,26 @@ adb shell am start -n org.webosarchive.lunacy/.shell.ShellActivity \
   press is a swipe that ends where it started), and `input keyevent KEYCODE_BACK` for the home
   button. Coordinates are device pixels, which on the HP 10 G2 are TouchPad pixels. This is
   how the launcher's edit mode and the file picker were checked against the TouchPad.
+  - **Wait until Lunacy is really up.** Just after `am start` the shell may not yet be the
+    window in front, and a tap then lands on whatever app is underneath - it opened Google
+    Camera, Photos and the Assistant on 2026-09-22 before that was understood. Allow 15-20 s
+    after a cold start, and check `dumpsys window | grep mCurrentFocus` if in doubt.
+  - **What `input` can't do** - press, hold, move, hold, let go, as dragging one launcher icon
+    onto another needs - `Workbench/touch.py "x,y" hold:900 "x2,y2" hold:800` plays through
+    `sendevent` on the touchscreen itself. Each `sendevent` is a process of its own, so a
+    stepped move is much slower than a finger; `STEP=1000` makes a move one jump.
+  - **Held or dragged a card?** A card-view drag longer than `TAP_RADIUS` in `input swipe` is
+    a scroll or a throw; a hold is a swipe that stays still for 700 ms.
+  - **The tablet's orientation** follows the sensor (`accelerometer_rotation` 1). For
+    portrait shots, `settings put system user_rotation 0` with `accelerometer_rotation 0`, and
+    put `accelerometer_rotation` back afterwards; `lshot.sh` is told `portrait` only when the
+    screen really is.
 - **DevTools from the command line:** `Workbench/cdp.sh` (Node 22+) forwards the running
   Lunacy's DevTools socket and talks to one page, chosen by a substring of its URL:
   - `./cdp.sh eval '<expr>' <appid>` prints the expression's value, for reading app state
-    such as `enyo.$` components, computed styles or media elements;
+    such as `enyo.$` components, computed styles or media elements. A promise is awaited, so
+    a bus call can be made from a page: `new Promise(r => { var b = new PalmServiceBridge();
+    b.onservicecallback = r; b.call(uri, params) })`;
   - `./cdp.sh send <Method> '<json>' <appid>` sends any DevTools method;
   - `./cdp.sh inject '<js>' <appid>` runs a script before the page's own and reloads it.
     Wrapping `setTimeout` and `clearTimeout` this way is what found the Enyo
@@ -131,6 +147,12 @@ the note in [luna-shell-reference.md](luna-shell-reference.md). `novacom -l` nam
 - **Screenshots:** `Workbench/tpshot.sh <name> [rotation]` (`-90` for portrait; `90`, then
   rotate `-90` again, for landscape; check the result). It uses
   `palm://com.palm.systemmanager/takeScreenShot`.
+- **Closing an app** by id: `Workbench/tpclose.sh <appid>...` (the application manager closes
+  by process id, which it looks up). A home press from the card view opens the launcher, and
+  the launcher is how the reference launcher screenshots were taken without touching it.
+- **When a screenshot can't be taken:** `takeScreenShot` takes a few seconds on the device, so
+  a burst (`tpburst.sh`) is one frame every ~3 s. `/dev/fb0` is 1024 × 2304, three BGRA
+  frames; `cat` it and slice it if the service is in doubt.
 - **Home button:** `Workbench/tpkey.sh 350` injects key 232 (`KEY_CENTER`, octal 350) into
   `/dev/input/event0` (gpio-keys). There is no remote touch: the launcher and menus need
   codepoet to tap.

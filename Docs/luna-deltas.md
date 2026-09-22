@@ -239,13 +239,13 @@ fresh and turned while open; then decide.
 Lunacy's `CardLayer` is one row of single cards. The device's is groups of cards, and four
 behaviours hang off that. Do them in this order; each is independent of the next.
 
-1. **Dimming.** Every non-active card is drawn at RGB × 0.8, animated 300 ms OutCubic when the
+1. **Dimming.** **Done 2026-09-22.** Only a card that *was* active is dimmed (`setActiveCardWindow` dims the old one and brightens the new), so a card that has never been active stays bright; in practice every launched card has been. Measured: (23, 61, 73) on the device, (23, 62, 74) on the tablet for #1d4d5c. Every non-active card is drawn at RGB × 0.8, animated 300 ms OutCubic when the
    active card changes. §2.3 "Dimming",
    [CardWindow.cpp#L248](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/cards/CardWindow.cpp#L248).
    *Lunacy:* `Card.fade` is only used for throw-away. *Do:* a `ColorMatrixColorFilter` (scale
    0.8 on RGB) on a `Card` whose index ≠ `position.roundToInt()`, animated in
    `CardLayer.applyTransforms`. *Check:* the reference card-view screenshot's side cards.
-2. **The angry card.** A card released with its centre *below* the screen bottom closes, like
+2. **The angry card.** **Done 2026-09-22.** Correction from the source: `closeWindow(win, true)` sends the card off the *top* like any other close (only the keep-alive and the sound differ), so the "animating `lift` to `+height`" below is wrong. A card released with its centre *below* the screen bottom closes, like
    one thrown off the top (with a bird sound when upside-down, which needs no doing).
    [CardWindowManager.cpp#L2047](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/cards/CardWindowManager.cpp#L2047).
    *Lunacy:* `CardLayer.onTouchEvent` `Drag.THROW` springs back. *Do:* add

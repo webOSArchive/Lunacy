@@ -64,6 +64,31 @@ class Card(
             canvas.drawBitmap(it, (width - it.width) / 2f, (height - it.height) / 2f, null)
         }
         super.dispatchDraw(canvas)
+        // Black at (1 - dimming) over an opaque card is the card's RGB times dimming, which is
+        // what LunaSysMgr's corner shader did with its Active uniform.
+        if (dimming < 1f) canvas.drawColor(android.graphics.Color.argb(Math.round((1f - dimming) * 255), 0, 0, 0))
+    }
+
+    /**
+     * Brightness, 1 to CardDimmPercentage (0.8). LunaSysMgr dimmed a card when it stopped
+     * being the active one and brightened the one that became active
+     * (SystemUiController::setActiveCardWindow); a card that has never been active is not
+     * dimmed. Measured on the reference TouchPad: a side card's #1d4d5c reads (23, 61, 73).
+     */
+    var dimming = 1f
+        set(v) { if (field != v) { field = v; invalidate() } }
+    private var dimAnim: ValueAnimator? = null
+
+    /** cardDimmingDuration 300 ms, cardDimmingCurve 6 (OutCubic). */
+    fun setDimmed(dim: Boolean) {
+        val to = if (dim) CardLayer.Params.DIMMED else 1f
+        dimAnim?.cancel()
+        if (dimming == to) return
+        dimAnim = ValueAnimator.ofFloat(dimming, to).apply {
+            duration = CardLayer.Params.DIM_MS; interpolator = Easing.OutCubic
+            addUpdateListener { dimming = it.animatedValue as Float }
+            start()
+        }
     }
     /** Card-view transform, animated by CardLayer. */
     var cx = 0f; var cy = 0f; var scale = 1f; var lift = 0f; var fade = 1f
@@ -147,6 +172,8 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         const val THROW_VELOCITY = -1100f
         const val THROW_DISTANCE = -50f
         const val THROW_MIN_VELOCITY = -500f
+        const val DIMMED = 0.8f               // CardDimmPercentage
+        const val DIM_MS = 300L               // cardDimmingDuration, OutCubic
     }
 
     val cards = ArrayList<Card>()
@@ -175,6 +202,20 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
      * is built does.
      */
     val active: Card? get() = maximized ?: activating ?: lastLaunched?.takeIf { it in launching }
+    /**
+     * LunaSysMgr's active card window: the card the card view is centred on, or the one on its
+     * way to the screen. Changing it dims the one before; see [Card.dimming].
+     */
+    private var current: Card? = null
+    private fun setCurrent(c: Card?) {
+        if (c == current) return
+        current?.takeIf { it in cards }?.setDimmed(true)
+        current = c
+        c?.setDimmed(false)
+    }
+    /** The card nearest the centre of the card view becomes the active one. */
+    private fun settleCurrent() { setCurrent(cards.getOrNull(position.roundToInt().coerceIn(0, max(cards.size - 1, 0)))) }
+
     /** Card-view scroll position, in cards. */
     private var position = 0f
     private var anim: ValueAnimator? = null
@@ -283,6 +324,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         if (maximized == card) maximized = null
         if (activating == card) activating = null
         position = min(position, max(cards.size - 1f, 0f))
+        if (current == card) { current = null; settleCurrent() }
     }
 
     /** Animates from wherever the cards are now to their targets. */
@@ -315,6 +357,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         if (i < 0) return
         launching.remove(card)
         position = i.toFloat()
+        setCurrent(card)
         cards.forEach { it.visibility = View.VISIBLE }
         card.bringToFront()
         activating = card
@@ -354,6 +397,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         settleCardView()
         card.cx = width / 2f; card.cy = height * 1.5f; card.scale = 1f
         applyTransforms()
+        setCurrent(card)
         if (card.ready) { maximize(card); return }
         launching += card
         lastLaunched = card
@@ -383,9 +427,14 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         maximize(card)
     }
 
-    private fun throwAway(card: Card, velocity: Float) {
+    /**
+     * Closes a card by sending it off the top of the card area, whichever way it was thrown:
+     * LunaSysMgr's closeWindow animates the card until its bottom edge is at the top, over
+     * cardDeleteDuration - the angry card pulled off the bottom included.
+     */
+    private fun throwAway(card: Card) {
         val start = card.lift
-        val end = -(height.toFloat())
+        val end = inset - card.height * card.scale / 2f - card.cy
         anim?.cancel()
         anim = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = Params.DELETE_MS; interpolator = Easing.OutCubic
@@ -395,6 +444,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
                     anim = null
                     remove(card)
                     listener.onThrownAway(card)
+                    settleCurrent()
                     animateTo(Params.SLIDE_MS, ::cardViewTarget)
                 }
             })
@@ -472,7 +522,9 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
                         val flung = dist < Params.THROW_DISTANCE && v < Params.THROW_MIN_VELOCITY &&
                             v < (Params.THROW_VELOCITY * Params.THROW_DISTANCE) / dist
                         val centreAboveTop = card.cy + card.lift < inset
-                        if (flung || centreAboveTop) throwAway(card, vy)
+                        // The angry card: let go with its centre below the bottom of the screen.
+                        val centreBelowBottom = card.cy + card.lift > height
+                        if (flung || centreAboveTop || centreBelowBottom) throwAway(card)
                         else animateTo(Params.SLIDE_MS, ::cardViewTarget)
                     }
                     Drag.MINIMIZE -> if (card != null) {
@@ -509,6 +561,8 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
             duration = Params.SLIDE_MS; interpolator = Easing.OutQuart
             addUpdateListener { a -> position = a.animatedValue as Float; settleCardView() }
             addListener(object : AnimatorListenerAdapter() { override fun onAnimationEnd(a: Animator) { anim = null } })
+            // The slide's target is the new active card from the start, as switchToNextGroup has it.
+            setCurrent(cards.getOrNull(i))
             start()
         }
     }

@@ -33,7 +33,7 @@ ws.onmessage = m => {
 await new Promise(ok => { ws.onopen = ok; });
 
 if (cmd === "eval") {
-  const r = await send("Runtime.evaluate", { expression: a, returnByValue: true });
+  const r = await send("Runtime.evaluate", { expression: a, returnByValue: true, awaitPromise: true });
   const v = r.result?.result;
   console.log(r.result?.exceptionDetails ? "THROWS " + v?.description : JSON.stringify(v?.value));
 } else if (cmd === "send") {

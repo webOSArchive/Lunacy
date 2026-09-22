@@ -394,6 +394,8 @@ On the roadmap; the pointers so it can be done without re-reading the C++:
 
 ### B9. Wallpaper smaller than the screen
 
+**Done 2026-09-22.** Measured on the reference TouchPad with a 600 x 400 image: drawn at its own size, centred on the whole screen, and the surround is Qt's `darkGray` (#808080), not black (`WindowServerLuna.cpp#L219`, `setBackgroundBrush(Qt::darkGray)`). Screenshots `Workbench/results/b9-tp-small.png`, `b9-and-small.png`.
+
 - **LunaCE:** an image at least screen-sized in either orientation is centre-cropped; a
   smaller one is drawn unscaled and centred on black. §1.3,
   [WindowServerLuna.cpp#L931](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/WindowServerLuna.cpp#L931).

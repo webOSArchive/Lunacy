@@ -785,9 +785,26 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val chosen = systemService.fileOf(systemService.get("wallpaper") as? JSONObject)
         val bmp = chosen?.let { f -> luna.decodeFull(f) } ?: luna.wallpaper()
         if (bmp != null) {
-            wallpaperView.setImageBitmap(bmp)
-            wallpaperView.background = null
+            // LunaSysMgr filled the screen only with an image that could fill it one way up or
+            // the other; a smaller one was drawn at its own size, centred on the screen, over
+            // the scene's Qt::darkGray (WindowServerLuna::generateWallpaperImages; measured on
+            // the reference TouchPad with a 600 x 400 image). Its own size is in TouchPad px.
+            val dm = android.util.DisplayMetrics()
+            @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(dm)
+            val sw = dm.widthPixels / luna.density; val sh = dm.heightPixels / luna.density
+            val fills = (bmp.width >= sw && bmp.height >= sh) || (bmp.width >= sh && bmp.height >= sw)
+            if (fills) {
+                wallpaperView.scaleType = ImageView.ScaleType.CENTER_CROP
+                wallpaperView.setImageBitmap(bmp)
+                wallpaperView.background = null
+            } else {
+                wallpaperView.scaleType = ImageView.ScaleType.CENTER
+                wallpaperView.setImageBitmap(if (luna.density == 1f) bmp else android.graphics.Bitmap.createScaledBitmap(
+                    bmp, luna.px(bmp.width), luna.px(bmp.height), true))
+                wallpaperView.setBackgroundColor(Color.rgb(0x80, 0x80, 0x80))
+            }
         } else {
+            wallpaperView.scaleType = ImageView.ScaleType.CENTER_CROP
             wallpaperView.setImageDrawable(null)
             wallpaperView.background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
                 intArrayOf(Color.rgb(8, 24, 64), Color.rgb(20, 90, 200)))

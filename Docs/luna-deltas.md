@@ -35,6 +35,8 @@ things that look like deltas and aren't, so nobody spends a day on them.
 
 ### A1. Full-screen cards (`PalmSystem.enableFullScreenMode`)
 
+**Done 2026-09-22.** Measured with `Workbench/probe/org.webosarchive.lunacy.winprobe` on both machines, both orientations; the "Up orientation only" branch below is the phone-era path and does not apply to the tablet (full screen works in portrait too). Not yet checked with Palm's Video Player itself. See [fix-log.md](fix-log.md).
+
 - **LunaCE:** the card's window grows by the status bar's 28 px and the status bar slides off
   the top, 400 ms OutCubic. Only in the Up orientation; in any other the card is always full
   screen. [CardWebApp.cpp#L1651](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/cards/CardWebApp.cpp#L1651)
@@ -63,6 +65,8 @@ things that look like deltas and aren't, so nobody spends a day on them.
   the home gesture still works from the bottom edge.
 
 ### A2. A card that asks for one orientation (`setWindowOrientation`, `windowOrientation =`)
+
+**Done 2026-09-22, and the "easy" path is the faithful one:** held in landscape, the reference TouchPad turned the whole screen - status bar included - for a card that asked for "up", and the card then read `windowOrientation` "up". Left different: Android follows the sensor again as soon as the lock is released, where the TouchPad waited to be turned; an emulated card's request is ignored. "left"/"right" are mapped to Android's two landscapes by reasoning, not measurement.
 
 - **LunaCE:** `"free"` lets the card turn with the screen. `"up"`, `"down"`, `"left"`,
   `"right"`, `"landscape"` or `"portrait"` fix it: the card is laid out at that
@@ -100,6 +104,8 @@ things that look like deltas and aren't, so nobody spends a day on them.
 
 ### A3. Window properties beyond `blockScreenTimeout`
 
+**Done 2026-09-22 for `statusBarColor` and `fullScreen`.** Measured: the colour is taken up at the *next* maximize, not while the card is already up, and `0` is black, not "default". `suppressBannerMessages`, `suppressGestures` and `rotationLockMaximized` turned out to be no-ops on the device - see D.
+
 `PalmSystem.setWindowProperties` takes these keys
 ([JsSysObject.cpp#L2018](https://github.com/webOSArchive/LunaCE/blob/master/Src/js/JsSysObject.cpp#L2018)
 to L2098); Lunacy's `bridge.js` `setWindowProperties` (line ~113) acts on one and logs the
@@ -121,6 +127,8 @@ rest. Do them in this order:
 
 ### A4. `PalmSystem.deactivate`
 
+**Not a delta - moved to D.** Measured: `enyo.windows.deactivateWindow(window)` on a maximized card does nothing on the reference TouchPad (no minimize, no `windowDeactivated`). `MethodDeactivate` only sends `ViewHost_UnfocusWindow`.
+
 - **LunaCE:** the page asks to lose focus; the card is deactivated (the maximized card is
   minimized to card view). [JsSysObject.cpp](https://github.com/webOSArchive/LunaCE/blob/master/Src/js/JsSysObject.cpp)
   `MethodDeactivate`, and the `PalmSystem.deactivate` string in `Src/webbase`.
@@ -133,6 +141,8 @@ rest. Do them in this order:
   device).
 
 ### A5. Banner sounds and the rest of `addBannerMessage`'s arguments
+
+**Done 2026-09-22.** The device's `notification.wav`, `alert.wav` and `ringtone.mp3` are byte-identical to LunaCE's Apache-2.0 `sounds/`, so those are what ship. Open choice for codepoet: with no file named, the default is webOS's sound rather than the tone chosen in Android's settings (which Sounds & Alerts opens). Step 5 is moot: `suppressBannerMessages` does nothing on the device.
 
 - **LunaCE:** `addBannerMessage(message, launchParams, icon, soundClass, soundFile, duration,
   doNotSuppress)`. A sound class of `notifications` plays `soundFile`, or
@@ -157,6 +167,8 @@ rest. Do them in this order:
 
 ### A6. Low memory
 
+**Done 2026-09-22.** Android 5 has no `am send-trim-memory`; use `--ei trimMemory 10` (or 15) on the shell ([dev-workflow.md](dev-workflow.md)). Not measured on the device, which can't be pushed into low memory remotely.
+
 - **LunaCE:** `MemoryWatcher` tells every page (`Palm::WebGlobal::notifyLowMemory`,
   [MemoryWatcher.cpp#L187](https://github.com/webOSArchive/LunaCE/blob/master/Src/webbase/MemoryWatcher.cpp#L187))
   and the frameworks call the app's `Mojo.lowMemoryNotification` / Enyo's
@@ -178,6 +190,8 @@ rest. Do them in this order:
 
 ### A7. Launch timing and the "preparing" card
 
+**Done 2026-09-22; Q7 answered.** A screenshot burst on the reference TouchPad with `…lunacy.slowprobe` (paints at once, calls `stageReady` after 4 s) showed the card waiting in the card view with its pulsing icon and no dock or pill, then maximizing already showing "stageReady". The signal is `stageReady`, or 3 s after load for a page that never calls it (`WindowedWebApp::kShowWindowTimeoutMs`) - not the first paint.
+
 - **LunaCE:** a new card waits up to 150 ms off-screen for the app's first frame; if it is not
   there, the card is added with the loading splash and given 750 ms more; if that runs out,
   it slides to its *card-view* slot and pulses there until the app paints, then maximizes.
@@ -194,6 +208,8 @@ rest. Do them in this order:
 
 ### A8. Clipboard: `paste`, `copiedToClipboard`, `pastedFromClipboard`
 
+**Done 2026-09-22**, and not as low priority as it looked: Chromium 37 refuses `execCommand("copy"/"cut")` to web content, so Enyo's own Copy and Cut did nothing either. The bridge now falls back to Android's clipboard. Measured on the device: copy, then `paste()` into the focused field, and the "Selection Copied" banner.
+
 - **LunaCE:** `paste` pastes the system clipboard into the focused editor; the other two are
   notifications from WebKit. [JsSysObject.cpp](https://github.com/webOSArchive/LunaCE/blob/master/Src/js/JsSysObject.cpp)
   `MethodPaste`.
@@ -202,6 +218,17 @@ rest. Do them in this order:
 - **Do:** `Native.paste()` → read `ClipboardManager` on the main thread and
   `evaluateJavascript(document.execCommand('insertText', false, <text>))` into the focused
   element. Low priority: Enyo's own copy/paste menu works without it on Chromium.
+
+### A9. Open: what a *free* card reports as its orientation
+
+Found while measuring A2 and not yet settled. On the reference TouchPad, a free card read
+`screenOrientation` "up" and `windowOrientation` "right" when launched in landscape **and**
+when launched in portrait. Lunacy's getters follow the screen (landscape: "right" and "up";
+portrait: "up" and "right"), as the 2026-09-22 drPodder fix assumed from a portrait-only
+measurement. If the device's values really are constant for a free card, every Mojo app's
+orientation branch behaves differently here in landscape. **Do:** with codepoet turning the
+device, run the window probe and read both values in each of the four positions, launched
+fresh and turned while open; then decide.
 
 ---
 
@@ -446,6 +473,14 @@ the media indexer's db8 kinds. All in [fix-log.md](fix-log.md) "Known gaps".
 
 ## D. Not deltas - so nobody chases them
 
+- **`PalmSystem.deactivate`** (was A4). Measured 2026-09-22: a maximized card that calls it
+  stays maximized and hears nothing.
+- **`suppressBannerMessages`, `suppressGestures`, `rotationLockMaximized`** (were in A3).
+  LunaSysMgr stores all three and nothing reads them - in LunaCE and in HP's luna-sysmgr alike:
+  the banner signal has no receiver, `suppressGestures` only eats the phone's quick-launch key
+  (`Key_CoreNavi_QuickLaunch`), not the tablet's swipe up, and `CardWindow::rotationLockMaximized`
+  has no caller. Measured for the first: a banner added while it is set shows as usual. The
+  bridge accepts all three and does nothing.
 - **`PalmSystem.keepAlive`.** Only apps named in luna.conf's `appsToKeepAlive` are kept
   ([WebAppManager.cpp#L1119](https://github.com/webOSArchive/LunaCE/blob/master/Src/webbase/WebAppManager.cpp#L1119));
   an ordinary app's call is ignored. Lunacy's no-op is right.

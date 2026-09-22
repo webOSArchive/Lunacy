@@ -1429,7 +1429,9 @@ Numbered as referenced in the text.
    ([BezelGestureRecognizer.cpp#L148-L153](https://github.com/webOSArchive/LunaCE/blob/master/Src/base/gesture/BezelGestureRecognizer.cpp#L148)),
    which depends on the TouchPad's touch report rate (not in source). Android reports at a
    different rate; convert to a velocity threshold after measuring on the TouchPad.
-7. **Q7 — Launch animation look.** See §2.5; confirm by recording a launch on the device.
+7. **Q7 — Launch animation look.** See §2.5; confirm by recording a launch on the device. **Answered 2026-09-22**
+   (luna-deltas.md A7): a card whose app is slow waits in the card view with its pulsing icon
+   and maximizes on `stageReady`.
 8. **Q8 — Dashboard row order and insertion animation** in menu (tablet) mode were not fully
    traced ([DashboardWindowContainer.cpp#L540-L640](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/notifications/DashboardWindowContainer.cpp#L540)).
 9. **Q9 — Virtual keyboard geometry** (heights per size, candidate bar) was not analysed; Lunacy

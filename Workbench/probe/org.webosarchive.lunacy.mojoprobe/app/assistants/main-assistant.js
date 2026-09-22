@@ -56,6 +56,19 @@ MainAssistant.prototype.report = function () {
 		}
 	}
 	rec("slider.children", kids);
+
+	// What a scene element comes out as, and whether a child that asks to fill it gets a
+	// height. drPodder's splash paints its background that way, and Mojo's own .palm-scrim
+	// (position: fixed with all four offsets at 0) sits on top of it.
+	rec("sceneElement", box(this.controller.sceneElement));
+	rec("sceneElement.computedHeight", win.getComputedStyle(this.controller.sceneElement).height);
+	rec("sceneElement.position", win.getComputedStyle(this.controller.sceneElement).position);
+	rec("backdrop", box(get("backdrop")));
+	rec("sceneScrollerParent", (function () {
+		var p = this.controller.sceneElement.parentNode;
+		return p ? [p.id || p.className || p.tagName, JSON.stringify(box(p)),
+			win.getComputedStyle(p).height, win.getComputedStyle(p).position] : null;
+	}).call(this));
 	rec("slider.innerHTML", slider ? slider.innerHTML.replace(/\s+/g, " ").substring(0, 300) : null);
 	rec("slider.display", slider ? win.getComputedStyle(slider).display : null);
 	rec("slider.computedWidth", slider ? win.getComputedStyle(slider).width : null);

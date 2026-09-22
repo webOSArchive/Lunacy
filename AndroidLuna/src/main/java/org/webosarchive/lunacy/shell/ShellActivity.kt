@@ -253,6 +253,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             return
         }
         val rootWindow = AppWindow(this, appId, this, registry.get(appId)?.emulated ?: false)
+        rootWindow.fixedOrientation = fixedOrientationOf(app)
         running[appId] = mutableListOf(rootWindow)
         if (app.noWindow) hidden.addView(rootWindow, FrameLayout.LayoutParams(1, 1))
         else showAsCard(rootWindow)
@@ -275,8 +276,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         cards.openMaximized(card)
     }
 
+    /** appinfo.json's requestedWindowOrientation, which every card of the app starts with. */
+    private fun fixedOrientationOf(app: AppInfo?): String? =
+        app?.appinfo?.optString("requestedWindowOrientation")?.lowercase()
+            ?.takeIf { it in setOf("up", "down", "left", "right", "landscape", "portrait") }
+
     override fun onWindowOpened(parent: AppWindow, child: AppWindow) {
         running.getOrPut(child.appId) { mutableListOf() } += child
+        child.fixedOrientation = fixedOrientationOf(registry.get(child.appId))
         when (child.type) {
             "dashboard" -> notifications.addDashboard(child, icon(child.attributes.optString("icon"), child.appId))
             "popupalert" -> notifications.popups.show(child, child.attributes.optInt("height", 200))
@@ -297,8 +304,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             setExhibition(false)
         }
         cards.cards.firstOrNull { it.window == window }?.let { cards.remove(it) }
-        // A full-screen card that closes itself while maximized takes the bar's absence with it.
-        if (cards.maximized == null) statusBar.slide(false)
+        // A full-screen card that closes itself while maximized takes the bar's absence with it,
+        // and one that had fixed the screen's orientation lets it go.
+        if (cards.maximized == null) { statusBar.slide(false); applyOrientation(null) }
         notifications.removeDashboard(window)
         notifications.popups.remove(window)
         closeWindow(window)
@@ -398,6 +406,32 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * nothing shows through the gap. LunaSysMgr left an emulated card's bar alone
      * (SystemUiController::applyWindowProperties), and so does this.
      */
+    override fun orientationRequested(window: AppWindow) {
+        if (cards.maximized?.window == window) applyOrientation(window)
+    }
+
+    /**
+     * A card that fixes its orientation turns the whole screen while it is maximized - status
+     * bar, card and all - which is what the reference TouchPad does (its luna.conf has
+     * displayUiRotates, and LunaSysMgr then rotated the UI rather than the card). webOS's
+     * window "up" is portrait on both the TouchPad and a phone. The screen is let go again in
+     * card view or when another card comes up; Android then follows the sensor at once, where
+     * a TouchPad waited for the next time it was turned.
+     */
+    private fun applyOrientation(window: AppWindow?) {
+        val o = window?.takeUnless { it.emulated }?.fixedOrientation
+        val want = when (o) {
+            "up" -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            "down" -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT
+            "right" -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            "left" -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
+            "landscape" -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            "portrait" -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            else -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+        if (requestedOrientation != want) requestedOrientation = want
+    }
+
     override fun fullScreen(window: AppWindow) {
         if (window.emulated) return
         val card = cards.cards.firstOrNull { it.window == window } ?: return
@@ -1014,6 +1048,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // and not again until the next time (measured on the reference TouchPad).
         statusBar.setMode(StatusBar.Mode.APP, card.window.statusBarColor)
         statusBar.slide(card.fullScreen)
+        applyOrientation(card.window)
         if (launcherOpen) closeLauncher()
         fade(justType, false); showDock(false)
         card.window.setStageActive(true)
@@ -1086,6 +1121,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         statusBar.title = StatusBar.CARRIER_TEXT
         statusBar.setMode(if (launcherOpen) StatusBar.Mode.LAUNCHER else StatusBar.Mode.CARDS)
         statusBar.slide(false)
+        applyOrientation(null)
         if (!launcherOpen) fade(justType, true)
         showDock(true)
         cards.cards.forEach { it.window.setStageActive(false) }

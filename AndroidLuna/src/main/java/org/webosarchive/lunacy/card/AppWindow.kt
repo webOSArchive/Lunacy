@@ -50,6 +50,8 @@ interface WindowHost {
      * goes while it is maximized. The request is on [AppWindow.fullScreen] already.
      */
     fun fullScreen(window: AppWindow)
+    /** The app asked for a fixed orientation, or "free" again; it is on [AppWindow.fixedOrientation]. */
+    fun orientationRequested(window: AppWindow)
     fun deviceInfo(emulated: Boolean): String
     /** webOS's screen orientation: "up", "down", "left" or "right". */
     fun screenOrientation(): String
@@ -93,6 +95,14 @@ class AppWindow(
     /** webOS window attributes from window.open: "window" is card, dashboard or popupalert. */
     var attributes = JSONObject()
     val type: String get() = attributes.optString("window", "card")
+    /**
+     * The orientation the app has fixed its card at - "up", "down", "left", "right",
+     * "landscape" or "portrait" - or null while it lets the card turn with the screen
+     * ("free"). Starts as appinfo.json's requestedWindowOrientation, as LunaSysMgr's
+     * CardWebApp did; the frameworks then ask for "free" on the app's behalf unless the app
+     * says otherwise. An emulated card ignores it (the shell doesn't turn for one).
+     */
+    @Volatile var fixedOrientation: String? = null
     /** What the app last asked for through PalmSystem.enableFullScreenMode. */
     var fullScreen = false
         private set
@@ -280,6 +290,7 @@ class AppWindow(
     private companion object {
         /** Plausible process ids, in the range webOS apps started at. */
         val nextPid = java.util.concurrent.atomic.AtomicInteger(1183)
+        val FOUR = setOf("up", "down", "left", "right")
     }
 
     inner class Native {
@@ -328,7 +339,19 @@ class AppWindow(
             if (w > 0 && h > 0) return JSONObject().put("width", w).put("height", h).toString()
             return host.screenSize(emulated)
         }
-        @JavascriptInterface fun windowOrientation(): String = host.windowOrientation(emulated)
+        /**
+         * A card fixed at one of the four reports that one, as the reference TouchPad did: asked
+         * for "up", its card turned to portrait and read "up" where a free card held the same
+         * way reads "right".
+         */
+        @JavascriptInterface fun windowOrientation(): String =
+            fixedOrientation?.takeIf { !emulated && it in FOUR } ?: host.windowOrientation(emulated)
+        /** PalmSystem.windowOrientation = o, or setWindowOrientation(o). */
+        @JavascriptInterface
+        fun requestOrientation(o: String) {
+            val v = o.lowercase().takeIf { it in FOUR || it == "landscape" || it == "portrait" }
+            main.post { if (fixedOrientation != v) { fixedOrientation = v; host.orientationRequested(this@AppWindow) } }
+        }
         @JavascriptInterface fun screenSize(): String = host.screenSize(emulated)
         /** PalmSystem's locale fields and clock format, from Android's own settings. */
         @JavascriptInterface fun localeInfo(): String = host.localeInfo()

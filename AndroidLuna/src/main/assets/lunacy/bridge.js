@@ -200,14 +200,12 @@
 					try { return N.windowOrientation ? N.windowOrientation() : PS.screenOrientation; }
 					catch (e) { return PS.screenOrientation; }
 				},
-				// "free" (the default, and what Mojo asks for) lets the card follow the screen,
-				// which is what Lunacy's cards already do; a fixed orientation is recorded and
-				// logged, because Lunacy has no rotation lock yet.
+				// "free" (the default, and what Mojo asks for) lets the card follow the screen; any
+				// other value fixes it there while the card is maximized. On a TouchPad the whole
+				// screen turned to suit the card, status bar and all, and so does Lunacy's.
 				set: function (o) {
 					PS.specifiedWindowOrientation = String(o);
-					if (String(o).toLowerCase() !== "free") {
-						N.log("PalmSystem.windowOrientation = " + o + " (rotation lock not implemented)");
-					}
+					if (N.requestOrientation) { N.requestOrientation(String(o)); }
 				}
 			});
 		} catch (e) {}

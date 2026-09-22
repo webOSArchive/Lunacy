@@ -158,6 +158,36 @@
 	safe("doc.compatMode", function () { return document.compatMode; });
 	safe("nav.userAgent", function () { return navigator.userAgent; });
 
+
+	// --- 8. background-size against what, when the background is fixed to the viewport.
+	// The spec says a fixed background's positioning area is the viewport, so 100% is the
+	// viewport's; this is the one place Lunacy corrects the renderer, so what the device does
+	// decides whether that correction is right. Some engines report a used pixel value here,
+	// which answers it without a camera; the swatches in index.html answer it either way.
+	safe("bgSize.fixed", function () {
+		var e = document.getElementById("sw-fixed"), cs = getComputedStyle(e);
+		return [cs.backgroundSize, cs.webkitBackgroundSize, Math.round(e.getBoundingClientRect().width)];
+	});
+	safe("bgSize.scroll", function () {
+		var e = document.getElementById("sw-scroll"), cs = getComputedStyle(e);
+		return [cs.backgroundSize, cs.webkitBackgroundSize, Math.round(e.getBoundingClientRect().width)];
+	});
+	// A 2 x 2 image, drawn here rather than shipped so both machines get the same bytes:
+	// red, green / blue, white.
+	safe("bgSize.swatches", function () {
+		var c = document.createElement("canvas");
+		c.width = 2; c.height = 2;
+		var x = c.getContext("2d");
+		x.fillStyle = "#ff0000"; x.fillRect(0, 0, 1, 1);
+		x.fillStyle = "#00c000"; x.fillRect(1, 0, 1, 1);
+		x.fillStyle = "#0000ff"; x.fillRect(0, 1, 1, 1);
+		x.fillStyle = "#ffffff"; x.fillRect(1, 1, 1, 1);
+		var url = "url(" + c.toDataURL("image/png") + ")";
+		document.getElementById("sw-fixed").style.backgroundImage = url;
+		document.getElementById("sw-scroll").style.backgroundImage = url;
+		return "drawn";
+	});
+
 	window.__cssprobe = results;
 	say("--- end ---");
 })();

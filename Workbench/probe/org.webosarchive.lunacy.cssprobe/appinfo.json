@@ -1,6 +1,6 @@
 {
 	"id": "org.webosarchive.lunacy.cssprobe",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"vendor": "webOS Archive",
 	"type": "web",
 	"main": "index.html",

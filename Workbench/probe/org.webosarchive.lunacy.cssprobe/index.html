@@ -23,6 +23,16 @@ body { min-height: 480px; height: 100%; margin: 0; padding: 0; }
 </head>
 <body>
 <pre id="out"></pre>
+<!-- Two swatches for the camera: the same image at background-size: 100% 100%, one with
+     background-attachment: fixed and one without. With a 2x2 image, resolving the size
+     against the element shows four quadrants; resolving it against the viewport, as the
+     spec says a fixed background does, shows the slice of a viewport-sized image that falls
+     where the swatch is - two colours at most, and usually one. -->
+<div id="swatches" style="position:absolute; top:150px; left:20px">
+  <div id="sw-fixed" style="width:200px;height:60px;border:2px solid #000;background-repeat:repeat;background-position:center center;-webkit-background-size:100% 100%;background-size:100% 100%;background-attachment:fixed"></div>
+  <div style="height:8px"></div>
+  <div id="sw-scroll" style="width:200px;height:60px;border:2px solid #000;background-repeat:repeat;background-position:center center;-webkit-background-size:100% 100%;background-size:100% 100%;background-attachment:scroll"></div>
+</div>
 <script src="cssprobe.js"></script>
 </body>
 </html>

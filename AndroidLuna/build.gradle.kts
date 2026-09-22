@@ -4,14 +4,13 @@ plugins {
 }
 
 /**
- * The build number counts itself: the number of commits behind this build, plus 10 (so the
- * count started at 101 with version 0.2.0). Every commit is a new build number, and any
- * checkout of the same commit gets the same one. Without git (a source drop) it is 1.
- * The version name is codepoet's to change, by hand, below.
+ * The build number counts itself: it is the number of commits behind this build. Every
+ * commit is a new build number, and any checkout of the same commit gets the same one.
+ * Without git (a source drop) it is 1. The version name is codepoet's to change, by hand, below.
  */
 val buildNumber: Int = runCatching {
     val git = ProcessBuilder("git", "rev-list", "--count", "HEAD").directory(rootDir).start()
-    git.inputStream.bufferedReader().readText().trim().toInt() + 10
+    git.inputStream.bufferedReader().readText().trim().toInt()
 }.getOrDefault(1)
 
 android {

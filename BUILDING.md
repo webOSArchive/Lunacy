@@ -81,6 +81,5 @@ how visual changes are checked.
 
 The version name (`versionName` in `AndroidLuna/build.gradle.kts`) is changed by hand, when
 codepoet decides. The build number (`versionCode`) counts itself: it is the number of commits
-behind the build plus 10, so every commit is a new build and version 0.2.0 started at build
-101. Device Info shows both. A build from a tree with uncommitted changes carries the last
+behind the build, so every commit is a new build. Device Info shows both. A build from a tree with uncommitted changes carries the last
 commit's number.

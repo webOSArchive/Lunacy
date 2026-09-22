@@ -1,0 +1,10 @@
+{
+	"id": "org.webosarchive.lunacy.cssprobe",
+	"version": "0.0.2",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "CSS Probe",
+	"icon": "icon.png",
+	"uiRevision": 2
+}

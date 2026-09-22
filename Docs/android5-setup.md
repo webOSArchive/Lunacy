@@ -106,8 +106,14 @@ Two Android settings were changed for screenshots and left that way:
 `screen_off_timeout 1800000`. Put `accelerometer_rotation 1` back to let the tablet rotate
 again.
 
-The reference **TouchPad** has the same five apps installed (`palm-install`), plus the three
+The reference **TouchPad** has the same five apps installed (`palm-install`), plus the five
 probe apps. drPodder there has taken its default feeds, as it would on any first run.
+
+**2026-09-22.** `org.webosarchive.lunacy.mojoprobe` was installed into Lunacy on the tablet
+(again `--es install`, so it goes with a `pm clear`), and `…lunacy.cssprobe` and
+`…lunacy.mojoprobe` onto the reference TouchPad. Nothing else on either device changed: the
+download manager's contract was measured into `/media/internal/lunacyprobe` on the TouchPad
+and that folder was deleted afterwards.
 
 ## Display density
 

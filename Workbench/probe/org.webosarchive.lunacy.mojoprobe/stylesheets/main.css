@@ -1,0 +1,44 @@
+/* drPodder Redux 1.6.0's own rules for the row either side of the playback slider, copied
+   from its stylesheets/main.css so this probe lays out exactly as its episodeDetails scene
+   does. The slider between them is Mojo's .stream-buffer-bar, a 60% table-cell. */
+.topContent {
+	width: 100%;
+	padding: 0 0 0 0;
+	margin: 0 0 0 0;
+	position: fixed;
+	top: 0;
+	z-index: 10000;
+	border-bottom-style: solid;
+	border-bottom-width: thin;
+}
+
+.stream-info {
+	padding-bottom: 12px;
+}
+
+.stream-info .elapsed,
+.stream-info .duration {
+	font-size: 14px;
+	vertical-align: middle;
+}
+
+.stream-info .elapsed {
+	text-align: left;
+}
+
+.stream-info .elapsed,
+.stream-info .duration {
+	display: table-cell;
+	text-align: center;
+	width: 20%;
+}
+
+#report {
+	position: absolute;
+	top: 130px;
+	left: 0;
+	font: 12px monospace;
+	white-space: pre-wrap;
+	background: #fff;
+	color: #000;
+}

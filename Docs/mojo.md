@@ -250,6 +250,27 @@ Honest list, for whoever picks this up:
 - **The frameworks MojoLoader can reach** are only the ones something has needed so far.
   `mediaextension`, which drPodder asks for, still 404s.
 
+## Telling an engine difference from an app one
+
+A layout that comes out wrong here and right on the device is not, on the evidence so far,
+usually the engine. Two of the three differences chased on 2026-09-22 were Lunacy answering a
+question wrongly, and the third was a renderer bug with an obvious mechanism - none was Mojo's
+CSS meeting a stricter parser.
+
+The way to tell them apart is to put the *same* markup on both machines.
+`Workbench/probe/org.webosarchive.lunacy.mojoprobe` is a Mojo app that does nothing but build
+a piece of another app's scene - real widgets, real framework stylesheets - and log the
+geometry, and `…lunacy.cssprobe` does the same for plain CSS with no framework at all. Both
+report to `palm-log` on a device and to the console in Lunacy, so the two columns can be read
+side by side.
+
+That is what settled drPodder's playback row. The row is three `display: table-cell` children
+of a plain block, and an anonymous table around them shrinks to fit its content rather than
+filling its container - which looked exactly like the cause, and which the probe showed
+happening **on the TouchPad too** (cells 36/109/36 there against 40/121/40 here, on the same
+markup). The engines agreed; the app was sizing the middle cell itself, from an orientation
+Lunacy was reporting wrongly.
+
 ## How to debug a Mojo app here
 
 - The bus log names every call: `adb logcat -v brief Lunacy:V '*:S'` and look for

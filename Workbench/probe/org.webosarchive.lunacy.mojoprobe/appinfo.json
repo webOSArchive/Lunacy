@@ -1,0 +1,11 @@
+{
+	"id": "org.webosarchive.lunacy.mojoprobe",
+	"version": "0.0.1",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Mojo Probe",
+	"icon": "icon.png",
+	"uiRevision": 2,
+	"noDeprecatedStyles": true
+}

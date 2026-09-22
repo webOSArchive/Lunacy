@@ -21,7 +21,7 @@ out on the reference devices. Changes made to the Android device are listed sepa
 | `AndroidLuna/tools/gen-fonts-css.py` | Regenerates `fonts.css` from the shipped Prelude files | yes |
 | `AndroidLuna/tools/node-launcher.cpp` | Node's `main()`, built by `fetch-assets.sh` into `liblunacynode.so` for JS services | yes |
 | `AndroidLuna/local-jni/` | `libnode.so` (nodejs-mobile 0.3.3), `libc++_shared.so` and the launcher, from `fetch-assets.sh` | no |
-| `Workbench/probe/` | TouchPad probe apps that record the contract: `…lunacy.probe` (PalmSystem, the input model, WebSQL, the text indexer), `…lunacy.netprobe` (the network, from a 2.2.4 phone) and `…lunacy.htmlprobe` (how the device's parser reads a self-closed tag) | yes |
+| `Workbench/probe/` | TouchPad probe apps that record the contract: `…lunacy.probe` (PalmSystem, the input model, WebSQL, the text indexer), `…lunacy.netprobe` (the network, from a 2.2.4 phone), `…lunacy.htmlprobe` (how the device's parser reads a self-closed tag), `…lunacy.cssprobe` (window metrics and the layout webOS apps were written against, no framework) and `…lunacy.mojoprobe` (a Mojo app that builds a piece of another app's scene with real widgets and logs the geometry) | yes |
 | `Workbench/*.sh`, `Workbench/cdp.mjs`, `Workbench/seams.py` | Device helper scripts, DevTools from the command line, and the border-image seam finder (both below) | yes |
 | `Workbench/vendor/` | Local clones: enyo-1.0, LunaCE, luna-sysmgr, webos-catalog-service, and files pulled from the TouchPad (frameworks, `/etc/palm`, fonts, wallpapers, a WebView 64 APK) | no |
 | `Workbench/vendor/palm-apps/` | Palm's own apps pulled off the reference TouchPad (Clock, Exhibition, Video Player), before they are bundled | no |
@@ -148,6 +148,14 @@ the note in [luna-shell-reference.md](luna-shell-reference.md). `novacom -l` nam
   org.webosarchive.lunacy.notifytest`. Actions are `banner`, `banners`, `push`, `pop` and
   `popup`. In Lunacy, pass the same JSON with `--es params`.
 - **Package and install our apps:** `palm-package <dir>`, then `palm-install <ipk>`.
+- **Putting the same markup on both machines.** When a layout comes out wrong here and right
+  on the device, build it in `…lunacy.cssprobe` (plain CSS) or `…lunacy.mojoprobe` (a real
+  Mojo scene) and read the two columns side by side before blaming the engine: on
+  2026-09-22 the table-cell layout that looked like the cause of drPodder's stub of a
+  playback bar turned out to lay out identically on the TouchPad. Both log to `palm-log` on a
+  device and to the console in Lunacy (`adb logcat`, or `cdp.sh eval 'window.__cssprobe'`).
+  A probe app needs `"uiRevision": 2` in its `appinfo.json`, or webOS runs it in a 320 x 480
+  phone-emulation card and every measurement is of the wrong window.
 - **The probe app** (`Workbench/probe`, 0.1.2 on the reference TouchPad) records the contract
   to `palm-log`. `net.js` in it measures cross-origin XHR against `httpbin.org`, which echoes
   what the server saw. Install the same `.ipk` in Lunacy (`adb push` it to

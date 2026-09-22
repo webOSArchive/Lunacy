@@ -232,6 +232,10 @@ fresh and turned while open; then decide.
 
 ---
 
+### A10. Open: a page's first script sees a 980-px-wide layout
+
+Found 2026-09-22 with `emuprobe`: its inline script, run while the page is parsed, reads `innerWidth` 980 in Lunacy (Chromium's default layout width) where the reference TouchPad reads 320; by the time the page has loaded it is 320. The compat layer's viewport meta arrives after the first script runs. Any app that measures the window in a script in its `<head>` or body, rather than on load, is told the wrong size. Worth a look in `compat.js`'s viewport code; not touched yet.
+
 ## B. The shell
 
 ### B1. Card view: stacks, reorder, dimming, the angry card
@@ -356,6 +360,8 @@ Everything here is §3; Lunacy's is `Launcher.kt`.
   separate decision.
 
 ### B7. The emulated card's chrome
+
+**Done 2026-09-22**, compared with `emuprobe` on both machines, maximized and in the card view (`Workbench/results/b7-*`). Corrections: the keyboard button is placed from the *card's* corner (the screen's bottom-right), not the phone's; the backdrop is #0F0F0F (`emucard-bg.png` doesn't exist on the device, so LunaSysMgr's fill shows); in the card view there is no phone - a black card with the page drawn about 1.5× (`2 − scale`); and the main status bar shows the carrier string with a ▾ while an emulated card is up. Not done: turning the chrome with the screen (the strip and bar move to the sides in landscape, `layoutWidgets`) - Lunacy's emulated card stays upright.
 
 On the roadmap; the pointers so it can be done without re-reading the C++:
 

@@ -39,7 +39,42 @@ class Card(
     private val frame: android.graphics.Bitmap? = null,
     /** The loading placeholder, over the page until the app has drawn; see [CardSplash]. */
     private val splash: CardSplash? = null,
+    /** An emulated card's chrome: the art, and the app's title for its own status bar. */
+    private val luna: Luna? = null,
+    private val title: String = "",
 ) : FrameLayout(context) {
+    private val emulated = emulatedSize != null
+
+    /** What a tap on an emulated card's chrome asks for. */
+    enum class ChromeAction { APP_MENU, BACK, KEYBOARD }
+    var onChrome: (ChromeAction) -> Unit = {}
+
+    /**
+     * An emulated card's chrome is up - its own status bar, the gesture strip, the keyboard
+     * button, the phone around it - while the card is maximized, and not in the card view
+     * (EmulatedCardWindow::setMaximized). The backdrop is #0F0F0F behind the phone, black in
+     * the card view (both measured on the reference TouchPad).
+     */
+    var chromeShown = false
+        set(v) {
+            if (field == v) return
+            field = v
+            if (emulated) setBackgroundColor(if (v) android.graphics.Color.rgb(0x0F, 0x0F, 0x0F) else android.graphics.Color.BLACK)
+            pressed = null
+            invalidate()
+        }
+
+    /**
+     * In the card view LunaSysMgr drew an emulated card's page larger than the phone, by
+     * (2 − the card's scale) - about 1.5 at the card view's size - so it can be read in the
+     * little card; maximized it is its own size.
+     */
+    fun setPageScale(k: Float) {
+        if (window.scaleX == k) return
+        window.scaleX = k; window.scaleY = k
+        splash?.let { it.scaleX = k; it.scaleY = k }
+        invalidate()
+    }
     /** The app counts as ready (stageReady, or loaded and out of time); see [CardLayer.ready]. */
     var ready = false
         set(v) { field = v; lift() }
@@ -61,13 +96,111 @@ class Card(
      * than put in an ImageView, which would scale it for the screen's density.
      */
     override fun dispatchDraw(canvas: android.graphics.Canvas) {
-        frame?.let {
+        if (chromeShown) frame?.let {
             canvas.drawBitmap(it, (width - it.width) / 2f, (height - it.height) / 2f, null)
         }
         super.dispatchDraw(canvas)
+        if (emulated) drawChrome(canvas)
         // Black at (1 - dimming) over an opaque card is the card's RGB times dimming, which is
         // what LunaSysMgr's corner shader did with its Active uniform.
         if (dimming < 1f) canvas.drawColor(android.graphics.Color.argb(Math.round((1f - dimming) * 255), 0, 0, 0))
+    }
+
+    // ---- an emulated card's chrome (EmulatedCardWindow) ----
+
+    /** The page as drawn, its scale included. */
+    private fun pageRect(): RectF {
+        val k = window.scaleX
+        val cx = (window.left + window.right) / 2f; val cy = (window.top + window.bottom) / 2f
+        return RectF(cx - window.width * k / 2, cy - window.height * k / 2, cx + window.width * k / 2, cy + window.height * k / 2)
+    }
+    private val chromeFullScreen get() = window.fullScreen
+    private fun titleRect(): RectF? {
+        val l = luna ?: return null
+        val p = pageRect()
+        val w = l.px(13f) + titlePaint.measureText(title) + l.px(20f) + l.px(2f)
+        val top = p.top - l.px(28f) + l.px(1f)
+        return RectF(p.left, top, p.left + w, top + l.px(26f))
+    }
+    private fun stripRect(): RectF? { val l = luna ?: return null; val p = pageRect(); return RectF(p.left, p.bottom, p.right, p.bottom + l.px(66f)) }
+    private fun keyboardRect(): RectF? {
+        val l = luna ?: return null
+        val right = width - l.px(17f); val bottom = height - l.px(18f)
+        return RectF(right - l.px(52f), bottom - l.px(44f), right, bottom)
+    }
+    private val titlePaint by lazy {
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE; textSize = luna?.px(14f) ?: 14f; luna?.let { typeface = it.fontBold }; letterSpacing = -0.05f
+        }
+    }
+    private var pressed: ChromeAction? = null
+
+    private fun drawChrome(c: Canvas) {
+        val l = luna ?: return
+        val p = pageRect()
+        // drawRoundedCorners: wm-corner-*.png over the page's corners, scaled with it (none in
+        // full screen).
+        if (!chromeFullScreen) {
+            val k = window.scaleX; val s = l.px(24f) * k
+            l.image("wm-corner-top-left.png")?.let { c.drawBitmap(it, null, RectF(p.left, p.top, p.left + s, p.top + s), null) }
+            l.image("wm-corner-top-right.png")?.let { c.drawBitmap(it, null, RectF(p.right - s, p.top, p.right, p.top + s), null) }
+            l.image("wm-corner-bottom-left.png")?.let { c.drawBitmap(it, null, RectF(p.left, p.bottom - s, p.left + s, p.bottom), null) }
+            l.image("wm-corner-bottom-right.png")?.let { c.drawBitmap(it, null, RectF(p.right - s, p.bottom - s, p.right, p.bottom), null) }
+        }
+        if (!chromeShown) return
+        // Its own status bar (StatusBar::TypeEmulatedCard), just above the page: the app's
+        // title in appname-background.png (13 px left cap, 20 px right with the ▾ in it).
+        if (!chromeFullScreen) titleRect()?.let { r ->
+            l.nine(c, "statusBar/appname-background.png", r, 13, 0, 20, 0)
+            c.drawText(title, r.left + l.px(13f - 4f), r.centerY() - (titlePaint.ascent() + titlePaint.descent()) / 2 - l.px(1f), titlePaint)
+        }
+        // The virtual core navi, 66 px below the page: the light bar, bright while pressed.
+        stripRect()?.let { r ->
+            fun bar(kind: String, paint: android.graphics.Paint?) {
+                val left = l.image("corenavi/light-bar-$kind-left.png"); val right = l.image("corenavi/light-bar-$kind-right.png")
+                val centre = l.image("corenavi/light-bar-$kind-center.png")
+                val h = (left?.height ?: 0).toFloat(); val top = r.centerY() - h / 2
+                left?.let { c.drawBitmap(it, r.left, top, paint) }
+                right?.let { c.drawBitmap(it, r.right - it.width, top, paint) }
+                centre?.let { c.drawBitmap(it, null, RectF(r.left + (left?.width ?: 0), top, r.right - (right?.width ?: 0), top + h), paint) }
+            }
+            bar("dark", null)
+            if (pressed == ChromeAction.BACK) bar("bright", null)
+        }
+        // The keyboard button, 17 px in and 18 px up from the card's corner: a two-state
+        // sprite, 52 × 44 at rows 0 and 44.
+        keyboardRect()?.let { r ->
+            l.sprite(c, "emucard-kb-up_icon.png", r.centerX(), r.centerY(), 0, if (pressed == ChromeAction.KEYBOARD) 44 else 0, 52, 44)
+        }
+    }
+
+    private fun chromeAt(x: Float, y: Float): ChromeAction? {
+        if (!emulated || !chromeShown) return null
+        val slop = luna?.px(10f) ?: 10f
+        return when {
+            keyboardRect()?.let { RectF(it).apply { inset(-slop, -slop) }.contains(x, y) } == true -> ChromeAction.KEYBOARD
+            stripRect()?.contains(x, y) == true -> ChromeAction.BACK
+            !chromeFullScreen && titleRect()?.contains(x, y) == true -> ChromeAction.APP_MENU
+            else -> null
+        }
+    }
+
+    private var downOn: ChromeAction? = null
+    override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
+        if (e.actionMasked == MotionEvent.ACTION_DOWN) { downOn = chromeAt(e.x, e.y); pressed = downOn; if (downOn != null) invalidate() }
+        return downOn != null
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(e: MotionEvent): Boolean {
+        val on = downOn ?: return false
+        val here = chromeAt(e.x, e.y) == on
+        when (e.actionMasked) {
+            MotionEvent.ACTION_MOVE -> { val p = if (here) on else null; if (p != pressed) { pressed = p; invalidate() } }
+            MotionEvent.ACTION_UP -> { pressed = null; invalidate(); downOn = null; if (here) onChrome(on) }
+            MotionEvent.ACTION_CANCEL -> { pressed = null; downOn = null; invalidate() }
+        }
+        return true
     }
 
     /**
@@ -412,6 +545,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
             c.translationX = cx(c) - (c.left + c.width / 2f)
             c.translationY = c.cy - (c.top + c.height / 2f) + c.lift
             c.alpha = c.fade
+            if (c.window.emulated) c.setPageScale(if (c.chromeShown) 1f else max(1f, 2f - c.scale))
             c.invalidateOutline()
         }
         invalidate()
@@ -584,6 +718,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
 
     fun maximize(card: Card) {
         val g = card.group ?: return
+        maximized?.takeIf { it != card }?.chromeShown = false
         launching.remove(card)
         g.active = card
         setActiveGroup(g)
@@ -595,11 +730,13 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
             activating = null
             maximized = card
             cards.forEach { if (it != card) it.visibility = View.INVISIBLE }
+            card.chromeShown = true
             listener.onMaximized(card)
         }
     }
 
     fun showCardView() {
+        maximized?.chromeShown = false
         maximized = null
         activating = null
         topCard = null
@@ -858,6 +995,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
             MotionEvent.ACTION_MOVE -> if (drag == Drag.UNDECIDED && downY - e.y >= luna.px(Params.TRIGGER) && downY - e.y > abs(e.x - downX)) {
                 drag = Drag.MINIMIZE; dragCard = max
                 cards.forEach { it.visibility = View.VISIBLE }
+                max.chromeShown = false
                 return true
             }
         }
@@ -983,6 +1121,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
             downY - e.y >= luna.px(Params.TRIGGER) && downY - e.y > abs(e.x - downX)) {
             drag = Drag.MINIMIZE; dragCard = max
             cards.forEach { it.visibility = View.VISIBLE }
+            max.chromeShown = false
             if (velocity == null) velocity = VelocityTracker.obtain()
             velocity!!.addMovement(e)
         }

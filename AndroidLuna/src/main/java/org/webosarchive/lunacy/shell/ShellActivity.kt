@@ -360,7 +360,17 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val card = Card(this, w, luna.px(CardLayer.Params.CORNER), emu,
             if (emu == null) null else luna.image("emucard-device-frame.png"),
             // webOS held the card's space with the app's own icon until it had drawn.
-            registry.get(w.appId)?.let { CardSplash(this, luna, luna.splashIcon(it)) })
+            registry.get(w.appId)?.let { CardSplash(this, luna, luna.splashIcon(it)) },
+            if (emu == null) null else luna, registry.get(w.appId)?.title ?: w.appId)
+        // The emulated card's own chrome: its title is the app menu, its strip the back gesture,
+        // its button the keyboard (EmulatedCardWindow).
+        card.onChrome = { action ->
+            when (action) {
+                Card.ChromeAction.APP_MENU -> toggleAppMenu()
+                Card.ChromeAction.BACK -> w.sendBack()
+                Card.ChromeAction.KEYBOARD -> { w.requestFocus(); imm.showSoftInput(w, android.view.inputmethod.InputMethodManager.SHOW_FORCED) }
+            }
+        }
         card.fullScreen = w.fullScreen && !w.emulated
         // A card an app opens while its own card is up joins that card's group
         // (CardWindowManager::prepareAddWindowSibling: the active card is focused and the
@@ -1215,7 +1225,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             card.window.requestFocus()
             imm.showSoftInput(card.window, 0)
         }
-        statusBar.title = registry.get(card.window.appId)?.title ?: card.window.appId
+        // An emulated card has its title on its own status bar; the main one shows the carrier
+        // string (SystemUiController::updateStatusBarTitle passes no title for it).
+        statusBar.title = if (card.window.emulated) StatusBar.CARRIER_TEXT else registry.get(card.window.appId)?.title ?: card.window.appId
         // The app's own colour, if it set one: LunaSysMgr read it as the card was maximized
         // and not again until the next time (measured on the reference TouchPad).
         statusBar.setMode(StatusBar.Mode.APP, card.window.statusBarColor)

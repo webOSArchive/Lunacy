@@ -3,12 +3,39 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-09-21)
+## Where things stand (2026-09-22)
 
 Apps now install from the App Museum and run: Apollo plays music, Plex plays direct and
 transcoded video, Sound Cloud Player streams through its JS service, AccuWeather and USA Today
 show live data. Per-app results and every fix, with the layer it landed in, are in
 [fix-log.md](fix-log.md).
+
+**2026-09-22, Mojo parity.** codepoet reported three things that look wrong beside a
+TouchPad, and asked for the systemic causes rather than the symptoms. There were four, all in
+general layers, and none of them was Mojo's CSS meeting a stricter parser:
+
+- **The window's own measurements disagreed.** `window.innerWidth` is 1281 where the page is
+  laid out into 1280, and `screen.width` came back in Android's density-independent pixels.
+  On a device every one of them was the card's own pixels. webOS IAmA reddit sizes its left
+  pane from `innerWidth` and leaves the right one at 60% in CSS, so the two came to a
+  fraction of a pixel more than the line and the right float - the whole article - dropped
+  below the fold. Both of codepoet's reddit symptoms were that one pixel.
+- **`PalmSystem.windowOrientation` answered "free"**, which is not an orientation. LunaSysMgr
+  reads the window's own orientation out of that property and writes the app's *request* into
+  a different one; Mojo asks for "free" on every app's behalf, so every orientation branch in
+  every Mojo app fell through. That is why drPodder's playback slider sat in the corner:
+  nothing sized it. See "Orientation" in [mojo.md](mojo.md).
+- **A fixed background is sized against the wrong box** in this WebView, which is what turned
+  reddit's card background into codepoet's "sliced up blob".
+- **`com.palm.downloadmanager` now answers**, in the shapes measured on the reference device,
+  so drPodder's album art and episodes and MeTube's downloads arrive.
+
+Worth recording for the next time something looks like an engine difference: it usually isn't.
+Two probe apps now put the same markup on both machines -
+`Workbench/probe/org.webosarchive.lunacy.mojoprobe` (a Mojo app with real widgets) and
+`…lunacy.cssprobe` (plain CSS, no framework) - and the first thing they showed was that the
+table-cell layout everyone would have blamed for drPodder's slider behaves *identically* on
+the TouchPad.
 
 **2026-09-21, Mojo and fidelity.** The five Mojo apps codepoet named all run, and Palm's own
 Video Player with them (Mojo 2). Then a pass on how it *feels*, each fix measured against the
@@ -53,6 +80,7 @@ and the space the keyboard and Android's navigation bar cost a card. Both are in
   `systemProperties/Get`, activitymanager (foreground activities), keys (headset and media),
   display, and db8 and tempdb ([db8.md](db8.md)). Everything else returns webOS's own errors.
   Not yet: zeroconf (codepoet: never worked, skip), background activities, the media indexer.
+  The download manager was added on 2026-09-22, measured method by method.
 - **Phase 3 (shell):** well along. Card view, launcher, dock, status bar, banners (now
   matching the TouchPad), dashboards and popup alerts. The launcher has the launch glow and
   edit mode: reordering, moving icons between tabs (with the tab highlight), removing

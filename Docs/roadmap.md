@@ -257,6 +257,13 @@ and the space the keyboard and Android's navigation bar cost a card. Both are in
   `webOS CE 3.1.0`).
 - **Next candidates** (the full list of what still differs from LunaCE, with pointers into both
   trees, is [luna-deltas.md](luna-deltas.md)):
+  - **Next priority (codepoet, 2026-09-22): Palm's App Catalog**, `com.palm.app.enyo-findapps`
+    6.1.2923 (the webOS Doctor CE pre-install, `AddToImage/PreInstall/`). This version talks to
+    webOS Archive's servers, which serve both the magazine and the catalog listings, so every
+    failure is Lunacy's. Installed on the tablet, it stops at its loading spinner; its log
+    names `com.palm.accountservices` (the Google property ID), `applicationManager/
+    launchPointChanges`, `connectCellularDataService` (for its proxy), and the magazine
+    edition request failing and then reading a null reply (`'nom' of null`).
   - `activitymanager`'s scheduled activities and `com.palm.power/timeout`, which are one want
     and not two: the Clock's alarms, SimpleChat's half-hourly refresh, reddit's message check
     and drPodder's feed update all ask for them, and Android's `AlarmManager` backs them all;

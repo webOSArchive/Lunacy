@@ -97,6 +97,7 @@ for where things stand.
 - [Docs/android5-setup.md](Docs/android5-setup.md): what is done to an Android 5 device
 - [Docs/dev-workflow.md](Docs/dev-workflow.md): building, running, and checking against a TouchPad
 - [Docs/luna-shell-reference.md](Docs/luna-shell-reference.md): LunaCE shell spec, from its source
+- [Docs/luna-deltas.md](Docs/luna-deltas.md): where Lunacy still differs from LunaCE, as a work list with pointers
 - [Docs/related-projects.md](Docs/related-projects.md): the wider webOS preservation landscape
 
 ## Companion apps

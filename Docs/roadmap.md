@@ -225,7 +225,8 @@ and the space the keyboard and Android's navigation bar cost a card. Both are in
   `PRODoID` (`HSTNH-I29C`) and `boardType` (`topaz-Wifi-pvt\n`, newline included) are the same
   on both; only `com.palm.properties.version` differs (`HP webOS 3.0.5` against
   `webOS CE 3.1.0`).
-- **Next candidates:**
+- **Next candidates** (the full list of what still differs from LunaCE, with pointers into both
+  trees, is [luna-deltas.md](luna-deltas.md)):
   - `activitymanager`'s scheduled activities and `com.palm.power/timeout`, which are one want
     and not two: the Clock's alarms, SimpleChat's half-hourly refresh, reddit's message check
     and drPodder's feed update all ask for them, and Android's `AlarmManager` backs them all;

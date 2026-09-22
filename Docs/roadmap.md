@@ -375,6 +375,12 @@ corpus survey says how many apps this phase can reach, and whether it is worth d
 
 ## Decided
 
+- **`deviceInfo` reports this screen, accurately** (codepoet, 2026-09-21): 1280 x 800 on the
+  HP 10 G2, not the TouchPad's 1024 x 768, because more devices are coming and the number has
+  to mean the screen. An app that subtracts a TouchPad-sized constant from it therefore gets a
+  short layout (SimpleChat's chat log; see [fix-log.md](fix-log.md)) - that is the accepted
+  cost. **Android's navigation bar** is accepted too: it takes 48 px no webOS device gave up,
+  and it goes away on the later Android versions that have gesture navigation.
 - **Lunacy answers as a webOS device, fully** (codepoet, 2026-09-20): a TouchPad on a
   tablet-sized screen, a Pre3 on a phone. The environment is most like a TouchPad, and with
   that hardware dying off this is how it lives on. One place decides it (`DeviceProfile.kt`)

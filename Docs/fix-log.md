@@ -237,6 +237,32 @@ Found while testing the apps below; each is general, not tied to one app.
   MojoLoader for it) and the other libraries 404 until they are added to `fetch-assets.sh`.
 - **shell, full-screen cards:** `PalmSystem.enableFullScreenMode` is still a logged no-op, so
   a video player's card keeps the status bar where a device hides it.
+- **shell, a card's open and close animations drop frames, and the minimize is the worse of
+  the two.** Measured on the HP 10 G2 from SurfaceFlinger's own present times
+  (`dumpsys SurfaceFlinger --latency`), Device Info, back key so no touch injection is in the
+  way. The card view's 200 ms minimize arrives as **four frames of 53-101 ms** and then runs at
+  17 ms; the 300 ms maximize is 17 ms all the way and drops its last three (100, 84, 67). So
+  there is a fixed ~300 ms of cost at the transition, and at 200 ms that *is* the animation -
+  stretched to 600 ms the same four frames are bad and the remaining 110 are 17 ms each.
+
+  It is the live WebView being drawn while the card is transformed. Hiding the page for the
+  length of the animation makes it perfectly smooth - 14-18 ms every frame, nothing dropped -
+  and an `atrace` shows why: every frame does a synchronous round trip to the renderer
+  (`SyncCompositorMsg_DemandDrawHwAsync`, `SyncChannel::Send`), and Chromium re-rasters its
+  tiles when the transform's scale changes. Ruled out by measurement, each on its own: the
+  card shadow's nine-slice, the rounded outline clip, `LAYER_TYPE_HARDWARE` on the card,
+  the scale itself (translation only is just as bad), `setStageActive` and the app's JS,
+  `WebView.onPause()`, and the CPU governor - with all four cores online at 1.3 GHz the four
+  frames still cost 51-84 ms.
+
+  **Landed nowhere yet.** The fix webOS itself used is to draw a *texture*: LunaSysMgr's card
+  view showed each card's last painted buffer, not a live page, which is also why a TouchPad
+  could hold a dozen cards. Android 5 has no cheap way to snapshot a hardware-accelerated
+  WebView - `PixelCopy` is API 24 - and the software path costs, measured on the App Museum,
+  385 ms at full size, 130 ms at card-view scale and 85 ms at a third. So it has to be taken
+  ahead of time rather than when the gesture starts, which changes what card view *is* (frozen
+  pages, refreshed when?) and is codepoet's call.
+
 - **shell, the card has less room than a TouchPad's while the keyboard is up.** Measured on
   SimpleChat, landscape, field focused, against the reference device:
 

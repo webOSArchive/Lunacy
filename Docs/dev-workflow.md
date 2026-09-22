@@ -53,6 +53,9 @@ adb shell am start -n org.webosarchive.lunacy/.shell.ShellActivity \
   `ANDROID_NDK`) and nodejs-mobile 0.3.3's Android zip unpacked in
   `Workbench/vendor/nodejs-mobile/v0.3.3/`. Their logs appear as `svc [<name>] …`; their files are
   under `files/webos/` in the app's data (`/media/internal` is `files/webos/media/internal`).
+- `--ei trimMemory <level>` hands the shell an Android memory warning (Android 5's `am` has
+  no `send-trim-memory`): 10 is `RUNNING_LOW`, 15 `RUNNING_CRITICAL`. Apps hear it as
+  `Mojo.lowMemoryNotification`, and "normal" follows once 30 s pass without another.
 - The activity is `singleTask`. A second `am start` with `launch` arrives through
   `onNewIntent`, which launches or relaunches the app.
 - **Lint matters.** A plain debug build does not stop calls to APIs newer than Android 5.

@@ -216,6 +216,56 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             launch(id, params)
         }
         if (intent.getBooleanExtra(EXTRA_EXHIBITION, false)) startDreamExhibition()
+        // Android 5's am has no send-trim-memory; this stands in for it (Docs/dev-workflow.md).
+        if (intent.hasExtra("trimMemory")) onTrimMemory(intent.getIntExtra("trimMemory", 0))
+    }
+
+    // ---- memory ----
+
+    /** The memory state the apps were last told: LunaSysMgr's "normal", "low" or "critical". */
+    private var memoryState = "normal"
+    private var lastTrim = 0L
+
+    /**
+     * Android saying memory is short, passed on as LunaSysMgr's MemoryWatcher did: every app's
+     * root page gets `Mojo.lowMemoryNotification({state})` when the state changes, which Enyo
+     * turns into its `lowMemory` event (WebAppManager::slotMemoryStateChanged). The shell
+     * still makes room itself, as before; this only lets an app help.
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        val state = when (level) {
+            TRIM_MEMORY_RUNNING_CRITICAL, TRIM_MEMORY_COMPLETE -> "critical"
+            TRIM_MEMORY_RUNNING_LOW, TRIM_MEMORY_MODERATE -> "low"
+            else -> return
+        }
+        lastTrim = android.os.SystemClock.uptimeMillis()
+        setMemoryState(state)
+    }
+
+    /**
+     * Android never says memory has eased, so the shell looks: "normal" once no warning has
+     * come for half a minute and the system no longer calls itself low on memory.
+     */
+    private val memoryCheck = object : Runnable {
+        override fun run() {
+            if (memoryState == "normal") return
+            val mi = android.app.ActivityManager.MemoryInfo()
+            (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
+            if (android.os.SystemClock.uptimeMillis() - lastTrim >= MEMORY_CALM_MS && !mi.lowMemory) setMemoryState("normal")
+            else wallpaperView.postDelayed(this, MEMORY_CHECK_MS)
+        }
+    }
+
+    private fun setMemoryState(state: String) {
+        if (state == memoryState) return
+        memoryState = state
+        Log.i(AppServer.TAG, "memory $state")
+        // Root pages only, as LunaSysMgr sent it: a child window is the same app.
+        val arg = JSONObject().put("state", state).toString()
+        running.values.mapNotNull { it.firstOrNull() }.forEach { it.callMojo("lowMemoryNotification", arg) }
+        wallpaperView.removeCallbacks(memoryCheck)
+        if (state != "normal") wallpaperView.postDelayed(memoryCheck, MEMORY_CHECK_MS)
     }
 
     override fun onResume() { super.onResume(); inFront = true }
@@ -1223,6 +1273,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         const val LAUNCH_DELAY_MS = 60L
         /** Android's screen saver asking for Exhibition; see ExhibitionDream. */
         const val EXTRA_EXHIBITION = "exhibition"
+        const val MEMORY_CHECK_MS = 10_000L
+        const val MEMORY_CALM_MS = 30_000L
         /** Package installers apps hand .ipks to: Preware on webOS, and LuneOS's Preware. */
         val INSTALLERS = setOf("org.webosinternals.preware", "org.webosports.app.preware")
     }

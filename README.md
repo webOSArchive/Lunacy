@@ -80,8 +80,9 @@ Building from source is [BUILDING.md](BUILDING.md).
 
 ## Status
 
-In *early* development. The Luna shell (card view, launcher, status bar, notifications) and Enyo apps
-such as the App Museum run on an Android 5 tablet. See [Docs/roadmap.md](Docs/roadmap.md)
+In *early* development; 0.2.0 is a community preview. The Luna shell (card view with card
+stacks, launcher, status bar, notifications, Just Type) and Enyo and Mojo apps such as the App
+Museum run on an Android 5 tablet, measured against a real TouchPad. See [Docs/roadmap.md](Docs/roadmap.md)
 for where things stand.
 
 ## Documentation

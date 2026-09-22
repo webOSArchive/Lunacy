@@ -6,6 +6,10 @@ runs) against `AndroidLuna/`. Each entry says what LunaSysMgr does, what Lunacy 
 what to change, and how to know it is right. It is written so that it can be worked through
 one entry at a time without re-reading either tree.
 
+**Status, 2026-09-22 (0.2.0):** A and B have been worked through; each entry starts with what
+it came to, measured on the reference TouchPad. Open: A9 and A10, B1.5 (left as it is by
+design), the rest of the system menu (B3) and of Just Type (B6), and C.
+
 **Read first:** [luna-shell-reference.md](luna-shell-reference.md) is the measured spec of
 the shell (the `§` numbers below are its sections), and [lessons.md](lessons.md) says why
 every entry ends with a check on the device. The rules in [CLAUDE.md](../CLAUDE.md) apply to

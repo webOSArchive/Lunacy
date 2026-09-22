@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head><title>Emu Probe</title></head>
+<body style="font:12px monospace;background:#fff;color:#000">
+<pre id="out"></pre>
+<script>
+// No "uiRevision" in appinfo.json on purpose: this is what a webOS device does with an app
+// that never declared one. On a TouchPad that is Window::Type_Emulated_Card - the phone
+// simulator frame - and this records what such an app is told about the machine it is on.
+(function () {
+	function say(k, v) {
+		var s; try { s = JSON.stringify(v); } catch (e) { s = String(v); }
+		document.getElementById("out").appendChild(document.createTextNode(k + " = " + s + "\n"));
+		try { console.log("EMUPROBE " + k + " " + s); } catch (e) {}
+		try { console.error("EMUPROBE " + k + " " + s); } catch (e) {}
+	}
+	function safe(k, f) { try { say(k, f()); } catch (e) { say(k, "THROWS " + e); } }
+	safe("screen", function () { return [screen.width, screen.height, screen.availWidth, screen.availHeight]; });
+	safe("inner", function () { return [window.innerWidth, window.innerHeight]; });
+	safe("outer", function () { return [window.outerWidth, window.outerHeight]; });
+	safe("client", function () { return [document.documentElement.clientWidth, document.documentElement.clientHeight]; });
+	safe("dpr", function () { return window.devicePixelRatio; });
+	safe("deviceInfo", function () { return window.PalmSystem && PalmSystem.deviceInfo; });
+	safe("screenOrientation", function () { return window.PalmSystem && PalmSystem.screenOrientation; });
+	safe("windowOrientation", function () { return window.PalmSystem && PalmSystem.windowOrientation; });
+	safe("userAgent", function () { return navigator.userAgent; });
+})();
+</script>
+</body>
+</html>

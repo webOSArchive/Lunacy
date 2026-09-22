@@ -40,9 +40,17 @@ show live data. Per-app results and every fix, with the layer it landed in, are 
   It also made ninety lines of compat layer redundant: fixed elements were being corrected one
   by one against the card, and with the viewport right their containing block *is* the card.
 
-  **Still open:** `uiRevision` is read and passed through but never acted on, so every app gets
-  a full-size card - including one that on a TouchPad would have run in the 320 x 480 phone
-  simulator frame.
+- **An app written for a phone now gets one.** `uiRevision` was read and passed through but
+  never acted on, so every app got a full-size card - including one that on a TouchPad would
+  have run in the phone simulator frame. Most of the catalogue predates the TouchPad and says
+  nothing, so this is the common case, not the odd one. Measured on the reference device with
+  a probe carrying no `uiRevision` and matched member for member: the page is 320 x 452,
+  `screen` reads [320, 480], and `deviceInfo`'s screen and card numbers are the phone's while
+  the model, version, serial and user agent stay the TouchPad's.
+
+  Still missing from that card: its own status bar, the gesture strip and the keyboard button,
+  the backdrop, and card view, where the thumbnail is a tablet-shaped card with a phone in it
+  rather than a phone.
 
 **2026-09-22, a second pass on the same two apps.** codepoet looked again and found five more
 differences. Four were separate causes, and two of those were general:

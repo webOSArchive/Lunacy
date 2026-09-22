@@ -39,19 +39,19 @@ interface WindowHost {
      * this window wants it. A video player asks for it for as long as it is playing.
      */
     fun blockScreenTimeout(window: AppWindow, block: Boolean)
-    fun deviceInfo(): String
+    fun deviceInfo(emulated: Boolean): String
     /** webOS's screen orientation: "up", "down", "left" or "right". */
     fun screenOrientation(): String
     /**
      * webOS's *window* orientation: the screen's, turned by where this device's home button
      * is. Also one of the four names - see [DeviceProfile.windowOrientationFor].
      */
-    fun windowOrientation(): String
+    fun windowOrientation(emulated: Boolean): String
     /**
      * The display's size in webOS pixels, the way round it is now: what `screen.width` and
      * `screen.height` report to a page. Follows the screen round, as a device's did.
      */
-    fun screenSize(): String
+    fun screenSize(emulated: Boolean): String
     /** PalmSystem's locale, localeRegion, phoneRegion and timeFormat, as JSON. */
     fun localeInfo(): String
     /** Android pixels per CSS pixel: apps get TouchPad-sized pixels (Docs/architecture.md, Screen size). */
@@ -63,7 +63,19 @@ interface WindowHost {
  * A card shows one window; an app can own several. See Docs/architecture.md, "App lifecycle".
  */
 @SuppressLint("ViewConstructor", "SetJavaScriptEnabled", "AddJavascriptInterface")
-class AppWindow(context: Context, val appId: String, private val host: WindowHost) : WebView(context) {
+class AppWindow(
+    context: Context,
+    val appId: String,
+    private val host: WindowHost,
+    /**
+     * Whether this window is one of webOS's *emulated* cards: the phone-sized card a TouchPad
+     * gave an app whose appinfo.json never said `"uiRevision": 2`. Such an app was laid out
+     * for a Pre-sized screen, and the device ran it at that size rather than stretching it
+     * across the tablet. Everything the window tells the page about the machine follows from
+     * it - see [Native.deviceInfo] and [Native.screenSize].
+     */
+    val emulated: Boolean = false,
+) : WebView(context) {
     private val main = Handler(Looper.getMainLooper())
     var stageReady = false
         private set
@@ -122,7 +134,7 @@ class AppWindow(context: Context, val appId: String, private val host: WindowHos
                 return true
             }
             override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
-                val child = AppWindow(context, appId, host)
+                val child = AppWindow(context, appId, host, emulated)
                 child.attributes = pendingAttributes
                 pendingAttributes = JSONObject()
                 // Dashboards and popup alerts draw over Luna's dark frames: transparent pages.
@@ -222,7 +234,7 @@ class AppWindow(context: Context, val appId: String, private val host: WindowHos
     }
 
     inner class Native {
-        @JavascriptInterface fun deviceInfo(): String = host.deviceInfo()
+        @JavascriptInterface fun deviceInfo(): String = host.deviceInfo(emulated)
 
         /** Async bus call: queue it, answer later through evaluateJavascript. */
         @JavascriptInterface
@@ -262,10 +274,10 @@ class AppWindow(context: Context, val appId: String, private val host: WindowHos
             val w = this@AppWindow.width
             val h = this@AppWindow.height
             if (w > 0 && h > 0) return JSONObject().put("width", w).put("height", h).toString()
-            return host.screenSize()
+            return host.screenSize(emulated)
         }
-        @JavascriptInterface fun windowOrientation(): String = host.windowOrientation()
-        @JavascriptInterface fun screenSize(): String = host.screenSize()
+        @JavascriptInterface fun windowOrientation(): String = host.windowOrientation(emulated)
+        @JavascriptInterface fun screenSize(): String = host.screenSize(emulated)
         /** PalmSystem's locale fields and clock format, from Android's own settings. */
         @JavascriptInterface fun localeInfo(): String = host.localeInfo()
         /** The process id in PalmSystem.identifier: one per window, as a device gave. */

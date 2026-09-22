@@ -320,6 +320,14 @@ product; being "close enough" is not the goal.
     `-webkit-palm-mouse-target: ignore` - webOS's own property for an element that takes no
     touches - becomes `pointer-events: none`. See [fix-log.md](fix-log.md) for what each one
     was found by.
+  - **An app that was written for a phone gets one.** `appinfo.json`'s `uiRevision` is how an
+    app says which screen it was laid out for, and a TouchPad ran an app that didn't say `2`
+    in a phone-sized card - LunaSysMgr's `Window::Type_Emulated_Card`, drawn as a little phone
+    in the middle of the tablet. Lunacy does the same: the page is 320 x 452 centred in the
+    card with LunaCE's own frame behind it, and `deviceInfo`, `screen` and the window's
+    orientation report that card rather than the screen. What does *not* change is who the
+    device is: the model, the version, the serial and the user agent stay the TouchPad's,
+    exactly as they do there.
   - **The viewport is declared, not inferred.** A webOS app carries a
     `<meta name="viewport">`, and on a device it says something about the *card*: the SDK told
     developers to put `height=device-height` in index.html so a Pre/Pre2-shaped app isn't

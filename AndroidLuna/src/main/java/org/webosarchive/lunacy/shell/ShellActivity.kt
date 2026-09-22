@@ -250,7 +250,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             }
             return
         }
-        val rootWindow = AppWindow(this, appId, this)
+        val rootWindow = AppWindow(this, appId, this, registry.get(appId)?.emulated ?: false)
         running[appId] = mutableListOf(rootWindow)
         if (app.noWindow) hidden.addView(rootWindow, FrameLayout.LayoutParams(1, 1))
         else showAsCard(rootWindow)
@@ -259,7 +259,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     private fun showAsCard(w: AppWindow) {
-        val card = Card(this, w, luna.px(CardLayer.Params.CORNER))
+        // An app that never said it was laid out for a tablet gets the phone-sized card a
+        // TouchPad gave it, rather than being stretched across the whole one.
+        val emu = if (!w.emulated) null else Pair(
+            luna.px(org.webosarchive.lunacy.card.EmulatedCard.WIDTH.toFloat()).toInt(),
+            luna.px((org.webosarchive.lunacy.card.EmulatedCard.HEIGHT - profile.positiveSpaceTopPadding).toFloat()).toInt())
+        val card = Card(this, w, luna.px(CardLayer.Params.CORNER), emu,
+            if (emu == null) null else luna.image("emucard-device-frame.png"))
         cards.add(card)
         cards.openMaximized(card)
     }
@@ -472,7 +478,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * are this screen's real ones: a TouchPad reported its own screen, and an app that lays
      * out from them should use the room it actually has.
      */
-    override fun deviceInfo(): String {
+    override fun deviceInfo(emulated: Boolean): String {
         // In TouchPad px, the unit apps lay out in.
         val dm = android.util.DisplayMetrics().apply {
             @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(this)
@@ -483,8 +489,20 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val d = profile
         // Which side the device calls its width: a TouchPad names its screen 1024 x 768, a
         // Pre3 names its own 480 x 800. Measured on both (Docs/pre3.md).
-        val w = if (d.naturalLandscape) long else short
-        val h = if (d.naturalLandscape) short else long
+        var w = if (d.naturalLandscape) long else short
+        var h = if (d.naturalLandscape) short else long
+        var minCardHeight = d.minimumCardHeight
+        var rows = d.touchableRows
+        // An app that never said it was laid out for a tablet is told about the phone-sized
+        // card it is running in, not about the screen. Measured on the reference TouchPad
+        // (EmulatedCard): 320 x 480, a 452-high card and 8 touchable rows. Everything else -
+        // the model, the version, the serial - is the device's own, as it is there.
+        if (emulated) {
+            w = org.webosarchive.lunacy.card.EmulatedCard.WIDTH
+            h = org.webosarchive.lunacy.card.EmulatedCard.HEIGHT
+            minCardHeight = org.webosarchive.lunacy.card.EmulatedCard.MINIMUM_CARD_HEIGHT
+            rows = org.webosarchive.lunacy.card.EmulatedCard.TOUCHABLE_ROWS
+        }
         return JSONObject(mapOf(
             "modelName" to d.modelName, "modelNameAscii" to d.modelNameAscii,
             "platformVersion" to d.platformVersion, "platformVersionMajor" to d.platformVersionMajor,
@@ -492,9 +510,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             "carrierName" to d.carrierName,
             "serialNumber" to org.webosarchive.lunacy.card.DeviceProfile.serial(this, d),
             "screenWidth" to w, "screenHeight" to h,
-            "minimumCardWidth" to w, "minimumCardHeight" to d.minimumCardHeight,
+            "minimumCardWidth" to w, "minimumCardHeight" to minCardHeight,
             "maximumCardWidth" to w, "maximumCardHeight" to h - d.positiveSpaceTopPadding,
-            "touchableRows" to d.touchableRows,
+            "touchableRows" to rows,
             "keyboardAvailable" to d.keyboardAvailable, "keyboardSlider" to d.keyboardSlider,
             "keyboardType" to d.keyboardType,
             "wifiAvailable" to true, "bluetoothAvailable" to d.bluetoothAvailable,
@@ -546,7 +564,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * `PalmSystem.screenOrientation` for the screen and `PalmSystem.windowOrientation` for
      * the window, and a Mojo app branches on the second. See [DeviceProfile.windowOrientationFor].
      */
-    override fun windowOrientation(): String = profile.windowOrientationFor(screenOrientation())
+    override fun windowOrientation(emulated: Boolean): String =
+        // An emulated card is drawn upright whichever way the tablet is held, and the
+        // reference device reports it as "up" where a full card in the same orientation
+        // reports "right".
+        if (emulated) "up" else profile.windowOrientationFor(screenOrientation())
 
     /**
      * The display in webOS pixels, the way round it is now. `getRealMetrics` follows the
@@ -554,7 +576,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * reference TouchPad, in portrait, reported 768 x 1024 where its `deviceInfo` says
      * 1024 x 768 whichever way up it is.
      */
-    override fun screenSize(): String {
+    override fun screenSize(emulated: Boolean): String {
+        if (emulated) {
+            return JSONObject()
+                .put("width", org.webosarchive.lunacy.card.EmulatedCard.WIDTH)
+                .put("height", org.webosarchive.lunacy.card.EmulatedCard.HEIGHT)
+                .toString()
+        }
         val dm = android.util.DisplayMetrics()
         @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(dm)
         return JSONObject()

@@ -23,12 +23,46 @@ import kotlin.math.roundToInt
 
 /** A card: one app window, laid out at its maximized size and scaled down in the card view. */
 @SuppressLint("ViewConstructor")
-class Card(context: Context, val window: AppWindow, cornerRadius: Float) : FrameLayout(context) {
+class Card(
+    context: Context,
+    val window: AppWindow,
+    cornerRadius: Float,
+    /**
+     * The size the page is given, in device pixels, when it isn't the whole card: webOS's
+     * emulated card, the phone-sized window a tablet gave an app that never said it had been
+     * laid out for one (see [org.webosarchive.lunacy.card.EmulatedCard]). Null for an
+     * ordinary card, which fills its own bounds.
+     */
+    emulatedSize: Pair<Int, Int>? = null,
+    /** LunaCE's emucard-device-frame.png, drawn behind an emulated card's page. */
+    private val frame: android.graphics.Bitmap? = null,
+) : FrameLayout(context) {
+    /**
+     * The phone an emulated card's page sits in, drawn centred on the page exactly as
+     * LunaSysMgr draws it: `EmulatedCardWindow::paintBase` centres emucard-device-frame.png
+     * on the card's own rect. 480 x 740 around a 320 x 452 page. Drawn onto the canvas rather
+     * than put in an ImageView, which would scale it for the screen's density.
+     */
+    override fun dispatchDraw(canvas: android.graphics.Canvas) {
+        frame?.let {
+            canvas.drawBitmap(it, (width - it.width) / 2f, (height - it.height) / 2f, null)
+        }
+        super.dispatchDraw(canvas)
+    }
     /** Card-view transform, animated by CardLayer. */
     var cx = 0f; var cy = 0f; var scale = 1f; var lift = 0f; var fade = 1f
 
     init {
-        addView(window, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        if (emulatedSize == null) {
+            addView(window, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        } else {
+            // Centred in the card, which already begins below the status bar - the reference
+            // device puts the page at x 224, y 300 of its 768 x 1024 screen, which is centred
+            // in what is left once the 28 px status bar is taken off.
+            addView(window, LayoutParams(emulatedSize.first, emulatedSize.second, android.view.Gravity.CENTER))
+            // The tablet's screen around the phone, as the device draws it.
+            setBackgroundColor(android.graphics.Color.BLACK)
+        }
         outlineProvider = object : ViewOutlineProvider() {
             // Small corners in card view; maximized cards are plain rectangles (Docs/luna-shell-reference.md §2.4).
             override fun getOutline(v: View, o: Outline) = o.setRoundRect(0, 0, v.width, v.height, if (scale >= 0.999f) 0f else cornerRadius)

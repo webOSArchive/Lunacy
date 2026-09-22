@@ -1,0 +1,9 @@
+{
+	"id": "org.webosarchive.lunacy.emuprobe",
+	"version": "0.0.1",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Emu Probe",
+	"icon": "icon.png"
+}

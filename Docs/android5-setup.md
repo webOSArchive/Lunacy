@@ -117,7 +117,8 @@ and that folder was deleted afterwards. drPodder on the **tablet** has since fet
 feeds' album art into `files/webos/media/internal/drPodder/.albumArt`, which is the download
 manager working and goes with a `pm clear` like the rest. The CSS probe on the **TouchPad**
 is 0.0.3, which adds two coloured swatches for the camera; nothing else on either device
-changed.
+changed. `…lunacy.emuprobe` was added to both on 2026-09-22 - it is the one probe with no
+`uiRevision`, so it runs in the phone-sized card and records what such an app is told.
 
 ## Display density
 

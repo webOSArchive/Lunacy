@@ -32,6 +32,14 @@ class AppInfo(
      * it opens no window. See Docs/architecture.md, "Settings".
      */
     val androidSettings: String,
+    /**
+     * appinfo.json's `uiRevision`, 1 unless the app says 2 (LunaSysMgr clamps it to that
+     * range: `ApplicationDescription.cpp`). It is how an app says which screen it was written
+     * for. An app that doesn't say 2 was written for a Pre-sized screen, and a TouchPad ran it
+     * in a phone-sized card rather than stretching it across the tablet - see
+     * [AppInfo.emulated].
+     */
+    val uiRevision: Int,
     /** appinfo.json's category and keywords, which decide the launcher page an app lands on. */
     val category: String,
     val keywords: List<String>,
@@ -39,6 +47,12 @@ class AppInfo(
     val appinfo: JSONObject,
     private val files: AppFiles,
 ) {
+    /**
+     * Whether this app runs in the phone-sized card a TouchPad gave an app that never said it
+     * had been laid out for a tablet - LunaSysMgr's `Window::Type_Emulated_Card`.
+     */
+    val emulated get() = uiRevision < 2
+
     /** The URL of the app's main page, at its webOS path on its own origin. */
     val url get() = AppServer.appUrl(id, main)
     val isWeb get() = type == "web"
@@ -123,6 +137,11 @@ class AppRegistry(private val files: AppFiles) {
             type = j.optString("type", "web"),
             version = j.optString("version", ""),
             androidSettings = j.optString("lunacyAndroidSettings", ""),
+            // Palm's own apps write it as a number and some write it as a string, so read
+            // either, and clamp to 1..2 as LunaSysMgr does.
+            uiRevision = (j.opt("uiRevision")?.let { r ->
+                (r as? Number)?.toInt() ?: r.toString().trim().toIntOrNull()
+            } ?: 1).coerceIn(1, 2),
             category = j.optString("category", ""),
             keywords = j.optJSONArray("keywords")?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty(),
             userInstalled = files.isInstalled(dir),

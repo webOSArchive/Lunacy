@@ -27,6 +27,30 @@ import android.os.Build
  * carriers change - buildName, carrierName, carrierCode - are that unit's; an unlocked Pre3
  * will differ, and Docs/pre3.md says so.
  */
+/**
+ * webOS's *emulated* card: the phone-sized card a tablet gave an app whose appinfo.json never
+ * said `"uiRevision": 2`.
+ *
+ * Such an app was laid out for a Pre-sized screen, and LunaSysMgr ran it at that size - drawn
+ * as a little phone in the middle of the tablet, bezel and all - rather than stretching it
+ * across the tablet's card (`Window::Type_Emulated_Card`; the sizes are LunaCE's own
+ * `Settings` defaults, and the reference device overrides neither in `/etc/palm`).
+ *
+ * Measured on the reference TouchPad on 2026-09-22 with a probe carrying no `uiRevision`:
+ * the page came out 320 x 452, centred in the screen below the status bar, and its
+ * `deviceInfo` reported the numbers below. What it does *not* change is who the device is -
+ * the model, the version, the serial and the user agent are the TouchPad's, exactly as for
+ * any other app.
+ */
+object EmulatedCard {
+    /** emulatedCardWidth, emulatedCardHeight. */
+    const val WIDTH = 320
+    const val HEIGHT = 480
+    /** What deviceInfo reports for a card this size, rather than the device's own. */
+    const val MINIMUM_CARD_HEIGHT = 30
+    const val TOUCHABLE_ROWS = 8
+}
+
 enum class DeviceProfile(
     /** deviceInfo.modelName. Palm branded the phone "Pre" with a macron, so this isn't ASCII. */
     val modelName: String,

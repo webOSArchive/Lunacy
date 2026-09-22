@@ -789,10 +789,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             // the other; a smaller one was drawn at its own size, centred on the screen, over
             // the scene's Qt::darkGray (WindowServerLuna::generateWallpaperImages; measured on
             // the reference TouchPad with a 600 x 400 image). Its own size is in TouchPad px.
+            // "The screen" is at most a TouchPad's 1024 x 768: a screen larger than that would
+            // otherwise leave webOS's own 1024 x 1024 wallpapers, made to fill a TouchPad,
+            // floating in grey.
             val dm = android.util.DisplayMetrics()
             @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(dm)
-            val sw = dm.widthPixels / luna.density; val sh = dm.heightPixels / luna.density
-            val fills = (bmp.width >= sw && bmp.height >= sh) || (bmp.width >= sh && bmp.height >= sw)
+            val long = minOf(maxOf(dm.widthPixels, dm.heightPixels) / luna.density, 1024f)
+            val short = minOf(minOf(dm.widthPixels, dm.heightPixels) / luna.density, 768f)
+            val fills = (bmp.width >= long && bmp.height >= short) || (bmp.width >= short && bmp.height >= long)
             if (fills) {
                 wallpaperView.scaleType = ImageView.ScaleType.CENTER_CROP
                 wallpaperView.setImageBitmap(bmp)

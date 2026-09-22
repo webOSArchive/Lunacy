@@ -394,7 +394,7 @@ On the roadmap; the pointers so it can be done without re-reading the C++:
 
 ### B9. Wallpaper smaller than the screen
 
-**Done 2026-09-22.** Measured on the reference TouchPad with a 600 x 400 image: drawn at its own size, centred on the whole screen, and the surround is Qt's `darkGray` (#808080), not black (`WindowServerLuna.cpp#L219`, `setBackgroundBrush(Qt::darkGray)`). Screenshots `Workbench/results/b9-tp-small.png`, `b9-and-small.png`.
+**Done 2026-09-22.** Measured on the reference TouchPad with a 600 x 400 image: drawn at its own size, centred on the whole screen, and the surround is Qt's `darkGray` (#808080), not black (`WindowServerLuna.cpp#L219`, `setBackgroundBrush(Qt::darkGray)`). Screenshots `Workbench/results/b9-tp-small.png`, `b9-and-small.png`. One deliberate difference: "screen-sized" means at most 1024 x 768, so the shipped 1024 x 1024 TouchPad wallpapers still fill a larger screen.
 
 - **LunaCE:** an image at least screen-sized in either orientation is centre-cropped; a
   smaller one is drawn unscaled and centred on black. §1.3,

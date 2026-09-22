@@ -130,13 +130,19 @@
 			if (rest.length) { N.log("PalmSystem.setWindowProperties " + rest.join(",") + " (not implemented)"); }
 		},
 		// addBannerMessage(message, launchParamsJson, icon, soundClass, soundFile, duration, doNotSuppress)
-		// returns the banner's id at once, as webOS did.
-		addBannerMessage: function (msg, params, icon) {
-			return N.addBanner(String(msg), params ? String(params) : "", icon ? absolute(icon) : "");
+		// returns the banner's id at once, as webOS did. The sound plays as the banner shows;
+		// doNotSuppress only mattered to suppressBannerMessages, which a TouchPad ignored.
+		addBannerMessage: function (msg, params, icon, soundClass, soundFile, duration) {
+			return N.addBanner(String(msg), params ? String(params) : "", icon ? absolute(icon) : "",
+				soundClass ? String(soundClass) : "", soundFile ? String(soundFile) : "", Number(duration) || 0);
 		},
 		removeBannerMessage: function (id) { N.removeBanner(Number(id)); },
 		clearBannerMessages: function () { N.clearBanners(); },
-		playSoundNotification: function () {},
+		// playSoundNotification(soundClass, soundFile, duration, wakeupScreen): a sound with no banner.
+		playSoundNotification: function (soundClass, soundFile, duration) {
+			if (typeof soundClass !== "string") { return; }
+			N.playSound(soundClass, soundFile ? String(soundFile) : "", Number(duration) || 0);
+		},
 		keepAlive: function () {},
 		shutdown: function () {},
 		receivePageUpDownInLandscape: function () {},

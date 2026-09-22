@@ -1,0 +1,6 @@
+notification.wav, alert.wav and ringtone.mp3: webOS's default notification, alert and
+ringtone sounds, from LunaCE's sounds/ (https://github.com/webOSArchive/LunaCE/tree/master/sounds),
+Apache License 2.0. Each is byte-identical to the file of the same name in /usr/palm/sounds on
+the reference TouchPad (webOS CE 3.1.0), checked by MD5 on 2026-09-22. LunaSysMgr plays the
+first two as its "sysmgr_notification" and "sysmgr_alert" feedback samples, which are
+preloaded copies of them.

@@ -146,7 +146,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         notifications = Notifications(luna, statusBar, menu, popups, onBannerTap = { b ->
             closeMenu()
             launch(b.appId, try { JSONObject(b.params) } catch (e: Exception) { null })
-        }, onNoDashboards = { closeMenu() })
+        }, onNoDashboards = { closeMenu() }, onBannerShown = { b ->
+            sounds.play(b.appId, b.soundClass, b.soundFile, b.soundDuration)
+        })
         statusBar.onNotificationTap = { if (!notifications.tapBanner()) toggleMenu() }
         root.addView(statusBar, FrameLayout.LayoutParams(MATCH_PARENT, luna.px(StatusBar.HEIGHT)))
 
@@ -318,11 +320,16 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         return registry.get(appId)?.let { luna.appIcon(it) }
     }
 
-    override fun addBanner(window: AppWindow, message: String, params: String, icon: String): Int {
+    override fun addBanner(window: AppWindow, message: String, params: String, icon: String, soundClass: String, soundFile: String, duration: Int): Int {
         val id = bannerIds.getAndIncrement()
-        runOnUiThread { notifications.addBanner(Banner(id, window, window.appId, message, icon(icon, window.appId), params)) }
+        runOnUiThread { notifications.addBanner(Banner(id, window, window.appId, message, icon(icon, window.appId), params, soundClass, soundFile, duration)) }
         return id
     }
+
+    private val sounds by lazy { Sounds(this, server) }
+
+    override fun playSound(window: AppWindow, soundClass: String, soundFile: String, duration: Int) =
+        sounds.play(window.appId, soundClass, soundFile, duration)
 
     /** A banner from the system itself, e.g. the package manager. Tapping it launches appId. */
     private fun systemBanner(appId: String, message: String, params: String = "") =

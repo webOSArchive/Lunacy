@@ -22,7 +22,8 @@ import kotlin.math.abs
  * A banner from PalmSystem.addBannerMessage, or from the system (window null), such as the
  * package manager's. Tapping it launches appId with params.
  */
-class Banner(val id: Int, val window: AppWindow?, val appId: String, val text: String, val icon: Bitmap?, val params: String)
+class Banner(val id: Int, val window: AppWindow?, val appId: String, val text: String, val icon: Bitmap?, val params: String,
+             val soundClass: String = "", val soundFile: String = "", val soundDuration: Int = 0)
 
 /**
  * Banners, dashboards and popup alerts: Docs/luna-shell-reference.md §5. On the TouchPad banners
@@ -36,6 +37,8 @@ class Notifications(
     private val onBannerTap: (Banner) -> Unit,
     /** The last dashboard went away: the shell closes the drop-down (and its tap catcher). */
     private val onNoDashboards: () -> Unit = {},
+    /** A banner is starting to show: LunaSysMgr played its sound then, not when it was queued. */
+    private val onBannerShown: (Banner) -> Unit = {},
 ) {
     companion object {
         const val SHOW_MS = 1000L        // OutCubic
@@ -88,6 +91,7 @@ class Notifications(
         val b = queue.removeFirstOrNull() ?: run { current = null; statusBar.banner = null; return }
         current = b
         statusBar.banner = b
+        onBannerShown(b)
         hold = if (queue.isEmpty()) HOLD_ALONE_MS else HOLD_QUEUED_MS
         shownAt = System.currentTimeMillis()
         animate(0f, 1f, 1f, SHOW_MS, Easing.OutCubic) { main.postDelayed(hideRunnable, hold) }

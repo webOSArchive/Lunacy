@@ -23,7 +23,9 @@ interface WindowHost {
     /** An app opened a window with window.open; child.attributes says which kind. */
     fun onWindowOpened(parent: AppWindow, child: AppWindow)
     /** PalmSystem banners. addBanner returns the banner's id. */
-    fun addBanner(window: AppWindow, message: String, params: String, icon: String): Int
+    fun addBanner(window: AppWindow, message: String, params: String, icon: String, soundClass: String, soundFile: String, duration: Int): Int
+    /** PalmSystem.playSoundNotification: a banner's sound without the banner. */
+    fun playSound(window: AppWindow, soundClass: String, soundFile: String, duration: Int)
     fun removeBanner(window: AppWindow, id: Int)
     fun clearBanners(window: AppWindow)
     fun onWindowClosed(window: AppWindow)
@@ -376,7 +378,12 @@ class AppWindow(
         }
 
         @JavascriptInterface
-        fun addBanner(message: String, params: String, icon: String): Int = host.addBanner(this@AppWindow, message, params, icon)
+        fun addBanner(message: String, params: String, icon: String, soundClass: String, soundFile: String, duration: Int): Int =
+            host.addBanner(this@AppWindow, message, params, icon, soundClass, soundFile, duration)
+        @JavascriptInterface
+        fun playSound(soundClass: String, soundFile: String, duration: Int) {
+            main.post { host.playSound(this@AppWindow, soundClass, soundFile, duration) }
+        }
         @JavascriptInterface fun removeBanner(id: Int) { main.post { host.removeBanner(this@AppWindow, id) } }
         @JavascriptInterface fun clearBanners() { main.post { host.clearBanners(this@AppWindow) } }
     }

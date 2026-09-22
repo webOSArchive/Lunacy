@@ -101,7 +101,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
         // The whole screen, so that a full-screen card can be laid out under the status bar;
         // every other card starts below it (CardLayer.inset).
-        cards = CardLayer(this, luna, this).apply { inset = luna.px(StatusBar.HEIGHT); feedback = { sounds.feedback(it) } }
+        cards = CardLayer(this, luna, this).apply { inset = luna.px(StatusBar.HEIGHT); feedback = { sounds.feedback(it) }
+            // The TouchPad's landscape turned end for end, which Lunacy calls "left".
+            upsideDown = { screenOrientation() == "left" } }
         sounds.preload()
         root.addView(cards, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
 

@@ -180,12 +180,13 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     /** Plays one of LunaSysMgr's feedback sounds; see [Sounds.feedback]. */
     var feedback: (String) -> Unit = {}
     /**
-     * LunaSysMgr's angry-card sounds are for a screen turned upside down only
-     * (CardWindowManager::playAngryCardSounds): a stretch as the card is pulled a way down,
-     * and a bird as it goes.
+     * LunaSysMgr's angry-card sounds - a stretch as the card is pulled a way down, and a bird
+     * as it goes - are only for UI orientation "Down" (CardWindowManager::playAngryCardSounds).
+     * That is measured against the TouchPad's panel, which is natively landscape, so it means
+     * landscape upside down, never portrait (codepoet: only ever heard in landscape). The
+     * shell says which orientation that is here; see ShellActivity.screenOrientation.
      */
-    @Suppress("DEPRECATION")
-    private fun upsideDown() = display?.rotation == android.view.Surface.ROTATION_180
+    var upsideDown: () -> Boolean = { false }
     private var playedStretch = false
     /**
      * The status bar's height. The layer runs the whole height of the screen so that a

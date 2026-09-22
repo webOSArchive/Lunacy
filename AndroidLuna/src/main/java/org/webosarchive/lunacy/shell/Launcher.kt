@@ -109,9 +109,45 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         const val DIALOG_TOP = 4f
         const val DIALOG_W = 320f + 2 * DIALOG_EDGE
         const val DIALOG_BUTTON_H = 52f
+        // [LunaCE] tab editing (pagetabbar.cpp): at most six tabs, the first four permanent; a
+        // tab held (Qt's tap-and-hold, 700 ms) is renamed; the empty bar held 650 ms without
+        // wandering 16 px shows a 28 px "+" 12 px right of the last tab.
+        const val MAX_TABS = 6
+        const val PERMANENT_TABS = 4
+        const val TAB_HOLD_MS = 700L
+        const val ADD_HOLD_MS = 650L
+        const val ADD_SLOP = 16f
+        const val ADD_BUTTON = 28f
+        const val ADD_LEFT = 12f
     }
 
-    class Page(val designator: String, val title: String, val apps: MutableList<AppInfo> = mutableListOf()) { var scrollY = 0f }
+    /** A tab was held: rename it (and, for one past the first four, offer to delete it). */
+    var onRenameTab: (index: Int, name: String, deletable: Boolean) -> Unit = { _, _, _ -> }
+    /** The "+" was tapped: ask for a new tab's name. */
+    var onAddTab: () -> Unit = {}
+
+    fun renameTab(index: Int, name: String) {
+        pages.getOrNull(index)?.title = name
+        saveOrder(); invalidate()
+    }
+
+    /** LauncherObject::createUserTab: a new, empty page at the end, with a designator of its own. */
+    fun addTab(name: String) {
+        if (pages.size >= Params.MAX_TABS) return
+        pages += Page("usertab_" + java.util.UUID.randomUUID(), name)
+        saveOrder(); animatePage(pages.size - 1, Params.SNAP_MS, Easing.InQuad)
+    }
+
+    /** LauncherObject::deleteUserTab: its icons go to the first page, in order. */
+    fun deleteTab(index: Int) {
+        if (index < Params.PERMANENT_TABS || index >= pages.size) return
+        val dying = pages.removeAt(index)
+        pages[0].apps += dying.apps
+        pagePos = pagePos.coerceAtMost(pages.size - 1f)
+        saveOrder(); animatePage(pagePos.roundToInt().coerceIn(0, pages.size - 1), Params.SNAP_MS, Easing.InQuad)
+    }
+
+    class Page(val designator: String, var title: String, val apps: MutableList<AppInfo> = mutableListOf()) { var scrollY = 0f }
 
     /**
      * The pages, their names and the keyword map, from assets/luna/launcher-pages.json (which
@@ -199,13 +235,30 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
      * anything that names doesn't cover goes by its keywords, alphabetically.
      */
     fun setApps(apps: List<AppInfo>) {
-        val saved = runCatching { JSONArray(prefs.getString("pages", null) ?: "[" + (prefs.getString("order", null) ?: "[]") + "]") }.getOrDefault(JSONArray())
         val byId = apps.associateBy { it.id }
         val placed = HashSet<String>()
         pages.forEach { it.apps.clear() }
-        for (pi in 0 until minOf(saved.length(), pages.size)) {
-            val ids = saved.optJSONArray(pi) ?: continue
-            for (i in 0 until ids.length()) byId[ids.optString(i)]?.takeIf { placed.add(it.id) }?.let { pages[pi].apps += it }
+        val tabs = runCatching { JSONArray(prefs.getString("tabs", null) ?: "") }.getOrNull()
+        if (tabs != null) {
+            // The user's own tabs: the stock ones by designator, keeping their names, and any
+            // they added, in their order.
+            for (i in 0 until tabs.length()) {
+                val t = tabs.optJSONObject(i) ?: continue
+                val d = t.optString("designator")
+                val page = pages.firstOrNull { it.designator == d } ?: Page(d, t.optString("name")).also { pages += it }
+                page.title = t.optString("name", page.title)
+                val ids = t.optJSONArray("apps")
+                for (j in 0 until (ids?.length() ?: 0)) byId[ids!!.optString(j)]?.takeIf { placed.add(it.id) }?.let { page.apps += it }
+            }
+            val order = (0 until tabs.length()).mapNotNull { tabs.optJSONObject(it)?.optString("designator") }
+            pages.sortBy { p -> order.indexOf(p.designator).let { if (it < 0) Int.MAX_VALUE else it } }
+        } else {
+            // Before tabs could change: each page's apps by index.
+            val saved = runCatching { JSONArray(prefs.getString("pages", null) ?: "[" + (prefs.getString("order", null) ?: "[]") + "]") }.getOrDefault(JSONArray())
+            for (pi in 0 until minOf(saved.length(), pages.size)) {
+                val ids = saved.optJSONArray(pi) ?: continue
+                for (i in 0 until ids.length()) byId[ids.optString(i)]?.takeIf { placed.add(it.id) }?.let { pages[pi].apps += it }
+            }
         }
         // Then the apps Lunacy ships with, where and in the order the default layout puts them.
         for ((designator, ids) in defaultLayout) {
@@ -220,7 +273,10 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         invalidate()
     }
 
-    private fun saveOrder() = prefs.edit().putString("pages", JSONArray(pages.map { p -> JSONArray(p.apps.map { it.id }) }).toString()).apply()
+    /** Each page's designator, name and apps, in order: the tabs themselves are the user's now. */
+    private fun saveOrder() = prefs.edit().putString("tabs", JSONArray(pages.map { p ->
+        JSONObject().put("designator", p.designator).put("name", p.title).put("apps", JSONArray(p.apps.map { it.id }))
+    }).toString()).apply()
 
     // ---- launch feedback ----
 
@@ -429,11 +485,37 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             tabText.color = if (i == selected) Color.WHITE else Color.rgb(0xC8, 0xC8, 0xC8)
             c.drawText(p.title.uppercase(), r.centerX(), h / 2 - (tabText.ascent() + tabText.descent()) / 2, tabText)
         }
+        if (showAddTab) addTabRect()?.let { r ->
+            // tab-add-icon.png's normal state is its upper half.
+            luna.image("launcher3/tab-add-icon.png")?.let { b -> c.drawBitmap(b, Rect(0, 0, b.width, b.height / 2), r, null) }
+        }
         if (editing) {
             val r = doneRect()
             drawDone(c, r, pressed = donePressed)
             c.drawText("DONE", r.centerX(), r.centerY() - (doneText.ascent() + doneText.descent()) / 2 + luna.px(Params.DONE_TEXT_DY), doneText)
         }
+    }
+
+    /** The "+" (PageTabBar::addTabButtonRect), in the bar's unused space, if there is room for it. */
+    private fun addTabRect(): RectF? {
+        val left = pages.size * tabWidth()
+        val edge = luna.px(Params.ADD_BUTTON)
+        if (width - left < edge + luna.px(8f)) return null
+        val top = (tabBarH() - edge) / 2
+        return RectF(left + luna.px(Params.ADD_LEFT), top, left + luna.px(Params.ADD_LEFT) + edge, top + edge)
+    }
+    private var showAddTab = false
+    private var addRevealedByThisPress = false
+    private var tabHeld = false
+    private val tabHold = Runnable {
+        val i = tabAt(downX, downY)
+        if (drag != Drag.UNDECIDED || i < 0) return@Runnable
+        tabHeld = true; highlightedTab = -1; invalidate()
+        onRenameTab(i, pages[i].title, i >= Params.PERMANENT_TABS)
+    }
+    private val addHold = Runnable {
+        if (drag != Drag.UNDECIDED) return@Runnable
+        showAddTab = true; addRevealedByThisPress = true; invalidate()
     }
 
     /** The tab under a dragged icon or a pressing finger, or -1. */
@@ -655,12 +737,18 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
                 downApp = if (pressedDelete == null && !donePressed) appAt(e.x, e.y) else null
                 highlightedTab = if (donePressed) -1 else tabAt(e.x, e.y)
                 if (downApp != null && !editing) postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
+                tabHeld = false; addRevealedByThisPress = false
+                if (!editing && !donePressed && e.y < tabBarH()) {
+                    if (tabAt(e.x, e.y) >= 0) postDelayed(tabHold, Params.TAB_HOLD_MS)
+                    else if (pages.size < Params.MAX_TABS) postDelayed(addHold, Params.ADD_HOLD_MS)
+                }
                 invalidate()
             }
             MotionEvent.ACTION_MOVE -> {
                 val dx = e.x - downX; val dy = e.y - downY
+                if (abs(dx) + abs(dy) > luna.px(Params.ADD_SLOP)) removeCallbacks(addHold)
                 if (drag == Drag.UNDECIDED && max(abs(dx), abs(dy)) > luna.px(Params.TAP_RADIUS)) {
-                    removeCallbacks(longPress)
+                    removeCallbacks(longPress); removeCallbacks(tabHold)
                     pressedDelete = null; donePressed = false; highlightedTab = -1
                     val app = downApp
                     // In edit mode an icon moves with the finger; otherwise the first axis past
@@ -681,7 +769,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                removeCallbacks(longPress)
+                removeCallbacks(longPress); removeCallbacks(tabHold); removeCallbacks(addHold)
                 velocity!!.computeCurrentVelocity(1000)
                 val vx = velocity!!.xVelocity; val vy = velocity!!.yVelocity
                 velocity!!.recycle(); velocity = null
@@ -708,6 +796,15 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     }
 
     private fun tap(x: Float, y: Float) {
+        if (tabHeld) return
+        if (showAddTab) {
+            // PageTabBar::mouseReleaseEvent: the release that revealed it leaves it up; a tap on
+            // it asks for a new tab; a tap anywhere else puts it away.
+            if (addRevealedByThisPress) return
+            val onIt = addTabRect()?.contains(x, y) == true
+            showAddTab = false; invalidate()
+            if (onIt) { onAddTab(); return }
+        }
         if (editing) {
             if (doneTouchRect().contains(x, y)) { exitEditMode(); return }
             deleteAt(x, y)?.let { dialogApp = it; return }

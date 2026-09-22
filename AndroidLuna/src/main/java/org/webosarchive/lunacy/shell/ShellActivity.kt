@@ -48,6 +48,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var justType: JustType
     private lateinit var quickLaunch: QuickLaunch
     private lateinit var launcher: Launcher
+    private lateinit var tabDialog: TabDialog
     private var launcherOpen = false
     private lateinit var notifications: Notifications
     private lateinit var systemMenu: SystemMenu
@@ -116,6 +117,20 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         launcher.dockHeight = luna.px(QuickLaunch.HEIGHT).toFloat()
         launcher.visibility = View.INVISIBLE
         root.addView(launcher, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
+        // [LunaCE] Renaming, adding and deleting launcher tabs.
+        tabDialog = TabDialog(this, luna)
+        root.addView(tabDialog, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
+        launcher.onRenameTab = { i, name, deletable ->
+            tabDialog.show("Rename Tab", name, deletable, commitOnTapAway = true) { newName, delete ->
+                if (newName != null) launcher.renameTab(i, newName)
+                if (delete) launcher.deleteTab(i)
+            }
+        }
+        launcher.onAddTab = {
+            tabDialog.show("New Tab", "New Tab", deletable = false, commitOnTapAway = false) { newName, _ ->
+                if (newName != null) launcher.addTab(newName)
+            }
+        }
 
         justType = JustType(this, luna)
         // The pill takes text now, so something else has to hold focus first, or the shell
@@ -1306,6 +1321,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (exhibitionOn) { setExhibition(false); return }
         if (notifications.menu.isOpen || systemMenu.isOpen) { closeMenu(); return }
         notifications.popups.newest()?.let { onWindowClosed(it); return }
+        if (tabDialog.showing) { tabDialog.dismiss(); return }
         if (launcher.editing || quickLaunch.editing) { exitEditMode(); return }
         if (launcherOpen) { closeLauncher(); return }
         val max = cards.maximized
@@ -1340,6 +1356,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         cards.visibility = View.VISIBLE
         launcher.animate().translationY(launcher.height.toFloat()).setDuration(LAUNCHER_MS).setInterpolator(Easing.InOutQuint)
             .withEndAction { if (!launcherOpen) { launcher.visibility = View.INVISIBLE; launcher.cancelLaunchFeedback(); exitEditMode() } }.start()
+        tabDialog.dismiss()
         if (cards.maximized == null) { fade(justType, true); statusBar.setMode(StatusBar.Mode.CARDS); statusBar.title = StatusBar.CARRIER_TEXT }
     }
 

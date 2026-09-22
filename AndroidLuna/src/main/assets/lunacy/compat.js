@@ -451,3 +451,100 @@ window.__lunacyFileUrl = function (u, media) {
 		def(window, "outerHeight", function () { return (displaySize() || size).height; });
 	}
 })();
+
+// A background fixed to the viewport is sized against the viewport.
+//
+// With background-attachment: fixed the background positioning area is the viewport, so a
+// percentage background-size is a percentage of the viewport. This WebView resolves it
+// against the element's own box instead, and the two are rarely the same: an element taller
+// than the card stretches the image over its whole height and the card shows a slice of it,
+// and one shorter than the card - Mojo gives every body min-height: 480px and height: 100%,
+// which comes to 480 whenever a page's own content doesn't fill it - tiles the image down
+// the card with a seam at every repeat.
+//
+// webOS IAmA reddit is the case: its body carries the app's background gradient at
+// background-size: 100% 100% with background-attachment: fixed, which on the reference
+// TouchPad is one smooth gradient over the whole card (measured: a monotonic ramp from 96
+// down to 17 with no step in it). Here it came out as flat blocks with hard edges between
+// them, which is what codepoet reported as a "sliced up blob".
+//
+// One mechanical rule for every app, not a fix for that one: whatever declares a fixed
+// background with a percentage size gets the size the viewport gives it, recomputed whenever
+// the card resizes. An app that already sizes its background in pixels is untouched.
+(function () {
+	var PCT = /%/;
+	/** Everything a percentage background-size could have been declared on, once. */
+	function candidates() {
+		var found = [document.documentElement, document.body], seen = found.slice();
+		for (var i = 0; i < document.styleSheets.length; i++) {
+			var rules;
+			try { rules = document.styleSheets[i].cssRules; } catch (e) { continue; }
+			if (!rules) { continue; }
+			for (var j = 0; j < rules.length; j++) {
+				var r = rules[j];
+				if (!r.selectorText || !/fixed/.test(r.style.cssText)) { continue; }
+				var list;
+				try { list = document.querySelectorAll(r.selectorText); } catch (e) { continue; }
+				for (var k = 0; k < list.length; k++) {
+					if (seen.indexOf(list[k]) < 0) { seen.push(list[k]); found.push(list[k]); }
+				}
+			}
+		}
+		return found;
+	}
+	var watched = null;
+	function apply() {
+		if (!document.body) { return; }
+		if (!watched) { watched = candidates(); }
+		var w = document.documentElement.clientWidth, h = document.documentElement.clientHeight;
+		for (var i = 0; i < watched.length; i++) {
+			var el = watched[i];
+			if (!el) { continue; }
+			var cs = window.getComputedStyle(el);
+			if (cs.backgroundAttachment.indexOf("fixed") < 0) { continue; }
+			// The declared size, not the one already corrected: read it back off the rule the
+			// page set, which is what el.style would otherwise overwrite on the second pass.
+			var size = el.__lunacyBgSize;
+			if (size === undefined) {
+				size = cs.backgroundSize;
+				if (!PCT.test(size)) { el.__lunacyBgSize = null; continue; }
+				el.__lunacyBgSize = size;
+			}
+			if (!size) { continue; }
+			var parts = size.split(/\s*,\s*/), out = [], covers = true;
+			for (var p = 0; p < parts.length; p++) {
+				var xy = parts[p].trim().split(/\s+/);
+				var sx = px(xy[0], w), sy = px(xy.length > 1 ? xy[1] : xy[0], h);
+				if (parseFloat(sx) < w || parseFloat(sy) < h) { covers = false; }
+				out.push(sx + " " + sy);
+			}
+			el.style.backgroundSize = out.join(", ");
+			// A background sized to cover the viewport has nothing to repeat inside it, so
+			// saying so costs nothing - and it is the only way to stop this WebView tiling a
+			// fixed background anyway. Measured on the HP 10 G2 with reddit's card: with the
+			// exact size alone the gradient still came back in blocks that repeated every
+			// 264 px; with no-repeat it is one smooth ramp, 104 down to 23 against the
+			// reference TouchPad's 102 down to 23. A small repeating texture (a size that
+			// doesn't cover) is left to tile, which is what it is for.
+			if (covers) { el.style.backgroundRepeat = "no-repeat"; }
+		}
+	}
+	function px(v, basis) {
+		var m = /^([\d.]+)%$/.exec(v);
+		return m ? Math.round(parseFloat(m[1]) / 100 * basis) + "px" : v;
+	}
+	function rescan() { watched = null; apply(); }
+	window.__lunacyFixedBackgrounds = rescan;
+	// A framework gives the body its classes when it builds its first scene, which is after
+	// load: Mojo's palm-default - the class reddit hangs its background on - isn't there when
+	// the page finishes loading. So the scan is repeated over the first few seconds rather
+	// than run once. Each pass is a handful of computed-style reads, and an app whose
+	// background never changes settles on the first.
+	rescan();
+	document.addEventListener("DOMContentLoaded", rescan);
+	window.addEventListener("load", function () {
+		rescan();
+		[100, 400, 1200, 3000].forEach(function (ms) { setTimeout(rescan, ms); });
+	});
+	window.addEventListener("resize", apply);
+})();

@@ -42,6 +42,11 @@ interface WindowHost {
     fun deviceInfo(): String
     /** webOS's screen orientation: "up", "down", "left" or "right". */
     fun screenOrientation(): String
+    /**
+     * webOS's *window* orientation: the screen's, turned by where this device's home button
+     * is. Also one of the four names - see [DeviceProfile.windowOrientationFor].
+     */
+    fun windowOrientation(): String
     /** PalmSystem's locale, localeRegion, phoneRegion and timeFormat, as JSON. */
     fun localeInfo(): String
     /** Android pixels per CSS pixel: apps get TouchPad-sized pixels (Docs/architecture.md, Screen size). */
@@ -237,6 +242,7 @@ class AppWindow(context: Context, val appId: String, private val host: WindowHos
         @JavascriptInterface fun netAbort(id: Int) = net.abort(id)
 
         @JavascriptInterface fun screenOrientation(): String = host.screenOrientation()
+        @JavascriptInterface fun windowOrientation(): String = host.windowOrientation()
         /** PalmSystem's locale fields and clock format, from Android's own settings. */
         @JavascriptInterface fun localeInfo(): String = host.localeInfo()
         /** The process id in PalmSystem.identifier: one per window, as a device gave. */

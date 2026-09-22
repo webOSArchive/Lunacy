@@ -91,13 +91,17 @@
 		// The screen's orientation, kept current by the shell as LunaSysMgr did; Enyo reads it
 		// when the page's resize event arrives. "up", "down", "left" or "right".
 		screenOrientation: N.screenOrientation ? N.screenOrientation() : "up",
-		windowOrientation: "up",
 		// The shell sets this as cards gain and lose focus; a device always has it.
 		isActivated: false,
 		isMinimal: false,
 		activityId: 1,
 		stageReady: function () { N.stageReady(); },
+		// Mojo's StageController.setWindowOrientation assigns to the property, so the two are
+		// the same thing; see the windowOrientation property below for what webOS did with it.
 		setWindowOrientation: function (o) { this.windowOrientation = o; },
+		// What the app last asked for, which is where "free" belongs. Null until it asks, as
+		// LunaSysMgr's m_specifiedWindowOrientation is.
+		specifiedWindowOrientation: null,
 		// Lunacy has no full-screen card and no window properties yet; they are logged like the
 		// rest of the surface it hasn't built, rather than silently doing nothing.
 		enableFullScreenMode: function (on) { N.log("PalmSystem.enableFullScreenMode(" + on + ") (not implemented)"); },
@@ -161,6 +165,43 @@
 		} catch (e) { obj[name] = value; }
 	}
 	window.PalmSystem = publish(palmSystem);
+
+	// PalmSystem.windowOrientation reads and writes two different things, and webOS meant it to.
+	//
+	// Reading it gives the *window's* own orientation - the screen's, turned by where the home
+	// button is (LunaSysMgr's mapScreenOrientationToWindowOrientation; the shell does the
+	// turning, from the device profile). Writing it does not set that: it records what the app
+	// is *asking* for and applies it as a policy, "free" meaning "let the card rotate with the
+	// screen". LunaSysMgr keeps the request in m_specifiedWindowOrientation, which is a
+	// separate property, and the getter never returns it. Both getters answer one of "up",
+	// "down", "left" and "right", and never "free".
+	//
+	// Lunacy used to store the write and hand it back on the read, which meant every app that
+	// asks to rotate freely - Mojo does it for the app - then read "free" and branched on it.
+	// A Mojo app handles rotation by comparing the value with the four names, so it did
+	// nothing at all: drPodder's playback slider stayed the width of its own text, huddled in
+	// the corner, because the branch that sizes it never ran.
+	(function () {
+		var PS = window.PalmSystem;
+		try {
+			Object.defineProperty(PS, "windowOrientation", {
+				configurable: true, enumerable: false,
+				get: function () {
+					try { return N.windowOrientation ? N.windowOrientation() : PS.screenOrientation; }
+					catch (e) { return PS.screenOrientation; }
+				},
+				// "free" (the default, and what Mojo asks for) lets the card follow the screen,
+				// which is what Lunacy's cards already do; a fixed orientation is recorded and
+				// logged, because Lunacy has no rotation lock yet.
+				set: function (o) {
+					PS.specifiedWindowOrientation = String(o);
+					if (String(o).toLowerCase() !== "free") {
+						N.log("PalmSystem.windowOrientation = " + o + " (rotation lock not implemented)");
+					}
+				}
+			});
+		} catch (e) {}
+	})();
 
 	// Relaunch, as LunaSysMgr did it: the root window's launchParams become the new
 	// parameters, then Mojo.relaunch() runs. True means the app handled it (Enyo's app menu,

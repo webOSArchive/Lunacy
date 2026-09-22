@@ -76,6 +76,13 @@ enum class DeviceProfile(
     val positiveSpaceTopPadding: Int,
     /** Whether deviceInfo carries a carrierAvailable member at all. The Pre3's hasn't got one. */
     val reportsCarrierAvailable: Boolean,
+    /**
+     * HomeButtonOrientationAngle from the device's luna-platform.conf, which is how far the
+     * home button sits round from the screen's own top. LunaSysMgr turns the *screen's*
+     * orientation into the *window's* with it, so it is what PalmSystem.windowOrientation
+     * reports: see [windowOrientationFor].
+     */
+    val homeButtonOrientationAngle: Int,
 ) {
     /** Measured on the reference TouchPad (webOS CE 3.1.0). */
     TOUCHPAD(
@@ -109,6 +116,8 @@ enum class DeviceProfile(
         naturalLandscape = true,
         positiveSpaceTopPadding = 28,
         reportsCarrierAvailable = true,
+        // Read off the reference device: /etc/palm/luna-platform.conf, HomeButtonOrientationAngle=270.
+        homeButtonOrientationAngle = 270,
     ),
 
     /**
@@ -156,7 +165,43 @@ enum class DeviceProfile(
         positiveSpaceTopPadding = 42,
         // The Pre3's deviceInfo has no carrierAvailable member at all.
         reportsCarrierAvailable = false,
+        // Not measured: the Pre3 was not connected when this was written. 0 is LunaSysMgr's
+        // other case (its source calls it "For Opal device"), and it is what a phone whose
+        // home button is below a portrait screen has. Read luna-platform.conf on a Pre3 and
+        // correct this, as the rest of this profile was corrected.
+        homeButtonOrientationAngle = 0,
     );
+
+    /**
+     * The window's orientation for a screen in [screen], which is what
+     * `PalmSystem.windowOrientation` reports.
+     *
+     * webOS kept the two apart. The *screen's* orientation is the device's, and an app reads
+     * it as `PalmSystem.screenOrientation`; the *window's* is the same thing turned by where
+     * the home button is, and an app reads it as `PalmSystem.windowOrientation`. On a
+     * TouchPad, held in its natural portrait, the screen is "up" and the window is "right".
+     *
+     * Straight from LunaSysMgr's own `mapScreenOrientationToWindowOrientation`
+     * (`Src/js/JsSysObject.cpp`), which switches on `HomeButtonOrientationAngle`: 270 or -90
+     * (a TouchPad) turns it a quarter, 0 (a phone) swaps left and right, and anything else is
+     * left alone. Both properties are always one of the four names - never "free", which is
+     * only something an app can *ask* for.
+     */
+    fun windowOrientationFor(screen: String): String = when (homeButtonOrientationAngle) {
+        270, -90 -> when (screen) {
+            "up" -> "right"
+            "right" -> "up"
+            "left" -> "down"
+            "down" -> "left"
+            else -> screen
+        }
+        0 -> when (screen) {
+            "right" -> "left"
+            "left" -> "right"
+            else -> screen
+        }
+        else -> screen
+    }
 
     val deviceNameShort get() = modelNameAscii
     val platformVersionMajor get() = platformVersion.substringBefore('.').toInt()

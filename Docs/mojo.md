@@ -197,6 +197,38 @@ The submission mapping in `mojo.js` for Mojo 1 (`{"1": "506", "2": "344"}`) turn
 red herring: a Mojo 2 app doesn't load `mojo/mojo.js` at all, it loads `mojo2/mojo.js`, which
 has its own default. Submission 344 is still unaccounted for and nothing on the device has it.
 
+## Orientation, which is how a Mojo app handles rotation
+
+Mojo gives an app no resize hook of its own worth using: it hands the scene assistant the
+window's orientation and the app branches on it. drPodder sizes its playback slider that way,
+Mojo's own scenes do, and an app that gets an orientation it doesn't recognise simply does
+nothing - no error, no log line, just a layout that never happens.
+
+**webOS had two orientations, and they are not the same one.**
+
+| | what it is | on the reference TouchPad, held in its natural portrait |
+|---|---|---|
+| `PalmSystem.screenOrientation` | the screen's, i.e. the device's | `"up"` |
+| `PalmSystem.windowOrientation` | the card's, turned by where the home button is | `"right"` |
+| `PalmSystem.specifiedWindowOrientation` | what the app last *asked* for | `null` until it asks |
+
+Both of the first two are always `"up"`, `"down"`, `"left"` or `"right"` - LunaSysMgr's
+`nameForOrientation` can return nothing else. The turn between them is
+`mapScreenOrientationToWindowOrientation` in `Src/js/JsSysObject.cpp`, which switches on
+`HomeButtonOrientationAngle` from the device's `luna-platform.conf`: 270 (a TouchPad, read off
+the reference device) maps up→right, right→up, left→down, down→left; 0 (a phone) swaps left
+and right.
+
+**The property reads and writes different things, and that is deliberate.** Reading
+`windowOrientation` gives the window's actual orientation. *Writing* it - which is all
+`Mojo.Controller.StageController.setWindowOrientation` does - records the request in
+`m_specifiedWindowOrientation` and applies it as a policy: `"free"` means "let the card rotate
+with the screen", a name means "hold the card this way up". The getter never returns the
+request. Mojo asks for `"free"` on the app's behalf, so an implementation that stores the write
+and hands it back on the read gives every app the string `"free"`, which matches none of the
+four names, and every rotation branch in every Mojo app falls through. That is what left
+drPodder's playback slider the width of its own text; see [fix-log.md](fix-log.md).
+
 ## What a browser gets wrong about WebSQL
 
 Both measured on the reference TouchPad (`Workbench/probe` 0.1.0):

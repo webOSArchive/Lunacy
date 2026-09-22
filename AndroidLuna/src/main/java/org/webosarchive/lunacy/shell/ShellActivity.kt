@@ -540,6 +540,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
     }
 
+    /**
+     * webOS's window orientation, which is the screen's turned by where this device's home
+     * button would be. LunaSysMgr kept the two apart and so does Lunacy: an app reads
+     * `PalmSystem.screenOrientation` for the screen and `PalmSystem.windowOrientation` for
+     * the window, and a Mojo app branches on the second. See [DeviceProfile.windowOrientationFor].
+     */
+    override fun windowOrientation(): String = profile.windowOrientationFor(screenOrientation())
+
     /** The orientation the windows have been told about. */
     private var reportedOrientation = ""
 

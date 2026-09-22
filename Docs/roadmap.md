@@ -397,11 +397,13 @@ corpus survey says how many apps this phase can reach, and whether it is worth d
 
 ## Decided
 
-- **The card animations stay as they are for now** (codepoet, 2026-09-21): a card's minimize
-  drops its first four frames because Chromium re-rasters a live WebView when the card's
-  transform changes, and Android 5 has no cheap way to draw a snapshot instead. Measured, with
-  everything else ruled out, in [fix-log.md](fix-log.md). Accepted on the HP 10 G2 and worth
-  revisiting on a faster device, where the same frames may simply fit.
+- **The card animations stay as they are, and card view keeps live pages** (codepoet,
+  2026-09-21): a card's minimize drops its first four frames because Chromium re-rasters a live
+  WebView when the card's transform changes. Measured, with everything else ruled out, in
+  [fix-log.md](fix-log.md). **Snapshotting the cards - what LunaSysMgr did - is declined**: it
+  would rebuild card view around frozen pages to work around one device's speed, and faster
+  hardware will simply fit the frames. Don't propose it again; if it ever comes back it should
+  be because a *newer* target still can't draw a transformed WebView in 16 ms.
 - **`deviceInfo` reports this screen, accurately** (codepoet, 2026-09-21): 1280 x 800 on the
   HP 10 G2, not the TouchPad's 1024 x 768, because more devices are coming and the number has
   to mean the screen. An app that subtracts a TouchPad-sized constant from it therefore gets a

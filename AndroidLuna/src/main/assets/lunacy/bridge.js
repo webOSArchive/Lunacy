@@ -102,20 +102,30 @@
 		// What the app last asked for, which is where "free" belongs. Null until it asks, as
 		// LunaSysMgr's m_specifiedWindowOrientation is.
 		specifiedWindowOrientation: null,
-		// Lunacy has no full-screen card and no window properties yet; they are logged like the
-		// rest of the surface it hasn't built, rather than silently doing nothing.
-		enableFullScreenMode: function (on) { N.log("PalmSystem.enableFullScreenMode(" + on + ") (not implemented)"); },
-		// webOS's window properties. blockScreenTimeout is the one Lunacy answers - a video
-		// player asks for it while it plays, and Android's screen would otherwise go out
-		// mid-film. The rest (fastAccelerometer, overlayNotificationsPosition,
-		// suppressBannerMessages and the others) are logged, like the rest of the surface
-		// Lunacy hasn't built.
+		// The card grows over the status bar's 28 px and the bar slides away while the card is
+		// maximized; the page hears about it through its own resize. A video player and most
+		// games ask for it.
+		enableFullScreenMode: function (on) { N.fullScreen(Boolean(on)); },
+		// webOS's window properties. blockScreenTimeout (a video player holds the screen on
+		// while it plays) and statusBarColor (the bar's fill while the card is maximized, taken
+		// up at the next maximize, as a device does) are answered. fullScreen is the same as
+		// enableFullScreenMode, which is how LunaSysMgr read it back.
+		//
+		// suppressBannerMessages, suppressGestures and rotationLockMaximized are stored by
+		// LunaSysMgr and then read by nothing, in LunaCE and in HP's luna-sysmgr alike: a
+		// TouchPad shows the banner, takes the swipe and turns the screen regardless (measured,
+		// Docs/luna-deltas.md "D"). So they are accepted and do nothing here either. The rest
+		// are hardware the tablet hasn't got, and are logged.
 		setWindowProperties: function (p) {
 			var props = p || {};
 			var rest = [];
 			for (var k in props) {
+				if (!Object.prototype.hasOwnProperty.call(props, k)) { continue; }
 				if (k === "blockScreenTimeout") { N.blockScreenTimeout(Boolean(props[k])); }
-				else if (Object.prototype.hasOwnProperty.call(props, k)) { rest.push(k); }
+				else if (k === "statusBarColor") { N.statusBarColor(Number(props[k]) | 0); }
+				else if (k === "fullScreen") { N.fullScreen(Boolean(props[k])); }
+				else if (k === "suppressBannerMessages" || k === "suppressGestures" || k === "rotationLockMaximized") {}
+				else { rest.push(k); }
 			}
 			if (rest.length) { N.log("PalmSystem.setWindowProperties " + rest.join(",") + " (not implemented)"); }
 		},

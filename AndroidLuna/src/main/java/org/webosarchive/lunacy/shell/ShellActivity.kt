@@ -99,8 +99,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         hidden = FrameLayout(this)
         root.addView(hidden, FrameLayout.LayoutParams(1, 1))
 
-        cards = CardLayer(this, luna, this)
-        root.addView(cards, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
+        // The whole screen, so that a full-screen card can be laid out under the status bar;
+        // every other card starts below it (CardLayer.inset).
+        cards = CardLayer(this, luna, this).apply { inset = luna.px(StatusBar.HEIGHT) }
+        root.addView(cards, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
 
         // Overlays, bottom to top as in LunaCE's OverlayWindowManager: launcher, pill, dock.
         // The icon glows first; the launch follows a frame later, so the glow is seen.
@@ -268,6 +270,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             if (emu == null) null else luna.image("emucard-device-frame.png"),
             // webOS held the card's space with the app's own icon until it had drawn.
             registry.get(w.appId)?.let { CardSplash(this, luna, luna.splashIcon(it)) })
+        card.fullScreen = w.fullScreen && !w.emulated
         cards.add(card)
         cards.openMaximized(card)
     }
@@ -294,6 +297,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             setExhibition(false)
         }
         cards.cards.firstOrNull { it.window == window }?.let { cards.remove(it) }
+        // A full-screen card that closes itself while maximized takes the bar's absence with it.
+        if (cards.maximized == null) statusBar.slide(false)
         notifications.removeDashboard(window)
         notifications.popups.remove(window)
         closeWindow(window)
@@ -386,6 +391,23 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     override fun mediaBase() = mediaServer.base()
 
+    /**
+     * PalmSystem.enableFullScreenMode. The card is laid out over the bar's space at once, as
+     * LunaSysMgr resized the window at once, and the bar slides away if the card is up. Going
+     * back, the bar slides in first and the card shrinks under it when it has arrived, so
+     * nothing shows through the gap. LunaSysMgr left an emulated card's bar alone
+     * (SystemUiController::applyWindowProperties), and so does this.
+     */
+    override fun fullScreen(window: AppWindow) {
+        if (window.emulated) return
+        val card = cards.cards.firstOrNull { it.window == window } ?: return
+        when {
+            window.fullScreen -> { card.fullScreen = true; if (cards.maximized == card) statusBar.slide(true) }
+            cards.maximized == card -> statusBar.slide(false) { if (!window.fullScreen) card.fullScreen = false }
+            else -> card.fullScreen = false
+        }
+    }
+
     override fun activate(window: AppWindow) {
         cards.cards.firstOrNull { it.window == window }?.let { if (cards.maximized != it) cards.maximize(it) }
     }
@@ -456,11 +478,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (h > 0) {
             w?.callMojo("keyboardShown", "true")
             if (w == null || w.keyboardResizes) { lp.bottomMargin = h; cards.layoutParams = lp }
-            else w.callMojo("positiveSpaceChanged", "${Math.round(cards.width / luna.density)},${Math.round((cards.height - h) / luna.density)}")
+            else w.callMojo("positiveSpaceChanged", "${Math.round(cards.width / luna.density)},${Math.round((cards.areaHeight - h) / luna.density)}")
         } else {
             val resized = lp.bottomMargin != 0
             lp.bottomMargin = 0; cards.layoutParams = lp
-            if (w != null && !resized) w.callMojo("positiveSpaceChanged", "${Math.round(cards.width / luna.density)},${Math.round(cards.height / luna.density)}")
+            if (w != null && !resized) w.callMojo("positiveSpaceChanged", "${Math.round(cards.width / luna.density)},${Math.round(cards.areaHeight / luna.density)}")
             w?.let { win -> cards.post { win.callMojo("keyboardShown", "false") } }
             w?.removeInputFocus()
             goImmersive()  // Android shows its bars with the keyboard and leaves them up
@@ -833,8 +855,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             .put("dpi", dm.densityDpi).put("androidDensity", dm.density)
             .put("scale", luna.density).put("orientation", screenOrientation())
             .put("cardWidth", Math.round(cards.width / luna.density))
-            .put("cardHeight", Math.round(cards.height / luna.density))
-            .put("pixelGrid", pixelGrid(cards.width, cards.height))
+            .put("cardHeight", Math.round(cards.areaHeight / luna.density))
+            .put("pixelGrid", pixelGrid(cards.width, cards.areaHeight))
     }
 
     /**
@@ -988,7 +1010,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             imm.showSoftInput(card.window, 0)
         }
         statusBar.title = registry.get(card.window.appId)?.title ?: card.window.appId
-        statusBar.setMode(StatusBar.Mode.APP)
+        // The app's own colour, if it set one: LunaSysMgr read it as the card was maximized
+        // and not again until the next time (measured on the reference TouchPad).
+        statusBar.setMode(StatusBar.Mode.APP, card.window.statusBarColor)
+        statusBar.slide(card.fullScreen)
         if (launcherOpen) closeLauncher()
         fade(justType, false); showDock(false)
         card.window.setStageActive(true)
@@ -1060,6 +1085,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         hideKeyboard()
         statusBar.title = StatusBar.CARRIER_TEXT
         statusBar.setMode(if (launcherOpen) StatusBar.Mode.LAUNCHER else StatusBar.Mode.CARDS)
+        statusBar.slide(false)
         if (!launcherOpen) fade(justType, true)
         showDock(true)
         cards.cards.forEach { it.window.setStageActive(false) }

@@ -619,7 +619,15 @@ apps depend on it as much as Mojo apps do.
   relaunch brings its own window forward with `PalmSystem.activate()`.
 - **Focus.** The maximized card's window has `PalmSystem.isActivated` true and gets
   `Mojo.stageActivated`; the others have it false and get `stageDeactivated`. Enyo finds its
-  active window through `isActivated`.
+  active window through `isActivated`. A page hears it once its framework has called `stageReady` (or it has
+  drawn), so a card maximized at launch still gets its `windowActivated`, and each change is
+  sent once.
+- **Window properties.** `setWindowProperties` acts on `blockScreenTimeout`, `statusBarColor`
+  (the bar's fill, taken up at the next maximize) and `fullScreen` (as
+  `enableFullScreenMode`: the card grows over the bar's space and the bar slides off while it
+  is maximized). `suppressBannerMessages`, `suppressGestures` and `rotationLockMaximized` are
+  accepted and do nothing, which is what LunaSysMgr did with them on a TouchPad
+  ([luna-deltas.md](luna-deltas.md), D).
 - **App menu.** Tapping the title (with its ▾) in the status bar relaunches the maximized
   card's app with `{"palm-command":"open-app-menu"}`, as LunaSysMgr's
   `SystemUiController::toggleCurrentAppMenu` did. Enyo 1 and Mojo open their app menu on

@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+<head>
+<title>Window Probe</title>
+<script src="/usr/palm/frameworks/enyo/1.0/framework/enyo.js" type="text/javascript"></script>
+<style>
+html, body { margin: 0; padding: 0; background: #1d4d5c; color: #fff; font-family: Prelude, sans-serif; }
+/* The window's own edges, so a screenshot shows exactly the rectangle the page was given. */
+#edge { position: fixed; left: 0; top: 0; right: 0; bottom: 0; border: 6px solid #ffd200; box-sizing: border-box; }
+#out { position: absolute; left: 30px; top: 30px; right: 30px; font-size: 22px; line-height: 30px; }
+#out b { color: #ffd200; }
+#log { font-size: 16px; line-height: 20px; margin-top: 12px; }
+input { font-size: 20px; width: 400px; }
+</style>
+</head>
+<body>
+<div id="edge"></div>
+<div id="out">
+	<div id="state"></div>
+	<input id="field" type="text" placeholder="paste lands here">
+	<div id="log"></div>
+</div>
+<script type="text/javascript">
+// Lunacy's window probe: every call in the app-facing contract that isn't a bus service
+// (Docs/luna-deltas.md, section A), driven by launch parameters so the same step runs on a
+// TouchPad (palm-launch -p) and in Lunacy (--es params) without touching the screen.
+//   {"do": "<action>" | ["<action>", ...], "delay": ms before acting, ...}
+// Actions: fullscreen, normal, color (with "color": int RGB), nocolor, orient (with "o"),
+// activate, deactivate, suppress, unsuppress, banner (with "sound", "file", "duration", "nosuppress"),
+// sound (playSoundNotification with "sound"), gestures, nogestures, rotlock, norotlock, paste.
+// Everything is logged with a LUNACYPROBE prefix for palm-log / logcat.
+var lines = [];
+function log(s) {
+	var t = new Date(); t = t.getMinutes() + ":" + ("0" + t.getSeconds()).slice(-2) + "." + ("00" + t.getMilliseconds()).slice(-3);
+	lines.unshift(t + " " + s);
+	lines.length = Math.min(lines.length, 18);
+	document.getElementById("log").innerHTML = lines.join("<br>");
+	console.log("LUNACYPROBE " + s);
+}
+function state() {
+	var P = window.PalmSystem || {};
+	document.getElementById("state").innerHTML =
+		"<b>inner</b> " + window.innerWidth + " x " + window.innerHeight +
+		" &nbsp; <b>screen</b> " + screen.width + " x " + screen.height +
+		"<br><b>window</b> " + P.windowOrientation + " &nbsp; <b>screen</b> " + P.screenOrientation +
+		" &nbsp; <b>asked</b> " + P.specifiedWindowOrientation +
+		"<br><b>active</b> " + P.isActivated;
+}
+window.addEventListener("resize", function () { state(); log("resize " + window.innerWidth + "x" + window.innerHeight); });
+function props(p) { enyo.windows.setWindowProperties(window, p); log("setWindowProperties " + enyo.json.stringify(p)); }
+var actions = {
+	fullscreen: function () { enyo.setFullScreen(true); log("setFullScreen(true)"); },
+	normal: function () { enyo.setFullScreen(false); log("setFullScreen(false)"); },
+	color: function (p) { props({statusBarColor: p.color === undefined ? 0xaa2233 : p.color}); },
+	nocolor: function () { props({statusBarColor: 0}); },
+	orient: function (p) { enyo.setAllowedOrientation(p.o || "free"); log("setAllowedOrientation(" + p.o + ")"); },
+	activate: function () { log("activate"); enyo.windows.activateWindow(window); },
+	deactivate: function () { log("deactivate"); enyo.windows.deactivateWindow(window); },
+	suppress: function () { props({suppressBannerMessages: true}); },
+	unsuppress: function () { props({suppressBannerMessages: false}); },
+	banner: function (p) {
+		var id = PalmSystem.addBannerMessage("Window Probe banner " + (p.sound || "silent"), '{"from":"banner"}', "icon.png",
+			p.sound || "", p.file || "", p.duration || 0, Boolean(p.nosuppress));
+		log("addBannerMessage -> " + id);
+	},
+	sound: function (p) { PalmSystem.playSoundNotification(p.sound || "notifications"); log("playSoundNotification(" + p.sound + ")"); },
+	gestures: function () { props({suppressGestures: true}); },
+	nogestures: function () { props({suppressGestures: false}); },
+	rotlock: function () { props({rotationLockMaximized: true}); },
+	norotlock: function () { props({rotationLockMaximized: false}); },
+	paste: function () {
+		var f = document.getElementById("field"); f.value = ""; f.focus();
+		PalmSystem.paste();
+		setTimeout(function () { log("paste -> \"" + f.value + "\""); }, 300);
+	}
+};
+function act(p) {
+	p = p || {};
+	log("launch " + enyo.json.stringify(p));
+	var list = p["do"] ? [].concat(p["do"]) : [];
+	setTimeout(function () {
+		list.forEach(function (a) { if (actions[a]) { actions[a](p); } else { log("no action " + a); } });
+		setTimeout(state, 500);
+	}, p.delay || 0);
+}
+// Enyo's own route for these notifications, as an app would see them.
+enyo.dispatcher.rootHandler.addListener({
+	dispatchDomEvent: function (e) {
+		if (e.type == "lowMemory") { log("lowMemory " + e.state); }
+		else if (e.type == "windowRotated") { log("windowRotated " + e.orientation); state(); }
+		else if (e.type == "windowActivated" || e.type == "windowDeactivated") { log(e.type); state(); }
+	}
+});
+enyo.applicationRelaunchHandler = function (p) { act(p); return true; };
+state();
+enyo.ready();
+act(enyo.windowParams);
+</script>
+</body>
+</html>

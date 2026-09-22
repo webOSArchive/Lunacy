@@ -45,6 +45,11 @@ interface WindowHost {
      * this window wants it. A video player asks for it for as long as it is playing.
      */
     fun blockScreenTimeout(window: AppWindow, block: Boolean)
+    /**
+     * PalmSystem.enableFullScreenMode: the card grows over the status bar's space, and the bar
+     * goes while it is maximized. The request is on [AppWindow.fullScreen] already.
+     */
+    fun fullScreen(window: AppWindow)
     fun deviceInfo(emulated: Boolean): String
     /** webOS's screen orientation: "up", "down", "left" or "right". */
     fun screenOrientation(): String
@@ -88,6 +93,15 @@ class AppWindow(
     /** webOS window attributes from window.open: "window" is card, dashboard or popupalert. */
     var attributes = JSONObject()
     val type: String get() = attributes.optString("window", "card")
+    /** What the app last asked for through PalmSystem.enableFullScreenMode. */
+    var fullScreen = false
+        private set
+    /**
+     * setWindowProperties' statusBarColor, as 0xRRGGBB, or null if the app never set one. The
+     * shell reads it when the card is maximized, which is when LunaSysMgr did.
+     */
+    @Volatile var statusBarColor: Int? = null
+        private set
     /** Attributes the page announced for the window it is about to open. */
     @Volatile private var pendingAttributes = JSONObject()
     @Volatile private var destroyed = false
@@ -155,7 +169,10 @@ class AppWindow(
         webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? =
                 host.server.serve(req.url)
-            override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) { net.reset(); endCalls() }
+            override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
+                net.reset(); endCalls()
+                pageReady = false; told = null
+            }
             override fun onPageFinished(view: WebView, url: String) {
                 // The window.open transport resets the background; apply transparency again.
                 if (type == "dashboard" || type == "popupalert") view.setBackgroundColor(android.graphics.Color.TRANSPARENT)
@@ -216,8 +233,34 @@ class AppWindow(
      * window (for the app menu, among others), then Mojo.stageActivated or stageDeactivated.
      */
     fun setStageActive(active: Boolean) {
+        this.active = active
+        if (pageReady) deliverActive()
+    }
+
+    /** Whether the shell has this window's card focused. */
+    private var active = false
+    /** What the page was last told, so that it hears each change once, as it did on webOS. */
+    private var told: Boolean? = null
+    /**
+     * Whether the page can be told: it has called stageReady or drawn a frame. A card is
+     * maximized before its page exists, and on a TouchPad the activation comes after
+     * stageReady ("APP READY", then "Sending stage activation" in LunaSysMgr's log) - so an
+     * app launched straight into a maximized card still hears windowActivated.
+     */
+    private var pageReady = false
+
+    private fun deliverActive() {
+        if (told == active) return
+        told = active
         evaluateJavascript("if(window.PalmSystem){PalmSystem.isActivated=$active}", null)
         callMojo(if (active) "stageActivated" else "stageDeactivated")
+    }
+
+    private fun onPageReady() {
+        if (pageReady) return
+        pageReady = true
+        // Until now it believed itself inactive, which is how a page starts.
+        if (active) deliverActive() else told = false
     }
 
     /**
@@ -260,10 +303,10 @@ class AppWindow(
         }
 
         @JavascriptInterface
-        fun stageReady() { main.post { stageReady = true; host.onStageReady(this@AppWindow) } }
+        fun stageReady() { main.post { stageReady = true; host.onStageReady(this@AppWindow); onPageReady() } }
 
         /** The compat layer, once the page has actually produced a frame. */
-        @JavascriptInterface fun pageDrawn() { main.post { host.onPageDrawn(this@AppWindow) } }
+        @JavascriptInterface fun pageDrawn() { main.post { host.onPageDrawn(this@AppWindow); onPageReady() } }
 
         /** The network shim (assets/lunacy/net.js): cross-origin XHRs, sent natively. */
         @JavascriptInterface fun netSend(id: Int, request: String) = net.send(id, request)
@@ -297,6 +340,9 @@ class AppWindow(
         @JavascriptInterface fun keyboardResizes(resize: Boolean) { keyboardResizes = resize }
         @JavascriptInterface
         fun blockScreenTimeout(block: Boolean) { main.post { host.blockScreenTimeout(this@AppWindow, block) } }
+        @JavascriptInterface
+        fun fullScreen(on: Boolean) { main.post { if (fullScreen != on) { fullScreen = on; host.fullScreen(this@AppWindow) } } }
+        @JavascriptInterface fun statusBarColor(rgb: Int) { statusBarColor = rgb and 0xFFFFFF }
 
         @JavascriptInterface fun log(msg: String) { Log.i(AppServer.TAG, "[$appId] palm $msg") }
 

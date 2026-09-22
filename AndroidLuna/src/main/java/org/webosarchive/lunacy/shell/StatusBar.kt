@@ -83,17 +83,45 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
     /** Whether the title shows its ▾ (an app is maximized). */
     private var titleArrow = false
 
-    fun setMode(mode: Mode) {
+    /**
+     * [color] is the maximized app's own, from setWindowProperties' statusBarColor (0xRRGGBB),
+     * in place of the mode's. LunaSysMgr cross-faded from the colour the bar had to the new
+     * one over statusBarColorChangeDuration, 300 ms linear, alongside the fade in or out.
+     */
+    fun setMode(mode: Mode, color: Int? = null) {
         titleArrow = mode == Mode.APP
         val target = if (mode == Mode.CARDS) 0f else 1f
-        if (mode != Mode.CARDS) fill.color = mode.color
+        val fromColor = fill.color or 0xFF000000.toInt()
+        // In card view the fill fades out wearing the colour it had.
+        val toColor = if (mode == Mode.CARDS) fromColor else (color?.let { it or 0xFF000000.toInt() } ?: mode.color)
+        // Nothing to cross-fade from while the bar is transparent.
+        val startColor = if (fillOpacity == 0f) toColor else fromColor
+        val startOpacity = fillOpacity
+        val argb = android.animation.ArgbEvaluator()
         fillAnim?.cancel()
-        fillAnim = android.animation.ValueAnimator.ofFloat(fillOpacity, target).apply {
+        fillAnim = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
             duration = 300; interpolator = Easing.Linear
-            addUpdateListener { fillOpacity = it.animatedValue as Float; invalidate() }
+            addUpdateListener {
+                val f = it.animatedValue as Float
+                fillOpacity = startOpacity + (target - startOpacity) * f
+                fill.color = argb.evaluate(f, startColor, toColor) as Int
+                invalidate()
+            }
             start()
         }
     }
+
+    /**
+     * A full-screen card is up: the bar slides off the top, and back when it isn't. 400 ms
+     * OutCubic, as LunaSysMgr animated the positive space. [done] runs once it is back.
+     */
+    fun slide(hidden: Boolean, done: () -> Unit = {}) {
+        val to = if (hidden) -height.toFloat() else 0f
+        animate().cancel()
+        if (translationY == to) { done(); return }
+        animate().translationY(to).setDuration(400).setInterpolator(Easing.OutCubic).withEndAction(done).start()
+    }
+    val slidOut get() = translationY != 0f
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {

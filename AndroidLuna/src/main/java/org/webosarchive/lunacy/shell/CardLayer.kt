@@ -57,6 +57,15 @@ class Card(
     /** Card-view transform, animated by CardLayer. */
     var cx = 0f; var cy = 0f; var scale = 1f; var lift = 0f; var fade = 1f
 
+    /**
+     * Laid out over the status bar's space as well as below it: the app asked for full screen
+     * (PalmSystem.enableFullScreenMode). LunaSysMgr grew the card's window by the bar's 28 px
+     * and kept it that size in the card view too; the bar itself only goes while the card is
+     * maximized, which is the shell's business. Never true for an emulated card.
+     */
+    var fullScreen = false
+        set(v) { if (field != v) { field = v; requestLayout() } }
+
     init {
         if (emulatedSize == null) {
             addView(window, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
@@ -123,6 +132,19 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     }
 
     val cards = ArrayList<Card>()
+    /**
+     * The status bar's height. The layer runs the whole height of the screen so that a
+     * full-screen card can be laid out under the bar; every other card, and the card view's
+     * geometry, start this far down.
+     */
+    var inset = 0
+        set(v) { if (field != v) { field = v; requestLayout() } }
+    /** The height a card that isn't full screen is given: what the card view is laid out in. */
+    val areaHeight get() = height - inset
+    /** Where a card's top edge is laid out. */
+    private fun top(c: Card) = if (c.fullScreen) 0 else inset
+    /** A card's own centre, which is where it sits maximized. */
+    private fun naturalY(c: Card) = top(c) + (height - top(c)) / 2f
     var maximized: Card? = null
         private set
     /** The card being maximized, while its animation runs. */
@@ -146,13 +168,15 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     // ---- layout ----
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
-        for (c in cards) c.layout(0, 0, r - l, b - t)
+        for (c in cards) c.layout(0, top(c), r - l, b - t)
+        // A maximized card that has just gone to or from full screen has a new centre.
+        maximized?.let { if (anim == null && drag == Drag.NONE) { it.cx = (r - l) / 2f; it.cy = naturalY(it) } }
         applyTransforms()
     }
 
     override fun onMeasure(w: Int, h: Int) {
         val ws = MeasureSpec.getSize(w); val hs = MeasureSpec.getSize(h)
-        for (c in cards) c.measure(MeasureSpec.makeMeasureSpec(ws, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(hs, MeasureSpec.EXACTLY))
+        for (c in cards) c.measure(MeasureSpec.makeMeasureSpec(ws, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(hs - top(c), MeasureSpec.EXACTLY))
         setMeasuredDimension(ws, hs)
     }
 
@@ -164,13 +188,13 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         val max = maximized
         if (max != null) {
             cards.forEachIndexed { i, c -> val (x, y, s) = cardViewTarget(i); c.cx = x; c.cy = y; c.scale = s; c.lift = 0f; c.fade = 1f }
-            max.cx = w / 2f; max.cy = h / 2f; max.scale = 1f
+            max.cx = w / 2f; max.cy = naturalY(max); max.scale = 1f
         } else settleCardView()
     }
 
     private fun reserve() = luna.px(Params.PILL_RESERVE)
-    private fun activeScale() = max(Params.MIN_SCALE, (height - reserve()) * Params.ACTIVE_RATIO / height)
-    private fun nonActiveScale() = max(Params.MIN_SCALE, (height - reserve()) * Params.NON_ACTIVE_RATIO / height)
+    private fun activeScale() = max(Params.MIN_SCALE, (areaHeight - reserve()) * Params.ACTIVE_RATIO / areaHeight)
+    private fun nonActiveScale() = max(Params.MIN_SCALE, (areaHeight - reserve()) * Params.NON_ACTIVE_RATIO / areaHeight)
     /** Distance between the centres of two side cards. */
     private fun pitch() = width * nonActiveScale() + luna.px(Params.GAP)
 
@@ -184,16 +208,16 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         val a = activeScale(); val n = nonActiveScale()
         val s = a + (n - a) * t
         val x = width / 2f + d * pitch() + Math.signum(d) * t * width * (a - n) / 2
-        val y = reserve() + (height - reserve()) * Params.ORIGIN_RATIO
+        val y = inset + reserve() + (areaHeight - reserve()) * Params.ORIGIN_RATIO
         return Triple(x, y, s)
     }
 
     private fun applyTransforms() {
         for (c in cards) {
-            c.pivotX = width / 2f; c.pivotY = height / 2f
+            c.pivotX = c.width / 2f; c.pivotY = c.height / 2f
             c.scaleX = c.scale; c.scaleY = c.scale
-            c.translationX = c.cx - width / 2f
-            c.translationY = c.cy - height / 2f + c.lift
+            c.translationX = c.cx - (c.left + c.width / 2f)
+            c.translationY = c.cy - (c.top + c.height / 2f) + c.lift
             c.alpha = c.fade
             c.invalidateOutline()
         }
@@ -213,7 +237,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
             // card-shadow-tile.png as a nine-patch (43 px insets), 20 px outside the card and
             // 5 px down, in the card's own scaled coordinates (reference §2.4).
             val s = card.scale; val g = luna.px(Params.SHADOW_GROW); val drop = luna.px(Params.SHADOW_DROP)
-            val halfW = (width / 2f + g) * s; val halfH = (height / 2f + g) * s
+            val halfW = (card.width / 2f + g) * s; val halfH = (card.height / 2f + g) * s
             val cy = card.cy + card.lift + drop * s
             // 43 of 87 px in the original: keep at least a 1-px stretchable middle after scaling,
             // or the edge slices vanish and only the corners draw.
@@ -274,7 +298,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         cards.forEach { it.visibility = View.VISIBLE }
         card.bringToFront()
         activating = card
-        animateTo(Params.MAXIMIZE_MS, { j -> if (j == i) Triple(width / 2f, height / 2f, 1f) else cardViewTarget(j) }, Easing.OutQuart) {
+        animateTo(Params.MAXIMIZE_MS, { j -> if (j == i) Triple(width / 2f, naturalY(card), 1f) else cardViewTarget(j) }, Easing.OutQuart) {
             activating = null
             maximized = card
             cards.forEach { if (it != card) it.visibility = View.INVISIBLE }
@@ -390,7 +414,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
                         val v = vy / luna.density / 3f
                         val flung = dist < Params.THROW_DISTANCE && v < Params.THROW_MIN_VELOCITY &&
                             v < (Params.THROW_VELOCITY * Params.THROW_DISTANCE) / dist
-                        val centreAboveTop = card.cy + card.lift < 0
+                        val centreAboveTop = card.cy + card.lift < inset
                         if (flung || centreAboveTop) throwAway(card, vy)
                         else animateTo(Params.SLIDE_MS, ::cardViewTarget)
                     }
@@ -416,7 +440,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         val f = (-dy / (height * 0.5f)).coerceIn(0f, 1f)
         val (x, y, s) = cardViewTarget(i)
         card.cx = width / 2f + (x - width / 2f) * f
-        card.cy = height / 2f + (y - height / 2f) * f
+        card.cy = naturalY(card) + (y - naturalY(card)) * f
         card.scale = 1f + (s - 1f) * f
         applyTransforms()
     }
@@ -433,7 +457,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     }
 
     private fun cardAt(x: Float, y: Float): Card? = cards.lastOrNull { c ->
-        val w = width * c.scale; val h = height * c.scale
+        val w = c.width * c.scale; val h = c.height * c.scale
         x >= c.cx - w / 2 && x <= c.cx + w / 2 && y >= c.cy - h / 2 && y <= c.cy + h / 2
     }
 }

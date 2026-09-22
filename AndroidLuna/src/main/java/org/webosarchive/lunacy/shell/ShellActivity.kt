@@ -82,7 +82,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         luna = Luna(this)
         files = AppFiles(assets, java.io.File(filesDir, "cryptofs/apps"))
         jsServices = org.webosarchive.lunacy.card.JsServices(this, bus, files.root)
-        server = AppServer(assets, files, jsServices.root)
+        server = AppServer(assets, files, jsServices.root, java.io.File(filesDir, "framework-art"))
         mediaServer = org.webosarchive.lunacy.card.MediaServer(jsServices.root)
         registry = AppRegistry(files)
         org.webosarchive.lunacy.card.Http.init(assets)

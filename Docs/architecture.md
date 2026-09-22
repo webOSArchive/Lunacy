@@ -173,6 +173,17 @@ product; being "close enough" is not the goal.
 - **Framework route.** Requests under `/usr/palm/frameworks/…` go to Lunacy's modernized
   frameworks, including the version aliases apps used (`enyo/0.10`, `enyo/1.0`). Apps are
   not rewritten; the path they already use gets a better library behind it.
+- **The framework's art is asked for before the page needs it.** A framework asks for a piece
+  of its widget art only once a widget using it has been laid out - and a dialog's own frame
+  only when the dialog opens - so the layout arrives before its chrome and a dialog shows as
+  unframed text for half a second. Serving faster doesn't help: the card host answers the
+  median request in under a millisecond, and the wait is the page's, not the file's. So the
+  host remembers which files under `/usr/palm/frameworks/` each app asked for, and asks for
+  those again at the top of the page next time. It keeps no list of its own and knows nothing
+  about any app: it is a cache, filled by the same rule for every one of them, and an app that
+  has never run gets no preload. Preloading a framework's whole theme instead was measured and
+  is worse - it pays for the fifty images nobody asked for and the page appears half a second
+  later ([fix-log.md](fix-log.md)).
 - **The fork is stock Enyo plus patches.** `LunaRuntimes/enyo-1.0/patches/` holds Lunacy's
   changes as diffs against upstream, and `fetch-assets.sh` applies them after copying the
   upstream clone, failing the build if one no longer applies. So every framework change stays

@@ -7,12 +7,19 @@ import android.webkit.WebResourceResponse
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
+import org.json.JSONObject
 
 /**
  * Serves every request to an app origin: the app's own files at their webOS path, the
  * frameworks, and Lunacy's injected scripts. See Docs/architecture.md, "Card host".
  */
-class AppServer(private val assets: AssetManager, private val files: AppFiles, private val webosRoot: java.io.File) {
+class AppServer(
+    private val assets: AssetManager,
+    private val files: AppFiles,
+    private val webosRoot: java.io.File,
+    /** Where the per-app lists of framework art live; see [preload]. */
+    private val artCacheDir: java.io.File,
+) {
     companion object {
         const val TAG = "Lunacy"
         /** Apps check location.hostname for this (the TouchPad reports ".media.cryptofs.apps..."). */
@@ -53,6 +60,12 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
             RegexOption.IGNORE_CASE)
         private val MOJO_VERSION = Regex("""x-mojo-(version|submission)="([^"]*)"""", RegexOption.IGNORE_CASE)
         private val MOJO_SUBMISSIONS = mapOf("1" to "506", "2" to "344")
+        /** Framework art an app has asked for: what to preload next time, and how much (see preload). */
+        private val IMAGE = Regex("""\.(png|jpg|jpeg|gif)$""", RegexOption.IGNORE_CASE)
+        private const val MAX_ART = 120
+        /** An app id is a file name here, so it has to be one: webOS ids are dotted names. */
+        private val APP_ID = Regex("""[A-Za-z0-9][A-Za-z0-9._-]{0,127}""")
+        private const val ART_FLUSH_MS = 2000L
         /**
          * What MojoLoader looks for on the window: a builtin library is `palm<name>Version<v>`
          * with the dots turned to underscores. A Mojo 2 page gets them all in front of its own
@@ -88,6 +101,7 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
         val host = uri.host ?: return null
         if (!host.endsWith(HOST_SUFFIX)) return null  // real network
         val path = uri.path.orEmpty().trimStart('/')
+        val app = host.removeSuffix(HOST_SUFFIX)
         val resource = runCatching { uri.getQueryParameter(RESOURCE_PARAM) != null }.getOrDefault(false)
         if (path.startsWith("__lunacy/fonts/")) return asset("luna/fonts/" + path.removePrefix("__lunacy/fonts/"), path)
         if (path.startsWith("__lunacy/")) return asset("lunacy/" + path.removePrefix("__lunacy/"), path)
@@ -108,15 +122,15 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
             mojo != null -> asset("fw/mojo/" + mojo.groupValues[1], path, resource)
             frameworks != null -> asset("fw/frameworks/" + frameworks.groupValues[1], path, resource)
             path.startsWith(SYSTEM_UI) -> asset("luna-systemui/" + path.removePrefix(SYSTEM_UI), path, resource)
-            path.startsWith(CRYPTOFS) -> files.open(path.removePrefix(CRYPTOFS))?.let { respond(it, path, resource) }
+            path.startsWith(CRYPTOFS) -> files.open(path.removePrefix(CRYPTOFS))?.let { respond(it, path, resource, app) }
             // webOS's user storage, shared by apps and services (JS services write files here).
             path.startsWith(MEDIA_INTERNAL) -> {
                 val rel = path.removePrefix(MEDIA_INTERNAL)
-                if (thumb != null) thumbnail(rel, thumb) else internal(rel)?.let { respond(it, path, resource) }
+                if (thumb != null) thumbnail(rel, thumb) else internal(rel)?.let { respond(it, path, resource, app) }
             }
             else -> null
         }
-        if (resp == null) Log.w(TAG, "404 $uri")
+        if (resp != null) noteArt(app, path) else Log.w(TAG, "404 $uri")
         return resp ?: WebResourceResponse("text/plain", "utf-8", 404, "Not Found", emptyMap(),
             ByteArrayInputStream(ByteArray(0)))
     }
@@ -158,10 +172,11 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
         return respond(stream, name, resource)
     }
 
-    private fun respond(stream: InputStream, name: String, resource: Boolean = false): WebResourceResponse {
+    private fun respond(stream: InputStream, name: String, resource: Boolean = false,
+                        app: String? = null): WebResourceResponse {
         val mime = mimeOf(name)
         val body = when (mime) {
-            "text/html" -> html(stream, resource)
+            "text/html" -> html(stream, resource, app)
             "text/css" -> CssTransforms.apply(stream)
             else -> stream
         }
@@ -174,20 +189,97 @@ class AppServer(private val assets: AssetManager, private val files: AppFiles, p
      * template an app reads. Lunacy's own scripts go only into a page: a file read through
      * `palmGetResource` ([RESOURCE_PARAM]) comes back as it is on disk.
      */
-    private fun html(s: InputStream, resource: Boolean): InputStream {
+    private fun html(s: InputStream, resource: Boolean, app: String? = null): InputStream {
         val text = HtmlTransforms.selfClosingTags(s.bufferedReader().readText())
-        return ByteArrayInputStream((if (resource) text else injectInto(text)).toByteArray())
+        return ByteArrayInputStream((if (resource) text else injectInto(text, app)).toByteArray())
     }
 
     /** Global serve-time transform: Lunacy's scripts run first in every page. */
-    private fun injectInto(source: String): String {
+    private fun injectInto(source: String, app: String? = null): String {
         var html = source
         val tag = "<link rel=\"stylesheet\" href=\"/__lunacy/fonts.css\">" +
             "<script src=\"/__lunacy/compat.js\"></script><script src=\"/__lunacy/bridge.js\"></script>" +
-            "<script src=\"/__lunacy/net.js\"></script>"
+            "<script src=\"/__lunacy/net.js\"></script>" + preload(app)
         val m = Regex("<head[^>]*>", RegexOption.IGNORE_CASE).find(html)
         html = if (m != null) html.substring(0, m.range.last + 1) + tag + html.substring(m.range.last + 1) else tag + html
         return mojoBuiltins(html)
+    }
+
+    // ---- the framework's art, asked for before the page needs it ----
+
+    /**
+     * A device kept its frameworks in the browser and its art on local storage. Here every
+     * piece of that art is a request, and a framework only asks for a piece once a widget
+     * that uses it has been laid out - so the layout arrives before its chrome, and a dialog's
+     * own frame (Onyx's popup.png, asked for only when the dialog opens) lands half a second
+     * after the dialog. That is what "the widgets popping in" is.
+     *
+     * Serving faster doesn't help: `serve` answers the median request in under a millisecond
+     * and the wait is the page's, not the file's. Asking earlier does. Measured on the HP 10
+     * G2 with the App Museum, three runs each:
+     *
+     *                                   art in hand   DOMContentLoaded   load
+     *   as it was                          3.16 s          2.25 s        3.09 s
+     *   all of Onyx's art (61 images)      0.90 s          2.84 s        3.43 s
+     *   the 11 pieces the app uses         0.43 s          2.26 s        2.83 s
+     *
+     * Preloading a framework's whole theme pays for fifty images nobody asked for, and the
+     * page appears half a second later for it. Preloading what the app actually used costs
+     * nothing and has the art in hand before the framework has finished starting.
+     *
+     * So Lunacy keeps no list of its own: it remembers what each app asked the *frameworks*
+     * for last time ([noteArt]) and asks for that again at the top of the page. Nothing here
+     * knows anything about any app - it is a cache, filled by the same rule for every one of
+     * them, and an app that has never run gets no preload and behaves as it did before.
+     */
+    private fun preload(app: String?): String {
+        val art = artOf(app ?: return "")
+        if (art.isEmpty()) return ""
+        val list = art.joinToString(",") { JSONObject.quote(it) }
+        return "<script>(function(){var a=[$list];" +
+            "for(var i=0;i<a.length;i++){(new Image()).src=a[i];}})();</script>"
+    }
+
+    /** What this app asked the frameworks for, in memory and on disk. */
+    private val art = HashMap<String, LinkedHashSet<String>>()
+    private val artFlush = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "lunacy-art").apply { isDaemon = true }
+    }
+    private var artFlushPending: java.util.concurrent.ScheduledFuture<*>? = null
+
+    private fun artOf(app: String): Set<String> = synchronized(art) {
+        if (!APP_ID.matches(app)) return emptySet()
+        art.getOrPut(app) {
+            val f = java.io.File(artCacheDir, app)
+            LinkedHashSet(runCatching { f.readLines().filter { it.isNotBlank() } }.getOrDefault(emptyList()))
+        }.toSet()
+    }
+
+    /**
+     * One piece of framework art this app has now asked for. Only the frameworks Lunacy
+     * serves: an app's own images are its own business and change with its content, while
+     * the widget art is the same every time the app runs.
+     */
+    private fun noteArt(app: String, path: String) {
+        if (!APP_ID.matches(app) || !path.contains("usr/palm/frameworks/") || !IMAGE.containsMatchIn(path)) return
+        val url = "/$path"
+        synchronized(art) {
+            val set = art.getOrPut(app) {
+                val f = java.io.File(artCacheDir, app)
+                LinkedHashSet(runCatching { f.readLines().filter { it.isNotBlank() } }.getOrDefault(emptyList()))
+            }
+            if (set.size >= MAX_ART || !set.add(url)) return
+            artFlushPending?.cancel(false)
+            artFlushPending = artFlush.schedule({ flushArt() }, ART_FLUSH_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        }
+    }
+
+    private fun flushArt() {
+        val snapshot = synchronized(art) { art.mapValues { it.value.toList() } }
+        runCatching { artCacheDir.mkdirs() }
+        for ((app, urls) in snapshot) {
+            runCatching { java.io.File(artCacheDir, app).writeText(urls.joinToString("\n")) }
+        }
     }
 
     /**

@@ -47,6 +47,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         const val LABEL_GAP = 2f
         const val MAX_COLUMNS = 7
         const val LEFT_MARGIN = 27f
+        const val SPACE_ADJUST = 12       // IconHorizontalSpaceAdjustInPixels
         const val TOP_MARGIN = 20f
         const val ROW_GAP = 10f
         const val TAP_RADIUS = 25f
@@ -241,14 +242,23 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private fun tabBarH() = luna.px(Params.TAB_BAR)
     private fun pageTop() = tabBarH()
     private fun pageBottom() = height - dockHeight - 1
-    private fun columns(): Int {
-        val row = width - 2 * luna.px(Params.LEFT_MARGIN)
-        return max(1, min(Params.MAX_COLUMNS, (row / luna.px(Params.CELL)).toInt()))
+    /**
+     * ReorderableIconLayout::calculateAndSetHorizontalSpaceParameters, in TouchPad px: from
+     * MaxIconsPerRow down, the first count n whose gap ⌊free / (n − 1)⌋ is positive, where
+     * free = pageWidth − 128·(n + 1) + 12·MaxIconsPerRow (the adjustment keeps counting the
+     * original seven). On a 768-px-wide TouchPad that is 5 icons 149 px apart, as measured.
+     */
+    private fun columnLayout(): Pair<Int, Int> {
+        val w = (width / luna.density).toInt()
+        for (n in Params.MAX_COLUMNS downTo 2) {
+            val free = w - Params.CELL.toInt() * (n + 1) + Params.SPACE_ADJUST * Params.MAX_COLUMNS
+            val gap = if (free <= 0) 0 else free / (n - 1)
+            if (gap > 0) return n to gap
+        }
+        return 1 to 0
     }
-    private fun columnPitch(): Float {
-        val n = columns(); val row = width - 2 * luna.px(Params.LEFT_MARGIN)
-        return if (n <= 1) luna.px(Params.CELL) else luna.px(Params.CELL) + (row - n * luna.px(Params.CELL)) / (n - 1)
-    }
+    private fun columns(): Int = columnLayout().first
+    private fun columnPitch(): Float = luna.px(Params.CELL + columnLayout().second)
     private fun rowPitch() = luna.px(Params.CELL + Params.ROW_GAP)
     private fun cellCentre(i: Int): PointF {
         val n = columns()

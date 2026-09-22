@@ -329,7 +329,7 @@ device animates, and is missing a few states.
 
 Everything here is §3; Lunacy's is `Launcher.kt`.
 
-**Stock items done 2026-09-22** (empty page, bottom shadow, kinetic scroll, auto-scroll, side-edge flip at the source's 50 px / 1500 ms - the 600 ms was chosen, not measured - installing). Found on the way and fixed: a user-installed app belongs on DOWNLOADS (`installedAppsPageIndex`), which is where the reference TouchPad has every one, and the status bar reads "Launcher" while the launcher is up. Column spacing: compared on both machines in portrait (5 icons a row), same positions within a pixel or two, so left as it is. The LunaCE extras (tab editing, app groups) are below.
+**Stock items done 2026-09-22** (empty page, bottom shadow, kinetic scroll, auto-scroll, side-edge flip at the source's 50 px / 1500 ms - the 600 ms was chosen, not measured - installing). Found on the way and fixed: a user-installed app belongs on DOWNLOADS (`installedAppsPageIndex`), which is where the reference TouchPad has every one, and the status bar reads "Launcher" while the launcher is up. Column spacing (Q14) settled: measured 5 icons 149 px apart on the reference TouchPad in portrait, which is exactly `calculateAndSetHorizontalSpaceParameters` with the whole page width and the adjustment still counting seven icons (`free = W − 128(n+1) + 84`, gap `⌊free/(n−1)⌋`); Lunacy's even spread gave 146.5 there, and now uses the formula (157 on this 800-px tablet). The LunaCE extras (tab editing, app groups) are below.
 
 | What | LunaCE | Lunacy today | Do |
 |---|---|---|---|

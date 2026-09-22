@@ -339,8 +339,11 @@ product; being "close enough" is not the goal.
     viewport meta carrying the card's width and a scale pinned at 1, **merged into** what the
     app declared: every directive the app wrote is kept, `device-width` and `device-height`
     are rewritten as the card's own numbers (they mean the card, and this engine would read
-    them as the display in density-independent pixels), and an app that names its own width or
-    scale in numbers gets nothing added. The app's own element is left where it is; the merged
+    them as the display in density-independent pixels), and what the app left unsaid is filled
+    in - the card's height as well as its width, since with only the width given the engine
+    works the height out itself and lands a pixel short, leaving the bottom row of the card
+    showing under the page. The scale is pinned only for an app that says nothing about it:
+    one that does is controlling its own. The app's own element is left where it is; the merged
     copy is appended after it. The width follows the card, so it is written again whenever the
     card is resized - a rotation, or the keyboard taking half of it.
   - **extractfs.** webOS's thumbnailer was a FUSE filesystem rather than a service: reading

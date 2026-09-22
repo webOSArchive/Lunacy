@@ -618,15 +618,21 @@ window.__lunacyFileUrl = function (u, media) {
 			var k = list[i][0], v = list[i][1].toLowerCase();
 			if (k === "width" && v === "device-width" && size.width) { list[i][1] = String(size.width); }
 			else if (k === "height" && v === "device-height" && size.height) { list[i][1] = String(size.height); }
-			else if (k === "width" || k === "initial-scale") { named = true; }
+			else if (k === "initial-scale" || k === "minimum-scale" || k === "maximum-scale" ||
+				k === "user-scalable") { named = true; }
 		}
-		// An app that named a size or a scale in numbers is being specific, so nothing is
-		// added to what it said - but the translation above still stands, because
-		// `device-width` on a device meant the card and here it doesn't.
+		// Nothing the app said is overwritten; what it left unsaid is filled in. The size is
+		// the card's, and both halves of it matter: with only the width given, the engine
+		// works the height out for itself and comes back a pixel short - 771 where the card
+		// is 772 - which leaves the bottom row of the card showing through underneath the
+		// page. That is the white line along the bottom of Palm's Clock.
+		if (!has(list, "width")) { list.push(["width", String(size.width)]); }
+		if (!has(list, "height") && size.height) { list.push(["height", String(size.height)]); }
+		// The scale is only pinned for an app that says nothing about it. One that does is
+		// controlling its own, and a minimum of 1 could contradict it.
 		if (!named) {
 			if (!has(list, "minimum-scale")) { list.push(["minimum-scale", "1"]); }
 			if (!has(list, "maximum-scale")) { list.push(["maximum-scale", "1"]); }
-			if (!has(list, "width")) { list.push(["width", String(size.width)]); }
 		}
 		if (!list.length) { return; }
 		var content = serialize(list);

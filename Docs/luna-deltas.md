@@ -349,7 +349,7 @@ Everything here is §3; Lunacy's is `Launcher.kt`.
 
 ### B6. Just Type
 
-**Done 2026-09-22 for the scope codepoet set: the launch results and "Search DuckDuckGo".** Drawn natively to the device app's measurements and with its art (`JustTypePanel`), compared with the reference TouchPad (`Workbench/results/b6-tp-justtype.png`, `b6-and-justtype2.png`). The filter tabs, "Search using…" and the rest are out of scope. Note for next time: `takeScreenShot` and `/dev/fb0` on the device don't capture the Just Type window - the screenshot came once it was up and captured again later.
+**Done 2026-09-22 for the scope codepoet set: the launch results and "Search DuckDuckGo".** Drawn natively to the device app's measurements and with its art (`JustTypePanel`), compared with the reference TouchPad (`Workbench/results/b6-tp-justtype.png`, `b6-and-justtype2.png`). The filter tabs, "Search using…" and the rest are out of scope.
 
 - **LunaCE:** tapping the pill opens Just Type, a web app in a `Type_Launcher` window under
   the status bar, cross-faded in over 150 ms; it searches apps and contacts and hands the

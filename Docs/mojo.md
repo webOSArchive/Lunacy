@@ -282,6 +282,29 @@ Honest list, for whoever picks this up:
 - **The frameworks MojoLoader can reach** are only the ones something has needed so far.
   `mediaextension`, which drPodder asks for, still 404s.
 
+## Properties webOS's WebKit had and this one hasn't
+
+Mojo's stylesheets are written against Palm's own WebKit, and one of the properties they use
+has no equivalent anywhere else.
+
+**`-webkit-palm-mouse-target: ignore`** means "a touch here is not for me": the element is
+drawn but takes no touches, and whatever is behind it gets them. Mojo's own stylesheets use
+it nineteen times - menus, lists, the mv-picker - and apps use it too (drPodder three times).
+`ignore` is the only value any of them uses.
+
+It is load-bearing rather than decorative. A page header draws its back icon absolutely
+positioned at the top left and then lays the title across the *whole* header on top of it
+(`global-lists.css`: `.palm-page-header .icon` is `position: absolute; left: 0`, and
+`.palm-page-header .title` covers it with `padding-left: 56px` so the text clears the icon).
+Both are positioned with `z-index: auto`, so the title - later in the document - paints on
+top and takes the touches. Only `-webkit-palm-mouse-target: ignore` on the title lets a tap
+reach the back button underneath, and without it drPodder's back button ran the *title's*
+handler: it showed and hid the playhead instead of leaving the scene.
+
+Lunacy translates it to `pointer-events: none` as a serve-time CSS transform, which is the
+same idea in a property this engine has, down to a child being able to opt back in. Only
+`ignore` is translated; another value would be a guess.
+
 ## Telling an engine difference from an app one
 
 A layout that comes out wrong here and right on the device is not, on the evidence so far,

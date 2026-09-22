@@ -412,9 +412,33 @@ object HtmlTransforms {
 object CssTransforms {
     private val rule = Regex("\\{[^{}]*\\}")
     private val borderImage = Regex("-webkit-border-image\\s*:(?!\\s*none)", RegexOption.IGNORE_CASE)
+    private val mouseTarget = Regex("-webkit-palm-mouse-target\\s*:\\s*ignore", RegexOption.IGNORE_CASE)
 
     fun apply(s: InputStream): InputStream =
-        ByteArrayInputStream(borderImageNeedsStyle(s.bufferedReader().readText()).toByteArray())
+        ByteArrayInputStream(mouseTargetIgnore(borderImageNeedsStyle(s.bufferedReader().readText())).toByteArray())
+    /**
+     * `-webkit-palm-mouse-target: ignore` is webOS's own property for "this element is not
+     * what a touch here means": the touch goes to whatever is behind it. Chromium has never
+     * heard of it, so such an element swallows the touch instead, and whatever was meant to
+     * receive it never hears anything.
+     *
+     * Mojo's own stylesheets use it nineteen times, and it is load-bearing. A page header
+     * draws its back icon absolutely positioned at the top left and lays the title over the
+     * whole header on top of it (`global-lists.css`: `.palm-page-header .icon` is
+     * `position: absolute`, `.palm-page-header .title` covers it and is marked ignore), so in
+     * Chromium every tap on the back button hit the title. In drPodder that meant the back
+     * button silently ran the title's own handler - it showed and hid the playhead instead of
+     * leaving the scene. The same applies to Mojo's menus and lists, and apps use the
+     * property themselves (drPodder three times).
+     *
+     * `pointer-events: none` is the same idea in a property Chromium has, down to a child
+     * being able to opt back in (`pointer-events: auto` for `-webkit-palm-mouse-target:
+     * accept`). Only `ignore` is ever used - the whole of Mojo, mojocommon and the apps
+     * looked at use no other value - so only `ignore` is translated, and anything else is
+     * left alone to be noticed rather than guessed at.
+     */
+    fun mouseTargetIgnore(css: String): String =
+        mouseTarget.replace(css) { m -> m.value + ";pointer-events:none" }
 
     /**
      * 2011 WebKit drew -webkit-border-image whatever the border-style; newer Chromium

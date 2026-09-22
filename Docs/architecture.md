@@ -313,6 +313,13 @@ product; being "close enough" is not the goal.
   - **Loading.** There is no document-start script API on this WebView. The bridge script is
     added to each app's HTML at serve time, as the first `<script>` in `<head>`. This is a
     global serve-time transform.
+  - **The other serve-time transforms** (`CssTransforms`, `HtmlTransforms`), each one
+    mechanical and applied to every app's files: a border image is given a border style,
+    because newer Chromium computes the width to 0 without one; a self-closed non-void tag
+    becomes an open and close pair, because webOS's parser read it that way; and
+    `-webkit-palm-mouse-target: ignore` - webOS's own property for an element that takes no
+    touches - becomes `pointer-events: none`. See [fix-log.md](fix-log.md) for what each one
+    was found by.
   - **Later platforms.** When Lunacy targets them, the transport can move to
     `WebMessageListener` and document-start scripts. Nothing above the bridge changes.
 - **Device identity: Lunacy answers as a webOS device.** Apps were written against a device,

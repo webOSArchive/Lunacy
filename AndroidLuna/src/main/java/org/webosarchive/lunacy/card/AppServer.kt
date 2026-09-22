@@ -80,6 +80,16 @@ class AppServer(
          * iframe. Lunacy serves its own pages there, so the control works in every app.
          */
         const val SYSTEM_UI = "usr/lib/luna/system/luna-systemui/app/"
+
+        /**
+         * webOS's thumbnailer, which was a FUSE filesystem rather than a service: a read of
+         * `/var/luna/data/extractfs<source path>:<x>:<y>:<width>:<height>:<mode>` returned
+         * the source image scaled to fit that box. An app builds the path with
+         * `encodeURIComponent`, so the source's own slashes arrive as %2F: the request keeps
+         * them escaped, which is why this route reads the *encoded* path and decodes it once
+         * itself rather than taking the decoded one.
+         */
+        const val EXTRACTFS = "var/luna/data/extractfs"
         /**
          * A scaled copy of an image in the webOS tree: `?__lunacy_thumb=160` gives a JPEG
          * whose short side is about 160 px. A picker or gallery would otherwise decode
@@ -101,6 +111,9 @@ class AppServer(
         val host = uri.host ?: return null
         if (!host.endsWith(HOST_SUFFIX)) return null  // real network
         val path = uri.path.orEmpty().trimStart('/')
+        // The thumbnailer's paths carry the source's slashes as %2F, and a decoded path would
+        // lose the difference between those and the ones in the route itself.
+        val encodedPath = uri.encodedPath.orEmpty().trimStart('/')
         val app = host.removeSuffix(HOST_SUFFIX)
         val resource = runCatching { uri.getQueryParameter(RESOURCE_PARAM) != null }.getOrDefault(false)
         if (path.startsWith("__lunacy/fonts/")) return asset("luna/fonts/" + path.removePrefix("__lunacy/fonts/"), path)
@@ -122,6 +135,8 @@ class AppServer(
             mojo != null -> asset("fw/mojo/" + mojo.groupValues[1], path, resource)
             frameworks != null -> asset("fw/frameworks/" + frameworks.groupValues[1], path, resource)
             path.startsWith(SYSTEM_UI) -> asset("luna-systemui/" + path.removePrefix(SYSTEM_UI), path, resource)
+            encodedPath.startsWith(EXTRACTFS) ->
+                extractfs(Uri.decode(encodedPath.removePrefix(EXTRACTFS)))
             path.startsWith(CRYPTOFS) -> files.open(path.removePrefix(CRYPTOFS))?.let { respond(it, path, resource, app) }
             // webOS's user storage, shared by apps and services (JS services write files here).
             path.startsWith(MEDIA_INTERNAL) -> {
@@ -138,6 +153,90 @@ class AppServer(
     /** webOS's user storage, Lunacy's own and the Android folders mapped into it (UserFiles). */
     private fun internal(rel: String): InputStream? =
         UserFiles.resolve(webosRoot, rel)?.takeIf { it.isFile }?.inputStream()
+
+    /**
+     * webOS's thumbnailer: `/var/luna/data/extractfs/<source>:<x>:<y>:<w>:<h>:<mode>`.
+     *
+     * Not a service and not a file an app wrote - a FUSE filesystem, mounted on the device at
+     * `/var/luna/data/extractfs`, that answered a read with the named image scaled down. Any
+     * app that shows artwork at a fixed size uses it rather than letting the page scale a
+     * full-size picture: drPodder's feed and episode lists ask for every podcast's cover at
+     * `:0:0:56:56:3`, and without it the lists are full of broken images.
+     *
+     * Measured on the reference TouchPad on 2026-09-22, by reading the synthetic files
+     * straight off the mount and looking at what came back:
+     *
+     * | asked for | source | came back |
+     * |---|---|---|
+     * | `:0:0:56:56:3` | 480 x 480 | 56 x 56 |
+     * | `:0:0:56:56:3` | 700 x 875 | **45 x 56** |
+     * | `:0:0:100:50:3` | 700 x 875 | **40 x 50** |
+     *
+     * So the box is a bound, not a shape: the image is scaled to fit inside it with its
+     * aspect ratio kept, and never cropped or stretched. Modes 0 and 3 returned the same
+     * bytes for the same source, and the first two numbers were 0 in everything seen, so
+     * neither is acted on here; if an app turns up that varies them, measure again.
+     *
+     * The device returned an uncompressed BMP. This returns a PNG, which no page can tell
+     * apart from an img's point of view and which is a tenth the size.
+     */
+    private fun extractfs(spec: String): WebResourceResponse? {
+        // <source path>:<x>:<y>:<width>:<height>:<mode>, so the last five fields are the box.
+        val parts = spec.trimStart('/').split(':')
+        if (parts.size < 6) return null
+        val source = parts.dropLast(5).joinToString(":")
+        val box = parts.takeLast(5).map { it.toIntOrNull() ?: return null }
+        val w = box[2]
+        val h = box[3]
+        if (w !in 1..4096 || h !in 1..4096) return null
+        val open = resolveWebos(source) ?: return null
+        return try {
+            // inJustDecodeBounds makes decodeStream return null and fill in the options,
+            // so what says whether the source is there is the stream, not the bitmap.
+            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            (open() ?: return null).use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+            var sample = 1
+            while (bounds.outWidth / (sample * 2) >= w && bounds.outHeight / (sample * 2) >= h) sample *= 2
+            val bmp = open()?.use {
+                android.graphics.BitmapFactory.decodeStream(it, null,
+                    android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+            } ?: return null
+            // Fit inside the box, as the device does, and never scale up: a source smaller
+            // than the box came back at its own size there.
+            val scale = minOf(w.toFloat() / bmp.width, h.toFloat() / bmp.height, 1f)
+            val out = if (scale < 1f) android.graphics.Bitmap.createScaledBitmap(
+                bmp, Math.max(1, Math.round(bmp.width * scale)), Math.max(1, Math.round(bmp.height * scale)), true)
+            else bmp
+            val bytes = java.io.ByteArrayOutputStream()
+            out.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, bytes)
+            if (out !== bmp) out.recycle()
+            bmp.recycle()
+            WebResourceResponse("image/png", null, 200, "OK", mapOf("Cache-Control" to "max-age=600"),
+                ByteArrayInputStream(bytes.toByteArray()))
+        } catch (e: Exception) {
+            Log.w(TAG, "extractfs $spec: $e")
+            null
+        }
+    }
+
+    /**
+     * An absolute webOS path, as the thumbnailer is given one: user storage or an app's own
+     * files. Returns a way to open it twice - the bounds are read before the pixels - because
+     * a bundled app's files are in the APK and have no path on disk.
+     */
+    private fun resolveWebos(path: String): (() -> InputStream?)? {
+        val p = path.trimStart('/')
+        if (p.startsWith(MEDIA_INTERNAL)) {
+            val f = UserFiles.resolve(webosRoot, p.removePrefix(MEDIA_INTERNAL))?.takeIf { it.isFile } ?: return null
+            return { runCatching { f.inputStream() as InputStream }.getOrNull() }
+        }
+        if (p.startsWith(CRYPTOFS)) {
+            val rel = p.removePrefix(CRYPTOFS)
+            return { files.open(rel) }
+        }
+        return null
+    }
 
     /** A JPEG copy of an image under /media/internal, scaled so its short side is about `size`. */
     private fun thumbnail(rel: String, size: Int): WebResourceResponse? {
@@ -416,6 +515,7 @@ object CssTransforms {
 
     fun apply(s: InputStream): InputStream =
         ByteArrayInputStream(mouseTargetIgnore(borderImageNeedsStyle(s.bufferedReader().readText())).toByteArray())
+
     /**
      * `-webkit-palm-mouse-target: ignore` is webOS's own property for "this element is not
      * what a touch here means": the touch goes to whatever is behind it. Chromium has never

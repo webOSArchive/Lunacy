@@ -305,6 +305,22 @@ Lunacy translates it to `pointer-events: none` as a serve-time CSS transform, wh
 same idea in a property this engine has, down to a child being able to opt back in. Only
 `ignore` is translated; another value would be a guess.
 
+## Files that were not files
+
+Two things a Mojo app reads look like files and are not.
+
+**`/var/luna/data/extractfs`** is webOS's thumbnailer, a FUSE filesystem. Reading
+`/var/luna/data/extractfs<source path>:<x>:<y>:<width>:<height>:<mode>` gives the source
+image scaled down, so an app showing artwork at a fixed size never decodes a full-size
+picture. An app builds the path with `encodeURIComponent`, so the source's slashes arrive as
+`%2F` and the whole thing is one path segment. Measured on the reference device: the box is a
+bound rather than a shape - a 700 x 875 source asked for at `:0:0:56:56:3` comes back 45 x 56
+- and what comes back is an uncompressed BMP. drPodder's feed and episode lists ask for every
+cover this way.
+
+**`palmGetResource`** is the other, and is covered under "Reading a file is not loading a
+page" above.
+
 ## Telling an engine difference from an app one
 
 A layout that comes out wrong here and right on the device is not, on the evidence so far,

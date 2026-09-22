@@ -320,6 +320,10 @@ product; being "close enough" is not the goal.
     `-webkit-palm-mouse-target: ignore` - webOS's own property for an element that takes no
     touches - becomes `pointer-events: none`. See [fix-log.md](fix-log.md) for what each one
     was found by.
+  - **extractfs.** webOS's thumbnailer was a FUSE filesystem rather than a service: reading
+    `/var/luna/data/extractfs<path>:<x>:<y>:<w>:<h>:<mode>` gave that image scaled to fit the
+    box. The card host answers the same paths, so an app that shows artwork at a fixed size
+    gets its thumbnails.
   - **Later platforms.** When Lunacy targets them, the transport can move to
     `WebMessageListener` and document-start scripts. Nothing above the bridge changes.
 - **Device identity: Lunacy answers as a webOS device.** Apps were written against a device,

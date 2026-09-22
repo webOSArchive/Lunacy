@@ -96,7 +96,12 @@ class AppWindow(context: Context, val appId: String, private val host: WindowHos
             setDatabasePath(context.getDir("websql", Context.MODE_PRIVATE).path)
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             mediaPlaybackRequiresUserGesture = false
-            useWideViewPort = false  // layout width = card width / initial scale (TouchPad px)
+            // The page's viewport is declared rather than inferred: the compat layer gives
+            // every page a viewport meta carrying the card's own width and a scale pinned at
+            // 1, merged into whatever the app declared (see "The viewport" in compat.js).
+            // With this false the meta is ignored altogether, and the engine works the scale
+            // out for itself - which is what left a card drawn at 0.78 after a rotation.
+            useWideViewPort = true
             loadWithOverviewMode = false
             setSupportMultipleWindows(true)
             javaScriptCanOpenWindowsAutomatically = true
@@ -247,6 +252,18 @@ class AppWindow(context: Context, val appId: String, private val host: WindowHos
         @JavascriptInterface fun netAbort(id: Int) = net.abort(id)
 
         @JavascriptInterface fun screenOrientation(): String = host.screenOrientation()
+        /**
+         * This card's own size in device pixels, which is the number the page's viewport has
+         * to be told so that one CSS pixel is one device pixel. The window's own size once it
+         * has been laid out; the display's until then.
+         */
+        @JavascriptInterface
+        fun cardSize(): String {
+            val w = this@AppWindow.width
+            val h = this@AppWindow.height
+            if (w > 0 && h > 0) return JSONObject().put("width", w).put("height", h).toString()
+            return host.screenSize()
+        }
         @JavascriptInterface fun windowOrientation(): String = host.windowOrientation()
         @JavascriptInterface fun screenSize(): String = host.screenSize()
         /** PalmSystem's locale fields and clock format, from Android's own settings. */

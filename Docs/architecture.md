@@ -320,6 +320,21 @@ product; being "close enough" is not the goal.
     `-webkit-palm-mouse-target: ignore` - webOS's own property for an element that takes no
     touches - becomes `pointer-events: none`. See [fix-log.md](fix-log.md) for what each one
     was found by.
+  - **The viewport is declared, not inferred.** A webOS app carries a
+    `<meta name="viewport">`, and on a device it says something about the *card*: the SDK told
+    developers to put `height=device-height` in index.html so a Pre/Pre2-shaped app isn't
+    letterboxed on a Pre3, and `"uiRevision": 2` in appinfo.json so it isn't put in the phone
+    simulator frame on a TouchPad. What it never carried is a width, because a card was the
+    viewport and there was nothing to say.
+    This engine needs telling, and left to itself it takes the page's own layout width and
+    draws the page smaller when that is wider than the card. So the compat layer writes a
+    viewport meta carrying the card's width and a scale pinned at 1, **merged into** what the
+    app declared: every directive the app wrote is kept, `device-width` and `device-height`
+    are rewritten as the card's own numbers (they mean the card, and this engine would read
+    them as the display in density-independent pixels), and an app that names its own width or
+    scale in numbers gets nothing added. The app's own element is left where it is; the merged
+    copy is appended after it. The width follows the card, so it is written again whenever the
+    card is resized - a rotation, or the keyboard taking half of it.
   - **extractfs.** webOS's thumbnailer was a FUSE filesystem rather than a service: reading
     `/var/luna/data/extractfs<path>:<x>:<y>:<w>:<h>:<mode>` gave that image scaled to fit the
     box. The card host answers the same paths, so an app that shows artwork at a fixed size

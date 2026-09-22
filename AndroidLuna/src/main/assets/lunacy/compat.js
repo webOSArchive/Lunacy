@@ -529,143 +529,127 @@ window.__lunacyFileUrl = function (u, media) {
 	window.addEventListener("resize", apply);
 })();
 
-// A card is the viewport, however wide the page turns out to be.
+// The viewport, declared rather than left to the engine.
 //
-// `position: fixed` is measured against the viewport, and on webOS the viewport was the card:
-// an element with `right: 0` sat against the card's right edge whatever the page did. This
-// WebView is a mobile browser underneath, and when a page's layout comes out wider than the
-// window it widens the box that fixed elements are measured against to fit the content, so
-// that nothing is lost when the reader zooms out. A card has no zoom, and webOS had no such
-// idea: content wider than the card simply hung off the edge.
+// webOS apps carry a viewport meta, and on a device it means something particular: the SDK
+// told developers to put `height=device-height` in index.html so a Pre/Pre2-shaped app isn't
+// letterboxed on a Pre3, and `"uiRevision": 2` in appinfo.json so it isn't put in the phone
+// simulator frame on a TouchPad. Both of the apps this was worked out on carry both. It is a
+// declaration about the *card*, not a browser hint, so nothing here overwrites it.
 //
-// So an app written for a 1024 px device, running in an 800 px portrait card, puts every
-// piece of fixed chrome off the side of the screen. webOS IAmA reddit is the case codepoet
-// reported: its spinner is `position: fixed; right: 0; top: 50%`, and while an article loaded
-// it sat at x = 983 in an 800 px card - off the edge, which is why the card just sat there
-// with nothing to show it was working. Mojo's own menus are `position: fixed; width: 100%`
-// and were coming out 1023 px wide in the same card.
+// What it doesn't carry is a width, because on webOS there was nothing to say: a card was the
+// viewport. This engine has to be told. Left to itself it takes the page's own layout width,
+// and when that comes out wider than the card - webOS IAmA reddit has a decorative strip
+// hard-coded to 1030 px for a TouchPad - it draws the whole page smaller so that it fits.
+// Measured on the HP 10 G2: after turning the tablet into portrait a 400 px element came out
+// 313 px wide in an 800 px card, and the bottom of the card was left unpainted.
 //
-// Measured on the HP 10 G2: a fixed element with width and height 100% measures 800 x 1253 in
-// a portrait card, and 1600 x 2506 as soon as anything 1600 px wide is added to the page -
-// and back to 800 x 1253 when it is taken away again. reddit's own `#bar`, a decorative strip
-// hard-coded to 1030 px for a TouchPad, is what pushes it over.
+// So the card's own width goes into the meta, with the scale pinned, and the app's own
+// directives are kept exactly as they are:
 //
-// Nothing is touched while the page fits, which is every app in landscape: the correction only
-// runs when that box and the viewport differ, and then only on elements the page itself
-// placed with `position: fixed`.
+//   - the app's meta is read and every directive in it is carried over;
+//   - `width`, `minimum-scale` and `maximum-scale` are added only if the app hasn't set them;
+//   - an app that sets its own `width` or `initial-scale` is telling the engine something
+//     specific, and is left alone entirely;
+//   - the app's own element is not touched: the merged copy is appended after it, which is
+//     the one the engine reads, so an app that inspects its own markup still finds what it
+//     wrote.
+//
+// The width follows the card, so it is written again whenever the card is resized.
 (function () {
-	var GEOM = ["width", "height", "top", "right", "bottom", "left"];
-	/** What this WebView is measuring fixed elements against, which should be the viewport. */
-	function fixedBox() {
-		var d = document.createElement("div");
-		d.style.cssText = "position:fixed;left:0;top:0;width:100%;height:100%;visibility:hidden;pointer-events:none";
-		document.body.appendChild(d);
-		var r = d.getBoundingClientRect();
-		d.parentNode.removeChild(d);
-		return [r.width, r.height];
-	}
-	/** The values the app's own stylesheets and inline style give this element. */
-	function declared(el, rules) {
-		var out = {};
-		for (var i = 0; i < rules.length; i++) {
-			var r = rules[i];
-			var matches;
-			try { matches = (el.matches || el.webkitMatchesSelector).call(el, r.selectorText); }
-			catch (e) { continue; }
-			if (!matches) { continue; }
-			for (var g = 0; g < GEOM.length; g++) {
-				var v = r.style.getPropertyValue(GEOM[g]);
-				if (v) { out[GEOM[g]] = v; }
-			}
-		}
-		// Inline wins, and it is where a previous pass wrote, so those are cleared first.
-		for (var k = 0; k < GEOM.length; k++) {
-			var iv = el.__lunacyInline && el.__lunacyInline[GEOM[k]];
-			if (iv) { out[GEOM[k]] = iv; }
-		}
+	var N = window.LunacyNative, mine = null, appMeta;
+
+	/**
+	 * "width=device-width, height=device-height" -> [["width","device-width"], …].
+	 *
+	 * Commas *and* whitespace separate, which is what the engine itself does and what Palm's
+	 * own Clock needs: its meta reads `width=device-width initial-scale=1.0, maximum-scale=1.0`
+	 * with the comma missing after the first one.
+	 */
+	function parse(content) {
+		var out = [];
+		String(content || "").split(/[,\s]+/).forEach(function (part) {
+			var at = part.indexOf("=");
+			if (at < 0) { return; }
+			var k = part.slice(0, at).trim().toLowerCase(), v = part.slice(at + 1).trim();
+			if (k) { out.push([k, v]); }
+		});
 		return out;
+	}
+	function has(list, key) {
+		for (var i = 0; i < list.length; i++) { if (list[i][0] === key) { return true; } }
+		return false;
+	}
+	function serialize(list) {
+		return list.map(function (p) { return p[0] + "=" + p[1]; }).join(", ");
 	}
 	/**
-	 * Every rule in the document, once per pass. Mojo's global.css is nine @imports and
-	 * almost nothing else, so a scan that doesn't follow them finds none of the framework's
-	 * own rules - which is most of what a Mojo app is made of.
+	 * The card, in device pixels - or nothing, if this window hasn't got one. An app's root
+	 * window is a pixel square and never shown (a `noWindow` app's is), and a card that
+	 * hasn't been laid out yet reads as nothing at all; neither is a viewport worth writing.
 	 */
-	function allRules() {
-		var out = [], depth = 0;
-		function walk(sheet) {
-			if (!sheet || depth > 8) { return; }
-			var rules;
-			try { rules = sheet.cssRules; } catch (e) { return; }
-			if (!rules) { return; }
-			depth++;
-			for (var j = 0; j < rules.length; j++) {
-				var r = rules[j];
-				if (r.styleSheet) { walk(r.styleSheet); }          // @import
-				else if (r.cssRules) { walkRules(r.cssRules); }    // @media and friends
-				else if (r.selectorText && r.style) { out.push(r); }
-			}
-			depth--;
-		}
-		function walkRules(rules) {
-			for (var k = 0; k < rules.length; k++) {
-				if (rules[k].selectorText && rules[k].style) { out.push(rules[k]); }
-			}
-		}
-		for (var i = 0; i < document.styleSheets.length; i++) { walk(document.styleSheets[i]); }
-		return out;
+	function card() {
+		var size;
+		try { size = JSON.parse(N.cardSize()); } catch (e) { return null; }
+		if (!size || !(size.width > 64) || !(size.height > 64)) { return null; }
+		return size;
 	}
-	function pct(v) { return typeof v === "string" && /^-?[\d.]+%$/.test(v); }
+	/** The app's own declaration: the last viewport meta that isn't the one written here. */
+	function declared() {
+		var metas = document.getElementsByTagName("meta"), found = null;
+		for (var i = 0; i < metas.length; i++) {
+			if (metas[i] !== mine && String(metas[i].name || "").toLowerCase() === "viewport") { found = metas[i]; }
+		}
+		return found;
+	}
 	function apply() {
-		if (!document.body) { return; }
-		var all = document.querySelectorAll("*"), fixed = [];
-		for (var i = 0; i < all.length; i++) {
-			if (window.getComputedStyle(all[i]).position === "fixed") { fixed.push(all[i]); }
+		var size = card();
+		if (!size || !size.width) { return; }
+		if (appMeta === undefined) { appMeta = declared(); }
+		var list = parse(appMeta && appMeta.content), i, named = false;
+		// `device-width` and `device-height` are the SDK's own idiom - "as big as the device,
+		// don't letterbox me" - and on webOS they were the card. This engine reads them as
+		// the display in density-independent pixels, which is a different unit from the card:
+		// carrying `height=device-height` over as it stands laid reddit's card out 1280 x 580
+		// where it is 1280 x 772. Written as the card's own numbers they say the same thing
+		// in the same unit. A size the app named in pixels is left exactly as it is, and the
+		// page is then left alone altogether: that app is being specific.
+		for (i = 0; i < list.length; i++) {
+			var k = list[i][0], v = list[i][1].toLowerCase();
+			if (k === "width" && v === "device-width" && size.width) { list[i][1] = String(size.width); }
+			else if (k === "height" && v === "device-height" && size.height) { list[i][1] = String(size.height); }
+			else if (k === "width" || k === "initial-scale") { named = true; }
 		}
-		// Put back whatever a previous pass wrote before deciding anything, so a card that has
-		// been rotated is measured as the page meant it, not as it was corrected last time.
-		for (var c = 0; c < fixed.length; c++) { restore(fixed[c]); }
-		if (!fixed.length) { return; }
-		var box = fixedBox();
-		var vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
-		if (Math.abs(box[0] - vw) < 1 && Math.abs(box[1] - vh) < 1) { return; }
-		// A page with hundreds of fixed elements is not a webOS app; leave it alone rather
-		// than walk every rule against every one of them.
-		if (fixed.length > 40) { return; }
-		var rules = allRules();
-		for (var e = 0; e < fixed.length; e++) { correct(fixed[e], declared(fixed[e], rules), box, vw, vh); }
+		// An app that named a size or a scale in numbers is being specific, so nothing is
+		// added to what it said - but the translation above still stands, because
+		// `device-width` on a device meant the card and here it doesn't.
+		if (!named) {
+			if (!has(list, "minimum-scale")) { list.push(["minimum-scale", "1"]); }
+			if (!has(list, "maximum-scale")) { list.push(["maximum-scale", "1"]); }
+			if (!has(list, "width")) { list.push(["width", String(size.width)]); }
+		}
+		if (!list.length) { return; }
+		var content = serialize(list);
+		if (mine && mine.content === content) { return; }
+		if (!mine) {
+			mine = document.createElement("meta");
+			mine.name = "viewport";
+		}
+		mine.content = content;
+		var head = document.head || document.getElementsByTagName("head")[0];
+		if (head && mine.parentNode !== head) { head.appendChild(mine); }
 	}
-	function restore(el) {
-		if (!el.__lunacyFixed) { return; }
-		var saved = el.__lunacyFixed;
-		for (var k in saved) { if (saved.hasOwnProperty(k)) { el.style[k] = saved[k]; } }
-		el.__lunacyFixed = null;
-	}
-	function set(el, prop, value) {
-		el.__lunacyFixed = el.__lunacyFixed || {};
-		if (!(prop in el.__lunacyFixed)) { el.__lunacyFixed[prop] = el.style[prop]; }
-		el.style[prop] = value;
-	}
-	function correct(el, d, box, vw, vh) {
-		// A percentage is a percentage of the box, so it is given the viewport's number instead.
-		if (pct(d.width)) { set(el, "width", Math.round(parseFloat(d.width) / 100 * vw) + "px"); }
-		if (pct(d.height)) { set(el, "height", Math.round(parseFloat(d.height) / 100 * vh) + "px"); }
-		if (pct(d.top)) { set(el, "top", Math.round(parseFloat(d.top) / 100 * vh) + "px"); }
-		if (pct(d.left)) { set(el, "left", Math.round(parseFloat(d.left) / 100 * vw) + "px"); }
-		if (pct(d.right)) { set(el, "right", Math.round(parseFloat(d.right) / 100 * vw) + "px"); }
-		if (pct(d.bottom)) { set(el, "bottom", Math.round(parseFloat(d.bottom) / 100 * vh) + "px"); }
-		// An element held against the right or bottom edge is that far from the *box's* edge;
-		// the margin makes up the difference so it lands against the card's instead.
-		if (d.right && d.right !== "auto") { set(el, "marginRight", Math.round(box[0] - vw) + "px"); }
-		if (d.bottom && d.bottom !== "auto") { set(el, "marginBottom", Math.round(box[1] - vh) + "px"); }
-		// left:0 and right:0 together, which is how Mojo's menus are full width, leaves the
-		// width to the box; the margin above already pulls the right edge in.
-	}
-	window.__lunacyFixedElements = apply;
-	apply();
-	document.addEventListener("DOMContentLoaded", apply);
+	// After the document's own metas have been parsed, because the engine takes the last one
+	// it sees rather than merging them, and again whenever the card changes size.
+	// Repeated over the first few seconds as well as on the events, because a card is often
+	// not laid out yet when its page finishes loading, and until it is there is no width to
+	// write. Each pass is one call across the bridge and a string compare.
+	if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", apply); }
+	else { apply(); }
 	window.addEventListener("load", function () {
 		apply();
 		[100, 400, 1200, 3000].forEach(function (ms) { setTimeout(apply, ms); });
 	});
 	window.addEventListener("resize", apply);
+	window.__lunacyViewport = apply;
 })();

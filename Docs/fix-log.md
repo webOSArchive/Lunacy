@@ -93,9 +93,10 @@ fixed-viewport fallback is allowed).
 | 2026-09-22 | The playback bar is a stub in the corner where the device spans it across the card | drPodder Redux 1.6.0 (any Mojo app that branches on the window's orientation, which is how Mojo apps handle rotation) | Lunacy's own, and **not** the table-cell layout it looks like: a Mojo probe app built to drPodder's exact markup lays the row out identically on both machines (`Workbench/probe/org.webosarchive.lunacy.mojoprobe`; cells 36/109/36 on the TouchPad, 40/121/40 here). What differs is that drPodder never sizes it. `PalmSystem.windowOrientation` answered **"free"**, and "free" is not an orientation: LunaSysMgr's getter returns the card's own orientation turned by where the home button is, always one of up/down/left/right, while a *write* to the same property records what the app is asking for (in `specifiedWindowOrientation`) and applies it as a rotation policy - `JsSysObject::propWindowOrientation` against `setPropWindowOrientation`. Lunacy stored the write and handed it back on the read, and Mojo asks for "free" on the app's behalf, so every orientation branch in every Mojo app fell through. Measured on the reference TouchPad: in its natural portrait, `screenOrientation` "up" and `windowOrientation` "right", which is `HomeButtonOrientationAngle=270` from its own `luna-platform.conf` | compat + shell (the property reads the window's orientation from the shell, which turns the screen's by the device profile's `homeButtonOrientationAngle`, and writes go to `specifiedWindowOrientation`) |
 | 2026-09-22 | The podcast's poster is a broken image, and nothing an app asks to download ever arrives | drPodder Redux 1.6.0 (its album art and its episodes), MeTube's "download first" | `palm://com.palm.downloadmanager` had nobody to answer it, so drPodder's album art kept the remote URL it downloads *from* and the app then pointed an `<img>` at `/media/internal/http://...`. Every reply shape measured on the reference TouchPad on 2026-09-22 with `luna-send -i`, fetching a real file: the ticket comes back before a byte moves, the progress messages carry no `returnValue`, and a download that will fail still gets `returnValue: true` first | bus (`DownloadManager`, writing into the webOS tree through `UserFiles`) |
 | 2026-09-22 | The back button in a scene's header does nothing useful: in drPodder it showed and hid the playhead instead of leaving the scene | every Mojo app with a page header, and Mojo's menus and lists besides | **`-webkit-palm-mouse-target: ignore`**, webOS's own CSS property for "a touch here is not for me - give it to whatever is behind". Chromium has never heard of it, so such an element swallows the touch. It is load-bearing in Mojo: `global-lists.css` draws a header's back icon absolutely positioned at the top left and lays the title across the whole header on top of it, marked ignore, so every tap on the back button hit the title and ran its handler. Mojo's stylesheets use it 19 times and drPodder's own three. **It does not inherit, and `pointer-events` does** - translating it on its own made `.palm-menu`'s whole subtree untouchable, so drPodder's view menu stopped working and a tap there fell through to the list row beneath it, pushing the episode into view instead of going back | compat (a serve-time CSS transform adds `pointer-events: none` to the rule *and* a companion `<selector> > * { pointer-events: auto }`, which puts the subtree back and leaves only the element itself transparent; only `ignore` is translated, because it is the only value the frameworks and the apps looked at ever use) |
-| 2026-09-22 | Every piece of fixed chrome is off the side of a portrait card: the spinner that says an article is loading sat at x = 983 in an 800 px card, and Mojo's own menus came out 1023 px wide | webOS IAmA reddit; any app laid out for a 1024 px device running in a narrower card | `position: fixed` is measured against the viewport, and on webOS the viewport was the card. This WebView is a mobile browser underneath: when a page's layout comes out wider than the window it widens the box fixed elements are measured against, so nothing is lost when the reader zooms out. A card has no zoom, and content wider than it simply hung off the edge on a device. Measured on the HP 10 G2: a fixed element at 100% x 100% is 800 x 1253 in a portrait card, 1600 x 2506 as soon as anything 1600 px wide is on the page, and 800 x 1253 again when it goes. reddit's `#bar` is hard-coded to 1030 px for a TouchPad, which is what pushes it over | compat (when that box and the card differ, the elements the page placed with `position: fixed` get their percentages against the card and their right and bottom edges pulled in by the difference; nothing is touched while the page fits) |
+| 2026-09-22 | Every piece of fixed chrome is off the side of a portrait card: the spinner that says an article is loading sat at x = 983 in an 800 px card, and Mojo's own menus came out 1023 px wide | webOS IAmA reddit; any app laid out for a 1024 px device running in a narrower card | The same cause as the row below: the engine was measuring `position: fixed` against the box it had decided to fit the page into (1023 x 1602 in an 800 x 1252 card) rather than against the card. First fixed by correcting those elements one by one in the compat layer, which worked and was ninety lines of it; **that was taken out again** when the viewport was declared properly, because the containing block then comes out as the card (measured: 801 x 1253) and there is nothing left to correct | compat (nothing of its own: the viewport rule below covers it, and the spinner lands against the card's right edge, vertically centred, without it) |
 | 2026-09-22 | Every podcast's cover is a broken image in the feed and episode lists | drPodder Redux 1.6.0; any app that shows artwork at a fixed size | **extractfs**, webOS's thumbnailer - not a service but a FUSE filesystem, mounted on the device at `/var/luna/data/extractfs`, where reading `<source path>:<x>:<y>:<w>:<h>:<mode>` gave the image scaled down. Measured on the reference TouchPad by reading those synthetic files: a 700 x 875 source asked for at `:0:0:56:56:3` comes back **45 x 56**, and at `:0:0:100:50:3` **40 x 50** - the box is a bound, not a shape, and the image is scaled to fit inside it with its aspect kept. Modes 0 and 3 gave the same bytes. The device returned an uncompressed BMP | card host (the route, serving PNG, which no page can tell apart) |
 | 2026-09-22 | The splash is a grey card with the logo adrift in it, where the device fills the card with a gradient | drPodder Redux 1.6.0; any Mojo app whose scene has a `height: 100%` child | A scene element is the content of Mojo's scene scroller: the scroller is given the card's height, the scene is left at its own content's. On a device that is enough, because the scroller is `overflow: -webkit-palm-overflow` - webOS's own scrolling model - and the scene fills it. Chromium doesn't know that value, so `Mojo.Widget.Scroller` takes its own fallback (`overflow: hidden`) and a scene whose content is short collapses to nothing, taking every percentage-height child with it. drPodder paints the splash's gradient with a `position: absolute; height: 100%` div inside the scene | **framework** (the Mojo fork: `.palm-scene { min-height: 100% }`, so a taller scene still scrolls and a scene with no scroller is untouched - see [CHANGES.md](../LunaRuntimes/mojo/CHANGES.md) patch 0003). Checked against codepoet's screenshot of the reference device: the gradient fills the card and the logo sits centred above the title. One difference left, and small: this Prelude draws "drPodder Redux" 300 px wide at 40 px where the device draws it 290, which is just enough to wrap it onto two lines in a 280 px box |
+| 2026-09-22 | A card is drawn at the wrong size after the tablet is turned over: a 400 px element came out 313 px wide in an 800 px card, with the bottom and right of the card unpainted | webOS IAmA reddit, and any app whose layout is wider than the card it is running in | The page was never the problem - it gets its resize, Mojo is told the screen turned, and everything re-lays out at the card's size. What was wrong is the scale the engine then drew that correct page through, and neither the page nor the framework can see or change it. This engine works the scale out from the page's own layout width, which webOS never did: a card *was* the viewport. Lunacy was also throwing away what the app said about it - `useWideViewPort` was off, so the `<meta name="viewport">` every webOS app carries was ignored outright | compat + card host (the viewport is declared rather than inferred: the card's own width and a scale pinned at 1, **merged into** what the app declared rather than replacing it - see "The viewport" in compat.js for the rules, which keep every directive the app wrote and leave an app that names its own width or scale alone). Measured through two full rotation cycles: the layout viewport is the card in both orientations and a 400 px element stays 401 px |
 | 2026-09-21 | An app meant to be invisible gets a launcher icon | Palm's Video Player (any app with `"visible": "false"`) | `appinfo.json`'s `visible` was never read. webOS used it for apps that are part of the platform and are launched by another app | shell (the launcher and the dock draw only the visible apps; `listApps` and launching by id are unchanged, as on a device) |
 
 ## Known gaps, by the layer they belong to
@@ -249,101 +250,27 @@ Found while testing the apps below; each is general, not tied to one app.
   MojoLoader for it) and the other libraries 404 until they are added to `fetch-assets.sh`.
 - **shell, full-screen cards:** `PalmSystem.enableFullScreenMode` is still a logged no-op, so
   a video player's card keeps the status bar where a device hides it.
-- **card host, a page wider than the card is zoomed out instead of clipped.** Measured on the
-  HP 10 G2 on 2026-09-22, and not fixed.
+- ~~**card host, a page wider than the card is zoomed out instead of clipped**~~ — done
+  2026-09-22, by declaring the viewport instead of leaving it to the engine. What the
+  behaviour was, and the four things that didn't fix it, are kept below because they cost a
+  day between them.
 
   This WebView is a mobile browser underneath. When a page's layout comes out wider than the
-  window it derives a minimum page scale that fits the content, so that nothing is lost when
-  the reader zooms out. webOS had no such idea: a card was the viewport, and content wider
-  than it simply hung off the edge.
+  window it works out a minimum page scale that fits the content, so nothing is lost when the
+  reader zooms out. webOS had no such idea: a card was the viewport, and content wider than it
+  simply hung off the edge. It showed on a **rotation**, because that is when the constraints
+  are recomputed: turning the tablet into portrait with webOS IAmA reddit open - whose `#bar`
+  is hard-coded to 1030 px for a TouchPad - drew the whole page at **0.78** and left the bottom
+  and right of the card unpainted.
 
-  It shows up on a **rotation**, because that is when the constraints are recomputed. Turning
-  the tablet from landscape into portrait with webOS IAmA reddit open - whose `#bar` is
-  hard-coded to 1030 px for a TouchPad - draws the whole page at **0.78** (800 / 1023) and
-  leaves the bottom and right of the card unpainted. Landscape is fine, because 1023 fits in
-  1280. Rotating again clears it, because by then the page is measured against a viewport it
-  fits in.
-
-  Proved by removing the overflow rather than by argument: narrowing `#bar` to 100 px in the
-  running card takes `documentElement.scrollWidth` from 1023 to 800 and the page snaps back to
-  1:1 immediately, white area and all.
-
-  **What doesn't work**, all tried on the device:
-  - `setInitialScale` again after the resize - it applies to the next load, as documented;
-  - `zoomBy` back to 1 - clamped, because Blink's own minimum *is* 0.78 by then;
-  - toggling `useWideViewPort` to make Blink recompute the constraints;
-  - `overflow-x: hidden` or an explicit width on `html` or `body` - neither reduces the
-    content width Blink measures, only what is painted.
-
-  What would work is taking the viewport out of the WebView's hands: `useWideViewPort` with an
-  injected `<meta name="viewport">` carrying the card's width and `minimum-scale=1`. That
-  replaces the model Lunacy's 1 CSS px = 1 device px mapping rests on
-  (`setInitialScale(density x 100)`), so it is a decision rather than a fix, and it is
-  codepoet's. The same behaviour is what puts fixed elements off the edge of a portrait card,
-  which *is* corrected - see the row above.
-- **shell, a card's open and close animations drop frames, and the minimize is the worse of
-  the two.** Measured on the HP 10 G2 from SurfaceFlinger's own present times
-  (`dumpsys SurfaceFlinger --latency`), Device Info, back key so no touch injection is in the
-  way. The card view's 200 ms minimize arrives as **four frames of 53-101 ms** and then runs at
-  17 ms; the 300 ms maximize is 17 ms all the way and drops its last three (100, 84, 67). So
-  there is a fixed ~300 ms of cost at the transition, and at 200 ms that *is* the animation -
-  stretched to 600 ms the same four frames are bad and the remaining 110 are 17 ms each.
-
-  It is the live WebView being drawn while the card is transformed. Hiding the page for the
-  length of the animation makes it perfectly smooth - 14-18 ms every frame, nothing dropped -
-  and an `atrace` shows why: every frame does a synchronous round trip to the renderer
-  (`SyncCompositorMsg_DemandDrawHwAsync`, `SyncChannel::Send`), and Chromium re-rasters its
-  tiles when the transform's scale changes. Ruled out by measurement, each on its own: the
-  card shadow's nine-slice, the rounded outline clip, `LAYER_TYPE_HARDWARE` on the card,
-  the scale itself (translation only is just as bad), `setStageActive` and the app's JS,
-  `WebView.onPause()`, and the CPU governor - with all four cores online at 1.3 GHz the four
-  frames still cost 51-84 ms.
-
-  **Landed nowhere, and left there on purpose** (codepoet, 2026-09-21): accepted on this
-  device. The fix webOS itself used is to draw a *texture* - LunaSysMgr's card view showed each
-  card's last painted buffer, not a live page, which is also why a TouchPad could hold a dozen
-  cards - and **that was offered and declined.** Android 5 has no cheap way to snapshot a
-  hardware-accelerated WebView (`PixelCopy` is API 24; the software path costs, measured on the
-  App Museum, 385 ms at full size, 130 ms at card-view scale, 85 ms at a third), so it would
-  have to be taken ahead of the gesture and would rebuild card view around frozen pages to work
-  around one device's speed. A device that can draw a transformed WebView in a frame needs none
-  of it. See "Decided" in [roadmap.md](roadmap.md).
-
-- **shell, the card has less room than a TouchPad's while the keyboard is up.** Measured on
-  SimpleChat, landscape, field focused, against the reference device:
-
-  | | TouchPad | HP 10 G2 |
-  |---|---|---|
-  | screen | 1024 x 768 | 1280 x 800 |
-  | keyboard | 291 | 338 |
-  | Android's navigation bar | - | 48 |
-  | card left for the app | 449 | 385 |
-  | `deviceInfo.screenHeight` the app reads | 768 | 800 |
-  | the app's own `screenHeight - 600` chat log | 168 | 200 |
-  | scene it then builds | ~431 | 463 |
-
-  Three separate differences, all Lunacy's side of the line:
-  - **`deviceInfo` reports this screen, not the TouchPad's.** webOS's own formula is
-    `hardwareScreenWidth / screenDensity` (`DeviceInfo.cpp`), so 1280 x 800 is right *by that
-    formula* - but an app that has been told it is on a TouchPad and subtracts a TouchPad-sized
-    constant gets a number no TouchPad could give it. Reporting 1024 x 768 makes this app's
-    chat log exactly the device's 168 (tried, and it does); the cost is that `maximumCardWidth`
-    would then be 1024 while the card really is 1280. Which way round that should go is
-    codepoet's call.
-  - **The keyboard is 338 px tall where the device's landscape keyboard is 291.** LunaKeyboard
-    draws its art at a fixed height (`keyboard-bg.png` is 340); webOS set the height per
-    orientation (`m_keyboardHeight` in `Src/ime/`), shorter in landscape where the keys are wider.
-  - **Android's navigation bar takes another 48 px** that no webOS device has, and it cannot be
-    suppressed while an IME is up on Android 5 - asking for immersive again on the keyboard's
-    way up changes nothing (tried).
-
-  Neither of the first two alone closes the 78 px gap; together they would, with about a pixel
-  to spare. Until then the compat layer scrolls the focused field clear of the bottom edge, so
-  what is being typed into is always visible.
-- **compat, Enter from a soft keyboard:** the keypress fix covers printable characters,
-  which is what the IME swallows. Enter still arrives as a real `keydown`/`keyup` with
-  keyCode 13 and no `keypress`, where a device sent one. Mojo reads Enter on keyup, so the
-  suite is unaffected, but an app that submits on a keypress of 13 would not.
+  **What didn't work**, all measured on the device: `setInitialScale` again after the resize
+  (it applies to the next load, as documented); `zoomBy` back to 1 (clamped, because the
+  engine's own minimum *is* 0.78 by then); toggling `useWideViewPort` to force a recompute;
+  `overflow-x: hidden` or an explicit width on `html` or `body` (neither reduces the content
+  width the engine measures, only what is painted). Nor does re-laying the page out, which
+  looks like it works - it takes a 400 px element from 313 px back to 400 - but only because
+  the engine then fits the page to the card afresh, which is wrong in the other direction: a
+  landscape card came back at 1.28, with the list half as much again as it should be.
 
 ## Apps tested
 

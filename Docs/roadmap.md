@@ -21,12 +21,28 @@ show live data. Per-app results and every fix, with the layer it landed in, are 
   and a scene whose content is all out of flow is zero pixels tall. drPodder's splash paints
   its gradient with a `height: 100%` div inside the scene, so it came out grey with the logo
   adrift. Fixed in the Mojo fork.
-- **A page wider than the card is zoomed out rather than clipped** - diagnosed, measured, and
-  *not* fixed. This WebView derives a minimum page scale that fits the content; webOS let
-  content hang off the edge. Turning the tablet into portrait with reddit open draws the page
-  at 0.78 and leaves the bottom of the card unpainted. Everything tried is written up in
-  [fix-log.md](fix-log.md); what would work is replacing the viewport model the 1 CSS px =
-  1 device px mapping rests on, which is a decision rather than a fix.
+- **A page wider than the card was zoomed out rather than clipped** - fixed, on codepoet's
+  call, by declaring the viewport instead of leaving it to the engine. This WebView derives a
+  minimum page scale that fits the content; webOS let content hang off the edge, because a
+  card *was* the viewport. Turning the tablet into portrait with reddit open drew the page at
+  0.78 and left the bottom of the card unpainted.
+
+  Lunacy was also throwing away what the app said about it: `useWideViewPort` was off, so the
+  `<meta name="viewport">` every webOS app carries never reached the engine. It now does, with
+  the card's width and a scale pinned at 1 **merged into** the app's own declaration rather
+  than replacing it - codepoet's constraint, and the right one, because on webOS that meta is
+  a statement about the card (`height=device-height` is what keeps a Pre/Pre2-shaped app out
+  of the Pre3's letterbox, as `"uiRevision": 2` keeps it out of the TouchPad's phone frame).
+  The rules are in [architecture.md](architecture.md) and the numbers in
+  [fix-log.md](fix-log.md), including the four Android-side levers that don't work - worth
+  reading before anyone tries them again.
+
+  It also made ninety lines of compat layer redundant: fixed elements were being corrected one
+  by one against the card, and with the viewport right their containing block *is* the card.
+
+  **Still open:** `uiRevision` is read and passed through but never acted on, so every app gets
+  a full-size card - including one that on a TouchPad would have run in the 320 x 480 phone
+  simulator frame.
 
 **2026-09-22, a second pass on the same two apps.** codepoet looked again and found five more
 differences. Four were separate causes, and two of those were general:

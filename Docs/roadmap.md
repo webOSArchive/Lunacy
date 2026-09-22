@@ -10,6 +10,35 @@ transcoded video, Sound Cloud Player streams through its JS service, AccuWeather
 show live data. Per-app results and every fix, with the layer it landed in, are in
 [fix-log.md](fix-log.md).
 
+**2026-09-22, the evening: [luna-deltas.md](luna-deltas.md)'s A and B lists, released as the
+0.2.0 community preview.** Every item was measured on the reference TouchPad before and after,
+with two new probes (`winprobe`, which drives every app-facing window call from its launch
+parameters, and `headprobe`, a `noWindow` app). What came of it:
+
+- *For apps:* full-screen cards, a card fixing the screen's orientation, `statusBarColor`,
+  banner and notification sounds, low-memory notices, paste/copy/cut through Android's
+  clipboard, and a slow app's card waiting in the card view with its icon pulsing until the app
+  is ready - each as the device does it, several of them corrected by the measurement.
+- *The card view:* cards dim when they stop being active, an app's cards stack in fanned
+  groups, a held card can be walked through and between groups, and a card pulled off the
+  bottom closes. Found on the way: Chromium 37's WebView draws nothing when turned the "wrong"
+  way or faded, so those cards are drawn from a layer.
+- *The status bar:* animated as LunaSysMgr did, with the Bluetooth, rotation-lock, mute,
+  airplane and VPN icons, and the start of the system menu (date, battery, brightness).
+- *Dashboards:* the drop-down scrolls, a dragged row shows its backing, Enyo dashboards swipe
+  their own layers.
+- *The launcher:* installed apps on DOWNLOADS, the device's column spacing and scrolling, the
+  empty page, install progress, and LunaCE's tab editing and app folders.
+- *Just Type:* the pill opens it; launch results and "Search DuckDuckGo" (the rest of Just
+  Type is for later, codepoet's call).
+- *Phone-sized apps* get their chrome: title bar, back strip, keyboard button, corners.
+- *Sounds:* LunaSysMgr's own, copied from the device.
+
+Four A/B items turned out to be the device doing nothing, and one (a card at launch for a
+headless app) not to happen on the device at all; all are in luna-deltas.md's section D so
+nobody chases them. Still open there: A9 (what a free card reports as its orientation, which
+needs the TouchPad turned by hand) and A10 (a page's first script sees a 980-px layout).
+
 **2026-09-22, a day on Mojo fidelity.** codepoet ran the suite beside the reference TouchPad
 and reported what looked wrong, three times over as each round was fixed. Eleven differences,
 nine causes, and the pattern worth keeping is that **almost none of them was the engine**:
@@ -129,11 +158,13 @@ and the space the keyboard and Android's navigation bar cost a card. Both are in
   display, and db8 and tempdb ([db8.md](db8.md)). Everything else returns webOS's own errors.
   Not yet: zeroconf (codepoet: never worked, skip), background activities, the media indexer.
   The download manager was added on 2026-09-22, measured method by method.
-- **Phase 3 (shell):** well along. Card view, launcher, dock, status bar, banners (now
-  matching the TouchPad), dashboards and popup alerts. The launcher has the launch glow and
-  edit mode: reordering, moving icons between tabs (with the tab highlight), removing
-  installed apps, and arranging the dock (add, swap, reorder, drag up and out to remove),
-  checked against the TouchPad at the same scale.
+- **Phase 3 (shell):** well along. Card view (with groups, reordering and dimming),
+  launcher, dock, status bar (with the start of the system menu), banners, dashboards, popup
+  alerts, Just Type's launch and web search, and the emulated card's chrome. The launcher has
+  the launch glow and edit mode: reordering, moving icons between tabs (with the tab
+  highlight), removing installed apps, arranging the dock (add, swap, reorder, drag up and out
+  to remove), LunaCE's tab editing and app folders - all checked against the TouchPad at the
+  same scale.
 - **Phase 4 (App Museum):** installs work through the Museum's own Preware route, from
   `http` and `https`; apps can be removed from the launcher; packages' db8 kinds and
   permissions register at install. Not yet: the compatibility score, activities from
@@ -154,9 +185,8 @@ and the space the keyboard and Android's navigation bar cost a card. Both are in
   entry point; the README's "Using it" is the owners'.
 - **The keyboard, and somewhere to try it (2026-09-20).** A companion APK in
   [LunaKeyboard/](../LunaKeyboard/README.md) puts the TouchPad's own keyboard on Android, scroll ball
-  and all; it is separate from Lunacy and optional. The "Just type" pill is now a real input
-  field so there is somewhere in the shell to type: Return is swallowed until Just Type has
-  something to do.
+  and all; it is separate from Lunacy and optional. (The "Just type" pill was a text field
+  until Just Type itself arrived on 2026-09-22; typing now happens there.)
 - **Settings (2026-09-20).** Three cases, described under "Settings" in the architecture doc:
   Lunacy's own app where webOS's reported a webOS device, Palm's own app where Lunacy can
   answer it, and an icon that opens Android's screen where the setting belongs to Android.
@@ -230,20 +260,19 @@ and the space the keyboard and Android's navigation bar cost a card. Both are in
   - `activitymanager`'s scheduled activities and `com.palm.power/timeout`, which are one want
     and not two: the Clock's alarms, SimpleChat's half-hourly refresh, reddit's message check
     and drPodder's feed update all ask for them, and Android's `AlarmManager` backs them all;
-  - the rest of the emulated card: its own status bar, gesture strip and keyboard button, and
-    a phone-shaped thumbnail in card view;
-  - a launching card created when the app is *launched* rather than when it opens a window,
-    so a `noWindow` app gets its placeholder as early as a device gives one;
+  - the emulated card's chrome turning with the screen (the strip and bar go to the sides in
+    landscape);
   - the media indexer's db8 kinds;
   - the rest of the settings apps: Date & Time, Language, Backup, Accounts, Updates, Location
     (each is one of the three cases above);
   - the border-image seams in Enyo dialogs;
   - a test suite from the apps in fix-log.md, run on WebView 37 and 64;
-  - card stacks/groups;
-  - the status-bar system menu (wifi, brightness, battery, rotation lock), which is QML in
-    LunaCE, per spec §4.3;
-  - Just Type search (the pill takes text, but nothing acts on it yet);
-  - tuning scroll inertia;
+  - the rest of the system menu: Wi-Fi, VPN, Bluetooth, airplane mode, rotation lock and mute
+    (date, battery and brightness are in), per spec §4.3 and the device's QML;
+  - the rest of Just Type (the filter tabs, "Search using…", contacts, content, actions) and
+    the bus side it needs: `applicationManager/searchApps` and `listLaunchPoints`,
+    `com.palm.universalsearch`;
+  - A9 and A10 in luna-deltas.md;
   - the one remaining seam inside the Sampler's radio-button graphic.
 
 ## Before phase 0: two checks

@@ -50,7 +50,7 @@ What this target means:
 ```
 Lunacy (Android app)
 ├─ Shell (simulated Luna)
-│    card view · gesture bar · launcher · status bar · banners/dashboard · (later) Just Type
+│    card view · gesture bar · launcher · status bar · banners/dashboard · Just Type
 ├─ Card host: one WebView per window (card, dashboard, alert), one origin per app
 │    ├─ webOS paths       each origin mirrors the webOS filesystem layout
 │    ├─ framework route   /usr/palm/frameworks/*  →  modernized Enyo (later Mojo)
@@ -77,6 +77,24 @@ product; being "close enough" is not the goal.
 
 - **Card view.** Live cards that can be thrown away with a swipe up, stacked in groups the
   way LunaSysMgr grouped an app's cards, and reordered with a tap-and-hold.
+  - A card an app opens while its own card is up joins that card's group; anything else starts
+    a group just right of the active one. The active group fans; the others collapse to a
+    10 px stagger. A card dims to 0.8 when it stops being the active one.
+  - Chromium 37's WebView draws nothing when its view is turned by a negative angle or has an
+    alpha below 1, so a tilted or see-through card is drawn from a hardware layer.
+  - A card pulled off the bottom closes like one thrown off the top.
+- **Status bar and system menu.** Drawn and animated as LunaSysMgr drew them (title
+  cross-fade, the ▾ only while an app is up, info icons from Android's own state). The ▾ at the
+  right opens the system menu, so far with the date, the battery and a brightness slider that
+  sets Android's brightness.
+- **Phone-sized apps** (an app without `"uiRevision": 2`) run in the emulated card with its
+  chrome: its own title bar (the app menu), the core-navi strip (back), the keyboard button,
+  rounded corners; in the card view, a black card with the page drawn larger. The chrome
+  doesn't yet turn with the screen.
+- **Sounds.** Banner and notification sounds by class; LunaSysMgr's own feedback samples for a
+  card closing, the launcher opening and closing and the angry card (upside-down landscape
+  only); `battery_full.mp3` at 100 %. On Android's system and notification streams, so the
+  ringer and the volumes are Android's.
 - **Full screen and buttons.**
   - Lunacy runs in Android's immersive sticky mode, so the whole screen is the shell. A swipe
     from the edge shows Android's buttons for a moment.
@@ -104,9 +122,12 @@ product; being "close enough" is not the goal.
 - **Gestures on newer Android.** On Android 10 and
   later, gesture navigation owns the swipe up from the bottom edge. There the bar sits above
   the system zone, and in launcher mode Android's home gesture lands back in Lunacy anyway.
-- **The "Just type" pill** takes text, and nothing acts on it yet: webOS's Just Type searched,
-  launched and handed what was typed to an app, none of which exists here. Return is swallowed
-  until it does. It is also the one place in the shell to try a keyboard on.
+- **Just Type.** A tap on the pill opens it under the status bar (150 ms), drawn natively to
+  the measurements of Palm's own Just Type app and with its art (`JustTypePanel`): the field,
+  a LAUNCH group of matching apps - LunaSysMgr's `searchApps` rule, the matched start
+  underlined, the first highlighted and launched by Return - and "Search DuckDuckGo" with the
+  device's own URL. The filter tabs, "Search using…" and the rest are for later (codepoet,
+  2026-09-22).
 - **Starting up.** Unpacking the bundled apps on a first run takes a couple of seconds, so
   ShellActivity carries a splash theme whose `windowBackground` is the Lunacy logo on the dark
   of its own icon. Android paints that before the process exists, so it covers the whole cold
@@ -134,7 +155,12 @@ product; being "close enough" is not the goal.
     doesn't name falls back to its category and keywords (LunaCE's
     `AppMonitor::pageDesignatorForWebOSApp`), then to the first page, alphabetically.
   - A dragged icon moves to another tab when it touches that tab, as LunaCE's tab bar takes
-    it, or when it's held at the screen's left or right edge (600 ms). The tab under the
+    it, or when it's held within 50 px of the screen's left or right edge (1500 ms,
+    `pagePanForIconMoveDelayMs`); held within 20 px of the page's top or bottom, the page
+    scrolls 150 px every 800 ms. The layout is only looked at while the finger rests, as
+    ReorderablePage's velocity sampling has it, so an icon passing over others doesn't
+    shuffle them. Held over the middle 60 % of another icon for 300 ms, an app is dropped
+    *onto* it and the two make a group ([LunaCE]; below). The tab under the
     icon (or under a pressing finger) shows `tab-highlight.png`, LunaCE's highlighted tab.
   - Edit-mode geometry uses the reference TouchPad's `/etc/palm/launcher3` overrides where
     they differ from LunaCE's defaults: the delete decorator at (-50, -50), and the Done
@@ -156,9 +182,20 @@ product; being "close enough" is not the goal.
   APPS, DOWNLOADS, GAMES, SETTINGS (its `app-keywords-to-designator-map.txt` renames favorites
   to "games" and prefs to "settings"). An app the user hasn't placed finds its page the way
   LunaCE's `AppMonitor::pageDesignatorForWebOSApp` does: its `appinfo.json` category first,
-  then each of its keywords, against the map in `assets/luna/launcher-pages.json`. webOS also
-  shipped a default layout naming which app started on which page; Lunacy has no fixed set of
-  apps, so the keywords those apps already carry do that job.
+  then each of its keywords, against the map in `assets/luna/launcher-pages.json`; failing
+  that, an app the user installed goes on DOWNLOADS (`installedAppsPageIndex`), which is where
+  the reference TouchPad has every one, and a bundled app on the first page.
+  - Columns are spaced by LunaCE's own formula over the whole page width (measured: 149 px
+    apart on a portrait TouchPad). Scrolling is LunaCE's KineticScroller. An empty page shows
+    its picture and "Tap and hold any app to drag it to this page." A package being installed
+    shows on DOWNLOADS as a faded icon with the `loading-strip.png` progress filmstrip.
+  - [LunaCE] Tabs can be renamed (hold a tab), added (hold the empty bar for the "+") and,
+    past the four stock tabs, deleted, their icons going to the first page; six at most.
+    The dialog is LunaCE's RenameDialog, drawn around a real text field for Android's
+    keyboard. Tabs are saved with their designators and names.
+  - [LunaCE] App groups: a group is GroupIcon's composite (a backplate with up to four member
+    thumbnails); a tap opens its panel (GroupOverlay), where a member launches, a held member
+    comes back out onto the page, and a tap on the name renames it. A group of one dissolves.
 - **Layouts.** Tablet and phone layouts from the start; the tablet layout is the reference.
 - **Launcher mode.** Lunacy starts as a normal full-screen app. Nothing in the shell should
   assume that, so it can later become the Android home launcher, with Android apps appearing
@@ -454,11 +491,15 @@ Following LunaCE's tablet mode (Docs/luna-shell-reference.md §4 and §5):
   - Android's `onCreateWindow` never sees the features string, so the bridge wraps
     `window.open`: it hands the attributes to native just before the real open.
 - **Dashboards.**
-  - Each dashboard puts its icon (`attributes.icon`, else the app icon) in the status bar's
-    notification group.
+  - Each dashboard puts its icon (`attributes.icon`, else the app's mini icon - its
+    `miniicon`, or its launcher icon at 28 px turned grey, as measured) in the status bar's
+    notification group, newest leftmost; icons slide in and out over 1000 ms.
   - Tapping the group drops down LunaCE's menu frame (`menu-dropdown-bg.png`), with every
-    dashboard as a live 320 × 52 px window, newest first. A row swiped right by more than a
-    quarter of its width closes that window.
+    dashboard as a live 320 × 52 px window, newest first. Past 410 px it scrolls behind
+    LunaCE's fade masks. A row swiped right by more than a quarter of its width closes that
+    window, uncovering `menu-dropdown-swipe-bg.png` as it goes; a dashboard opened with
+    `webosDragMode: "manual"` (all of Enyo's) is dragged only from its 50 px badge, and the
+    rest of its touches are the app's, which swipes its own layers.
   - Dashboard windows keep running while the menu is closed.
 - **Icon sizes** follow webOS conventions:
   - Status-bar notification icons are drawn at natural size and scaled down only if taller

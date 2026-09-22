@@ -341,7 +341,7 @@ Everything here is §3; Lunacy's is `Launcher.kt`.
 | Installing | icon at 0.5 opacity with `loading-strip.png` (19 frames of 32×32) at (+50, −50) while a package installs; `warning-icon.png` on failure | the launcher only changes when the install finishes | `Launcher.installing: Set<String>` driven from `ShellActivity.install`; [iconheap.cpp#L44](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/launcher/elements/icons/iconheap.cpp#L44) |
 | Column spacing | `free = rowWidth − 128·(n+1) + 12·n; spacing = ⌊free/(n−1)⌋` (Q14) | even spacing across `width − 2·27` | compare a 7-icon row against the reference screenshot before touching it |
 | Tab rename / add / delete [LunaCE] **(done 2026-09-22)** | long-press a tab → rename dialog; hold the empty bar 650 ms → "+"; tabs ≥ 4 get a trash; `MaxTabs` 6 | fixed four | §3.5; only after the stock items. `luna-send … systemUi launchertitlechange` is the bus side (C2) |
-| App groups (folders) [LunaCE] | hover the centre 60 % of an icon 300 ms → group; 68×68 tile with 2×2 thumbnails; overlay panel | none | §3.8; low priority, LunaCE-only |
+| App groups (folders) [LunaCE] **(done 2026-09-22)** | hover the centre 60 % of an icon 300 ms → group; 68×68 tile with 2×2 thumbnails; overlay panel | none | §3.8; low priority, LunaCE-only |
 
 ### B6. Just Type
 

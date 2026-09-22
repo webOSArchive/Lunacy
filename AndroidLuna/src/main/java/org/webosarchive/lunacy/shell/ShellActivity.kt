@@ -49,6 +49,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var quickLaunch: QuickLaunch
     private lateinit var launcher: Launcher
     private lateinit var tabDialog: TabDialog
+    private lateinit var groupOverlay: GroupOverlay
     private var launcherOpen = false
     private lateinit var notifications: Notifications
     private lateinit var systemMenu: SystemMenu
@@ -117,6 +118,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         launcher.dockHeight = luna.px(QuickLaunch.HEIGHT).toFloat()
         launcher.visibility = View.INVISIBLE
         root.addView(launcher, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
+        // [LunaCE] Launcher groups: the panel a group opens into.
+        groupOverlay = GroupOverlay(this, luna)
+        root.addView(groupOverlay, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
+        launcher.onOpenGroup = { g, from -> groupOverlay.show(g, from) }
+        groupOverlay.onLaunch = { app -> launcher.showLaunchFeedback(app); launcher.postDelayed({ launch(app.id); closeLauncher() }, LAUNCH_DELAY_MS) }
+        groupOverlay.onPopOut = { g, app -> launcher.popOut(g, app) }
+        groupOverlay.onRenamed = { g -> launcher.groupChanged(g) }
         // [LunaCE] Renaming, adding and deleting launcher tabs.
         tabDialog = TabDialog(this, luna)
         root.addView(tabDialog, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
@@ -1322,6 +1330,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (notifications.menu.isOpen || systemMenu.isOpen) { closeMenu(); return }
         notifications.popups.newest()?.let { onWindowClosed(it); return }
         if (tabDialog.showing) { tabDialog.dismiss(); return }
+        if (groupOverlay.showing) { groupOverlay.close(); return }
         if (launcher.editing || quickLaunch.editing) { exitEditMode(); return }
         if (launcherOpen) { closeLauncher(); return }
         val max = cards.maximized
@@ -1357,6 +1366,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         launcher.animate().translationY(launcher.height.toFloat()).setDuration(LAUNCHER_MS).setInterpolator(Easing.InOutQuint)
             .withEndAction { if (!launcherOpen) { launcher.visibility = View.INVISIBLE; launcher.cancelLaunchFeedback(); exitEditMode() } }.start()
         tabDialog.dismiss()
+        groupOverlay.close()
         if (cards.maximized == null) { fade(justType, true); statusBar.setMode(StatusBar.Mode.CARDS); statusBar.title = StatusBar.CARRIER_TEXT }
     }
 

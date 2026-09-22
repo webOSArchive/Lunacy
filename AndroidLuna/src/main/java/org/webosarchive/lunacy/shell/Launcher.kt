@@ -119,6 +119,43 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         const val ADD_SLOP = 16f
         const val ADD_BUTTON = 28f
         const val ADD_LEFT = 12f
+        // [LunaCE] app groups (reorderablepage.cpp): the middle 60 % of an icon, held 300 ms.
+        const val GROUP_CORE = 0.6f
+        const val GROUP_DWELL_MS = 300L
+        const val GROUP_NAME = "Group"
+        /** How long a dragged icon's finger must rest before the layout is looked at. */
+        const val SAMPLE_STILL_MS = 60L
+    }
+
+    /** [LunaCE] A group was tapped: open its panel, growing out of [from] (its icon, in this view). */
+    var onOpenGroup: (Tile.Group, PointF) -> Unit = { _, _ -> }
+
+    /** Where a group's icon is drawn, for the panel to grow out of. */
+    private fun groupScreenCentre(g: Tile.Group): PointF {
+        val page = currentPage()
+        val c = cellCentre(page.tiles.indexOf(g))
+        return PointF(c.x, c.y - page.scrollY + luna.px(Params.ICON_DY))
+    }
+
+    /** The group's panel changed it: a new name, or a member launched or taken out. */
+    fun groupChanged(g: Tile.Group) {
+        // GroupOverlay::slotMemberIconPoppedOut and the dissolve rule: one member left is an app.
+        for (page in pages) {
+            val i = page.tiles.indexOf(g)
+            if (i < 0) continue
+            when (g.members.size) {
+                0 -> page.tiles.removeAt(i)
+                1 -> page.tiles[i] = Tile.App(g.members[0])
+            }
+        }
+        saveOrder(); invalidate()
+    }
+
+    /** A member held in the group's panel comes out onto the page, just after the group. */
+    fun popOut(g: Tile.Group, app: AppInfo) {
+        if (!g.members.remove(app)) return
+        pages.firstOrNull { g in it.tiles }?.let { p -> p.tiles.add(p.tiles.indexOf(g) + 1, Tile.App(app)) }
+        groupChanged(g)
     }
 
     /** A tab was held: rename it (and, for one past the first four, offer to delete it). */
@@ -142,12 +179,19 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     fun deleteTab(index: Int) {
         if (index < Params.PERMANENT_TABS || index >= pages.size) return
         val dying = pages.removeAt(index)
-        pages[0].apps += dying.apps
+        pages[0].tiles += dying.tiles
         pagePos = pagePos.coerceAtMost(pages.size - 1f)
         saveOrder(); animatePage(pagePos.roundToInt().coerceIn(0, pages.size - 1), Params.SNAP_MS, Easing.InQuad)
     }
 
-    class Page(val designator: String, var title: String, val apps: MutableList<AppInfo> = mutableListOf()) { var scrollY = 0f }
+    /** A launcher cell: an app or, [LunaCE], a group of apps (LunaCE's GroupIcon). */
+    sealed class Tile {
+        abstract val id: String
+        class App(val app: AppInfo) : Tile() { override val id get() = app.id }
+        class Group(override val id: String, var name: String, val members: MutableList<AppInfo>) : Tile()
+    }
+
+    class Page(val designator: String, var title: String, val tiles: MutableList<Tile> = mutableListOf()) { var scrollY = 0f }
 
     /**
      * The pages, their names and the keyword map, from assets/luna/launcher-pages.json (which
@@ -237,7 +281,23 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     fun setApps(apps: List<AppInfo>) {
         val byId = apps.associateBy { it.id }
         val placed = HashSet<String>()
-        pages.forEach { it.apps.clear() }
+        pages.forEach { it.tiles.clear() }
+        fun app(id: String) = byId[id]?.takeIf { placed.add(it.id) }?.let { Tile.App(it) }
+        /** A saved cell: an app's id, or a group ({"group": name, "uid": ..., "apps": [ids]}). */
+        fun tile(entry: Any?): Tile? = when (entry) {
+            is String -> app(entry)
+            is JSONObject -> {
+                val ids = entry.optJSONArray("apps")
+                val members = (0 until (ids?.length() ?: 0)).mapNotNull { byId[ids!!.optString(it)]?.takeIf { a -> placed.add(a.id) } }
+                // A group left with one member is that app again (it dissolves, as LunaCE's does).
+                when (members.size) {
+                    0 -> null
+                    1 -> Tile.App(members[0])
+                    else -> Tile.Group(entry.optString("uid").ifEmpty { "group_" + java.util.UUID.randomUUID() }, entry.optString("group", "Group"), members.toMutableList())
+                }
+            }
+            else -> null
+        }
         val tabs = runCatching { JSONArray(prefs.getString("tabs", null) ?: "") }.getOrNull()
         if (tabs != null) {
             // The user's own tabs: the stock ones by designator, keeping their names, and any
@@ -248,7 +308,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
                 val page = pages.firstOrNull { it.designator == d } ?: Page(d, t.optString("name")).also { pages += it }
                 page.title = t.optString("name", page.title)
                 val ids = t.optJSONArray("apps")
-                for (j in 0 until (ids?.length() ?: 0)) byId[ids!!.optString(j)]?.takeIf { placed.add(it.id) }?.let { page.apps += it }
+                for (j in 0 until (ids?.length() ?: 0)) tile(ids!!.opt(j))?.let { page.tiles += it }
             }
             val order = (0 until tabs.length()).mapNotNull { tabs.optJSONObject(it)?.optString("designator") }
             pages.sortBy { p -> order.indexOf(p.designator).let { if (it < 0) Int.MAX_VALUE else it } }
@@ -257,25 +317,31 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             val saved = runCatching { JSONArray(prefs.getString("pages", null) ?: "[" + (prefs.getString("order", null) ?: "[]") + "]") }.getOrDefault(JSONArray())
             for (pi in 0 until minOf(saved.length(), pages.size)) {
                 val ids = saved.optJSONArray(pi) ?: continue
-                for (i in 0 until ids.length()) byId[ids.optString(i)]?.takeIf { placed.add(it.id) }?.let { pages[pi].apps += it }
+                for (i in 0 until ids.length()) app(ids.optString(i))?.let { pages[pi].tiles += it }
             }
         }
         // Then the apps Lunacy ships with, where and in the order the default layout puts them.
         for ((designator, ids) in defaultLayout) {
             val page = pages.indexOfFirst { it.designator == designator }.takeIf { it >= 0 } ?: continue
-            for (id in ids) byId[id]?.takeIf { placed.add(it.id) }?.let { pages[page].apps += it }
+            for (id in ids) app(id)?.let { pages[page].tiles += it }
         }
         // Everything else by its keywords, alphabetically.
         for (app in apps.filter { it.id !in placed }.sortedBy { it.title.lowercase() }) {
-            pages[pageFor(app)].apps += app
+            pages[pageFor(app)].tiles += Tile.App(app)
         }
-        if (dragging != null && pages.none { dragging in it.apps }) dragging = null
+        // A tile being dragged while the list changed is the new one with its id, if any.
+        dragging = dragging?.let { d -> pages.flatMap { it.tiles }.firstOrNull { it.id == d.id } }
         invalidate()
     }
 
     /** Each page's designator, name and apps, in order: the tabs themselves are the user's now. */
     private fun saveOrder() = prefs.edit().putString("tabs", JSONArray(pages.map { p ->
-        JSONObject().put("designator", p.designator).put("name", p.title).put("apps", JSONArray(p.apps.map { it.id }))
+        JSONObject().put("designator", p.designator).put("name", p.title).put("apps", JSONArray(p.tiles.map { t ->
+            when (t) {
+                is Tile.App -> t.app.id
+                is Tile.Group -> JSONObject().put("group", t.name).put("uid", t.id).put("apps", JSONArray(t.members.map { it.id }))
+            }
+        }))
     }).toString()).apply()
 
     // ---- launch feedback ----
@@ -328,7 +394,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val row = max(0, ((y - pageTop() - luna.px(Params.TOP_MARGIN)) / rowPitch()).toInt())
         return (row * columns() + col).coerceIn(0, max(0, count - 1))
     }
-    private fun contentHeight(p: Page) = luna.px(Params.TOP_MARGIN) + ((p.apps.size + installsOn(p).size + columns() - 1) / columns()) * rowPitch()
+    private fun contentHeight(p: Page) = luna.px(Params.TOP_MARGIN) + ((p.tiles.size + installsOn(p).size + columns() - 1) / columns()) * rowPitch()
     private fun maxScroll(p: Page) = max(0f, contentHeight(p) - (pageBottom() - pageTop()))
     private fun tabWidth() = min(width.toFloat() / pages.size, luna.px(Params.TAB_MAX_W))
     private fun currentPage() = pages[pagePos.roundToInt().coerceIn(0, pages.size - 1)]
@@ -348,16 +414,16 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private var moveT = 1f
     private var moveAnim: ValueAnimator? = null
 
-    private fun drawnCentre(app: AppInfo, i: Int): PointF {
+    private fun drawnCentre(tile: Tile, i: Int): PointF {
         val target = cellCentre(i)
-        val from = movedFrom[app.id] ?: return target
+        val from = movedFrom[tile.id] ?: return target
         return PointF(from.x + (target.x - from.x) * moveT, from.y + (target.y - from.y) * moveT)
     }
 
     /** Changes the order, with every icon sliding from where it is to its new cell (300 ms InQuad). */
     private fun reorder(change: () -> Unit) {
         val page = currentPage()
-        val now = page.apps.mapIndexed { i, a -> a.id to drawnCentre(a, i) }.toMap()
+        val now = page.tiles.mapIndexed { i, t -> t.id to drawnCentre(t, i) }.toMap()
         change()
         movedFrom.clear(); movedFrom.putAll(now)
         moveAnim?.cancel()
@@ -385,10 +451,10 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             luna.tile(c, "launcher3/tab-shadow.png", RectF(0f, pageTop(), width.toFloat(), pageTop() + luna.px(8f)))
             luna.tile(c, "launcher3/quicklaunch-shadow.png", RectF(0f, pageBottom() - luna.px(8f), width.toFloat(), pageBottom()))
             val installing = installsOn(page)
-            if (page.apps.isEmpty() && installing.isEmpty()) drawEmptyPage(c)
+            if (page.tiles.isEmpty() && installing.isEmpty()) drawEmptyPage(c)
             c.translate(0f, -page.scrollY)
-            page.apps.forEachIndexed { i, app -> if (app != dragging) drawIcon(c, app, drawnCentre(app, i)) }
-            installing.forEachIndexed { i, inst -> drawInstalling(c, inst, cellCentre(page.apps.size + i)) }
+            page.tiles.forEachIndexed { i, t -> if (t != dragging) drawTile(c, t, drawnCentre(t, i)) }
+            installing.forEachIndexed { i, inst -> drawInstalling(c, inst, cellCentre(page.tiles.size + i)) }
             c.restore()
         }
         c.restore()
@@ -397,7 +463,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
 
         drawTabBar(c)
         // The dragged icon, over everything, under the finger.
-        dragging?.let { drawIcon(c, it, PointF(dragX - grabDx, dragY - grabDy)) }
+        dragging?.let { drawTile(c, it, PointF(dragX - grabDx, dragY - grabDy)) }
         dialogApp?.let { drawDialog(c, it) }
     }
 
@@ -428,6 +494,35 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         luna.sprite(c, "loading-strip.png", centre.x + luna.px(Params.INSTALL_DX), centre.y + luna.px(Params.INSTALL_DY), 0, frame * 32, 32, 32)
     }
 
+    private fun drawTile(c: Canvas, t: Tile, centre: PointF) = when (t) {
+        is Tile.App -> drawIcon(c, t.app, centre)
+        is Tile.Group -> drawGroup(c, t, centre)
+    }
+
+    /**
+     * [LunaCE] A group: GroupIcon's 68 px composite - a rounded, gradient backplate with the
+     * first members as 26 px thumbnails, 2 by 2, "+N" in the fourth place past four - with the
+     * group's name as its label.
+     */
+    private fun drawGroup(c: Canvas, g: Tile.Group, centre: PointF) {
+        val cx = centre.x; val cy = centre.y
+        val iy = cy + luna.px(Params.ICON_DY)
+        if (editing) {
+            val fh = luna.px(Params.CELL) / 2
+            luna.image("launcher3/edit-icon-bg.png")?.let { c.drawBitmap(it, null, RectF(cx - fh, cy - fh, cx + fh, cy + fh), null) }
+        }
+        if (groupTarget == g.id) {
+            val gh = luna.px(Params.FEEDBACK) / 2
+            luna.image("launcher3/launcher-touch-feedback.png")?.let { c.drawBitmap(it, null, RectF(cx - gh, iy - gh, cx + gh, iy + gh), null) }
+        }
+        val composite = groupComposites.getOrPut(g.id + ":" + g.members.joinToString(",") { it.id }) { GroupArt.composite(luna, g.members) }
+        val half = composite.width / 2f
+        c.drawBitmap(composite, cx - half, iy - composite.height / 2f, null)
+        val layout = labels.getOrPut("group:" + g.name) { twoLineLabel(g.name) }
+        c.save(); c.translate(cx - layout.width / 2f, iy + luna.px(Params.ICON) / 2 + luna.px(Params.LABEL_GAP)); layout.draw(c); c.restore()
+    }
+    private val groupComposites = HashMap<String, android.graphics.Bitmap>()
+
     /** centre is the cell centre: the icon sits above it, its label below. */
     private fun drawIcon(c: Canvas, app: AppInfo, centre: PointF) {
         val cx = centre.x; val cy = centre.y
@@ -437,7 +532,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             val fh = luna.px(Params.CELL) / 2
             luna.image("launcher3/edit-icon-bg.png")?.let { c.drawBitmap(it, null, RectF(cx - fh, cy - fh, cx + fh, cy + fh), null) }
         }
-        if (feedbackId == app.id) {
+        if (feedbackId == app.id || groupTarget == app.id) {
             val gh = luna.px(Params.FEEDBACK) / 2
             luna.image("launcher3/launcher-touch-feedback.png")?.let { c.drawBitmap(it, null, RectF(cx - gh, iy - gh, cx + gh, iy + gh), null) }
         }
@@ -445,7 +540,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         bmp?.let { c.drawBitmap(it, null, RectF(cx - half, iy - half, cx + half, iy + half), null) }
         val layout = labels.getOrPut(app.id) { twoLineLabel(app.title) }
         c.save(); c.translate(cx - layout.width / 2f, iy + half + luna.px(Params.LABEL_GAP)); layout.draw(c); c.restore()
-        if (editing && app.userInstalled && app != dragging) {
+        if (editing && app.userInstalled && (dragging as? Tile.App)?.app != app) {
             val d = deleteCentre(centre)
             drawDelete(c, d.x, d.y, pressed = pressedDelete == app.id)
         }
@@ -526,7 +621,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
 
     var editing = false
         private set
-    private var dragging: AppInfo? = null
+    private var dragging: Tile? = null
     private var dragX = 0f; private var dragY = 0f
     private var grabDx = 0f; private var grabDy = 0f
     private var pressedDelete: String? = null
@@ -543,10 +638,10 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         invalidate()
     }
 
-    private fun pickUp(app: AppInfo, x: Float, y: Float) {
+    private fun pickUp(tile: Tile, x: Float, y: Float) {
         val page = currentPage()
-        val c = drawnCentre(app, page.apps.indexOf(app))
-        dragging = app
+        val c = drawnCentre(tile, page.tiles.indexOf(tile))
+        dragging = tile
         dragX = x; dragY = y
         grabDx = x - c.x; grabDy = y + page.scrollY - c.y
         drag = Drag.ICON
@@ -574,12 +669,45 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val edge = luna.px(Params.EDGE)
         val side = if (x < edge) -1 else if (x > width - edge) 1 else 0
         if (side != edgeSide) { edgeSide = side; removeCallbacks(edgeFlip); if (side != 0) postDelayed(edgeFlip, Params.EDGE_MS) }
-        val page = currentPage()
-        val to = cellAt(x - grabDx, y + page.scrollY - grabDy, page.apps.size)
-        val from = page.apps.indexOf(app)
-        if (to != from && from >= 0) reorder { page.apps.removeAt(from); page.apps.add(to, app) }
+        // ReorderablePage only looks at the layout while the finger is all but still (its
+        // velocity sampling), so an icon passing over the others on its way doesn't shuffle
+        // them. Android sends nothing while a finger rests, so look once it has stopped.
+        removeCallbacks(sampleDrag); postDelayed(sampleDrag, Params.SAMPLE_STILL_MS)
         invalidate()
     }
+
+    /**
+     * Where the finger rests decides: over the middle 60 % of another icon it is aiming to drop
+     * *onto* it - a group, once it has stayed 300 ms - and nothing moves; over the rest of a
+     * cell the dragged icon takes that cell.
+     */
+    private val sampleDrag = Runnable {
+        val app = dragging ?: return@Runnable
+        if (dragY < pageTop() || dragY > pageBottom()) return@Runnable
+        val page = currentPage()
+        val fx = dragX; val fy = dragY + page.scrollY
+        val hit = page.tiles.withIndex().firstOrNull { (i, _) ->
+            val c = cellCentre(i); val half = luna.px(Params.CELL) / 2
+            abs(fx - c.x) < half && abs(fy - c.y) < half
+        }
+        if (hit != null && hit.value !== app && app is Tile.App) {
+            val c = cellCentre(hit.index); val core = luna.px(Params.CELL) * Params.GROUP_CORE / 2
+            if (abs(fx - c.x) < core && abs(fy - c.y) < core) {
+                if (hit.value.id != hovering) { hovering = hit.value.id; groupTarget = null; removeCallbacks(armGroup); postDelayed(armGroup, Params.GROUP_DWELL_MS) }
+                invalidate(); return@Runnable
+            }
+        }
+        hovering = null; groupTarget = null; removeCallbacks(armGroup)
+        val to = cellAt(fx, fy, page.tiles.size)
+        val from = page.tiles.indexOf(app)
+        if (to != from && from >= 0) reorder { page.tiles.removeAt(from); page.tiles.add(to, app) }
+        invalidate()
+    }
+
+    /** The tile the dragged icon is over the middle of, and - once it has stayed 300 ms - the group target. */
+    private var hovering: String? = null
+    private var groupTarget: String? = null
+    private val armGroup = Runnable { if (dragging != null) { groupTarget = hovering; invalidate() } }
 
     private var edgeSide = 0
     private var vSide = 0
@@ -606,8 +734,8 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     /** Moves the dragged icon to the end of another page, and shows that page. */
     private fun moveDragged(to: Int) {
         val app = dragging ?: return
-        pages.forEach { it.apps.remove(app) }
-        pages[to].apps.add(app)
+        pages.forEach { it.tiles.remove(app) }
+        pages[to].tiles.add(app)
         movedFrom.clear(); moveT = 1f
         animatePage(to, Params.SNAP_MS, Easing.InQuad)
     }
@@ -616,14 +744,33 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val app = dragging ?: return
         removeCallbacks(edgeFlip); edgeSide = 0
         removeCallbacks(vScroll); vSide = 0
+        removeCallbacks(armGroup); removeCallbacks(sampleDrag)
         highlightedTab = -1
+        val target = groupTarget; hovering = null; groupTarget = null
         if (dragY > pageBottom()) {
-            // Onto the dock: it takes the app; the icon stays where it was in the launcher.
+            // Onto the dock: it takes the app; the icon stays where it was in the launcher. A
+            // group has no place there.
             dragging = null
-            onDropOnDock(app, dragX)
+            if (app is Tile.App) onDropOnDock(app.app, dragX)
             invalidate(); return
         }
         val page = currentPage()
+        if (target != null && app is Tile.App) {
+            // Onto another icon: into its group, or the two make a new one where it stood.
+            val i = page.tiles.indexOfFirst { it.id == target }
+            val onto = page.tiles.getOrNull(i)
+            if (onto != null) {
+                dragging = null
+                page.tiles.remove(app)
+                when (onto) {
+                    is Tile.Group -> onto.members += app.app
+                    is Tile.App -> page.tiles[page.tiles.indexOf(onto)] = Tile.Group("group_" + java.util.UUID.randomUUID(), Params.GROUP_NAME, mutableListOf(onto.app, app.app))
+                }
+                reorder { }
+                saveOrder()
+                return
+            }
+        }
         // The icon settles from under the finger into its cell.
         val finger = PointF(dragX - grabDx, dragY - grabDy + page.scrollY)
         dragging = null
@@ -694,7 +841,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private enum class Drag { NONE, UNDECIDED, PAGE, SCROLL, ICON }
     private var drag = Drag.NONE
     private var downX = 0f; private var downY = 0f; private var downPage = 0f; private var downScroll = 0f
-    private var downApp: AppInfo? = null
+    private var downApp: Tile? = null
     private var velocity: VelocityTracker? = null
     private var anim: ValueAnimator? = null
     /** Holding an icon enters edit mode and picks the icon up. */
@@ -705,21 +852,22 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         pickUp(app, downX, downY)
     }
 
-    private fun appAt(x: Float, y: Float): AppInfo? {
+    private fun tileAt(x: Float, y: Float): Tile? {
         if (y < pageTop() || y > pageBottom() || abs(pagePos - pagePos.roundToInt()) > 0.01f) return null
         val page = currentPage()
         val half = luna.px(Params.CELL) / 2
-        return page.apps.withIndex().firstOrNull { (i, _) -> val c = cellCentre(i); abs(x - c.x) < half && abs(y + page.scrollY - c.y) < half }?.value
+        return page.tiles.withIndex().firstOrNull { (i, _) -> val c = cellCentre(i); abs(x - c.x) < half && abs(y + page.scrollY - c.y) < half }?.value
     }
 
     private fun deleteAt(x: Float, y: Float): AppInfo? {
         if (!editing) return null
         val page = currentPage()
         val r = luna.px(Params.DELETE_BOX) / 2 + luna.px(6f)
-        return page.apps.withIndex().firstOrNull { (i, a) ->
+        return page.tiles.withIndex().firstOrNull { (i, t) ->
+            val a = (t as? Tile.App)?.app ?: return@firstOrNull false
             if (!a.userInstalled) return@firstOrNull false
             val d = deleteCentre(cellCentre(i)); abs(x - d.x) < r && abs(y + page.scrollY - d.y) < r
-        }?.value
+        }?.value?.let { (it as Tile.App).app }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -734,7 +882,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
                 downX = e.x; downY = e.y; downPage = pagePos; downScroll = page.scrollY
                 pressedDelete = deleteAt(e.x, e.y)?.id
                 donePressed = editing && doneTouchRect().contains(e.x, e.y)
-                downApp = if (pressedDelete == null && !donePressed) appAt(e.x, e.y) else null
+                downApp = if (pressedDelete == null && !donePressed) tileAt(e.x, e.y) else null
                 highlightedTab = if (donePressed) -1 else tabAt(e.x, e.y)
                 if (downApp != null && !editing) postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
                 tabHeld = false; addRevealedByThisPress = false
@@ -815,7 +963,11 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             return
         }
         if (editing) return  // icons don't launch while being arranged
-        appAt(x, y)?.let { showLaunchFeedback(it); onLaunch(it) }
+        when (val t = tileAt(x, y)) {
+            is Tile.App -> { showLaunchFeedback(t.app); onLaunch(t.app) }
+            is Tile.Group -> onOpenGroup(t, groupScreenCentre(t))
+            null -> {}
+        }
     }
 
     private fun animatePage(target: Int, ms: Long, easing: android.animation.TimeInterpolator) {

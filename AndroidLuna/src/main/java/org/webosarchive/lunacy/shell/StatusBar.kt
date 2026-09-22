@@ -319,8 +319,13 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
         super.onDetachedFromWindow()
     }
 
-    /** Reads everything the info icons show from Android's own state. */
+    /**
+     * Reads everything the info icons show from Android's own state. Bluetooth needs only
+     * `BLUETOOTH` on API 21; `BLUETOOTH_CONNECT` from API 31 is a ratchet item
+     * (Docs/architecture.md), and a refusal is caught below.
+     */
     @Suppress("DEPRECATION")
+    @SuppressLint("MissingPermission")
     private fun updateInfo() {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager

@@ -526,6 +526,10 @@ so it has no icon but still runs, still answers `listApps` and can still be laun
 - **Android's settings, written for real (ratchet item).** `WRITE_SETTINGS` is granted at
   install while Lunacy targets API 21. From API 23 it needs the user's consent, so a later
   target has to ask before Screen & Lock's brightness and timeout will take.
+- **Bluetooth state for the status bar (ratchet item).** The Bluetooth icon reads the adapter
+  and its A2DP and headset connections with `BLUETOOTH`, a normal permission on API 21. From
+  API 31 that needs `BLUETOOTH_CONNECT`, which the user grants; until it is asked for, the
+  status bar catches the refusal and shows no Bluetooth icon.
 
 ### Exhibition
 

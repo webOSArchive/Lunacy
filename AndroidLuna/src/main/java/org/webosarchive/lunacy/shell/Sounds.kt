@@ -67,6 +67,63 @@ class Sounds(private val context: Context, private val server: AppServer) {
         }
     }
 
+    /**
+     * webOS's battery-charged sound: LunaSysMgr's StatusBarBattery played
+     * /usr/palm/sounds/battery_full.mp3 on the notifications class, uncut, when the battery
+     * reached 100 % having been below 95.
+     */
+    fun batteryFull() = playAsset("battery_full.mp3", AudioManager.STREAM_NOTIFICATION)
+
+    private fun playAsset(name: String, stream: Int) {
+        val player = MediaPlayer()
+        try {
+            @Suppress("DEPRECATION") player.setAudioStreamType(stream)
+            context.assets.openFd("luna/sounds/$name").use { player.setDataSource(it.fileDescriptor, it.startOffset, it.length) }
+            player.setOnCompletionListener { release(it) }
+            player.setOnErrorListener { p, _, _ -> release(p); true }
+            player.prepare(); player.start()
+            playing += player
+        } catch (e: Exception) {
+            Log.w(AppServer.TAG, "sound $name: $e")
+            player.release()
+        }
+    }
+
+    // ---- feedback ----
+
+    /**
+     * LunaSysMgr's feedback sounds (SoundPlayerPool::playFeedback): short samples preloaded
+     * into PulseAudio, here into a SoundPool on Android's system stream, whose volume is
+     * Android's and which the ringer's silent mode mutes. webOS played them unless its
+     * `systemSounds` preference was turned off, and it isn't set on the reference TouchPad.
+     * Android's "Touch sounds" is deliberately not read: it is Android's own click, and it is
+     * off out of the box on the reference tablet, so reading it would mean never hearing these.
+     */
+    @Suppress("DEPRECATION")
+    private val pool by lazy { android.media.SoundPool(2, AudioManager.STREAM_SYSTEM, 0) }
+    private val samples = HashMap<String, Int>()
+    private val loaded = HashSet<Int>()
+    private val pending = HashMap<Int, Boolean>()
+
+    /** Loads the samples ahead, as LunaSysMgr's were loaded at boot, so the first play isn't late. */
+    fun preload() {
+        pool.setOnLoadCompleteListener { p, id, status ->
+            if (status != 0) return@setOnLoadCompleteListener
+            loaded += id
+            if (pending.remove(id) == true) p.play(id, 1f, 1f, 1, 0, 1f)
+        }
+        for (name in FEEDBACK) sample(name)
+    }
+
+    private fun sample(name: String): Int = samples.getOrPut(name) {
+        context.assets.openFd("luna/sounds/feedback/$name.wav").use { pool.load(it, 1) }
+    }
+
+    fun feedback(name: String) {
+        val id = try { sample(name) } catch (e: Exception) { Log.w(AppServer.TAG, "feedback $name: $e"); return }
+        if (id in loaded) pool.play(id, 1f, 1f, 1, 0, 1f) else pending[id] = true
+    }
+
     private fun release(p: MediaPlayer) {
         if (!playing.remove(p)) return
         try { p.stop() } catch (e: Exception) {}
@@ -94,5 +151,7 @@ class Sounds(private val context: Context, private val server: AppServer) {
     private companion object {
         /** luna.conf's notificationSoundDuration. */
         const val NOTIFICATION_MS = 5000
+        /** The samples Lunacy has a use for; see assets/luna/sounds/NOTICE. */
+        val FEEDBACK = listOf("appclose", "birdappclose", "carddrag", "LauncherOpenApp", "LauncherCloseApp")
     }
 }

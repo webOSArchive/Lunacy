@@ -101,7 +101,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
         // The whole screen, so that a full-screen card can be laid out under the status bar;
         // every other card starts below it (CardLayer.inset).
-        cards = CardLayer(this, luna, this).apply { inset = luna.px(StatusBar.HEIGHT) }
+        cards = CardLayer(this, luna, this).apply { inset = luna.px(StatusBar.HEIGHT); feedback = { sounds.feedback(it) } }
+        sounds.preload()
         root.addView(cards, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
 
         // Overlays, bottom to top as in LunaCE's OverlayWindowManager: launcher, pill, dock.
@@ -132,6 +133,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
         // Notifications layer (reference §1.1): popup alerts, then the dashboard drop-down, under the status bar.
         statusBar = StatusBar(this, luna)
+        statusBar.onBatteryFull = { sounds.batteryFull() }
         val popups = PopupLayer(this, luna)
         root.addView(popups, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
         menuScrim = View(this).apply {
@@ -1279,6 +1281,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun openLauncher() {
         if (cards.maximized != null) return
         launcherOpen = true
+        // SystemUiController::setLauncherShown.
+        sounds.feedback("LauncherOpenApp")
         launcher.visibility = View.VISIBLE
         statusBar.setMode(StatusBar.Mode.LAUNCHER)
         launcher.translationY = launcher.height.toFloat()
@@ -1290,6 +1294,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun closeLauncher() {
         if (!launcherOpen) return
         launcherOpen = false
+        sounds.feedback("LauncherCloseApp")
         cards.visibility = View.VISIBLE
         launcher.animate().translationY(launcher.height.toFloat()).setDuration(LAUNCHER_MS).setInterpolator(Easing.InOutQuint)
             .withEndAction { if (!launcherOpen) { launcher.visibility = View.INVISIBLE; launcher.cancelLaunchFeedback(); exitEditMode() } }.start()

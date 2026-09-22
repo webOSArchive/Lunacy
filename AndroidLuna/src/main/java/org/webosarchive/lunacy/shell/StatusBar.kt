@@ -61,6 +61,10 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
     }
 
     private var batteryLevel = 11   // battery-0 … battery-11
+    /** The battery has just reached 100 %; see [Sounds.batteryFull]. */
+    var onBatteryFull: () -> Unit = {}
+    /** StatusBarBattery's s_playSoundWhenCharged: armed below 95 %, fired once at 100 %. */
+    private var soundWhenCharged = false
     private var charging = false
     private var full = false
     private var wifiLevel = -1      // -1 off, 0..3
@@ -135,6 +139,9 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
                     charging = plugged
                     full = plugged && (status == BatteryManager.BATTERY_STATUS_FULL || level >= scale)
                     batteryLevel = (level * 11 / scale).coerceIn(0, 11)
+                    val percent = level * 100 / scale
+                    if (percent < 95) soundWhenCharged = true
+                    if (soundWhenCharged && percent == 100) { soundWhenCharged = false; onBatteryFull() }
                 }
                 else -> updateWifi()
             }

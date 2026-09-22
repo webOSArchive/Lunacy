@@ -177,6 +177,16 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     }
 
     val cards = ArrayList<Card>()
+    /** Plays one of LunaSysMgr's feedback sounds; see [Sounds.feedback]. */
+    var feedback: (String) -> Unit = {}
+    /**
+     * LunaSysMgr's angry-card sounds are for a screen turned upside down only
+     * (CardWindowManager::playAngryCardSounds): a stretch as the card is pulled a way down,
+     * and a bird as it goes.
+     */
+    @Suppress("DEPRECATION")
+    private fun upsideDown() = display?.rotation == android.view.Surface.ROTATION_180
+    private var playedStretch = false
     /**
      * The status bar's height. The layer runs the whole height of the screen so that a
      * full-screen card can be laid out under the bar; every other card, and the card view's
@@ -432,7 +442,9 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
      * LunaSysMgr's closeWindow animates the card until its bottom edge is at the top, over
      * cardDeleteDuration - the angry card pulled off the bottom included.
      */
-    private fun throwAway(card: Card) {
+    private fun throwAway(card: Card, angry: Boolean = false) {
+        // lunaSystemSoundAppClose, "appclose", as the card goes.
+        feedback(if (angry && upsideDown()) "birdappclose" else "appclose")
         val start = card.lift
         val end = inset - card.height * card.scale / 2f - card.cy
         anim?.cancel()
@@ -487,6 +499,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
                 anim?.cancel(); anim = null
                 drag = Drag.UNDECIDED; downX = e.x; downY = e.y; downPos = position
                 dragCard = cardAt(e.x, e.y)
+                playedStretch = false
             }
             MotionEvent.ACTION_MOVE -> {
                 val dx = e.x - downX; val dy = e.y - downY
@@ -499,7 +512,11 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
                         position = (downPos - dx / pitch()).coerceIn(-0.3f, cards.size - 0.7f)
                         settleCardView()
                     }
-                    Drag.THROW -> { dragCard?.lift = dy; applyTransforms() }
+                    Drag.THROW -> {
+                        dragCard?.lift = dy; applyTransforms()
+                        // kAngryCardThreshold: 30 % of half the card area's height.
+                        if (!playedStretch && dy > areaHeight / 2f * 0.30f && upsideDown()) { playedStretch = true; feedback("carddrag") }
+                    }
                     Drag.MINIMIZE -> minimizeFollow(dy)
                     else -> {}
                 }
@@ -524,7 +541,8 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
                         val centreAboveTop = card.cy + card.lift < inset
                         // The angry card: let go with its centre below the bottom of the screen.
                         val centreBelowBottom = card.cy + card.lift > height
-                        if (flung || centreAboveTop || centreBelowBottom) throwAway(card)
+                        if (flung || centreAboveTop) throwAway(card)
+                        else if (centreBelowBottom) throwAway(card, angry = true)
                         else animateTo(Params.SLIDE_MS, ::cardViewTarget)
                     }
                     Drag.MINIMIZE -> if (card != null) {

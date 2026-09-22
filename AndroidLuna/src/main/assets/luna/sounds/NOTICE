@@ -4,3 +4,15 @@ Apache License 2.0. Each is byte-identical to the file of the same name in /usr/
 the reference TouchPad (webOS CE 3.1.0), checked by MD5 on 2026-09-22. LunaSysMgr plays the
 first two as its "sysmgr_notification" and "sysmgr_alert" feedback samples, which are
 preloaded copies of them.
+
+battery_full.mp3: webOS's "battery charged" sound, from the same LunaCE sounds/ folder,
+Apache License 2.0; byte-identical to /usr/palm/sounds/battery_full.mp3 on the reference
+TouchPad, checked by MD5 on 2026-09-22.
+
+feedback/appclose.wav, birdappclose.wav, carddrag.wav, LauncherOpenApp.wav and
+LauncherCloseApp.wav: LunaSysMgr's feedback sounds, copied on 2026-09-22 from
+/usr/share/systemsounds/*.pcm on the reference TouchPad (webOS CE 3.1.0). They are HP webOS
+system sounds and are not in LunaCE's repository. The only change is a WAV header on
+the raw samples, whose format PulseAudio on the device reports as s16le, 1 channel, 44100 Hz
+(`pactl list samples`). Shipped as abandonware, like the Prelude fonts and the TouchPad
+wallpapers.

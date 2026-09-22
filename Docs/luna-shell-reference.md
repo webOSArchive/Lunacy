@@ -1406,6 +1406,22 @@ Not referenced by this code: `launcher-bg64`, `launcher-icon-64/72`, `superscrol
 
 Numbered as referenced in the text.
 
+**Measured corrections, 2026-09-22** (luna-deltas.md has the detail). Where the text above says
+otherwise, these win:
+
+- §4.2 info icons: right to left the order is RSSI, WAN, **Bluetooth, Wi-Fi**, … - Bluetooth
+  sits right of Wi-Fi. Dashboard icons are painted newest *leftmost*.
+- §4.2 search group: it takes **no** visible space beside the notification group on the device
+  (the notification group sits against the system group's separator).
+- §4.2 title: the title group's separator fades with its ▾ - in the card view there is none.
+- §2.6 angry card: it leaves off the *top*, like any close; its sounds are for UI orientation
+  Down, which is landscape upside down on the TouchPad's natively landscape panel.
+- §1.4: `sysUiEnableNextPrevGestures` reads **true** on the reference device.
+- Emulated card: the backdrop is #0F0F0F (`emucard-bg.png` isn't on the device); the keyboard
+  button is placed from the card's corner; in the card view there is no phone frame and the page
+  is drawn (2 − scale) times its size; the main bar shows the carrier string.
+- Dashboard and banner icons without their own fall back to the app's grey mini icon.
+
 1. **Q1 — resolved.** The reference TouchPad has `/etc/palm/luna-platform.conf` with the topaz
    values (Active 0.55, NonActive 0.50, RotFactor 90, Gap 30, XDistance 0.35,
    VirtualKeyboardEnabled true); §0.2 and §2 now use them. Still unknown: whether
@@ -1432,8 +1448,8 @@ Numbered as referenced in the text.
 7. **Q7 — Launch animation look.** See §2.5; confirm by recording a launch on the device. **Answered 2026-09-22**
    (luna-deltas.md A7): a card whose app is slow waits in the card view with its pulsing icon
    and maximizes on `stageReady`.
-8. **Q8 — Dashboard row order and insertion animation** in menu (tablet) mode were not fully
-   traced ([DashboardWindowContainer.cpp#L540-L640](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/notifications/DashboardWindowContainer.cpp#L540)).
+8. **Q8 — Dashboard row order: answered 2026-09-22** from `layoutAllWindowsInMenu`: newest on
+   top. The insertion animation is still untraced ([DashboardWindowContainer.cpp#L540-L640](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/notifications/DashboardWindowContainer.cpp#L540)).
 9. **Q9 — Virtual keyboard geometry** (heights per size, candidate bar) was not analysed; Lunacy
    will use Android's IME, but the positive-space/keyboard interplay matters (§1.2).
 10. **Q10 — Density: decided** 1 TouchPad px = 1 dp (Lunacy tablet = 600×960 dp). Open: whether
@@ -1446,10 +1462,14 @@ Numbered as referenced in the text.
 13. **Q13 — `launcher-touch-feedback.png` path.** OverlayWindowManager loads it from the images root
     ([OverlayWindowManager.cpp#L1989](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/launcher/OverlayWindowManager.cpp#L1989)),
     where the repo has no such file; the device image set may differ.
-14. **Q14 — Launcher grid row width.** The width passed to the icon layout was not traced, so the
-    exact column spacing on a 1024-wide page is an estimate (§3.6); portrait column count too.
-15. **Q15 — System menu internals** (row contents, sliders, Wi-Fi list) are QML files that were not
-    traced beyond the frame; read `uiComponents/SystemMenu/*.qml` when building that menu.
+14. **Q14 — Launcher grid row width: answered 2026-09-22.** The row width is the whole page
+    width, and the spacing adjustment keeps counting `MaxIconsPerRow` (7) when fewer fit:
+    `free = W − 128(n+1) + 84`, gap `⌊free/(n−1)⌋`. Measured on the reference TouchPad in
+    portrait: 5 icons, 149 px apart, as the formula gives.
+15. **Q15 — System menu internals:** the date, battery and brightness rows were read from the
+    device's `uiComponents/SystemMenu/*.qml` on 2026-09-22 and built (300 wide, clipped 7 px in
+    and 14 up, rows 42 px, headers 14 px in, Prelude 18 px #AAA; the slider per `Slider.qml`).
+    The Wi-Fi, VPN, Bluetooth, airplane, rotation-lock and mute rows are still to read.
 16. **Q16 — Banner timing constants in stock.** Banner show times (2 s / 5 s) and 1 s
     animations are read from LunaCE; assumed stock but not checked against the binary.
 17. **Q17 — Dock `backgroundOpacity`.** The fade animation exists but nothing paints with it

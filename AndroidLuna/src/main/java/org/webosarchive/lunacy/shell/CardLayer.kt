@@ -842,7 +842,18 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 drag = if (e.y > height - luna.px(Params.EDGE)) Drag.UNDECIDED else Drag.NONE
-                downX = e.x; downY = e.y
+                downX = e.x; downY = e.y; lastX = e.x; lastY = e.y
+                ignoring = false
+                // The gesture dead zone (SystemUiController, sysUiEnableGestureDeadzone, on by
+                // default and with the edge gestures on, as the reference TouchPad has them): a
+                // touch that starts in the 15 px band at the bottom, or at the left or right
+                // below the status bar, never reaches the app, so a swipe up can't press a
+                // toolbar button on its way.
+                val edge = luna.px(Params.EDGE)
+                if (e.y >= height - 1 - edge || (e.y > inset && (e.x <= edge || e.x >= width - 1 - edge))) {
+                    dragCard = max
+                    return true
+                }
             }
             MotionEvent.ACTION_MOVE -> if (drag == Drag.UNDECIDED && downY - e.y >= luna.px(Params.TRIGGER) && downY - e.y > abs(e.x - downX)) {
                 drag = Drag.MINIMIZE; dragCard = max
@@ -871,6 +882,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        if (maximized != null && drag != Drag.MINIMIZE) return deadZoneTouch(e)
         if (e.actionMasked == MotionEvent.ACTION_DOWN) ignoring = activating != null
         if (ignoring) return true
         if (velocity == null) velocity = VelocityTracker.obtain()
@@ -958,6 +970,23 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
                 drag = Drag.NONE; dragCard = null
             }
         }
+        return true
+    }
+
+    /**
+     * A touch that began in the dead zone of a maximized card: the app never sees it. One from
+     * the bottom band is still the swipe up.
+     */
+    private fun deadZoneTouch(e: MotionEvent): Boolean {
+        val max = maximized ?: return true
+        if (e.actionMasked == MotionEvent.ACTION_MOVE && drag == Drag.UNDECIDED &&
+            downY - e.y >= luna.px(Params.TRIGGER) && downY - e.y > abs(e.x - downX)) {
+            drag = Drag.MINIMIZE; dragCard = max
+            cards.forEach { it.visibility = View.VISIBLE }
+            if (velocity == null) velocity = VelocityTracker.obtain()
+            velocity!!.addMovement(e)
+        }
+        if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL) { drag = Drag.NONE; dragCard = null }
         return true
     }
 

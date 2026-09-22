@@ -276,6 +276,8 @@ behaviours hang off that. Do them in this order; each is independent of the next
 
 ### B2. The bottom-edge gesture: flick, not follow, and the dead zone
 
+**Done 2026-09-22.** codepoet chose to keep the fluid mode (recorded in the architecture doc). The dead zone is in: measured in Lunacy, taps at x 5, x 795 and the bottom row never reach the page, x 20 does, and the swipe up still minimizes. The device's `sysUiEnableNextPrevGestures` reads **true** (`getPreferences`), which is what turns the dead zone on - and which contradicts D's "left/right edge app-switch gestures ... off on the reference device". Open for codepoet: does a swipe in from the left or right edge switch cards on the reference TouchPad?
+
 - **LunaCE, on the reference device:** `sysUiGestureDetection = 0`, so the swipe up is a
   *flick*: nothing moves until the finger lifts with a qualifying flick (25–100 px per touch
   update), then `handleUpSwipe` runs. The fluid, card-shrinks-with-the-finger mode is setting

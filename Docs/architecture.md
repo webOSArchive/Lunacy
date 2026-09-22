@@ -75,8 +75,8 @@ styling target is **LunaCE**, with stock TouchPad 3.0.5 as the reference where L
 doesn't differ. It doesn't run LunaSysMgr or any Palm code. The webOS look and feel *is* the
 product; being "close enough" is not the goal.
 
-- **Card view.** Live cards that can be thrown away with a swipe up, reordered, and (later)
-  stacked.
+- **Card view.** Live cards that can be thrown away with a swipe up, stacked in groups the
+  way LunaSysMgr grouped an app's cards, and reordered with a tap-and-hold.
 - **Full screen and buttons.**
   - Lunacy runs in Android's immersive sticky mode, so the whole screen is the shell. A swipe
     from the edge shows Android's buttons for a moment.
@@ -84,7 +84,14 @@ product; being "close enough" is not the goal.
     back button), in LunaCE's order: close what's open on top, else minimize the maximized
     card, else toggle the launcher.
   - A swipe up from the bottom edge minimizes, as in LunaCE (15 px edge band, 15 px
-    trigger).
+    trigger). **A deliberate difference:** the card follows the finger down to the card view
+    (LunaCE's fluid mode, `sysUiGestureDetection` 2). The reference TouchPad has that setting
+    at 0: nothing moves until the finger lifts with a flick. codepoet chose the fluid mode
+    on 2026-09-22.
+  - The gesture dead zone is the device's: a touch that starts in the 15 px band at the
+    bottom, or at the left or right edge below the status bar, never reaches a maximized
+    app (`SystemUiController`, `sysUiEnableGestureDeadzone`; the reference TouchPad has the
+    edge gestures on, which is what switches it on).
 - **Proportions.** Shell sizes are in TouchPad pixels.
   - On tablets, one TouchPad px is (screen short side ÷ 768) device pixels, rounded to a
     whole number: 1 on the HP 10 G2.

@@ -320,6 +320,11 @@ product; being "close enough" is not the goal.
     `-webkit-palm-mouse-target: ignore` - webOS's own property for an element that takes no
     touches - becomes `pointer-events: none`. See [fix-log.md](fix-log.md) for what each one
     was found by.
+  - **A card holds its space while the app loads.** webOS put a card in the switcher as soon
+    as an app was launched, with the app's own `splashicon` on a dark background until it had
+    drawn. Lunacy draws the same placeholder (`CardSplash`), and the page tells the shell when
+    it has actually put a frame up - not when the framework announces itself, which is earlier
+    than it sounds.
   - **An app that was written for a phone gets one.** `appinfo.json`'s `uiRevision` is how an
     app says which screen it was laid out for, and a TouchPad ran an app that didn't say `2`
     in a phone-sized card - LunaSysMgr's `Window::Type_Emulated_Card`, drawn as a little phone

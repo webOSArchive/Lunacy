@@ -36,7 +36,12 @@ class Card(
     emulatedSize: Pair<Int, Int>? = null,
     /** LunaCE's emucard-device-frame.png, drawn behind an emulated card's page. */
     private val frame: android.graphics.Bitmap? = null,
+    /** The loading placeholder, over the page until the app has drawn; see [CardSplash]. */
+    private val splash: CardSplash? = null,
 ) : FrameLayout(context) {
+    /** The app has drawn: fade the placeholder away. Does nothing once it has gone. */
+    fun appIsReady() = splash?.dismiss()
+
     /**
      * The phone an emulated card's page sits in, drawn centred on the page exactly as
      * LunaSysMgr draws it: `EmulatedCardWindow::paintBase` centres emucard-device-frame.png
@@ -63,6 +68,10 @@ class Card(
             // The tablet's screen around the phone, as the device draws it.
             setBackgroundColor(android.graphics.Color.BLACK)
         }
+        // Over the page, and the same size as it, so an emulated card's placeholder sits in
+        // the phone rather than across the whole card.
+        splash?.let { addView(it, LayoutParams(window.layoutParams.width, window.layoutParams.height,
+            (window.layoutParams as LayoutParams).gravity)) }
         outlineProvider = object : ViewOutlineProvider() {
             // Small corners in card view; maximized cards are plain rectangles (Docs/luna-shell-reference.md §2.4).
             override fun getOutline(v: View, o: Outline) = o.setRoundRect(0, 0, v.width, v.height, if (scale >= 0.999f) 0f else cornerRadius)

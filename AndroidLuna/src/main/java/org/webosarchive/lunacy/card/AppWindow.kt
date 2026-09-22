@@ -30,6 +30,12 @@ interface WindowHost {
     fun onStageReady(window: AppWindow)
     /** Where media players fetch /media/internal files: MediaServer's loopback base URL. */
     fun mediaBase(): String
+    /**
+     * The page has put a frame on the screen. webOS took its loading card away when the app
+     * had actually drawn, not when the framework said it was ready: Mojo calls `stageReady`
+     * while the scene is still being built, and taking it away then shows a blank card.
+     */
+    fun onPageDrawn(window: AppWindow)
     /** PalmSystem.activate: bring the window's card forward. */
     fun activate(window: AppWindow)
     /** The page wants the virtual keyboard shown or hidden. */
@@ -255,6 +261,9 @@ class AppWindow(
 
         @JavascriptInterface
         fun stageReady() { main.post { stageReady = true; host.onStageReady(this@AppWindow) } }
+
+        /** The compat layer, once the page has actually produced a frame. */
+        @JavascriptInterface fun pageDrawn() { main.post { host.onPageDrawn(this@AppWindow) } }
 
         /** The network shim (assets/lunacy/net.js): cross-origin XHRs, sent natively. */
         @JavascriptInterface fun netSend(id: Int, request: String) = net.send(id, request)

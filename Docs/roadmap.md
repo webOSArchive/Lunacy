@@ -40,6 +40,21 @@ show live data. Per-app results and every fix, with the layer it landed in, are 
   It also made ninety lines of compat layer redundant: fixed elements were being corrected one
   by one against the card, and with the viewport right their containing block *is* the card.
 
+- **A card being launched holds its space.** webOS put a card in the switcher the moment an
+  app was launched and filled it with the app's own `splashicon` on a dark background, a glow
+  pulsing behind it, until the app had drawn - §2.4, and codepoet's screenshot of Palm's Clock
+  starting. Lunacy showed an empty card. The signal for when to take it away is the
+  interesting part: `stageReady` is no good, because Mojo calls it while it is still building
+  the first scene, so the compat layer waits for the page to have something laid out instead.
+
+  An app with no `splashicon` of its own falls back to its launcher icon at half again, as the
+  device does; webOS IAmA reddit ships a `splashicon` that is a single fully transparent
+  colour, so it shows the glow and nothing else - on a TouchPad too, as codepoet confirmed.
+
+  **Still different:** webOS created that card when the app was *launched*, and Lunacy creates
+  it when the app opens its window - so an app that declares `noWindow` (most Mojo apps) gets
+  its placeholder a little later than a device would.
+
 - **An app written for a phone now gets one.** `uiRevision` was read and passed through but
   never acted on, so every app got a full-size card - including one that on a TouchPad would
   have run in the phone simulator frame. Most of the catalogue predates the TouchPad and says
@@ -252,7 +267,6 @@ and the space the keyboard and Android's navigation bar cost a card. Both are in
   - card stacks/groups;
   - the status-bar system menu (wifi, brightness, battery, rotation lock), which is QML in
     LunaCE, per spec §4.3;
-  - the card-loading splash (§2.4);
   - Just Type search (the pill takes text, but nothing acts on it yet);
   - tuning scroll inertia;
   - the one remaining seam inside the Sampler's radio-button graphic.

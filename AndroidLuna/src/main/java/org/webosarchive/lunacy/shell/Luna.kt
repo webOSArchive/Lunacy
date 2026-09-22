@@ -33,6 +33,9 @@ class Luna(private val context: Context) {
     private val fonts = HashMap<String, Typeface>()
 
     /** TouchPad pixels to Android pixels. */
+    /** SplashIconSize, from the reference TouchPad's luna-platform.conf. */
+    val SPLASH_ICON_SIZE = 192
+
     fun px(tp: Float) = tp * density
     fun px(tp: Int) = (tp * density).toInt()
 
@@ -53,6 +56,22 @@ class Luna(private val context: Context) {
     /** An app's icon (bundled or installed), scaled like the Luna images; cached per version. */
     fun appIcon(app: org.webosarchive.lunacy.card.AppInfo): Bitmap? =
         bitmaps.getOrPut("icon:${app.id}:${app.version}") { decode(app.openIcon()) }
+
+    /**
+     * The icon for an app's loading card: its own `splashicon` at SplashIconSize, else its
+     * launcher icon at half again, capped at the same size (LunaCE's `CardLoading`; the size
+     * is 192 on a TouchPad, from luna-topaz.conf). In TouchPad px, scaled like the rest.
+     */
+    fun splashIcon(app: org.webosarchive.lunacy.card.AppInfo): Bitmap? =
+        bitmaps.getOrPut("splash:${app.id}:${app.version}") {
+            val size = px(SPLASH_ICON_SIZE)
+            val own = decode(app.openSplashIcon())
+            val bmp = own ?: appIcon(app) ?: return@getOrPut null
+            val want = if (own != null) size else minOf(size, (maxOf(bmp.width, bmp.height) * 1.5f).toInt())
+            val longest = maxOf(bmp.width, bmp.height)
+            if (longest <= 0 || longest == want) bmp
+            else Bitmap.createScaledBitmap(bmp, bmp.width * want / longest, bmp.height * want / longest, true)
+        }
 
     /** HP's Prelude fonts (assets/luna/fonts, shipped as abandonware); the system sans if one is missing. */
     fun font(name: String, fallbackStyle: Int = Typeface.NORMAL): Typeface = fonts.getOrPut(name) {

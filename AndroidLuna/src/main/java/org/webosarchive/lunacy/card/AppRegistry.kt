@@ -33,6 +33,12 @@ class AppInfo(
      */
     val androidSettings: String,
     /**
+     * appinfo.json's `splashicon`: the icon the shell shows on the placeholder card while the
+     * app is still loading. Empty if the app doesn't ship one, and then the launcher icon
+     * stands in - see [Luna.splashIcon].
+     */
+    val splashIcon: String,
+    /**
      * appinfo.json's `uiRevision`, 1 unless the app says 2 (LunaSysMgr clamps it to that
      * range: `ApplicationDescription.cpp`). It is how an app says which screen it was written
      * for. An app that doesn't say 2 was written for a Pre-sized screen, and a TouchPad ran it
@@ -57,6 +63,8 @@ class AppInfo(
     val url get() = AppServer.appUrl(id, main)
     val isWeb get() = type == "web"
     fun openIcon(): InputStream? = files.open("${Packages.APPS}/$id/$icon")
+    fun openSplashIcon(): InputStream? =
+        if (splashIcon.isEmpty()) null else files.open("${Packages.APPS}/$id/$splashIcon")
 
     /** The app's main page as a file:// path, the form webOS's bus answers with. */
     fun filePath(): String = "file:///media/cryptofs/apps/${Packages.APPS}/$id/$main"
@@ -137,6 +145,8 @@ class AppRegistry(private val files: AppFiles) {
             type = j.optString("type", "web"),
             version = j.optString("version", ""),
             androidSettings = j.optString("lunacyAndroidSettings", ""),
+            // Palm spells it all lower case; every app of theirs that has one writes it so.
+            splashIcon = j.optString("splashicon", j.optString("splashIcon", "")),
             // Palm's own apps write it as a number and some write it as a string, so read
             // either, and clamp to 1..2 as LunaSysMgr does.
             uiRevision = (j.opt("uiRevision")?.let { r ->

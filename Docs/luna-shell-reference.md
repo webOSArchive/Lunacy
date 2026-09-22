@@ -630,7 +630,7 @@ a ~1 dp anti-aliased edge; no rounding when maximized [inferred].
   `#484848 → #1E1E1E` ([#L270-L273](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/cards/CardLoading.cpp#L270)).
 * Icon: app `splashicon` scaled to SplashIconSize (192 on topaz), else launcher icon ×1.5 capped
   at that size, centred ([#L82-L98](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/cards/CardLoading.cpp#L82)).
-* Glow: `images/loading-glow.png` (228×228) centred behind the icon, opacity pulsing 0→1→0
+* Glow: `images/loading-glow.png` (**342×342** on the reference device, where the source says 228×228 - the shipped asset is the one to believe) centred behind the icon, opacity pulsing 0→1→0
   linearly in steps at 60 fps over 1000 ms, first pulse after 900 ms, then 1000 ms pause
   between pulses ([#L123-L134](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/cards/CardLoading.cpp#L123),
   [#L295-L321](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/cards/CardLoading.cpp#L295)).

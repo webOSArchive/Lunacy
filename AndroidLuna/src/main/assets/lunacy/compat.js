@@ -659,3 +659,38 @@ window.__lunacyFileUrl = function (u, media) {
 	window.addEventListener("resize", apply);
 	window.__lunacyViewport = apply;
 })();
+
+// Tell the shell when the page has actually drawn.
+//
+// webOS held a card's space with a loading card - the app's own icon on a dark background -
+// and took it away when the app had *drawn*, not when the framework announced itself. Mojo
+// calls PalmSystem.stageReady() while it is still building the first scene, so a card that
+// goes then is a blank one. Two animation frames after load is a frame that has been through
+// the compositor, which is as close as a page can get to saying "I am on the screen".
+(function () {
+	var N = window.LunacyNative;
+	if (!N || !N.pageDrawn) { return; }
+	var raf = window.requestAnimationFrame || window.webkitRequestAnimationFrame;
+	function sent() { try { N.pageDrawn(); } catch (e) {} }
+	/** Has the page put anything on the screen yet - any laid-out element in the body? */
+	function painted() {
+		var kids = document.body && document.body.children;
+		for (var i = 0; kids && i < kids.length; i++) {
+			var r = kids[i].getBoundingClientRect();
+			if (r.width > 0 && r.height > 0) { return true; }
+		}
+		return false;
+	}
+	// `load` is not it on its own: a framework builds its first scene in its own load
+	// handlers and afterwards, so a card let go then is a blank one. Waited for instead,
+	// frame by frame, until the page has something laid out - and given up on after a few
+	// seconds, because a card kept behind a placeholder for ever would be worse than a blank
+	// one.
+	function tell(tries) {
+		if (!raf) { sent(); return; }
+		if (painted() || tries <= 0) { raf(function () { raf(sent); }); return; }
+		raf(function () { tell(tries - 1); });
+	}
+	function start() { tell(180); }
+	if (document.readyState === "complete") { start(); } else { window.addEventListener("load", start); }
+})();

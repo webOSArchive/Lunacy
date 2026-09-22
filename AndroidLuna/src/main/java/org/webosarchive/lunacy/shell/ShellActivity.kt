@@ -265,7 +265,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             luna.px(org.webosarchive.lunacy.card.EmulatedCard.WIDTH.toFloat()).toInt(),
             luna.px((org.webosarchive.lunacy.card.EmulatedCard.HEIGHT - profile.positiveSpaceTopPadding).toFloat()).toInt())
         val card = Card(this, w, luna.px(CardLayer.Params.CORNER), emu,
-            if (emu == null) null else luna.image("emucard-device-frame.png"))
+            if (emu == null) null else luna.image("emucard-device-frame.png"),
+            // webOS held the card's space with the app's own icon until it had drawn.
+            registry.get(w.appId)?.let { CardSplash(this, luna, luna.splashIcon(it)) })
         cards.add(card)
         cards.openMaximized(card)
     }
@@ -374,7 +376,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (cards.cards.isEmpty()) onCardView()
     }
 
+    /** The app has drawn into its window: the loading placeholder can go. */
     override fun onStageReady(window: AppWindow) {}
+
+    /** The app has drawn: the loading placeholder on its card can go. */
+    override fun onPageDrawn(window: AppWindow) {
+        cards.cards.firstOrNull { it.window == window }?.appIsReady()
+    }
 
     override fun mediaBase() = mediaServer.base()
 

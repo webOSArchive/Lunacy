@@ -76,3 +76,11 @@ ever patched, that unimplemented services return real errors rather than fake su
 every compatibility fix is logged in [Docs/fix-log.md](Docs/fix-log.md) with the layer it landed
 in. [Docs/dev-workflow.md](Docs/dev-workflow.md) covers the devices, the reference TouchPad and
 how visual changes are checked.
+
+## Version and build number
+
+The version name (`versionName` in `AndroidLuna/build.gradle.kts`) is changed by hand, when
+codepoet decides. The build number (`versionCode`) counts itself: it is the number of commits
+behind the build plus 10, so every commit is a new build and version 0.2.0 started at build
+101. Device Info shows both. A build from a tree with uncommitted changes carries the last
+commit's number.

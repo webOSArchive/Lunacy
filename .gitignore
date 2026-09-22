@@ -14,6 +14,7 @@ Workbench/android/local.properties
 
 # Local-only assets: frameworks and apps under review, populated by AndroidLuna/fetch-assets.sh
 AndroidLuna/local-assets/
+AndroidLuna/local-test-apps/
 AndroidLuna/local-jni/
 
 # Gradle build output and local configuration

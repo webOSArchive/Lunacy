@@ -1,13 +1,16 @@
 #!/bin/sh
-# Populates AndroidLuna/local-assets/ from the workbench's local clones: the Enyo framework and
-# the apps that aren't bundled. Nothing here is committed.
+# Populates AndroidLuna/local-assets/ from the workbench's local clones (the frameworks every
+# build ships), and AndroidLuna/local-test-apps/ with the test apps (Glimpse, the Enyo samples,
+# settings apps not yet shipped), which only a build asked for them includes: ./gradlew
+# assembleDebug -PtestApps. A release build leaves them out. Nothing here is committed.
 # See Docs/android5-setup.md and Docs/roadmap.md.
 set -e
 cd "$(dirname "$0")"
 HERE=$(pwd)
 V=../Workbench/vendor
 L=local-assets
-rm -rf $L && mkdir -p $L/fw/enyo $L/apps
+T=local-test-apps
+rm -rf $L $T && mkdir -p $L/fw/enyo $T/apps
 cp -r $V/enyo-1.0 $L/fw/enyo/1.0 && rm -rf $L/fw/enyo/1.0/.git $L/fw/enyo/1.0/support/docs
 # Lunacy's changes to Enyo, as diffs against upstream: LunaRuntimes/enyo-1.0/CHANGES.md says what
 # each one is and why. A patch that no longer applies is a build failure, not a silent skip.
@@ -17,13 +20,13 @@ for patch in ../LunaRuntimes/enyo-1.0/patches/*.patch; do
         { echo "fetch-assets: $patch does not apply to stock Enyo" >&2; exit 1; }
     echo "enyo: applied $(basename "$patch")"
 done
-cp -r ../Workbench/apps-src/com.ingloriousapps.glimpse/usr/palm/applications/com.ingloriousapps.glimpse $L/apps/
+cp -r ../Workbench/apps-src/com.ingloriousapps.glimpse/usr/palm/applications/com.ingloriousapps.glimpse $T/apps/
 # Palm's own settings apps that Lunacy ships (Screen & Lock, Help) are committed under
 # assets/apps/ with their NOTICE, like Mojo and the fonts. Any others under
 # Workbench/vendor/settings-apps/ are copied here for testing and stay out of the repo.
 for a in $V/settings-apps/*; do
     id=$(basename "$a")
-    [ -d "$a" ] && [ ! -d "src/main/assets/apps/$id" ] && cp -r "$a" $L/apps/
+    [ -d "$a" ] && [ ! -d "src/main/assets/apps/$id" ] && cp -r "$a" $T/apps/
 done
 # Mojo, from the reference TouchPad. webOS's browser had the framework compiled in, so the
 # submission on disk carries only its assets and builtins/ carries the code; Lunacy serves
@@ -78,9 +81,9 @@ NOTICE
 # at the framework path installed apps use (what palm-package'd samples needed on a device too).
 for s in Sampler HelloWorld; do
     id=com.palmdts.enyo.$(echo $s | tr A-Z a-z)
-    cp -r $V/enyo-1.0/support/examples/$s $L/apps/$id
-    sed -i 's#"../../../../1.0/framework/enyo.js"#"/usr/palm/frameworks/enyo/1.0/framework/enyo.js"#' $L/apps/$id/index.html
-    sed -i "s#\"id\": *\"[^\"]*\"#\"id\": \"$id\"#" $L/apps/$id/appinfo.json
+    cp -r $V/enyo-1.0/support/examples/$s $T/apps/$id
+    sed -i 's#"../../../../1.0/framework/enyo.js"#"/usr/palm/frameworks/enyo/1.0/framework/enyo.js"#' $T/apps/$id/index.html
+    sed -i "s#\"id\": *\"[^\"]*\"#\"id\": \"$id\"#" $T/apps/$id/appinfo.json
 done
 
 # JS services. Node is nodejs-mobile 0.3.3 (Node 12.19): the last release whose libnode.so loads

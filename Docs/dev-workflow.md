@@ -17,7 +17,8 @@ out on the reference devices. Changes made to the Android device are listed sepa
 | `LunaRuntimes/enyo-1.0/` | Lunacy's changes to Enyo, as patches against upstream, with CHANGES.md as the fork's change log | yes |
 | `LunaRuntimes/mojo/` | Lunacy's changes to Palm's Mojo, likewise, with CHANGES.md explaining how Mojo is packaged | yes |
 | `LunaKeyboard/` | The companion keyboard APK, built by the same Gradle root and depending on nothing in Lunacy ([its README](../LunaKeyboard/README.md)) | yes |
-| `AndroidLuna/local-assets/` | Stock Enyo 1.0 with those patches applied, and third-party test apps (App Museum, Glimpse, Enyo samples), populated by `AndroidLuna/fetch-assets.sh` | no |
+| `AndroidLuna/local-assets/` | Stock Enyo 1.0 with those patches applied, Mojo and the other frameworks, populated by `AndroidLuna/fetch-assets.sh` | no |
+| `AndroidLuna/local-test-apps/` | Test apps (Glimpse, the Enyo samples, settings apps not yet shipped), also from `fetch-assets.sh`; in the APK only with `./gradlew assembleDebug -PtestApps` | no |
 | `AndroidLuna/tools/gen-fonts-css.py` | Regenerates `fonts.css` from the shipped Prelude files | yes |
 | `AndroidLuna/tools/node-launcher.cpp` | Node's `main()`, built by `fetch-assets.sh` into `liblunacynode.so` for JS services | yes |
 | `AndroidLuna/local-jni/` | `libnode.so` (nodejs-mobile 0.3.3), `libc++_shared.so` and the launcher, from `fetch-assets.sh` | no |
@@ -26,7 +27,7 @@ out on the reference devices. Changes made to the Android device are listed sepa
 | `Workbench/vendor/` | Local clones: enyo-1.0, LunaCE, luna-sysmgr, webos-catalog-service, and files pulled from the TouchPad (frameworks, `/etc/palm`, fonts, wallpapers, a WebView 64 APK) | no |
 | `Workbench/vendor/palm-apps/` | Palm's own apps pulled off the reference TouchPad (Clock, Exhibition, Video Player), before they are bundled | no |
 | `Workbench/vendor/touchpad/sysmgr-qml/` | The device's own `/usr/palm/sysmgr/uiComponents` QML, which is what the shell's Exhibition faces are drawn from | no |
-| `Workbench/vendor/settings-apps/` | Palm's settings apps not yet shipped; `fetch-assets.sh` copies the ones that aren't already in `assets/apps/` into `local-assets/apps/` for testing | no |
+| `Workbench/vendor/settings-apps/` | Palm's settings apps not yet shipped; `fetch-assets.sh` copies the ones that aren't already in `assets/apps/` into `local-test-apps/apps/` for testing | no |
 | `Workbench/results/` | Screenshots and logs | no |
 | `Meta/` | codepoet's artwork, including the launcher icon the mipmaps are made from | yes |
 | `out/` | Where both modules' APKs are copied when they build | no |

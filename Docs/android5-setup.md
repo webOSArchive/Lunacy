@@ -120,6 +120,19 @@ is 0.0.3, which adds two coloured swatches for the camera; nothing else on eithe
 changed. `…lunacy.emuprobe` was added to both on 2026-09-22 - it is the one probe with no
 `uiRevision`, so it runs in the phone-sized card and records what such an app is told.
 
+**2026-09-22, the shell's B items.** On the **tablet**: `…lunacy.winprobe` updated to 0.0.7
+(`card` and `dash` actions) and `…lunacy.slowprobe` reinstalled, both with `--es install`;
+Lunacy's launcher preferences now hold a user-arranged APPS page (Notify Test before Clock)
+and the installed apps moved to DOWNLOADS by the new placement rule; the brightness slider
+was tried and `screen_brightness` put back to 191. `accelerometer_rotation` is **1** again
+(the tablet rotates; `user_rotation` 0), which supersedes the note above - rotations for
+screenshots were set with `user_rotation` and undone. Android's "Touch sounds"
+(`sound_effects_enabled`) is 0 out of the box and was left alone. On the **TouchPad**:
+`…lunacy.winprobe` 0.0.7, `…lunacy.headprobe` 0.0.1 (a `noWindow` probe) and
+`org.webosarchive.lunacy.notifytest` 1.0.0 (Lunacy's bundled test app, packaged from
+`AndroidLuna/src/main/assets/apps`) installed; the wallpaper was set to a 600 × 400 test image
+and put back to `22.jpg`, and the test image deleted from the wallpaper store.
+
 ## Display density
 
 The tablet is 213 dpi, which Android reports as a density of 1.33125. Chromium lays a card's

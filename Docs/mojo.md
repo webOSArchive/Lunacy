@@ -301,9 +301,25 @@ top and takes the touches. Only `-webkit-palm-mouse-target: ignore` on the title
 reach the back button underneath, and without it drPodder's back button ran the *title's*
 handler: it showed and hid the playhead instead of leaving the scene.
 
-Lunacy translates it to `pointer-events: none` as a serve-time CSS transform, which is the
-same idea in a property this engine has, down to a child being able to opt back in. Only
-`ignore` is translated; another value would be a guess.
+Lunacy translates it to `pointer-events: none` as a serve-time CSS transform - with one
+difference that has to be undone. **`pointer-events` inherits and `-webkit-palm-mouse-target`
+does not.** webOS's is a flag on the element itself, so an element that takes no touches still
+has children that do, and that is exactly how Mojo uses it on `.palm-menu`, whose *buttons*
+are what a person taps. Translating it on its own made the whole view menu untouchable, and a
+tap there fell through to the list row beneath, so drPodder's back arrow pushed an episode
+into view instead of going back. Each rule therefore gets a companion putting the subtree
+back:
+
+```css
+.palm-menu { … ; pointer-events: none }
+.palm-menu > * { pointer-events: auto }
+```
+
+Only `ignore` is translated; another value would be a guess.
+
+**`-webkit-palm-overflow`** is the other one, and Mojo handles its own absence:
+`Mojo.Widget.Scroller` sets `overflow: -webkit-palm-overflow` where it can and `overflow:
+hidden` where it can't. The fallback costs the scene its height - see below.
 
 ## Files that were not files
 

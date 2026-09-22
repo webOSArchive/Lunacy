@@ -1,0 +1,27 @@
+--- a/submissions/506/stylesheets/global-base.css
++++ b/submissions/506/stylesheets/global-base.css
+@@ -11,6 +11,24 @@
+   color: #000;
+ }
+ 
++/*
++   A scene is at least as tall as the card it is in.
++ 
++   Lunacy's change. A scene element is the content of Mojo's scene scroller, which is given
++   the card's height; the scene itself is left at its content's height. On a device the
++   scroller is `overflow: -webkit-palm-overflow`, webOS's own scrolling model, and the scene
++   fills it - which is what every `height: 100%` child of a scene depends on. Chromium has no
++   such value, the scroller falls back to `overflow: hidden`, and a scene whose own content is
++   short collapses to nothing: drPodder's splash paints its background with a
++   `position: absolute; height: 100%` div inside the scene, so it came out as a grey card with
++   the logo adrift in it instead of the reference device's full-bleed gradient.
++ 
++   min-height rather than height, so a scene taller than the card still scrolls.
++ */
++.palm-scene {
++  min-height: 100%;
++}
++
+ body {
+   min-height: 480px;
+   height: 100%;

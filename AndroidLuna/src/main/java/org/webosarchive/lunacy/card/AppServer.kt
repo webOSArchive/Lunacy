@@ -512,6 +512,8 @@ object CssTransforms {
     private val rule = Regex("\\{[^{}]*\\}")
     private val borderImage = Regex("-webkit-border-image\\s*:(?!\\s*none)", RegexOption.IGNORE_CASE)
     private val mouseTarget = Regex("-webkit-palm-mouse-target\\s*:\\s*ignore", RegexOption.IGNORE_CASE)
+    /** Selector and body, so a rule can be rewritten with its selector in hand. */
+    private val selectorRule = Regex("([^{}]+)\\{([^{}]*)\\}")
 
     fun apply(s: InputStream): InputStream =
         ByteArrayInputStream(mouseTargetIgnore(borderImageNeedsStyle(s.bufferedReader().readText())).toByteArray())
@@ -531,14 +533,29 @@ object CssTransforms {
      * leaving the scene. The same applies to Mojo's menus and lists, and apps use the
      * property themselves (drPodder three times).
      *
-     * `pointer-events: none` is the same idea in a property Chromium has, down to a child
-     * being able to opt back in (`pointer-events: auto` for `-webkit-palm-mouse-target:
-     * accept`). Only `ignore` is ever used - the whole of Mojo, mojocommon and the apps
-     * looked at use no other value - so only `ignore` is translated, and anything else is
-     * left alone to be noticed rather than guessed at.
+     * `pointer-events: none` is the same idea in a property Chromium has, with one
+     * difference that matters: **it inherits, and webOS's did not.** `-webkit-palm-mouse-target`
+     * is a flag on the element itself, so an element that takes no touches still has children
+     * that do - which is the whole point of the way Mojo uses it on `.palm-menu`, whose
+     * buttons are what a person taps. Translating it to `pointer-events: none` alone made the
+     * entire view menu untouchable, and drPodder's episode list lost its back button. So each
+     * rule also gets a companion putting its children back: `sel > * { pointer-events: auto }`,
+     * which - because the property inherits - restores the whole subtree and leaves only the
+     * element itself transparent.
+     *
+     * Only `ignore` is ever used - the whole of Mojo, mojocommon and the apps looked at use no
+     * other value - so only `ignore` is translated, and anything else is left alone to be
+     * noticed rather than guessed at.
      */
-    fun mouseTargetIgnore(css: String): String =
-        mouseTarget.replace(css) { m -> m.value + ";pointer-events:none" }
+    fun mouseTargetIgnore(css: String): String = selectorRule.replace(css) { m ->
+        val body = m.groupValues[2]
+        if (!mouseTarget.containsMatchIn(body)) m.value else {
+            val selector = m.groupValues[1]
+            val children = selector.split(',').joinToString(",") { it.trim() + " > *" }
+            m.groupValues[1] + "{" + body.trimEnd().trimEnd(';') + ";pointer-events:none}" +
+                children + "{pointer-events:auto}"
+        }
+    }
 
     /**
      * 2011 WebKit drew -webkit-border-image whatever the border-style; newer Chromium

@@ -1,0 +1,11 @@
+{
+	"id": "org.webosarchive.lunacy.headprobe",
+	"version": "0.0.1",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Head Probe",
+	"icon": "icon.png",
+	"noWindow": true,
+	"uiRevision": 2
+}

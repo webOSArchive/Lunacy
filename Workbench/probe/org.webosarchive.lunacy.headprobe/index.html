@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head>
+<title>Head Probe</title>
+<script src="/usr/palm/frameworks/enyo/1.0/framework/enyo.js" type="text/javascript"></script>
+</head>
+<body>
+<script type="text/javascript">
+// Lunacy's headless probe (Docs/luna-deltas.md B10): a noWindow app whose headless page opens
+// its first card only after {"delay": ms} (3000 by default), to see when the shell shows a card.
+var p = enyo.windowParams || {};
+console.log("LUNACYPROBE headless start");
+setTimeout(function () {
+	console.log("LUNACYPROBE opening card");
+	enyo.windows.openWindow("card.html", "main", {});
+}, p.delay || 3000);
+</script>
+</body>
+</html>

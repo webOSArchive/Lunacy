@@ -421,6 +421,8 @@ On the roadmap; the pointers so it can be done without re-reading the C++:
 
 ### B10. The launching card at launch, not window-open
 
+**Not a delta - moved to D.** Measured 2026-09-22 with `Workbench/probe/org.webosarchive.lunacy.headprobe` (a `noWindow` app that opens its card after `{"delay": ms}`): launched with a 15 s delay, the reference TouchPad showed no card at all until the app opened one (LunaSysMgr's log: `APP START ... type: headless` at 21:42:45, `type: card` at 21:43:01; screenshots in between show the card view unchanged). `prepareAddWindow` runs when a window is created, and a headless app has none until it opens it - which is when Lunacy shows it too.
+
 On the roadmap; the pointer: LunaSysMgr creates the card in
 `CardWindowManager::prepareAddWindow` when the *launch* is requested, before the app's page
 exists ([CardWindowManager.cpp#L709](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/cards/CardWindowManager.cpp#L709));
@@ -531,6 +533,8 @@ the media indexer's db8 kinds. All in [fix-log.md](fix-log.md) "Known gaps".
 - **The lock screen** (`Src/lunaui/lockscreen`), **brick/USB screens, boot animation,
   first-use, emergency, Touchstone dock detection, PDK card hosting** (`CardHostWindow`).
   Android's, or later layers (architecture doc, "Later layers").
+- **A card for a `noWindow` app at launch** (was B10). Measured: the reference TouchPad shows
+  nothing until the headless app opens its first card, as Lunacy does.
 - **Persistent dashboards** (was in B4). `DashboardWebApp::attach` honours the `persistent`
   stage argument only for `com.palm.systemui`; no app can make one.
 - **Transient alerts** (was in B4). The only transient alert is LunaSysMgr's own volume display

@@ -16,9 +16,8 @@ reference TouchPad or against LunaCE's own source rather than guessed at: the ac
 holds the page's focus (without it a WebView dispatches no focus events at all, so nothing an
 app focused itself raised the keyboard); putting the keyboard away takes the field's focus with
 it, as `IMEController::hideIME` did, which is the only way a Mojo app can tell; the keyboard's
-shift reaches the number row's symbols, as `TabletKeymap::map` says it should, and shift-lock
-holds through the letters but ends on the first symbol, which is codepoet's recollection of the
-device against what the source reads; Device Info's
+shift reaches the number row's symbols, as `TabletKeymap::map` says it should, while shift-lock
+does not, as `isShiftActive` against `isCapActive` says it should not; Device Info's
 rows take their metrics and their disabled grey from Mojo; and a framework's widget art is
 asked for before the page needs it, which is what stopped the widgets popping in. Two
 differences are recorded and accepted rather than fixed - the card animations' dropped frames,

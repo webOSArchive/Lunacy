@@ -120,8 +120,13 @@ class AppWindow(
      */
     @Volatile var statusBarColor: Int? = null
         private set
-    /** Attributes the page announced for the window it is about to open. */
-    @Volatile private var pendingAttributes = JSONObject()
+    /**
+     * Attributes the page announced for the windows it is about to open, in order. A queue,
+     * because each window.open announces on the bridge's thread and the window is created
+     * later on this one: a page that opens several at once (an app putting up two dashboards)
+     * would otherwise hand the last one's attributes to the first.
+     */
+    private val pendingAttributes = java.util.concurrent.ConcurrentLinkedQueue<JSONObject>()
     @Volatile private var destroyed = false
     /** This page's open bus calls, by bridge token: subscriptions until they're cancelled. Main thread. */
     private val calls = HashMap<Int, Bus.Call>()
@@ -173,8 +178,7 @@ class AppWindow(
             }
             override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
                 val child = AppWindow(context, appId, host, emulated)
-                child.attributes = pendingAttributes
-                pendingAttributes = JSONObject()
+                child.attributes = pendingAttributes.poll() ?: JSONObject()
                 // Dashboards and popup alerts draw over Luna's dark frames: transparent pages.
                 if (child.type == "dashboard" || child.type == "popupalert") child.setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 (resultMsg.obj as WebViewTransport).webView = child
@@ -381,7 +385,7 @@ class AppWindow(
         /** Called by the page's window.open wrapper just before the native open. */
         @JavascriptInterface
         fun nextWindow(attributesJson: String) {
-            pendingAttributes = try { JSONObject(attributesJson) } catch (e: Exception) { JSONObject() }
+            pendingAttributes.add(try { JSONObject(attributesJson) } catch (e: Exception) { JSONObject() })
         }
 
         @JavascriptInterface

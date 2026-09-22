@@ -313,6 +313,8 @@ device animates, and is missing a few states.
 
 ### B4. Notifications: taller dashboards, the scrolling drop-down, the swipe backing
 
+**Done 2026-09-22, except taller dashboards** (skipped by codepoet's choice: no app is known to have used `dashheight`). The scroller, masks, swipe backing and badge handle are in. From the source: the badge area only matters for `webosDragMode: "manual"` dashboards (all of Enyo's), which get every touch right of the badge; a Mojo dashboard is dragged from anywhere. Persistent dashboards and transient alerts moved to D. Row order: newest on top, read from `layoutAllWindowsInMenu` (Q8). Found on the way: the status-bar and banner fallback icon is the app's mini icon, grey (measured).
+
 | What | LunaCE | Lunacy today | Do |
 |---|---|---|---|
 | Dashboard height | a `dashheight` stage argument up to 320 px sets the row's height; default 52 | `DashboardMenu.ROW_H` = 52 for all | `bridge.js` `window.open` wrapper already parses `height=`; pass `attributes.dashHeight`/`height` and size the `Row` with it, capped at 320; [DashboardWebApp.cpp#L110](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/notifications/DashboardWebApp.cpp#L110). Check what Enyo's `enyo.Dashboard` and Mojo's `createStageWithCallback` actually put in the features string |
@@ -521,5 +523,9 @@ the media indexer's db8 kinds. All in [fix-log.md](fix-log.md) "Known gaps".
 - **The lock screen** (`Src/lunaui/lockscreen`), **brick/USB screens, boot animation,
   first-use, emergency, Touchstone dock detection, PDK card hosting** (`CardHostWindow`).
   Android's, or later layers (architecture doc, "Later layers").
+- **Persistent dashboards** (was in B4). `DashboardWebApp::attach` honours the `persistent`
+  stage argument only for `com.palm.systemui`; no app can make one.
+- **Transient alerts** (was in B4). The only transient alert is LunaSysMgr's own volume display
+  (`VolumeControlAlertWindow`); neither Mojo nor Enyo opens one.
 - **The 300 ms rotation animation** (`rotationAnimationDuration`). Android animates its own
   rotation; matching webOS's would mean drawing the rotation by hand. Not worth it.

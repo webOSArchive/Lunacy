@@ -58,6 +58,30 @@ class Luna(private val context: Context) {
         bitmaps.getOrPut("icon:${app.id}:${app.version}") { decode(app.openIcon()) }
 
     /**
+     * An app's mini icon, which a dashboard or banner without an icon of its own shows in the
+     * status bar: the app's `miniicon`, or else - as ApplicationDescription::miniIcon made one -
+     * its launcher icon squeezed to positiveSpaceBottomPadding (28 px) square and turned grey,
+     * each pixel the average of its red, green and blue. Measured on the reference TouchPad:
+     * a dashboard from an app without a mini icon shows its icon grey.
+     */
+    fun miniIcon(app: org.webosarchive.lunacy.card.AppInfo): Bitmap? =
+        bitmaps.getOrPut("mini:${app.id}:${app.version}") {
+            decode(app.openMiniIcon())?.let { return@getOrPut it }
+            val icon = decode(app.openIcon()) ?: return@getOrPut null
+            val size = px(28)
+            val b = Bitmap.createScaledBitmap(icon, size, size, true).copy(Bitmap.Config.ARGB_8888, true)
+            val px = IntArray(size * size)
+            b.getPixels(px, 0, size, 0, 0, size, size)
+            for (i in px.indices) {
+                val c = px[i]
+                val avg = (((c shr 16) and 0xFF) + ((c shr 8) and 0xFF) + (c and 0xFF)) / 3
+                px[i] = (c and 0xFF000000.toInt()) or (avg shl 16) or (avg shl 8) or avg
+            }
+            b.setPixels(px, 0, size, 0, 0, size, size)
+            b
+        }
+
+    /**
      * The icon for an app's loading card: its own `splashicon` at SplashIconSize, else its
      * launcher icon at half again, capped at the same size (LunaCE's `CardLoading`; the size
      * is 192 on a TouchPad, from luna-topaz.conf). In TouchPad px, scaled like the rest.

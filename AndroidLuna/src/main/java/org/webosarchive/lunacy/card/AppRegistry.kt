@@ -63,6 +63,8 @@ class AppInfo(
     val url get() = AppServer.appUrl(id, main)
     val isWeb get() = type == "web"
     fun openIcon(): InputStream? = files.open("${Packages.APPS}/$id/$icon")
+    /** appinfo.json's `miniicon`, "miniicon.png" when it names none (ApplicationDescription). */
+    fun openMiniIcon(): InputStream? = files.open("${Packages.APPS}/$id/" + appinfo.optString("miniicon", "miniicon.png").ifEmpty { "miniicon.png" })
     fun openSplashIcon(): InputStream? =
         if (splashIcon.isEmpty()) null else files.open("${Packages.APPS}/$id/$splashIcon")
 

@@ -383,10 +383,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         closeWindow(window)
     }
 
-    /** An icon from an app's origin (e.g. a dashboard's smallIcon), else the app's own icon. */
+    /**
+     * An icon from an app's origin (a dashboard's `icon`, a banner's), else the app's mini
+     * icon, as LunaSysMgr fell back for both (DashboardWindow::icon, BannerMessageHandler::generateIcon).
+     */
     private fun icon(url: String?, appId: String): android.graphics.Bitmap? {
         if (!url.isNullOrEmpty()) server.serve(android.net.Uri.parse(url))?.takeIf { it.statusCode == 200 }?.let { luna.decode(it.data)?.let { b -> return b } }
-        return registry.get(appId)?.let { luna.appIcon(it) }
+        return registry.get(appId)?.let { luna.miniIcon(it) }
     }
 
     override fun addBanner(window: AppWindow, message: String, params: String, icon: String, soundClass: String, soundFile: String, duration: Int): Int {

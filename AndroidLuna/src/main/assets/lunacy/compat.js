@@ -391,3 +391,63 @@ window.__lunacyFileUrl = function (u, media) {
 			displayName === undefined ? name : displayName, WEBOS_QUOTA, creation));
 	};
 })();
+
+// What the window says it is.
+//
+// On a webOS device every way of asking how big the window is gave the same answer, and an
+// app could use any of them: window.innerWidth and document.documentElement.clientWidth were
+// both the card's own pixels, and screen.width was the display's, in the same unit. Here all
+// three disagree, for two separate reasons.
+//
+// **innerWidth is a pixel wider than the page is laid out.** A card is 1280 device px wide,
+// but Chromium works in density-independent pixels: on the HP 10 G2's 213 dpi screen it
+// divides by 1.33125, rounds 961.5 up to 962 and multiplies back, so the page lays out 1281
+// CSS px into 1280 (see "border-image seams" in Docs/fix-log.md, which is the same rounding
+// seen from the other end). documentElement.clientWidth is the layout viewport, 1280;
+// innerWidth is the visual one, 1281. One pixel is enough to break a layout outright: webOS
+// IAmA reddit sizes its left pane to innerWidth * 0.4 and leaves the right one at 60% in CSS,
+// which comes to 1280.4 in a 1280 px line, so the right pane - the whole article - dropped
+// below the fold and the card showed an empty page beside the list.
+//
+// **screen is in the wrong unit.** screen.width/height come back in Android's
+// density-independent pixels (962 x 601 here), where a device reported the panel's own
+// (1024 x 768 on a TouchPad, measured with Workbench/probe). An app laying out to screen.width
+// gets three quarters of the card.
+//
+// Both are reported the way a device reported them: the layout viewport for the window, and
+// the screen the shell says this device has, turned with the screen.
+(function () {
+	var N = window.LunacyNative;
+	function def(obj, name, get) {
+		try { Object.defineProperty(obj, name, { configurable: true, enumerable: true, get: get }); } catch (e) {}
+	}
+	// The layout viewport, which is what the page is laid out into. In standards mode this is
+	// the viewport whatever the document's own height is; the fallback is for a page read
+	// before its documentElement exists.
+	var rawW = window.innerWidth, rawH = window.innerHeight;
+	function viewW() { var e = document.documentElement; return (e && e.clientWidth) || rawW || 0; }
+	function viewH() { var e = document.documentElement; return (e && e.clientHeight) || rawH || 0; }
+	def(window, "innerWidth", viewW);
+	def(window, "innerHeight", viewH);
+
+	// The display, in the pixels this device tells apps it has. It has to follow the screen
+	// round rather than be read off the window: deviceInfo names the screen in its natural
+	// orientation and never changes (a TouchPad says 1024 x 768 whichever way up it is),
+	// while the reference device's screen.width in portrait reported 768 x 1024. The window
+	// can't stand in for it either, because the keyboard takes half the card's height and the
+	// screen doesn't change when it does.
+	function displaySize() {
+		try { return JSON.parse(N.screenSize()); } catch (e) { return null; }
+	}
+	var size = displaySize();
+	if (size && size.width && size.height) {
+		def(screen, "width", function () { return (displaySize() || size).width; });
+		def(screen, "height", function () { return (displaySize() || size).height; });
+		def(screen, "availWidth", function () { return (displaySize() || size).width; });
+		def(screen, "availHeight", function () { return (displaySize() || size).height; });
+		// A card is the whole window on webOS, so outer and inner differed only by the status
+		// bar; Chromium reports these in dip too.
+		def(window, "outerWidth", function () { return (displaySize() || size).width; });
+		def(window, "outerHeight", function () { return (displaySize() || size).height; });
+	}
+})();

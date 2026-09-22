@@ -548,6 +548,21 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      */
     override fun windowOrientation(): String = profile.windowOrientationFor(screenOrientation())
 
+    /**
+     * The display in webOS pixels, the way round it is now. `getRealMetrics` follows the
+     * rotation, so this turns with the screen the way a device's `screen.width` did: the
+     * reference TouchPad, in portrait, reported 768 x 1024 where its `deviceInfo` says
+     * 1024 x 768 whichever way up it is.
+     */
+    override fun screenSize(): String {
+        val dm = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(dm)
+        return JSONObject()
+            .put("width", Math.round(dm.widthPixels / luna.density))
+            .put("height", Math.round(dm.heightPixels / luna.density))
+            .toString()
+    }
+
     /** The orientation the windows have been told about. */
     private var reportedOrientation = ""
 

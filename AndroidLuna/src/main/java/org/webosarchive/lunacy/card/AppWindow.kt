@@ -47,6 +47,11 @@ interface WindowHost {
      * is. Also one of the four names - see [DeviceProfile.windowOrientationFor].
      */
     fun windowOrientation(): String
+    /**
+     * The display's size in webOS pixels, the way round it is now: what `screen.width` and
+     * `screen.height` report to a page. Follows the screen round, as a device's did.
+     */
+    fun screenSize(): String
     /** PalmSystem's locale, localeRegion, phoneRegion and timeFormat, as JSON. */
     fun localeInfo(): String
     /** Android pixels per CSS pixel: apps get TouchPad-sized pixels (Docs/architecture.md, Screen size). */
@@ -243,6 +248,7 @@ class AppWindow(context: Context, val appId: String, private val host: WindowHos
 
         @JavascriptInterface fun screenOrientation(): String = host.screenOrientation()
         @JavascriptInterface fun windowOrientation(): String = host.windowOrientation()
+        @JavascriptInterface fun screenSize(): String = host.screenSize()
         /** PalmSystem's locale fields and clock format, from Android's own settings. */
         @JavascriptInterface fun localeInfo(): String = host.localeInfo()
         /** The process id in PalmSystem.identifier: one per window, as a device gave. */

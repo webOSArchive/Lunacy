@@ -528,3 +528,144 @@ window.__lunacyFileUrl = function (u, media) {
 	});
 	window.addEventListener("resize", apply);
 })();
+
+// A card is the viewport, however wide the page turns out to be.
+//
+// `position: fixed` is measured against the viewport, and on webOS the viewport was the card:
+// an element with `right: 0` sat against the card's right edge whatever the page did. This
+// WebView is a mobile browser underneath, and when a page's layout comes out wider than the
+// window it widens the box that fixed elements are measured against to fit the content, so
+// that nothing is lost when the reader zooms out. A card has no zoom, and webOS had no such
+// idea: content wider than the card simply hung off the edge.
+//
+// So an app written for a 1024 px device, running in an 800 px portrait card, puts every
+// piece of fixed chrome off the side of the screen. webOS IAmA reddit is the case codepoet
+// reported: its spinner is `position: fixed; right: 0; top: 50%`, and while an article loaded
+// it sat at x = 983 in an 800 px card - off the edge, which is why the card just sat there
+// with nothing to show it was working. Mojo's own menus are `position: fixed; width: 100%`
+// and were coming out 1023 px wide in the same card.
+//
+// Measured on the HP 10 G2: a fixed element with width and height 100% measures 800 x 1253 in
+// a portrait card, and 1600 x 2506 as soon as anything 1600 px wide is added to the page -
+// and back to 800 x 1253 when it is taken away again. reddit's own `#bar`, a decorative strip
+// hard-coded to 1030 px for a TouchPad, is what pushes it over.
+//
+// Nothing is touched while the page fits, which is every app in landscape: the correction only
+// runs when that box and the viewport differ, and then only on elements the page itself
+// placed with `position: fixed`.
+(function () {
+	var GEOM = ["width", "height", "top", "right", "bottom", "left"];
+	/** What this WebView is measuring fixed elements against, which should be the viewport. */
+	function fixedBox() {
+		var d = document.createElement("div");
+		d.style.cssText = "position:fixed;left:0;top:0;width:100%;height:100%;visibility:hidden;pointer-events:none";
+		document.body.appendChild(d);
+		var r = d.getBoundingClientRect();
+		d.parentNode.removeChild(d);
+		return [r.width, r.height];
+	}
+	/** The values the app's own stylesheets and inline style give this element. */
+	function declared(el, rules) {
+		var out = {};
+		for (var i = 0; i < rules.length; i++) {
+			var r = rules[i];
+			var matches;
+			try { matches = (el.matches || el.webkitMatchesSelector).call(el, r.selectorText); }
+			catch (e) { continue; }
+			if (!matches) { continue; }
+			for (var g = 0; g < GEOM.length; g++) {
+				var v = r.style.getPropertyValue(GEOM[g]);
+				if (v) { out[GEOM[g]] = v; }
+			}
+		}
+		// Inline wins, and it is where a previous pass wrote, so those are cleared first.
+		for (var k = 0; k < GEOM.length; k++) {
+			var iv = el.__lunacyInline && el.__lunacyInline[GEOM[k]];
+			if (iv) { out[GEOM[k]] = iv; }
+		}
+		return out;
+	}
+	/**
+	 * Every rule in the document, once per pass. Mojo's global.css is nine @imports and
+	 * almost nothing else, so a scan that doesn't follow them finds none of the framework's
+	 * own rules - which is most of what a Mojo app is made of.
+	 */
+	function allRules() {
+		var out = [], depth = 0;
+		function walk(sheet) {
+			if (!sheet || depth > 8) { return; }
+			var rules;
+			try { rules = sheet.cssRules; } catch (e) { return; }
+			if (!rules) { return; }
+			depth++;
+			for (var j = 0; j < rules.length; j++) {
+				var r = rules[j];
+				if (r.styleSheet) { walk(r.styleSheet); }          // @import
+				else if (r.cssRules) { walkRules(r.cssRules); }    // @media and friends
+				else if (r.selectorText && r.style) { out.push(r); }
+			}
+			depth--;
+		}
+		function walkRules(rules) {
+			for (var k = 0; k < rules.length; k++) {
+				if (rules[k].selectorText && rules[k].style) { out.push(rules[k]); }
+			}
+		}
+		for (var i = 0; i < document.styleSheets.length; i++) { walk(document.styleSheets[i]); }
+		return out;
+	}
+	function pct(v) { return typeof v === "string" && /^-?[\d.]+%$/.test(v); }
+	function apply() {
+		if (!document.body) { return; }
+		var all = document.querySelectorAll("*"), fixed = [];
+		for (var i = 0; i < all.length; i++) {
+			if (window.getComputedStyle(all[i]).position === "fixed") { fixed.push(all[i]); }
+		}
+		// Put back whatever a previous pass wrote before deciding anything, so a card that has
+		// been rotated is measured as the page meant it, not as it was corrected last time.
+		for (var c = 0; c < fixed.length; c++) { restore(fixed[c]); }
+		if (!fixed.length) { return; }
+		var box = fixedBox();
+		var vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
+		if (Math.abs(box[0] - vw) < 1 && Math.abs(box[1] - vh) < 1) { return; }
+		// A page with hundreds of fixed elements is not a webOS app; leave it alone rather
+		// than walk every rule against every one of them.
+		if (fixed.length > 40) { return; }
+		var rules = allRules();
+		for (var e = 0; e < fixed.length; e++) { correct(fixed[e], declared(fixed[e], rules), box, vw, vh); }
+	}
+	function restore(el) {
+		if (!el.__lunacyFixed) { return; }
+		var saved = el.__lunacyFixed;
+		for (var k in saved) { if (saved.hasOwnProperty(k)) { el.style[k] = saved[k]; } }
+		el.__lunacyFixed = null;
+	}
+	function set(el, prop, value) {
+		el.__lunacyFixed = el.__lunacyFixed || {};
+		if (!(prop in el.__lunacyFixed)) { el.__lunacyFixed[prop] = el.style[prop]; }
+		el.style[prop] = value;
+	}
+	function correct(el, d, box, vw, vh) {
+		// A percentage is a percentage of the box, so it is given the viewport's number instead.
+		if (pct(d.width)) { set(el, "width", Math.round(parseFloat(d.width) / 100 * vw) + "px"); }
+		if (pct(d.height)) { set(el, "height", Math.round(parseFloat(d.height) / 100 * vh) + "px"); }
+		if (pct(d.top)) { set(el, "top", Math.round(parseFloat(d.top) / 100 * vh) + "px"); }
+		if (pct(d.left)) { set(el, "left", Math.round(parseFloat(d.left) / 100 * vw) + "px"); }
+		if (pct(d.right)) { set(el, "right", Math.round(parseFloat(d.right) / 100 * vw) + "px"); }
+		if (pct(d.bottom)) { set(el, "bottom", Math.round(parseFloat(d.bottom) / 100 * vh) + "px"); }
+		// An element held against the right or bottom edge is that far from the *box's* edge;
+		// the margin makes up the difference so it lands against the card's instead.
+		if (d.right && d.right !== "auto") { set(el, "marginRight", Math.round(box[0] - vw) + "px"); }
+		if (d.bottom && d.bottom !== "auto") { set(el, "marginBottom", Math.round(box[1] - vh) + "px"); }
+		// left:0 and right:0 together, which is how Mojo's menus are full width, leaves the
+		// width to the box; the margin above already pulls the right edge in.
+	}
+	window.__lunacyFixedElements = apply;
+	apply();
+	document.addEventListener("DOMContentLoaded", apply);
+	window.addEventListener("load", function () {
+		apply();
+		[100, 400, 1200, 3000].forEach(function (ms) { setTimeout(apply, ms); });
+	});
+	window.addEventListener("resize", apply);
+})();

@@ -90,14 +90,17 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
      * active"). So a letter reaches its alternate through the symbol key - shift only
      * capitalises it - while the number row and the punctuation reach theirs through shift.
      *
-     * Caps lock is not shift here. webOS separated `isShiftActive` from `isCapActive`: locked,
-     * the letters come out capital and the number row still types numbers.
+     * Shift-lock is shift for this, and it survives a letter but not a symbol: locked, the
+     * letters keep coming out capital, and the first key that takes its alternate - anything
+     * off the number row - ends the lock (codepoet, on how webOS behaved; LunaCE's own
+     * `isShiftActive` reads as though the number row would go on typing numbers, so this
+     * follows the device rather than the source).
      */
     private fun usesAlt(key: Key): Boolean {
         if (key.alt == key.main && key.altText == null) return false
         val main = key.main.toChar()
         val letter = main.isLetter() && !main.isDigit() && !key.alt.toChar().isDigit()
-        return if (letter) symbols else shift == Shift.ONCE
+        return if (letter) symbols else shift != Shift.OFF
     }
 
     private var pressed: Key? = null
@@ -493,11 +496,12 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
         }
         // webOS mapped the key first and capitalised whatever came out (TabletKeyboard sends
         // QChar(key).toUpper() while caps are active), which leaves a symbol alone.
-        val mapped =
-            if (usesAlt(key)) key.altText ?: key.alt.toChar().toString()
-            else key.main.toChar().toString()
+        val alt = usesAlt(key)
+        val mapped = if (alt) key.altText ?: key.alt.toChar().toString() else key.main.toChar().toString()
         host.onText(if (shift != Shift.OFF) mapped.uppercase() else mapped)
-        if (shift == Shift.ONCE) shift = Shift.OFF
+        // One shift, one character. A lock survives the letters and ends on the first
+        // character it had to shift for - see usesAlt.
+        if (shift == Shift.ONCE || (shift == Shift.LOCK && alt)) shift = Shift.OFF
     }
 
     /** Called when the field being edited changes, so the keyboard starts from a clean state. */

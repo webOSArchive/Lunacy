@@ -18,10 +18,10 @@ webOS's tablet keyboard, rebuilt as an `InputMethodService`:
   two the keys reach is webOS's rule and not the obvious one (`TabletKeymap::map`): a letter
   takes its alternate from the symbol key, and shift only capitalises it; the number row and
   the punctuation take theirs from **shift**, so shift on `1` gives `!` and the symbol page
-  leaves them alone. Shift-lock capitalises the letters and still types numbers - that last
-  part is reasoned from `isShiftActive` against `isCapActive` and **not yet checked on the
-  tablet**, because `adb shell input tap` cannot fire twice inside the 500 ms double-tap
-  window. It wants one check with a real finger.
+  leaves them alone. **Shift-lock is shift for this, and survives a letter but not a symbol:**
+  locked, the letters keep coming out capital, and the first key that takes its alternate -
+  anything off the number row - ends the lock. Typed on the tablet, locked: `q w 1 q e` gives
+  `QW!qe`.
 - The **scroll ball**: the little ball in the top right corner that drags the insertion
   point around. Hold shift while you drag it and it selects instead.
 

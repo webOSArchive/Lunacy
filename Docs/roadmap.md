@@ -264,6 +264,12 @@ and the space the keyboard and Android's navigation bar cost a card. Both are in
     names `com.palm.accountservices` (the Google property ID), `applicationManager/
     launchPointChanges`, `connectCellularDataService` (for its proxy), and the magazine
     edition request failing and then reading a null reply (`'nom' of null`).
+  - **Then Sounds & Alerts (codepoet, 2026-09-22).** Its icon still only opens Android's
+    sound settings. Now that the shell plays webOS's own sounds (B8, A5), Lunacy should offer
+    control of them itself: Palm's Sounds & Alerts app, answered through `com.palm.audio` and
+    `com.palm.systemservice` preferences the shell honours (system sounds on/off, the
+    notification and alert tones, volumes), rather than a shortcut. Measure the app's
+    calls on the reference TouchPad first.
   - `activitymanager`'s scheduled activities and `com.palm.power/timeout`, which are one want
     and not two: the Clock's alarms, SimpleChat's half-hourly refresh, reddit's message check
     and drPodder's feed update all ask for them, and Android's `AlarmManager` backs them all;

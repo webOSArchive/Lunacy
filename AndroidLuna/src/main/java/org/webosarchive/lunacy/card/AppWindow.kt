@@ -24,6 +24,10 @@ interface WindowHost {
     fun onWindowOpened(parent: AppWindow, child: AppWindow)
     /** PalmSystem banners. addBanner returns the banner's id. */
     fun addBanner(window: AppWindow, message: String, params: String, icon: String, soundClass: String, soundFile: String, duration: Int): Int
+    /** PalmSystem.paste: the system clipboard into the focused field of the card that is up. */
+    fun paste(window: AppWindow)
+    /** PalmSystem.copiedToClipboard: the "Selection Copied" banner. */
+    fun copiedToClipboard(window: AppWindow)
     /** PalmSystem.playSoundNotification: a banner's sound without the banner. */
     fun playSound(window: AppWindow, soundClass: String, soundFile: String, duration: Int)
     fun removeBanner(window: AppWindow, id: Int)
@@ -380,6 +384,16 @@ class AppWindow(
         @JavascriptInterface
         fun addBanner(message: String, params: String, icon: String, soundClass: String, soundFile: String, duration: Int): Int =
             host.addBanner(this@AppWindow, message, params, icon, soundClass, soundFile, duration)
+        @JavascriptInterface fun paste() { main.post { host.paste(this@AppWindow) } }
+        /** A page's copy or cut, which this engine won't put on the clipboard itself. */
+        @JavascriptInterface
+        fun setClipboard(text: String) {
+            main.post {
+                (context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager)
+                    .setPrimaryClip(android.content.ClipData.newPlainText(appId, text))
+            }
+        }
+        @JavascriptInterface fun copiedToClipboard() { main.post { host.copiedToClipboard(this@AppWindow) } }
         @JavascriptInterface
         fun playSound(soundClass: String, soundFile: String, duration: Int) {
             main.post { host.playSound(this@AppWindow, soundClass, soundFile, duration) }

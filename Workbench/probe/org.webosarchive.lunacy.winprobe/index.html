@@ -27,7 +27,7 @@ input { font-size: 20px; width: 400px; }
 //   {"do": "<action>" | ["<action>", ...], "delay": ms before acting, ...}
 // Actions: fullscreen, normal, color (with "color": int RGB), nocolor, orient (with "o"),
 // activate, deactivate, suppress, unsuppress, banner (with "sound", "file", "duration", "nosuppress"),
-// sound (playSoundNotification with "sound"), gestures, nogestures, rotlock, norotlock, paste.
+// sound (playSoundNotification with "sound"), gestures, nogestures, rotlock, norotlock, copy (with "text"), copied, paste.
 // Everything is logged with a LUNACYPROBE prefix for palm-log / logcat.
 var lines = [];
 function log(s) {
@@ -68,6 +68,13 @@ var actions = {
 	nogestures: function () { props({suppressGestures: false}); },
 	rotlock: function () { props({rotationLockMaximized: true}); },
 	norotlock: function () { props({rotationLockMaximized: false}); },
+	copy: function (p) {
+		// Puts text on the system clipboard the way a page could: select it and copy.
+		var f = document.getElementById("field"); f.value = p.text || "probe-clip"; f.focus(); f.select();
+		log("execCommand(copy) -> " + document.execCommand("copy"));
+		f.value = "";
+	},
+	copied: function () { PalmSystem.copiedToClipboard(); log("copiedToClipboard"); },
 	paste: function () {
 		var f = document.getElementById("field"); f.value = ""; f.focus();
 		PalmSystem.paste();

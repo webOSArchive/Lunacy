@@ -343,9 +343,47 @@
 
 	// The rest of the PalmSystem surface measured on a TouchPad (docs/spike-1.md). Calls with no
 	// Lunacy equivalent yet are logged no-ops, so apps don't throw; the log shows what's used.
+	// The clipboard. paste() pastes the system clipboard into the focused field of whichever
+	// card is up (LunaSysMgr sent it to the active window, not the caller); copiedToClipboard()
+	// says "Selection Copied" in a banner; pastedFromClipboard() did nothing on a device.
+	define(PalmSystem, "paste", function () { N.paste(); });
+	define(PalmSystem, "copiedToClipboard", function () { N.copiedToClipboard(); });
+	define(PalmSystem, "pastedFromClipboard", function () {});
+	// Copy and cut. webOS's WebKit put a page's execCommand("copy") or ("cut") on the system
+	// clipboard; this engine refuses both to web content (Chromium let pages copy only from
+	// version 43), so Enyo's Copy and Cut - Input.js and enyo.dom.setClipboard - did nothing.
+	// When the engine says no, the selection goes to Android's clipboard from here, and a cut
+	// takes it out of the field as the device did.
+	var nativeExec = document.execCommand;
+	function selectedText() {
+		var el = document.activeElement;
+		if (el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT") && typeof el.selectionStart === "number") {
+			return el.value.substring(el.selectionStart, el.selectionEnd);
+		}
+		return String(window.getSelection ? window.getSelection() : "");
+	}
+	document.execCommand = function (cmd) {
+		var done = false;
+		try { done = nativeExec.apply(document, arguments); } catch (e) {}
+		var c = String(cmd).toLowerCase();
+		if (!done && (c === "copy" || c === "cut")) {
+			var text = selectedText();
+			if (!text) { return false; }
+			N.setClipboard(text);
+			if (c === "cut") { nativeExec.call(document, "delete", false, null); }
+			return true;
+		}
+		return done;
+	};
+	window.__lunacyPaste = function (text) {
+		var el = document.activeElement;
+		if (!el || el === document.body) { return false; }
+		return document.execCommand("insertText", false, text);
+	};
+
 	["deactivate", "addNewContentIndicator", "removeNewContentIndicator", "cancelCrossAppScene",
 	 "cancelSceneTransition", "crossAppSceneActive", "decrypt", "editorFocused", "encrypt", "hideSpellingWidget",
-	 "paste", "prepareSceneTransition", "printFrame", "runAnimationLoop", "runCrossAppTransition",
+	 "prepareSceneTransition", "printFrame", "runAnimationLoop", "runCrossAppTransition",
 	 "runSceneTransition", "stagePreparing"].forEach(function (name) {
 		if (!PalmSystem[name]) {
 			define(PalmSystem, name, function () { N.log("PalmSystem." + name + " (not implemented)"); });

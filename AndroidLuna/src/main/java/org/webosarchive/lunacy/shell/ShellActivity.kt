@@ -378,6 +378,23 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     private val sounds by lazy { Sounds(this, server) }
 
+    override fun paste(window: AppWindow) {
+        val target = cards.maximized?.window ?: return
+        val clip = (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).primaryClip
+        val text = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString() ?: return
+        target.evaluateJavascript("window.__lunacyPaste&&__lunacyPaste(${JSONObject.quote(text)})", null)
+    }
+
+    /** The last "Selection Copied" banner, which the next one replaces (WebAppManager::copiedToClipboard). */
+    private var copiedBanner: Pair<AppWindow, Int>? = null
+
+    override fun copiedToClipboard(window: AppWindow) {
+        copiedBanner?.let { (w, id) -> notifications.removeBanner(w, id) }
+        val id = bannerIds.getAndIncrement()
+        notifications.addBanner(Banner(id, window, window.appId, "Selection Copied", icon(null, window.appId), "{ }"))
+        copiedBanner = window to id
+    }
+
     override fun playSound(window: AppWindow, soundClass: String, soundFile: String, duration: Int) =
         sounds.play(window.appId, soundClass, soundFile, duration)
 

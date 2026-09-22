@@ -104,6 +104,10 @@ class DisplayService(private val context: Context) {
     private fun timeout(): Int =
         Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_OFF_TIMEOUT, 60_000) / 1000
 
+    /** The screen's brightness as webOS's maximumBrightness, 1 to 100: the system menu's slider. */
+    fun brightnessPercent(): Int = brightness()
+    fun setBrightnessPercent(percent: Int) { write(Settings.System.SCREEN_BRIGHTNESS, percent.coerceIn(1, 100) * 255 / 100) }
+
     private fun brightness(): Int {
         val raw = Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS, 255)
         return (raw * 100 / 255).coerceIn(1, 100)

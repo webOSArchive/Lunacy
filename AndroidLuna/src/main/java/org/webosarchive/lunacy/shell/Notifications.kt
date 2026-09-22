@@ -126,13 +126,14 @@ class Notifications(
     fun addDashboard(w: AppWindow, icon: Bitmap?) {
         icons[w] = icon
         menu.add(w)
-        statusBar.notificationIcons = icons.values.toList()
+        statusBar.addNotificationIcon(w, icon)
     }
 
     fun removeDashboard(w: AppWindow) {
-        if (icons.remove(w) == null) return
+        if (!icons.containsKey(w)) return
+        icons.remove(w)
         menu.remove(w)
-        statusBar.notificationIcons = icons.values.toList()
+        statusBar.removeNotificationIcon(w)
         if (icons.isEmpty()) onNoDashboards()
     }
 }

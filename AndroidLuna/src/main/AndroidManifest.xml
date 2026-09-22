@@ -7,6 +7,8 @@
          com.palm.display/control. Granted at install while Lunacy targets API 21; from
          API 23 this needs the user's consent (a ratchet item, Docs/architecture.md). -->
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <!-- The status bar's Bluetooth icon: whether the adapter is on and connected. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
     <!-- webOS's /media/internal is the user's own storage, and apps read and wrote it freely.
          Android's shared folders are mapped into it (UserFiles.kt). Granted at install while
          Lunacy targets API 21; a ratchet item for API 23 and later. -->

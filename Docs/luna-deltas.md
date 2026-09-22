@@ -296,6 +296,8 @@ behaviours hang off that. Do them in this order; each is independent of the next
 
 ### B3. Status bar: the transitions, the icons, the empty search group
 
+**Done 2026-09-22, the system menu only begun** (date, battery and brightness rows, as codepoet asked; Wi-Fi, VPN, Bluetooth, airplane, rotation lock and mute rows still to come). Corrections from the source and the device: info icons right to left are Bluetooth *then* Wi-Fi (the reference's "[BT][wifi]" had them reversed); dashboard icons are painted newest-*leftmost*; the title group's separator fades with its ▾, so the card view has none; and the invisible search group takes **no** space next to the notification group (measured: the notification group sits against the system separator on the device). Not yet compared: the system menu against the device's, which needs a tap on the TouchPad.
+
 Lunacy's `StatusBar` draws the right things at the right sizes but changes instantly where the
 device animates, and is missing a few states.
 

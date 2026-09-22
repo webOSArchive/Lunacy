@@ -50,6 +50,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var launcher: Launcher
     private var launcherOpen = false
     private lateinit var notifications: Notifications
+    private lateinit var systemMenu: SystemMenu
     /** Exhibition mode: webOS's dock-mode clock, over everything, while it is on. */
     private lateinit var exhibition: ExhibitionLayer
     private lateinit var dockMode: org.webosarchive.lunacy.card.DockMode
@@ -154,6 +155,16 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             sounds.play(b.appId, b.soundClass, b.soundFile, b.soundDuration)
         })
         statusBar.onNotificationTap = { if (!notifications.tapBanner()) toggleMenu() }
+        // The system menu, right-aligned under the bar, its edge 11 px past the screen's.
+        systemMenu = SystemMenu(this, luna)
+        root.addView(systemMenu, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = luna.px(StatusBar.HEIGHT); gravity = android.view.Gravity.TOP or android.view.Gravity.END
+        })
+        systemMenu.translationX = luna.px(SystemMenu.EDGE_OFFSET).toFloat()
+        // SystemMenu::slotMenuBrightnessChanged: 0…1 along the slider is 1…100 %.
+        systemMenu.onBrightness = { v, _ -> displayService.setBrightnessPercent(Math.round(v * 99) + 1) }
+        statusBar.onSystemTap = { toggleSystemMenu() }
+        statusBar.onSystemInfoChanged = { systemMenu.batteryPercent = statusBar.batteryPercent }
         root.addView(statusBar, FrameLayout.LayoutParams(MATCH_PARENT, luna.px(StatusBar.HEIGHT)))
 
         exhibition = ExhibitionLayer(this, luna).apply {
@@ -436,9 +447,21 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     private fun toggleMenu() = if (notifications.menu.isOpen) closeMenu() else openMenu()
 
+    /** Opening one status-bar menu closes the other (StatusBar::slotMenuGroupActivated). */
+    private fun toggleSystemMenu() {
+        if (systemMenu.isOpen) { closeMenu(); return }
+        closeMenu()
+        systemMenu.batteryPercent = statusBar.batteryPercent
+        systemMenu.brightness = (displayService.brightnessPercent() - 1) / 99f
+        menuScrim.visibility = View.VISIBLE
+        statusBar.systemMenuOpen = true
+        systemMenu.open()
+    }
+
     /** The drop-down's right edge lines up with the notification group's right edge. */
     private fun openMenu() {
         if (!notifications.hasDashboards || notifications.popups.showing) return
+        statusBar.systemMenuOpen = false; systemMenu.close()
         val menu = notifications.menu
         menu.measure(0, 0)
         (menu.layoutParams as FrameLayout.LayoutParams).leftMargin =
@@ -454,6 +477,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         menuScrim.visibility = View.GONE
         statusBar.menuOpen = false
         notifications.menu.close()
+        statusBar.systemMenuOpen = false
+        systemMenu.close()
     }
 
     private fun closeWindow(w: AppWindow) {
@@ -1273,7 +1298,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun homePressed() {
         if (exhibitionMenu.visibility == View.VISIBLE) { closeExhibitionMenu(); return }
         if (exhibitionOn) { setExhibition(false); return }
-        if (notifications.menu.isOpen) { closeMenu(); return }
+        if (notifications.menu.isOpen || systemMenu.isOpen) { closeMenu(); return }
         notifications.popups.newest()?.let { onWindowClosed(it); return }
         if (launcher.editing || quickLaunch.editing) { exitEditMode(); return }
         if (launcherOpen) { closeLauncher(); return }

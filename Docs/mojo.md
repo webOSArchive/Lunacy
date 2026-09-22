@@ -337,6 +337,20 @@ cover this way.
 **`palmGetResource`** is the other, and is covered under "Reading a file is not loading a
 page" above.
 
+## A scene's height
+
+A scene element is the *content* of Mojo's scene scroller. The scroller is given the card's
+height; the scene is left at whatever its own content comes to. On a device that is enough,
+because the scroller is `overflow: -webkit-palm-overflow` and the scene fills it. Here the
+scroller falls back to `overflow: hidden` and a scene whose content is short is **zero pixels
+tall** - and every percentage-height child of the scene collapses with it.
+
+That is easy to miss, because most scenes have enough in them to have a height anyway. It
+shows up where a scene's content is all out of flow: drPodder's splash paints its background
+with `position: absolute; height: 100%` inside the scene, and came out as a grey card with the
+logo adrift in it. The fork gives `.palm-scene` a `min-height: 100%`
+([CHANGES.md](../LunaRuntimes/mojo/CHANGES.md), patch 0003).
+
 ## Telling an engine difference from an app one
 
 A layout that comes out wrong here and right on the device is not, on the evidence so far,

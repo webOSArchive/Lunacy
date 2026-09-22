@@ -81,3 +81,23 @@ Files: `builtins/palmInitFramework2205.js`, `builtins/palmmojo_coreVersion1_0.js
 
 `palmcontactsVersion1_0.js` is patched with the others for consistency; nothing has loaded it
 yet.
+
+### 0003-scene-fills-its-scroller.patch
+
+A scene element is the content of Mojo's scene scroller, and the scroller is given the card's
+height; the scene itself is left at whatever its own content comes to.
+
+On a device that is enough, because the scroller is `overflow: -webkit-palm-overflow` -
+webOS's own scrolling model, which has no equivalent here - and the scene fills it. Chromium
+doesn't know that value, so `Mojo.Widget.Scroller` takes its own fallback
+(`scrollContainer.style.overflow = "hidden"`) and a scene whose content is short collapses to
+nothing. Every `height: 100%` child of a scene then collapses with it: drPodder's splash
+paints its background with a `position: absolute; height: 100%` div inside the scene, so it
+came out as a grey card with the logo adrift in it where the reference device shows a
+full-bleed gradient (codepoet's screenshot, 2026-09-22).
+
+`min-height: 100%` rather than `height`, so a scene taller than the card still scrolls, and it
+only bites where the scroller has a definite height - which is exactly the case the fallback
+broke. A scene that isn't in a scroller (webOS IAmA reddit's is not) is untouched.
+
+File: `submissions/506/stylesheets/global-base.css`.

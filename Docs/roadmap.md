@@ -10,111 +10,80 @@ transcoded video, Sound Cloud Player streams through its JS service, AccuWeather
 show live data. Per-app results and every fix, with the layer it landed in, are in
 [fix-log.md](fix-log.md).
 
-**2026-09-22, a third pass.** Three more from codepoet, and one of them was mine again:
+**2026-09-22, a day on Mojo fidelity.** codepoet ran the suite beside the reference TouchPad
+and reported what looked wrong, three times over as each round was fixed. Eleven differences,
+nine causes, and the pattern worth keeping is that **almost none of them was the engine**:
+they were Lunacy answering a question wrongly, a webOS idea this engine has never had, or -
+three times - a fix of mine from earlier the same day.
 
-- **`-webkit-palm-mouse-target` does not inherit, and `pointer-events` does.** Translating it
-  straight made Mojo's whole view menu untouchable, so a tap on drPodder's back arrow fell
-  through to the list row beneath it and pushed an episode into view. Each rule now gets a
-  companion that puts the subtree back.
-- **A scene has no height of its own.** Mojo's scroller is `overflow: -webkit-palm-overflow`
-  on a device, which is what makes a scene fill it; here it falls back to `overflow: hidden`
-  and a scene whose content is all out of flow is zero pixels tall. drPodder's splash paints
-  its gradient with a `height: 100%` div inside the scene, so it came out grey with the logo
-  adrift. Fixed in the Mojo fork.
-- **A page wider than the card was zoomed out rather than clipped** - fixed, on codepoet's
-  call, by declaring the viewport instead of leaving it to the engine. This WebView derives a
-  minimum page scale that fits the content; webOS let content hang off the edge, because a
-  card *was* the viewport. Turning the tablet into portrait with reddit open drew the page at
-  0.78 and left the bottom of the card unpainted.
+*What Lunacy was telling apps, wrongly*
 
-  Lunacy was also throwing away what the app said about it: `useWideViewPort` was off, so the
-  `<meta name="viewport">` every webOS app carries never reached the engine. It now does, with
-  the card's width and a scale pinned at 1 **merged into** the app's own declaration rather
-  than replacing it - codepoet's constraint, and the right one, because on webOS that meta is
-  a statement about the card (`height=device-height` is what keeps a Pre/Pre2-shaped app out
-  of the Pre3's letterbox, as `"uiRevision": 2` keeps it out of the TouchPad's phone frame).
-  The rules are in [architecture.md](architecture.md) and the numbers in
-  [fix-log.md](fix-log.md), including the four Android-side levers that don't work - worth
-  reading before anyone tries them again.
+- **`window.innerWidth` was a pixel wider than the page was laid out into**, and `screen` came
+  back in Android's density-independent pixels. On a device every one of them was the card's
+  own pixels. reddit sizes a pane from `innerWidth`, so one pixel dropped the whole article
+  below the fold.
+- **`PalmSystem.windowOrientation` answered "free"**, which is not an orientation: LunaSysMgr
+  reads the window's own out of that property and writes the app's *request* into a different
+  one. Mojo asks for "free" on every app's behalf, so every orientation branch in every Mojo
+  app fell through, and drPodder's playback slider was never sized.
+- **`uiRevision` was read and ignored**, so an app written for a Pre was stretched across a
+  tablet card instead of running in the phone-sized one a TouchPad gave it. Most of the
+  catalogue predates the TouchPad, so this is the common case.
+- **A launching card was blank** where webOS held its space with the app's own icon.
 
-  It also made ninety lines of compat layer redundant: fixed elements were being corrected one
-  by one against the card, and with the viewport right their containing block *is* the card.
+*webOS ideas this engine hasn't got*
 
-- **A card being launched holds its space.** webOS put a card in the switcher the moment an
-  app was launched and filled it with the app's own `splashicon` on a dark background, a glow
-  pulsing behind it, until the app had drawn - §2.4, and codepoet's screenshot of Palm's Clock
-  starting. Lunacy showed an empty card. The signal for when to take it away is the
-  interesting part: `stageReady` is no good, because Mojo calls it while it is still building
-  the first scene, so the compat layer waits for the page to have something laid out instead.
+- **`-webkit-palm-mouse-target: ignore`**, for an element that takes no touches. Mojo uses it
+  nineteen times and it is load-bearing: a page header's back icon sits under the title.
+  Translated to `pointer-events: none` - with a companion rule, because that one inherits and
+  webOS's did not.
+- **`-webkit-palm-overflow`**, webOS's scrolling model, which is what gives a Mojo scene its
+  height. Without it a scene whose content is all out of flow is zero pixels tall and every
+  percentage-height child collapses with it.
+- **extractfs**, the thumbnailer - a FUSE filesystem rather than a service, which is why it
+  was easy to miss. The card host serves its paths now.
+- **A card is the viewport.** This engine is a mobile browser underneath and shrinks a page
+  that lays out wider than its window; webOS let content hang off the edge. That is now
+  settled by declaring the viewport rather than leaving it to be inferred - see below.
 
-  An app with no `splashicon` of its own falls back to its launcher icon at half again, as the
-  device does; webOS IAmA reddit ships a `splashicon` that is a single fully transparent
-  colour, so it shows the glow and nothing else - on a TouchPad too, as codepoet confirmed.
+*Mine, from earlier the same day*
 
-  **Still different:** webOS created that card when the app was *launched*, and Lunacy creates
-  it when the app opens its window - so an app that declares `noWindow` (most Mojo apps) gets
-  its placeholder a little later than a device would.
+The card-background fix was applied to every element rather than only the card's background,
+and it read its own output back on the next pass, so a rotated card kept the wrong size. The
+`pointer-events` translation was applied without its companion rule and made Mojo's menus
+untouchable. Each is recorded in [fix-log.md](fix-log.md) as it happened rather than quietly
+settled, because the measurement that decides each one is the useful part.
 
-- **An app written for a phone now gets one.** `uiRevision` was read and passed through but
-  never acted on, so every app got a full-size card - including one that on a TouchPad would
-  have run in the phone simulator frame. Most of the catalogue predates the TouchPad and says
-  nothing, so this is the common case, not the odd one. Measured on the reference device with
-  a probe carrying no `uiRevision` and matched member for member: the page is 320 x 452,
-  `screen` reads [320, 480], and `deviceInfo`'s screen and card numbers are the phone's while
-  the model, version, serial and user agent stay the TouchPad's.
+*The viewport, which is the piece to know about*
 
-  Still missing from that card: its own status bar, the gesture strip and the keyboard button,
-  the backdrop, and card view, where the thumbnail is a tablet-shaped card with a phone in it
-  rather than a phone.
+`useWideViewPort` was off, so the `<meta name="viewport">` every webOS app carries never
+reached the engine at all, and the engine worked the viewport out from the page's own layout
+width. It is now declared: the card's width and height and a scale pinned at 1, **merged into**
+what the app said rather than replacing it. That constraint is codepoet's and it is the right
+one - on webOS that meta is a statement about the *card* (`height=device-height` keeps a
+Pre-shaped app out of the Pre3's letterbox, as `"uiRevision": 2` keeps it out of the
+TouchPad's phone frame), so `device-width` and `device-height` are translated into this card's
+numbers and an app that names its own width or scale keeps it. The rules are in
+[architecture.md](architecture.md); [fix-log.md](fix-log.md) also lists the four Android-side
+levers that don't work, which are worth reading before anyone tries them again.
 
-**2026-09-22, a second pass on the same two apps.** codepoet looked again and found five more
-differences. Four were separate causes, and two of those were general:
+It paid for itself twice over: it took ninety lines of compat layer back out, because fixed
+elements no longer need correcting one by one, and it is the lever the next screen size will
+need.
 
-- **`-webkit-palm-mouse-target: ignore`** is a webOS CSS property for an element that takes no
-  touches, and Mojo's stylesheets use it nineteen times. Chromium has never heard of it, so
-  those elements swallowed touches meant for what is behind them - a scene's back button sits
-  under the title, so tapping it ran the title's handler. Translated at serve time to
-  `pointer-events: none`.
-- **`position: fixed` was measured against the page, not the card.** This WebView widens the
-  box fixed elements are measured against when a page lays out wider than the window, which is
-  a mobile browser's idea and not webOS's. Every piece of fixed chrome in a portrait card went
-  off the edge, including the spinner that says an article is loading.
-- **extractfs**, webOS's thumbnailer, had nobody to answer it, so drPodder's lists were full
-  of broken covers. It was a FUSE filesystem rather than a service; the card host serves the
-  same paths now.
-- The other two were **Lunacy's own, in yesterday's background fix**: it was applied to every
-  element rather than only to the card's background, which put a dark block under reddit's
-  search bar, and it read its own output back on the next pass, so a card kept the background
-  size of the orientation it had been in. Both corrected, and the measurement that settles the
-  first is in [fix-log.md](fix-log.md): on an ordinary element the reference device sizes a
-  percentage background against the element's own box, exactly as this WebView does.
+*Left different, on purpose or for later*
 
-**2026-09-22, Mojo parity.** codepoet reported three things that look wrong beside a
-TouchPad, and asked for the systemic causes rather than the symptoms. There were four, all in
-general layers, and none of them was Mojo's CSS meeting a stricter parser:
+- An emulated card has no status bar, gesture strip or keyboard button of its own, and in card
+  view its thumbnail is a tablet-shaped card with a phone in it rather than a phone.
+- webOS created a launching card when the app was *launched*; Lunacy creates it when the app
+  opens its window, so a `noWindow` app gets its placeholder a little later.
+- drPodder's playback row comes out 17/65/17 where the device gives 20/60/20, and this
+  Prelude draws its title 300 px wide where the device draws it 290.
 
-- **The window's own measurements disagreed.** `window.innerWidth` is 1281 where the page is
-  laid out into 1280, and `screen.width` came back in Android's density-independent pixels.
-  On a device every one of them was the card's own pixels. webOS IAmA reddit sizes its left
-  pane from `innerWidth` and leaves the right one at 60% in CSS, so the two came to a
-  fraction of a pixel more than the line and the right float - the whole article - dropped
-  below the fold. Both of codepoet's reddit symptoms were that one pixel.
-- **`PalmSystem.windowOrientation` answered "free"**, which is not an orientation. LunaSysMgr
-  reads the window's own orientation out of that property and writes the app's *request* into
-  a different one; Mojo asks for "free" on every app's behalf, so every orientation branch in
-  every Mojo app fell through. That is why drPodder's playback slider sat in the corner:
-  nothing sized it. See "Orientation" in [mojo.md](mojo.md).
-- **A fixed background is sized against the wrong box** in this WebView, which is what turned
-  reddit's card background into codepoet's "sliced up blob".
-- **`com.palm.downloadmanager` now answers**, in the shapes measured on the reference device,
-  so drPodder's album art and episodes and MeTube's downloads arrive.
-
-Worth recording for the next time something looks like an engine difference: it usually isn't.
-Two probe apps now put the same markup on both machines -
-`Workbench/probe/org.webosarchive.lunacy.mojoprobe` (a Mojo app with real widgets) and
-`…lunacy.cssprobe` (plain CSS, no framework) - and the first thing they showed was that the
-table-cell layout everyone would have blamed for drPodder's slider behaves *identically* on
-the TouchPad.
+*Two probe apps came out of it*, because the fastest way to tell an engine difference from an
+app one is to put the same markup on both machines: `…lunacy.cssprobe` (plain CSS and the
+window's own measurements) and `…lunacy.mojoprobe` (a Mojo app with real widgets), plus
+`…lunacy.emuprobe`, the one deliberately without a `uiRevision`.
 
 **2026-09-21, Mojo and fidelity.** The five Mojo apps codepoet named all run, and Palm's own
 Video Player with them (Mojo 2). Then a pass on how it *feels*, each fix measured against the
@@ -257,11 +226,16 @@ and the space the keyboard and Android's navigation bar cost a card. Both are in
   on both; only `com.palm.properties.version` differs (`HP webOS 3.0.5` against
   `webOS CE 3.1.0`).
 - **Next candidates:**
+  - `activitymanager`'s scheduled activities and `com.palm.power/timeout`, which are one want
+    and not two: the Clock's alarms, SimpleChat's half-hourly refresh, reddit's message check
+    and drPodder's feed update all ask for them, and Android's `AlarmManager` backs them all;
+  - the rest of the emulated card: its own status bar, gesture strip and keyboard button, and
+    a phone-shaped thumbnail in card view;
+  - a launching card created when the app is *launched* rather than when it opens a window,
+    so a `noWindow` app gets its placeholder as early as a device gives one;
   - the media indexer's db8 kinds;
   - the rest of the settings apps: Date & Time, Language, Backup, Accounts, Updates, Location
     (each is one of the three cases above);
-  - `activitymanager`'s scheduled activities, which is what the Clock's alarms need;
-
   - the border-image seams in Enyo dialogs;
   - a test suite from the apps in fix-log.md, run on WebView 37 and 64;
   - card stacks/groups;

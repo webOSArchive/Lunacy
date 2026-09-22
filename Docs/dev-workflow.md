@@ -142,6 +142,11 @@ the note in [luna-shell-reference.md](luna-shell-reference.md). `novacom -l` nam
   `prototype`, `mojoloader.js`, `mojo.core`, `underscore`, `foundations`, `globalization`,
   the `metascene.*` and the media ones, into `Workbench/vendor/touchpad/`. `media` there is a
   symlink to `/usr/lib/luna/luna-media-shim`, so copy that instead and name it `media`.
+- **If the device's apps sit on a loading splash and `palm-install` says "file open failed",**
+  it is in USB drive mode: `/media/internal` and `/media/cryptofs` are handed to the host, so
+  nothing on the device can read them. `grep media/internal /proc/mounts` comes back empty.
+  Nothing here can fix it - tap **Done** on the device. Don't mount the volume from this side
+  while the device is sharing it.
 - **If novacom hangs:** `novacom -l` times out when the daemon is stuck. Restart it with
   `sudo systemctl restart novacomd`, which works non-interactively here.
 - **Driving the test app without touches:** `palm-launch -p '{"do":"push"}'

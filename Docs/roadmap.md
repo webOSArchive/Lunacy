@@ -10,6 +10,24 @@ transcoded video, Sound Cloud Player streams through its JS service, AccuWeather
 show live data. Per-app results and every fix, with the layer it landed in, are in
 [fix-log.md](fix-log.md).
 
+**2026-09-22, a third pass.** Three more from codepoet, and one of them was mine again:
+
+- **`-webkit-palm-mouse-target` does not inherit, and `pointer-events` does.** Translating it
+  straight made Mojo's whole view menu untouchable, so a tap on drPodder's back arrow fell
+  through to the list row beneath it and pushed an episode into view. Each rule now gets a
+  companion that puts the subtree back.
+- **A scene has no height of its own.** Mojo's scroller is `overflow: -webkit-palm-overflow`
+  on a device, which is what makes a scene fill it; here it falls back to `overflow: hidden`
+  and a scene whose content is all out of flow is zero pixels tall. drPodder's splash paints
+  its gradient with a `height: 100%` div inside the scene, so it came out grey with the logo
+  adrift. Fixed in the Mojo fork.
+- **A page wider than the card is zoomed out rather than clipped** - diagnosed, measured, and
+  *not* fixed. This WebView derives a minimum page scale that fits the content; webOS let
+  content hang off the edge. Turning the tablet into portrait with reddit open draws the page
+  at 0.78 and leaves the bottom of the card unpainted. Everything tried is written up in
+  [fix-log.md](fix-log.md); what would work is replacing the viewport model the 1 CSS px =
+  1 device px mapping rests on, which is a decision rather than a fix.
+
 **2026-09-22, a second pass on the same two apps.** codepoet looked again and found five more
 differences. Four were separate causes, and two of those were general:
 

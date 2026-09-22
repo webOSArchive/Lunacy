@@ -249,6 +249,38 @@ Found while testing the apps below; each is general, not tied to one app.
   MojoLoader for it) and the other libraries 404 until they are added to `fetch-assets.sh`.
 - **shell, full-screen cards:** `PalmSystem.enableFullScreenMode` is still a logged no-op, so
   a video player's card keeps the status bar where a device hides it.
+- **card host, a page wider than the card is zoomed out instead of clipped.** Measured on the
+  HP 10 G2 on 2026-09-22, and not fixed.
+
+  This WebView is a mobile browser underneath. When a page's layout comes out wider than the
+  window it derives a minimum page scale that fits the content, so that nothing is lost when
+  the reader zooms out. webOS had no such idea: a card was the viewport, and content wider
+  than it simply hung off the edge.
+
+  It shows up on a **rotation**, because that is when the constraints are recomputed. Turning
+  the tablet from landscape into portrait with webOS IAmA reddit open - whose `#bar` is
+  hard-coded to 1030 px for a TouchPad - draws the whole page at **0.78** (800 / 1023) and
+  leaves the bottom and right of the card unpainted. Landscape is fine, because 1023 fits in
+  1280. Rotating again clears it, because by then the page is measured against a viewport it
+  fits in.
+
+  Proved by removing the overflow rather than by argument: narrowing `#bar` to 100 px in the
+  running card takes `documentElement.scrollWidth` from 1023 to 800 and the page snaps back to
+  1:1 immediately, white area and all.
+
+  **What doesn't work**, all tried on the device:
+  - `setInitialScale` again after the resize - it applies to the next load, as documented;
+  - `zoomBy` back to 1 - clamped, because Blink's own minimum *is* 0.78 by then;
+  - toggling `useWideViewPort` to make Blink recompute the constraints;
+  - `overflow-x: hidden` or an explicit width on `html` or `body` - neither reduces the
+    content width Blink measures, only what is painted.
+
+  What would work is taking the viewport out of the WebView's hands: `useWideViewPort` with an
+  injected `<meta name="viewport">` carrying the card's width and `minimum-scale=1`. That
+  replaces the model Lunacy's 1 CSS px = 1 device px mapping rests on
+  (`setInitialScale(density x 100)`), so it is a decision rather than a fix, and it is
+  codepoet's. The same behaviour is what puts fixed elements off the edge of a portrait card,
+  which *is* corrected - see the row above.
 - **shell, a card's open and close animations drop frames, and the minimize is the worse of
   the two.** Measured on the HP 10 G2 from SurfaceFlinger's own present times
   (`dumpsys SurfaceFlinger --latency`), Device Info, back key so no touch injection is in the

@@ -1,6 +1,6 @@
 {
 	"id": "org.webosarchive.lunacy.winprobe",
-	"version": "0.0.4",
+	"version": "0.0.5",
 	"vendor": "webOS Archive",
 	"type": "web",
 	"main": "index.html",

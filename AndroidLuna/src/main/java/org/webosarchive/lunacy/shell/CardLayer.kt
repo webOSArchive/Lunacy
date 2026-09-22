@@ -2,6 +2,7 @@ package org.webosarchive.lunacy.shell
 
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
+import android.animation.TimeInterpolator
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
@@ -90,8 +91,15 @@ class Card(
             start()
         }
     }
-    /** Card-view transform, animated by CardLayer. */
-    var cx = 0f; var cy = 0f; var scale = 1f; var lift = 0f; var fade = 1f
+    /**
+     * Card-view transform, animated by CardLayer, as LunaSysMgr kept it: [gx] is the card's
+     * group's x (from the centre of the screen) and [rx] the card's own x within the group,
+     * because the two slide on different timings. [rot] is degrees; [lift] is a drag off
+     * its place up or down.
+     */
+    var gx = 0f; var rx = 0f; var cy = 0f; var scale = 1f; var rot = 0f; var lift = 0f; var fade = 1f
+    /** The group this card is in (LunaCE's CardGroup); see [CardLayer]. */
+    internal var group: CardLayer.Group? = null
 
     /**
      * Laid out over the status bar's space as well as below it: the app asked for full screen
@@ -125,10 +133,15 @@ class Card(
     }
 }
 
+
 /**
  * The card layer: every card, in card view or maximized. Cards keep their maximized size and
  * are scaled, as Luna did, so apps never see a resize when the card view opens.
- * Geometry and timings: Docs/luna-shell-reference.md.
+ *
+ * Cards live in groups, LunaSysMgr's CardGroup: a card an app opens while its own card is up
+ * joins that card's group, and anything else starts a group of its own just right of the
+ * active one. The active group is fanned; the others are collapsed into a 10 px stagger at
+ * the smaller scale. Geometry and timings: Docs/luna-shell-reference.md §2.
  */
 @SuppressLint("ViewConstructor")
 class CardLayer(context: Context, private val luna: Luna, private val listener: Listener) : ViewGroup(context) {
@@ -141,6 +154,8 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
          */
         fun onPreparing(card: Card)
         fun onThrownAway(card: Card)
+        /** A card is picked up to be reordered, or put down: the dock fades out meanwhile. */
+        fun onReorder(active: Boolean)
     }
 
     /**
@@ -154,15 +169,24 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         const val ORIGIN_RATIO = 0.40f        // kWindowOriginRatio: card centre within the rest
         const val MIN_SCALE = 0.26f           // kMinimumWindowScale
         const val GAP = 30f                   // GapBetweenCardGroups
+        const val GROUP_X_DISTANCE = 0.35f    // CardGroupingXDistanceFactor
+        const val GROUP_ROT = 90f             // CardGroupRotFactor
+        const val SIDE_STAGGER = 10f          // a collapsed group's cards, each this far right of the last
         const val CORNER = 9f                 // corner half-axis, unscaled card px
         const val SHADOW_GROW = 20f           // card-shadow-tile drawn 20 px outside the card
         const val SHADOW_DROP = 5f            // … and 5 px lower
         const val TAP_RADIUS = 25f            // TapRadiusMax
         const val AXIS_LOCK = 0.866f          // horizontal if |dx| > 0.866·|dy|
         const val MAXIMIZE_MS = 300L          // cardMaximizeDuration, OutQuart
-        const val MINIMIZE_MS = 200L          // active group on minimize, OutCubic (hard-coded)
+        const val FAN_MS = 200L               // the active group's cards on every slide, OutCubic (hard-coded)
         const val SLIDE_MS = 300L             // cardSlideDuration, OutQuart
         const val DELETE_MS = 300L            // cardDeleteDuration, OutCubic
+        const val TRACK_GROUP_MS = 50L        // cardTrackGroupDuration, linear: groups under the finger
+        const val TRACK_MS = 300L             // cardTrack: not in the device's conf, so the code's 300 ms linear
+        const val SHUFFLE_MS = 350L           // cardShuffleReorderDuration, OutCubic
+        const val GROUP_REORDER_MS = 500L     // cardGroupReorderDuration, OutCubic
+        const val HOLD_MS = 700L              // Qt's QTapAndHoldGesture timeout; LunaSysMgr keeps it
+        const val REORDER_OPACITY = 0.8f      // a card being reordered
         const val PREPARE_MS = 150L           // cardPrepareAddDuration: held off-screen for the first frame
         const val ADD_MAX_MS = 750L           // cardAddMaxDuration: then this long more before the card view
         const val EDGE = 15f                  // kGestureBorderSize
@@ -176,7 +200,19 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         const val DIM_MS = 300L               // cardDimmingDuration, OutCubic
     }
 
-    val cards = ArrayList<Card>()
+    /** LunaCE's CardGroup: cards back (left) to front (right), and the one that is active. */
+    class Group {
+        val cards = ArrayList<Card>()
+        var active: Card? = null
+        /** Extents either side of the group's x, from its last layout, for spacing the groups. */
+        var left = 0f; var right = 0f
+    }
+
+    private val groups = ArrayList<Group>()
+    /** Every card, group by group, back to front. */
+    val cards: List<Card> get() = groups.flatMap { it.cards }
+    private var activeGroup: Group? = null
+
     /** Plays one of LunaSysMgr's feedback sounds; see [Sounds.feedback]. */
     var feedback: (String) -> Unit = {}
     /**
@@ -188,6 +224,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
      */
     var upsideDown: () -> Boolean = { false }
     private var playedStretch = false
+
     /**
      * The status bar's height. The layer runs the whole height of the screen so that a
      * full-screen card can be laid out under the bar; every other card, and the card view's
@@ -199,6 +236,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     val areaHeight get() = height - inset
     /** Where a card's top edge is laid out. */
     private fun top(c: Card) = if (c.fullScreen) 0 else inset
+    private fun cardHeight(c: Card) = height - top(c)
     /** A card's own centre, which is where it sits maximized. */
     private fun naturalY(c: Card) = top(c) + (height - top(c)) / 2f
     var maximized: Card? = null
@@ -213,34 +251,17 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
      * is built does.
      */
     val active: Card? get() = maximized ?: activating ?: lastLaunched?.takeIf { it in launching }
-    /**
-     * LunaSysMgr's active card window: the card the card view is centred on, or the one on its
-     * way to the screen. Changing it dims the one before; see [Card.dimming].
-     */
-    private var current: Card? = null
-    private fun setCurrent(c: Card?) {
-        if (c == current) return
-        current?.takeIf { it in cards }?.setDimmed(true)
-        current = c
-        c?.setDimmed(false)
-    }
-    /** The card nearest the centre of the card view becomes the active one. */
-    private fun settleCurrent() { setCurrent(cards.getOrNull(position.roundToInt().coerceIn(0, max(cards.size - 1, 0)))) }
-
-    /** Card-view scroll position, in cards. */
-    private var position = 0f
-    private var anim: ValueAnimator? = null
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
     private val flingMin = ViewConfiguration.get(context).scaledMinimumFlingVelocity * 4
 
-    init { clipChildren = false; setWillNotDraw(false) }
+    init { clipChildren = false; setWillNotDraw(false); isChildrenDrawingOrderEnabled = true }
 
     // ---- layout ----
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
         for (c in cards) c.layout(0, top(c), r - l, b - t)
         // A maximized card that has just gone to or from full screen has a new centre.
-        maximized?.let { if (anim == null && drag == Drag.NONE) { it.cx = (r - l) / 2f; it.cy = naturalY(it) } }
+        maximized?.let { if (anim == null && drag == Drag.NONE) { it.gx = 0f; it.rx = 0f; it.cy = naturalY(it) } }
         applyTransforms()
     }
 
@@ -254,39 +275,141 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         anim?.cancel(); anim = null
+        endReorder(animate = false)
         drag = Drag.NONE
         val max = maximized
-        if (max != null) {
-            cards.forEachIndexed { i, c -> val (x, y, s) = cardViewTarget(i); c.cx = x; c.cy = y; c.scale = s; c.lift = 0f; c.fade = 1f }
-            max.cx = w / 2f; max.cy = naturalY(max); max.scale = 1f
-        } else settleCardView()
+        place(if (max != null) maximizedLayout(max) else layout(Arrange.STACK))
     }
 
     private fun reserve() = luna.px(Params.PILL_RESERVE)
     private fun activeScale() = max(Params.MIN_SCALE, (areaHeight - reserve()) * Params.ACTIVE_RATIO / areaHeight)
     private fun nonActiveScale() = max(Params.MIN_SCALE, (areaHeight - reserve()) * Params.NON_ACTIVE_RATIO / areaHeight)
-    /** Distance between the centres of two side cards. */
-    private fun pitch() = width * nonActiveScale() + luna.px(Params.GAP)
+    /** CardWindowManager's kWindowOrigin: where every group's centre sits in the card view. */
+    private fun originY() = inset + reserve() + (areaHeight - reserve()) * Params.ORIGIN_RATIO
+
+    /** Where a card should be: its group's x, its own x in the group, centre y, scale, degrees. */
+    private class Pose(val gx: Float, val rx: Float, val cy: Float, val scale: Float, val rot: Float)
+
+    /** Half a transformed card's width, rotation included, as LunaCE's mapRect measures it. */
+    private fun halfExtent(c: Card, scale: Float, rot: Float): Float {
+        val a = Math.toRadians(rot.toDouble())
+        return scale * (width / 2f * Math.cos(a).toFloat() + cardHeight(c) / 2f * abs(Math.sin(a).toFloat()))
+    }
 
     /**
-     * Where each card sits in the card view for the current scroll position: the active card
-     * at activeScale, the others at nonActiveScale with GAP between their edges.
+     * CardGroup::calculateOpenedPositions for the Stack arranger (the card view), relative to
+     * the group, with LunaCE's always-centred position p. A group [xOffset] from the centre
+     * collapses towards a 10 px stagger at the non-active scale as it goes. Sets the group's
+     * extents, as LunaCE did.
      */
-    private fun cardViewTarget(i: Int): Triple<Float, Float, Float> {
-        val d = i - position
-        val t = min(abs(d), 1f)
-        val a = activeScale(); val n = nonActiveScale()
-        val s = a + (n - a) * t
-        val x = width / 2f + d * pitch() + Math.signum(d) * t * width * (a - n) / 2
-        val y = inset + reserve() + (areaHeight - reserve()) * Params.ORIGIN_RATIO
-        return Triple(x, y, s)
+    private fun fan(g: Group, xOffset: Float): List<Pose> {
+        val n = g.cards.size; val p = (n - 1) / 2f
+        val cur = activeScale(); val non = nonActiveScale(); val aw = width * cur
+        val poses = (0 until n).map { i ->
+            var x = ((i - p) / 3f) * aw * Params.GROUP_X_DISTANCE
+            var y = if (x > 0) x / 15f else 0f
+            var s = cur
+            var r = (x / luna.density) / (cur * Params.GROUP_ROT)
+            if (xOffset != 0f) {
+                val amt = max(1f, aw - abs(xOffset)) / aw
+                x = x * amt + (1 - amt) * luna.px(Params.SIDE_STAGGER) * i
+                y *= amt; s = non + (cur - non) * amt; r *= amt
+            }
+            Pose(0f, x, originY() + y, s, r)
+        }
+        if (n > 0) {
+            g.left = -(poses.first().rx - halfExtent(g.cards.first(), poses.first().scale, poses.first().rot))
+            g.right = poses.last().rx + halfExtent(g.cards.last(), poses.last().scale, poses.last().rot)
+        }
+        return poses
     }
+
+    /** The Linear arranger, used while a card is maximized: full size, side by side. */
+    private fun linear(g: Group): List<Pose> {
+        val n = g.cards.size
+        val a = g.cards.indexOf(g.active).coerceAtLeast(0)
+        val poses = (0 until n).map { i ->
+            Pose(0f, (i - a) * (width + if (n > 1) luna.px(Params.GAP) else 0f), naturalY(g.cards[i]), 1f, 0f)
+        }
+        if (n > 0) { g.left = -(poses.first().rx - width / 2f); g.right = poses.last().rx + width / 2f }
+        return poses
+    }
+
+    private enum class Arrange { STACK, LINEAR }
+
+    /**
+     * Every card's place, CardWindowManager::slideAllGroups: the active group at [activeX]
+     * and the others either side of it, GAP between their extents. [tracking] is
+     * slideAllGroupsTo, the groups under a finger, where the active group collapses too.
+     */
+    private fun layout(arr: Arrange, activeX: Float = 0f, tracking: Boolean = false): HashMap<Card, Pose> {
+        val out = HashMap<Card, Pose>()
+        val ag = activeGroup ?: return out
+        val gap = luna.px(Params.GAP)
+        fun poses(g: Group, offset: Float) = if (arr == Arrange.STACK) fan(g, offset) else linear(g)
+        fun put(g: Group, gx: Float, ps: List<Pose>) = g.cards.forEachIndexed { i, c -> out[c] = Pose(gx, ps[i].rx, ps[i].cy, ps[i].scale, ps[i].rot) }
+        put(ag, activeX, poses(ag, if (tracking) activeX else 0f))
+        val ai = groups.indexOf(ag)
+        // A side group's extents depend on how far it has collapsed, which depends on where it
+        // lands: estimate it collapsed, then place it once more with that.
+        var edge = activeX - ag.left - gap
+        for (i in ai - 1 downTo 0) {
+            val g = groups[i]
+            poses(g, -Float.MAX_VALUE / 4)
+            val ps = poses(g, edge - g.right)
+            val x = edge - g.right
+            put(g, x, ps)
+            edge = x - gap - g.left
+        }
+        edge = activeX + ag.right + gap
+        for (i in ai + 1 until groups.size) {
+            val g = groups[i]
+            poses(g, Float.MAX_VALUE / 4)
+            val ps = poses(g, edge + g.left)
+            val x = edge + g.left
+            put(g, x, ps)
+            edge = x + gap + g.right
+        }
+        return out
+    }
+
+    /**
+     * CardWindowManager::maximizeActiveWindow: the groups laid out Linear, the card itself
+     * full size in the middle, and the rest of its group off either side at the active scale.
+     */
+    private fun maximizedLayout(card: Card): HashMap<Card, Pose> {
+        val g = card.group ?: return HashMap()
+        val out = layout(Arrange.LINEAR)
+        val a = g.cards.indexOf(card)
+        g.cards.forEachIndexed { i, c ->
+            out[c] = when {
+                c == card -> Pose(0f, 0f, naturalY(card), 1f, 0f)
+                i < a -> Pose(0f, -width.toFloat(), naturalY(card), activeScale(), 0f)
+                else -> Pose(0f, width.toFloat(), naturalY(card), activeScale(), 0f)
+            }
+        }
+        return out
+    }
+
+    private fun place(poses: Map<Card, Pose>) {
+        for ((c, p) in poses) { c.gx = p.gx; c.rx = p.rx; c.cy = p.cy; c.scale = p.scale; c.rot = p.rot; c.lift = 0f }
+        applyTransforms()
+    }
+
+    private fun cx(c: Card) = width / 2f + c.gx + c.rx
 
     private fun applyTransforms() {
         for (c in cards) {
             c.pivotX = c.width / 2f; c.pivotY = c.height / 2f
             c.scaleX = c.scale; c.scaleY = c.scale
-            c.translationX = c.cx - (c.left + c.width / 2f)
+            c.rotation = c.rot
+            // Chromium 37's WebView draws nothing, and asks to draw again every frame, when it
+            // is itself turned by a negative angle, and nothing at all under a view's alpha;
+            // drawn into a layer that is then turned or faded, it is fine. Only a card that is
+            // turned or see-through has one.
+            val layer = if (abs(c.rot) > 0.01f || c.fade < 1f) View.LAYER_TYPE_HARDWARE else View.LAYER_TYPE_NONE
+            if (c.layerType != layer) c.setLayerType(layer, null)
+            c.translationX = cx(c) - (c.left + c.width / 2f)
             c.translationY = c.cy - (c.top + c.height / 2f) + c.lift
             c.alpha = c.fade
             c.invalidateOutline()
@@ -294,85 +417,181 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         invalidate()
     }
 
-    private fun settleCardView() {
-        cards.forEachIndexed { i, c -> val (x, y, s) = cardViewTarget(i); c.cx = x; c.cy = y; c.scale = s; c.lift = 0f; c.fade = 1f }
-        applyTransforms()
+    // ---- stacking ----
+
+    /** The card drawn over everything else: the one being maximized, reordered or launched. */
+    private var topCard: Card? = null
+    private var drawOrder = IntArray(0)
+
+    /**
+     * Within a group later cards are drawn over earlier ones, and the active group over the
+     * others (CardGroup::raiseCards, CardWindowManager's re-raise after every animation).
+     */
+    private fun restack() {
+        val order = ArrayList<Card>()
+        groups.filter { it != activeGroup }.forEach { order += it.cards }
+        activeGroup?.let { order += it.cards }
+        topCard?.takeIf { it in order }?.let { order.remove(it); order += it }
+        drawOrder = order.map { indexOfChild(it) }.filter { it >= 0 }.toIntArray()
+        invalidate()
     }
 
-    /** Luna's card shadow, drawn behind each card at its transformed bounds. */
-    override fun dispatchDraw(c: Canvas) {
+    override fun getChildDrawingOrder(childCount: Int, i: Int): Int =
+        if (drawOrder.size == childCount) drawOrder[i] else i
+
+    /** Luna's card shadow, drawn under each card as the card itself is drawn (reference §2.4). */
+    override fun drawChild(c: Canvas, child: View, drawingTime: Long): Boolean {
+        val card = child as? Card
         val shadow = luna.image("card-shadow-tile.png")
-        if (shadow != null) for (card in cards) {
-            if (card.visibility != View.VISIBLE || card.scale >= 0.999f) continue
+        if (card != null && shadow != null && card.visibility == View.VISIBLE && card.scale < 0.999f) {
             // card-shadow-tile.png as a nine-patch (43 px insets), 20 px outside the card and
-            // 5 px down, in the card's own scaled coordinates (reference §2.4).
+            // 5 px down, in the card's own scaled and turned coordinates.
             val s = card.scale; val g = luna.px(Params.SHADOW_GROW); val drop = luna.px(Params.SHADOW_DROP)
             val halfW = (card.width / 2f + g) * s; val halfH = (card.height / 2f + g) * s
-            val cy = card.cy + card.lift + drop * s
+            val x = cx(card); val y = card.cy + card.lift
             // 43 of 87 px in the original: keep at least a 1-px stretchable middle after scaling,
             // or the edge slices vanish and only the corners draw.
             val inset = (shadow.width - 1) / 2
             val p = android.graphics.Paint().apply { alpha = (card.fade * 255).toInt(); isFilterBitmap = true }
             val d = inset * s
-            Luna.drawNineSlice(c, shadow, RectF(card.cx - halfW, cy - halfH, card.cx + halfW, cy + halfH), inset, inset, inset, inset, p, d, d, d, d)
+            c.save()
+            c.rotate(card.rot, x, y)
+            Luna.drawNineSlice(c, shadow, RectF(x - halfW, y + drop * s - halfH, x + halfW, y + drop * s + halfH), inset, inset, inset, inset, p, d, d, d, d)
+            c.restore()
         }
-        super.dispatchDraw(c)
+        return super.drawChild(c, child, drawingTime)
     }
 
-    // ---- state changes ----
+    // ---- the active card ----
 
-    fun add(card: Card) {
-        cards += card
-        addView(card)
-        card.visibility = View.VISIBLE
+    /**
+     * LunaSysMgr's active card window: the active group's active card. Changing it dims the
+     * one before; see [Card.dimming].
+     */
+    private var current: Card? = null
+    private fun setCurrent(c: Card?) {
+        if (c == current) return
+        current?.takeIf { it.group != null }?.setDimmed(true)
+        current = c
+        c?.setDimmed(false)
     }
 
-    fun remove(card: Card) {
-        val i = cards.indexOf(card)
-        if (i < 0) return
-        cards.removeAt(i); removeView(card)
-        launching.remove(card)
-        if (maximized == card) maximized = null
-        if (activating == card) activating = null
-        position = min(position, max(cards.size - 1f, 0f))
-        if (current == card) { current = null; settleCurrent() }
+    private fun setActiveGroup(g: Group?) {
+        activeGroup = g
+        setCurrent(g?.active)
+        restack()
     }
 
-    /** Animates from wherever the cards are now to their targets. */
-    private fun animateTo(ms: Long, target: (Int) -> Triple<Float, Float, Float>, easing: android.animation.TimeInterpolator = Easing.OutQuart, done: () -> Unit = {}) {
-        anim?.cancel()
-        val from = cards.map { floatArrayOf(it.cx, it.cy, it.scale, it.lift) }
-        val to = cards.indices.map { target(it) }
-        anim = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = ms; interpolator = easing
+    /** CardWindowManager::groupClosestToCenterHorizontally. */
+    private fun closestGroup(): Group? = groups.minByOrNull { g -> g.cards.firstOrNull()?.let { abs(it.gx) } ?: Float.MAX_VALUE }
+
+    // ---- animation ----
+
+    /** One card's move: its group's x on one timing, its own place in the group on another. */
+    private class Move(val card: Card, val to: Pose, val groupMs: Long, val groupEase: TimeInterpolator,
+                       val cardMs: Long, val cardEase: TimeInterpolator)
+
+    private var anim: ValueAnimator? = null
+
+    private fun run(moves: List<Move>, done: () -> Unit = {}) {
+        anim?.cancel(); anim = null
+        val total = moves.maxOfOrNull { max(it.groupMs, it.cardMs) } ?: 0L
+        if (total <= 0L) { moves.forEach { m -> place(mapOf(m.card to m.to)) }; done(); return }
+        val from = moves.map { m -> m.card.let { floatArrayOf(it.gx, it.rx, it.cy, it.scale, it.rot, it.lift) } }
+        var cancelled = false
+        anim = ValueAnimator.ofFloat(0f, total.toFloat()).apply {
+            duration = total; interpolator = Easing.Linear
             addUpdateListener { a ->
-                val f = a.animatedValue as Float
-                cards.forEachIndexed { i, c ->
-                    if (i >= from.size) return@forEachIndexed
-                    c.cx = from[i][0] + (to[i].first - from[i][0]) * f
-                    c.cy = from[i][1] + (to[i].second - from[i][1]) * f
-                    c.scale = from[i][2] + (to[i].third - from[i][2]) * f
-                    c.lift = from[i][3] * (1 - f)
+                val t = a.animatedValue as Float
+                moves.forEachIndexed { k, m ->
+                    val f = from[k]; val c = m.card; val to = m.to
+                    val fg = m.groupEase.getInterpolation(if (m.groupMs <= 0) 1f else min(1f, t / m.groupMs))
+                    val fc = m.cardEase.getInterpolation(if (m.cardMs <= 0) 1f else min(1f, t / m.cardMs))
+                    c.gx = f[0] + (to.gx - f[0]) * fg
+                    c.rx = f[1] + (to.rx - f[1]) * fc
+                    c.cy = f[2] + (to.cy - f[2]) * fc
+                    c.scale = f[3] + (to.scale - f[3]) * fc
+                    c.rot = f[4] + (to.rot - f[4]) * fc
+                    c.lift = f[5] * (1 - fc)
                 }
                 applyTransforms()
             }
             addListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationEnd(a: Animator) { anim = null; done() }
+                override fun onAnimationCancel(a: Animator) { cancelled = true }
+                override fun onAnimationEnd(a: Animator) {
+                    if (anim === a) anim = null
+                    if (!cancelled) { restack(); done() }
+                }
             })
             start()
         }
     }
 
-    fun maximize(card: Card) {
-        val i = cards.indexOf(card)
-        if (i < 0) return
+    /**
+     * slideAllGroups: every group to its place over cardSlideDuration, and the active group's
+     * own cards over a quicker, hard-coded 200 ms OutCubic.
+     */
+    private fun slide(except: Card? = null, done: () -> Unit = {}) {
+        val ag = activeGroup
+        run(layout(Arrange.STACK).filterKeys { it != except }.map { (c, p) ->
+            if (c.group == ag) Move(c, p, Params.SLIDE_MS, Easing.OutQuart, Params.FAN_MS, Easing.OutCubic)
+            else Move(c, p, Params.SLIDE_MS, Easing.OutQuart, Params.SLIDE_MS, Easing.OutQuart)
+        }, done)
+    }
+
+    // ---- state changes ----
+
+    /**
+     * A new card. One that [sibling]'s app opens while [sibling] is up joins its group, at the
+     * front; anything else starts a group of its own just right of the active group
+     * (CardWindowManager::prepareAddWindowSibling). Either way it becomes the active card.
+     */
+    fun add(card: Card, sibling: Card? = null) {
+        val g = sibling?.group ?: Group().also { groups.add(activeGroup?.let { groups.indexOf(it) + 1 } ?: groups.size, it) }
+        g.cards += card
+        card.group = g
+        g.active = card
+        addView(card)
+        card.visibility = View.VISIBLE
+        setActiveGroup(g)
+    }
+
+    fun remove(card: Card) {
+        val g = card.group ?: return
+        val i = g.cards.indexOf(card)
+        val activeIndex = g.cards.indexOf(g.active)
+        g.cards.removeAt(i); card.group = null
+        // CardGroup::removeFromGroup: the card behind takes over as the group's active one.
+        if (g.cards.isEmpty()) g.active = null
+        else if (i == activeIndex) g.active = if (i > 0) g.cards[i - 1] else g.cards[0]
+        if (g.cards.isEmpty()) groups.remove(g)
+        removeView(card)
         launching.remove(card)
-        position = i.toFloat()
-        setCurrent(card)
+        if (reorderCard == card) endReorder(animate = false)
+        if (topCard == card) topCard = null
+        if (current == card) current = null
+        val wasUp = maximized == card || activating == card
+        if (maximized == card) maximized = null
+        if (activating == card) { activating = null; anim?.cancel(); anim = null }
+        if (dragCard == card) { drag = Drag.NONE; dragCard = null }
+        // CardWindowManager::removeCardFromGroup: the group nearest the middle is the active one,
+        // and everything slides to its place. A card that goes while it is up takes the shell
+        // back to the card view (removeCardFromGroupMaximized).
+        setActiveGroup(if (g.cards.isNotEmpty() && g == activeGroup) g else closestGroup())
+        if (wasUp) { if (cards.isNotEmpty()) showCardView() }
+        else if (maximized == null && activating == null) slide()
+    }
+
+    fun maximize(card: Card) {
+        val g = card.group ?: return
+        launching.remove(card)
+        g.active = card
+        setActiveGroup(g)
         cards.forEach { it.visibility = View.VISIBLE }
-        card.bringToFront()
         activating = card
-        animateTo(Params.MAXIMIZE_MS, { j -> if (j == i) Triple(width / 2f, naturalY(card), 1f) else cardViewTarget(j) }, Easing.OutQuart) {
+        topCard = card
+        restack()
+        run(maximizedLayout(card).map { (c, p) -> Move(c, p, Params.MAXIMIZE_MS, Easing.OutQuart, Params.MAXIMIZE_MS, Easing.OutQuart) }) {
             activating = null
             maximized = card
             cards.forEach { if (it != card) it.visibility = View.INVISIBLE }
@@ -381,12 +600,12 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     }
 
     fun showCardView() {
-        val was = maximized
         maximized = null
         activating = null
+        topCard = null
         cards.forEach { it.visibility = View.VISIBLE }
-        if (was != null) position = cards.indexOf(was).toFloat()
-        animateTo(Params.MINIMIZE_MS, ::cardViewTarget, Easing.OutCubic)
+        restack()
+        slide()
         listener.onCardView()
     }
 
@@ -405,24 +624,28 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
      */
     fun openLaunching(card: Card) {
         if (width == 0) { post { openLaunching(card) }; return }
-        settleCardView()
-        card.cx = width / 2f; card.cy = height * 1.5f; card.scale = 1f
+        // setActiveCardOffScreen: full size, its top at the bottom of the screen.
+        card.gx = 0f; card.rx = 0f; card.cy = height + cardHeight(card) / 2f; card.scale = 1f; card.rot = 0f; card.lift = 0f
+        topCard = card
+        restack()
         applyTransforms()
-        setCurrent(card)
+        // The others make room while it waits (slideAllGroups without the new card).
+        if (maximized == null && activating == null) slide(except = card)
         if (card.ready) { maximize(card); return }
         launching += card
         lastLaunched = card
         postDelayed({
-            if (card in launching && card in cards && activating == null && drag == Drag.NONE) timedOut(card)
+            if (card in launching && card.group != null && activating == null && drag == Drag.NONE) timedOut(card)
         }, Params.PREPARE_MS + Params.ADD_MAX_MS)
     }
 
     private fun timedOut(card: Card) {
         maximized = null
-        position = cards.indexOf(card).toFloat()
+        card.group?.let { it.active = card; setActiveGroup(it) }
         cards.forEach { it.visibility = View.VISIBLE }
-        card.bringToFront()
-        animateTo(Params.SLIDE_MS, ::cardViewTarget, Easing.OutQuart)
+        topCard = null
+        restack()
+        run(layout(Arrange.STACK).map { (c, p) -> Move(c, p, Params.SLIDE_MS, Easing.OutQuart, Params.SLIDE_MS, Easing.OutQuart) })
         listener.onPreparing(card)
     }
 
@@ -432,7 +655,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
      */
     fun ready(card: Card) {
         card.ready = true
-        if (!launching.remove(card) || card !in cards) return
+        if (!launching.remove(card) || card.group == null) return
         if (maximized != null && maximized != card) return
         if (drag != Drag.NONE) return
         maximize(card)
@@ -448,30 +671,169 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         feedback(if (angry && upsideDown()) "birdappclose" else "appclose")
         val start = card.lift
         val end = inset - card.height * card.scale / 2f - card.cy
-        anim?.cancel()
+        anim?.cancel(); anim = null
         anim = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = Params.DELETE_MS; interpolator = Easing.OutCubic
             addUpdateListener { a -> val f = a.animatedValue as Float; card.lift = start + (end - start) * f; applyTransforms() }
             addListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationEnd(a: Animator) {
-                    anim = null
+                    if (anim === a) anim = null
+                    if (card.group == null) return
                     remove(card)
                     listener.onThrownAway(card)
-                    settleCurrent()
-                    animateTo(Params.SLIDE_MS, ::cardViewTarget)
                 }
             })
             start()
         }
     }
 
+    // ---- reorder (reference §2.7) ----
+
+    private var reorderCard: Card? = null
+    /** -1, 0, 1: the finger is left of, over or right of the active card's slot. */
+    private var zone = 0
+
+    /** CardWindowManager::getReorderZone: either side of the middle W·activeScale. */
+    private fun zoneAt(x: Float): Int {
+        val half = width * activeScale() / 2f
+        val rel = x - width / 2f
+        return if (rel < -half) -1 else if (rel > half) 1 else 0
+    }
+
+    /** CardWindowManager::enterReorder: the held card goes 80 % opaque and leaves its group's layout. */
+    private fun startReorder(c: Card, x: Float) {
+        drag = Drag.REORDER
+        reorderCard = c
+        c.fade = Params.REORDER_OPACITY
+        topCard = c
+        restack()
+        zone = zoneAt(x)
+        listener.onReorder(true)
+        applyTransforms()
+    }
+
+    private fun reorderMove(dx: Float, dy: Float, x: Float) {
+        val c = reorderCard ?: return
+        c.rx += dx; c.cy += dy; c.scale = activeScale(); c.rot = 0f
+        applyTransforms()
+        val z = zoneAt(x)
+        if (z == zone && z == 0) moveReorderCentre()
+        else if (z != zone) { zone = z; if (z == 1) moveReorderRight() else if (z == -1) moveReorderLeft() }
+    }
+
+    /** The others make room: the active group to the middle, everyone to their places (arrangeWindowsAfterReorderChange). */
+    private fun arrangeAfterReorder(ms: Long) {
+        val ag = activeGroup
+        run(layout(Arrange.STACK).filterKeys { it != reorderCard }.map { (c, p) ->
+            if (c.group == ag) Move(c, p, Params.SHUFFLE_MS, Easing.OutCubic, ms, Easing.OutCubic)
+            else Move(c, p, ms, Easing.OutCubic, ms, Easing.OutCubic)
+        }) {
+            // ReorderState::animationsFinished: a finger still held to one side keeps going.
+            if (drag == Drag.REORDER) { if (zone == 1) moveReorderRight() else if (zone == -1) moveReorderLeft() }
+        }
+    }
+
+    /** CardGroup::moveActiveCard: past a sibling's centre, take its place. */
+    private fun moveReorderCentre() {
+        val c = reorderCard ?: return
+        val g = c.group ?: return
+        val a = g.cards.indexOf(c)
+        val x = cx(c)
+        val to = (0 until a).firstOrNull { x < cx(g.cards[it]) }
+            ?: (g.cards.size - 1 downTo a + 1).firstOrNull { x > cx(g.cards[it]) } ?: return
+        g.cards.removeAt(a); g.cards.add(to, c)
+        setActiveGroup(g)
+        arrangeAfterReorder(Params.SHUFFLE_MS)
+    }
+
+    /**
+     * moveReorderSlotRight: one place right in the group; past its front, out of it. A card
+     * that was alone joins the next group at the back; one leaving a group starts a new one.
+     */
+    private fun moveReorderRight() {
+        val c = reorderCard ?: return
+        val g = c.group ?: return
+        val a = g.cards.indexOf(c)
+        if (a < g.cards.size - 1) {
+            java.util.Collections.swap(g.cards, a, a + 1)
+            setActiveGroup(g)
+            arrangeAfterReorder(Params.SHUFFLE_MS)
+        } else if (g != groups.last() || g.cards.size > 1) {
+            val gi = groups.indexOf(g)
+            detach(c, g)
+            val ng = if (g.cards.isEmpty()) { groups.removeAt(gi); groups[gi] } else Group().also { groups.add(gi + 1, it) }
+            ng.cards.add(0, c); c.group = ng; ng.active = c
+            setActiveGroup(ng)
+            arrangeAfterReorder(Params.GROUP_REORDER_MS)
+        }
+    }
+
+    /** moveReorderSlotLeft, the mirror: a card that was alone joins the previous group at the front. */
+    private fun moveReorderLeft() {
+        val c = reorderCard ?: return
+        val g = c.group ?: return
+        val a = g.cards.indexOf(c)
+        if (a > 0) {
+            java.util.Collections.swap(g.cards, a, a - 1)
+            setActiveGroup(g)
+            arrangeAfterReorder(Params.SHUFFLE_MS)
+        } else if (g != groups.first() || g.cards.size > 1) {
+            val gi = groups.indexOf(g)
+            detach(c, g)
+            val ng = if (g.cards.isEmpty()) { groups.removeAt(gi); groups[max(0, gi - 1)] } else Group().also { groups.add(gi, it) }
+            ng.cards.add(c); c.group = ng; ng.active = c
+            setActiveGroup(ng)
+            arrangeAfterReorder(Params.GROUP_REORDER_MS)
+        }
+    }
+
+    private fun detach(c: Card, g: Group) {
+        val i = g.cards.indexOf(c)
+        g.cards.removeAt(i)
+        g.active = if (g.cards.isEmpty()) null else g.cards[max(0, i - 1)]
+    }
+
+    /** handleMouseReleaseReorder: opaque again, back in its group, and everything to its place. */
+    private fun endReorder(animate: Boolean = true) {
+        val c = reorderCard ?: return
+        reorderCard = null
+        c.fade = 1f
+        topCard = null
+        if (drag == Drag.REORDER) drag = Drag.NONE
+        listener.onReorder(false)
+        restack()
+        if (animate) slide()
+    }
+
     // ---- touch ----
 
-    private enum class Drag { NONE, UNDECIDED, SCROLL, THROW, MINIMIZE }
+    private enum class Drag { NONE, UNDECIDED, SCROLL, THROW, MINIMIZE, REORDER }
     private var drag = Drag.NONE
-    private var downX = 0f; private var downY = 0f; private var downPos = 0f
+    private var downX = 0f; private var downY = 0f
+    private var lastX = 0f; private var lastY = 0f
+    /** The active group's x as the finger took it (m_activeGroupPivot). */
+    private var pivot = 0f
     private var dragCard: Card? = null
     private var velocity: VelocityTracker? = null
+    /** A touch that arrived while a card was maximizing, which LunaSysMgr had no state for. */
+    private var ignoring = false
+
+    /**
+     * Tap-and-hold (handleTapAndHoldGestureMinimized): on a card of the active group, pick it
+     * up to reorder; on the empty space either side, go to the previous or next group.
+     */
+    private val hold = Runnable {
+        if (drag != Drag.UNDECIDED) return@Runnable
+        val c = dragCard
+        if (c != null) startReorder(c, lastX)
+        else {
+            drag = Drag.NONE
+            val ag = activeGroup ?: return@Runnable
+            val i = groups.indexOf(ag) + if (downX < width / 2f) -1 else 1
+            groups.getOrNull(i)?.let { setActiveGroup(it) }
+            slide()
+        }
+    }
 
     override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
         val max = maximized
@@ -491,27 +853,52 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         return false
     }
 
+    /** The topmost card under a point, of [g] only when given (CardGroup::setActiveCard, testHit). */
+    private fun cardAt(x: Float, y: Float, g: Group? = null): Card? {
+        val order = drawOrder.map { getChildAt(it) }.filterIsInstance<Card>().ifEmpty { cards }
+        return order.lastOrNull { c ->
+            if (g != null && c.group != g) return@lastOrNull false
+            val w = c.width * c.scale; val h = c.height * c.scale; val cx = cx(c); val cy = c.cy + c.lift
+            x >= cx - w / 2 && x <= cx + w / 2 && y >= cy - h / 2 && y <= cy + h / 2
+        }
+    }
+
+    /** CardGroup::withinColumn. */
+    private fun withinColumn(g: Group, x: Float): Boolean {
+        val gx = width / 2f + (g.cards.firstOrNull()?.gx ?: 0f)
+        return x >= gx - g.left && x <= gx + g.right
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        if (e.actionMasked == MotionEvent.ACTION_DOWN) ignoring = activating != null
+        if (ignoring) return true
         if (velocity == null) velocity = VelocityTracker.obtain()
         velocity!!.addMovement(e)
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 anim?.cancel(); anim = null
-                drag = Drag.UNDECIDED; downX = e.x; downY = e.y; downPos = position
-                dragCard = cardAt(e.x, e.y)
+                drag = Drag.UNDECIDED; downX = e.x; downY = e.y; lastX = e.x; lastY = e.y
                 playedStretch = false
+                // handleMousePressMinimized: only the active group's cards can be taken hold of.
+                dragCard = activeGroup?.let { g -> cardAt(e.x, e.y, g)?.also { g.active = it } }
+                pivot = activeGroup?.cards?.firstOrNull()?.gx ?: 0f
+                removeCallbacks(hold); postDelayed(hold, Params.HOLD_MS)
             }
             MotionEvent.ACTION_MOVE -> {
                 val dx = e.x - downX; val dy = e.y - downY
                 if (drag == Drag.UNDECIDED && Math.hypot(dx.toDouble(), dy.toDouble()) > luna.px(Params.TAP_RADIUS)) {
+                    removeCallbacks(hold)
                     drag = if (abs(dx) > Params.AXIS_LOCK * abs(dy)) Drag.SCROLL
                     else if (dragCard != null) Drag.THROW else Drag.NONE
                 }
                 when (drag) {
                     Drag.SCROLL -> {
-                        position = (downPos - dx / pitch()).coerceIn(-0.3f, cards.size - 0.7f)
-                        settleCardView()
+                        // slideAllGroupsTo: the groups follow the finger, collapsing as they leave the middle.
+                        pivot += e.x - lastX
+                        run(layout(Arrange.STACK, pivot, tracking = true).map { (c, p) ->
+                            Move(c, p, Params.TRACK_GROUP_MS, Easing.Linear, Params.TRACK_MS, Easing.Linear)
+                        })
                     }
                     Drag.THROW -> {
                         dragCard?.lift = dy; applyTransforms()
@@ -519,19 +906,27 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
                         if (!playedStretch && dy > areaHeight / 2f * 0.30f && upsideDown()) { playedStretch = true; feedback("carddrag") }
                     }
                     Drag.MINIMIZE -> minimizeFollow(dy)
+                    Drag.REORDER -> reorderMove(e.x - lastX, e.y - lastY, e.x)
                     else -> {}
                 }
+                lastX = e.x; lastY = e.y
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                removeCallbacks(hold)
                 velocity!!.computeCurrentVelocity(1000)
                 val vx = velocity!!.xVelocity; val vy = velocity!!.yVelocity
                 velocity!!.recycle(); velocity = null
                 val card = dragCard
                 when (drag) {
                     Drag.SCROLL -> {
-                        var target = position.roundToInt()
-                        if (abs(vx) > flingMin) target = if (vx < 0) downPos.roundToInt() + 1 else downPos.roundToInt() - 1
-                        scrollTo(target.coerceIn(0, max(cards.size - 1, 0)))
+                        // The group nearest the middle becomes active; a flick goes one further.
+                        var g = closestGroup()
+                        if (abs(vx) > flingMin && g != null) {
+                            val i = (groups.indexOf(g) + if (vx < 0) 1 else -1).coerceIn(0, groups.size - 1)
+                            g = groups[i]
+                        }
+                        setActiveGroup(g)
+                        slide()
                     }
                     Drag.THROW -> if (card != null) {
                         // Luna's rule: far enough, fast enough, and faster the shorter the drag.
@@ -544,14 +939,19 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
                         val centreBelowBottom = card.cy + card.lift > height
                         if (flung || centreAboveTop) throwAway(card)
                         else if (centreBelowBottom) throwAway(card, angry = true)
-                        else animateTo(Params.SLIDE_MS, ::cardViewTarget)
+                        else slide()
                     }
                     Drag.MINIMIZE -> if (card != null) {
                         if (vy < -flingMin || (downY - e.y) > height * 0.15f) showCardView() else maximize(card)
                     }
-                    Drag.UNDECIDED -> if (e.actionMasked == MotionEvent.ACTION_UP && card != null) {
-                        val i = cards.indexOf(card)
-                        if (i == position.roundToInt()) maximize(card) else scrollTo(i)
+                    Drag.REORDER -> endReorder()
+                    Drag.UNDECIDED -> if (e.actionMasked == MotionEvent.ACTION_UP) {
+                        val ag = activeGroup
+                        if (card != null) maximize(card)
+                        else if (ag != null && !withinColumn(ag, e.x)) {
+                            // A tap on another group makes it the active one.
+                            cardAt(e.x, e.y)?.group?.let { setActiveGroup(it); slide() }
+                        }
                     }
                     Drag.NONE -> {}
                 }
@@ -564,30 +964,12 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     /** Fluid minimize: the maximized card shrinks toward its card-view slot as the finger rises. */
     private fun minimizeFollow(dy: Float) {
         val card = dragCard ?: return
-        val i = cards.indexOf(card)
+        val to = layout(Arrange.STACK)[card] ?: return
         val f = (-dy / (height * 0.5f)).coerceIn(0f, 1f)
-        val (x, y, s) = cardViewTarget(i)
-        card.cx = width / 2f + (x - width / 2f) * f
-        card.cy = naturalY(card) + (y - naturalY(card)) * f
-        card.scale = 1f + (s - 1f) * f
+        card.gx = to.gx * f; card.rx = to.rx * f
+        card.cy = naturalY(card) + (to.cy - naturalY(card)) * f
+        card.scale = 1f + (to.scale - 1f) * f
+        card.rot = to.rot * f
         applyTransforms()
-    }
-
-    private fun scrollTo(i: Int) {
-        val start = position
-        anim?.cancel()
-        anim = ValueAnimator.ofFloat(start, i.toFloat()).apply {
-            duration = Params.SLIDE_MS; interpolator = Easing.OutQuart
-            addUpdateListener { a -> position = a.animatedValue as Float; settleCardView() }
-            addListener(object : AnimatorListenerAdapter() { override fun onAnimationEnd(a: Animator) { anim = null } })
-            // The slide's target is the new active card from the start, as switchToNextGroup has it.
-            setCurrent(cards.getOrNull(i))
-            start()
-        }
-    }
-
-    private fun cardAt(x: Float, y: Float): Card? = cards.lastOrNull { c ->
-        val w = c.width * c.scale; val h = c.height * c.scale
-        x >= c.cx - w / 2 && x <= c.cx + w / 2 && y >= c.cy - h / 2 && y <= c.cy + h / 2
     }
 }

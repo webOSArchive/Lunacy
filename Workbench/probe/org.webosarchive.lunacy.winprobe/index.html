@@ -27,7 +27,8 @@ input { font-size: 20px; width: 400px; }
 //   {"do": "<action>" | ["<action>", ...], "delay": ms before acting, ...}
 // Actions: fullscreen, normal, color (with "color": int RGB), nocolor, orient (with "o"),
 // activate, deactivate, suppress, unsuppress, banner (with "sound", "file", "duration", "nosuppress"),
-// sound (playSoundNotification with "sound"), gestures, nogestures, rotlock, norotlock, copy (with "text"), copied, paste.
+// sound (playSoundNotification with "sound"), gestures, nogestures, rotlock, norotlock, copy (with "text"), copied, paste,
+// card (another card of this app, with "bg": its background colour - a stack, if this card is up).
 // Everything is logged with a LUNACYPROBE prefix for palm-log / logcat.
 var lines = [];
 function log(s) {
@@ -74,6 +75,11 @@ var actions = {
 		log("execCommand(copy) -> " + document.execCommand("copy"));
 		f.value = "";
 	},
+	card: function (p) {
+		var name = "card" + new Date().getTime();
+		enyo.windows.openWindow("index.html", name, {bg: p.bg || "#5c1d4d"});
+		log("openWindow " + name);
+	},
 	copied: function () { PalmSystem.copiedToClipboard(); log("copiedToClipboard"); },
 	paste: function () {
 		var f = document.getElementById("field"); f.value = ""; f.focus();
@@ -99,6 +105,7 @@ enyo.dispatcher.rootHandler.addListener({
 	}
 });
 enyo.applicationRelaunchHandler = function (p) { act(p); return true; };
+if (enyo.windowParams && enyo.windowParams.bg) { document.body.style.background = enyo.windowParams.bg; }
 state();
 enyo.ready();
 act(enyo.windowParams);

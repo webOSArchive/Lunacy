@@ -250,7 +250,7 @@ behaviours hang off that. Do them in this order; each is independent of the next
    [CardWindowManager.cpp#L2047](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/cards/CardWindowManager.cpp#L2047).
    *Lunacy:* `CardLayer.onTouchEvent` `Drag.THROW` springs back. *Do:* add
    `centreBelowBottom` beside `centreAboveTop`, animating `lift` to `+height`.
-3. **Tap-and-hold to reorder**, and tap on the empty space left or right of centre to go to
+3. **Tap-and-hold to reorder**, **done 2026-09-22** (correction: it is a tap-*and-hold* on the empty space that goes to the previous or next group - a plain tap there does nothing, `handleTapAndHoldGestureMinimized`; there is no reorder sound, see B8). And tap on the empty space left or right of centre to go to
    the previous or next card. §2.6, §2.7,
    [CardWindowManager.cpp#L1511](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/cards/CardWindowManager.cpp#L1511)
    (hold), [#L1777](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/cards/CardWindowManager.cpp#L1777)
@@ -260,7 +260,7 @@ behaviours hang off that. Do them in this order; each is independent of the next
    index in `cards` when its `cx` crosses a neighbour's; `carddrag` sound on pick-up
    ([#L1702](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/cards/CardWindowManager.cpp#L1702),
    see B8).
-4. **Groups (stacks).** A card an app opens while its own card is focused joins that card's
+4. **Groups (stacks).** **Done 2026-09-22**, measured with `winprobe`'s `card` action on both machines (`Workbench/results/b1-tp-stack.png`, `b1-and-stack8.png`). Also from the source: a new group goes just right of the *active* group, not at the end. Side groups are laid out at their target offset, where LunaCE uses the offset they had when the slide began. A card an app opens while its own card is focused joins that card's
    group, to its right; the group fans as §2.3 (x offsets `((i−p)/3)·activeW·0.35`, a few
    pixels of y, ±1° of tilt); side groups collapse to a 10 px stagger at `nonActiveScale`;
    maximizing lays other groups out side by side. [CardGroup.cpp#L753](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/cards/CardGroup.cpp#L753),

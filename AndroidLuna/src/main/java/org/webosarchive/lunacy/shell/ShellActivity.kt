@@ -317,7 +317,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         rootWindow.loadUrl(url)
     }
 
-    private fun showAsCard(w: AppWindow) {
+    private fun showAsCard(w: AppWindow, parent: AppWindow? = null) {
         // An app that never said it was laid out for a tablet gets the phone-sized card a
         // TouchPad gave it, rather than being stretched across the whole one.
         val emu = if (!w.emulated) null else Pair(
@@ -328,7 +328,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             // webOS held the card's space with the app's own icon until it had drawn.
             registry.get(w.appId)?.let { CardSplash(this, luna, luna.splashIcon(it)) })
         card.fullScreen = w.fullScreen && !w.emulated
-        cards.add(card)
+        // A card an app opens while its own card is up joins that card's group
+        // (CardWindowManager::prepareAddWindowSibling: the active card is focused and the
+        // launch came from the same app).
+        val up = cards.maximized?.takeIf { parent != null && it.window.appId == w.appId }
+        cards.add(card, up)
         cards.openLaunching(card)
     }
 
@@ -348,7 +352,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             // remember it: it is the window whose closing ends the mode, and the one to close
             // when the mode ends.
             "dockMode" -> { exhibitionWindows += child; showAsCard(child) }
-            else -> showAsCard(child)
+            else -> showAsCard(child, parent)
         }
     }
 
@@ -1248,6 +1252,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         fade(justType, false)
         showDock(false)
     }
+
+    /** SystemUiController::enterOrExitCardReorder: the dock fades while a card is being reordered. */
+    override fun onReorder(active: Boolean) = showDock(!active)
 
     override fun onThrownAway(card: Card) {
         card.window.evaluateJavascript("try{window.close()}catch(e){}", null)

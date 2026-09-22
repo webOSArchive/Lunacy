@@ -17,12 +17,8 @@ import android.widget.EditText
 
 /**
  * The "Just type..." pill above the card view (reference §3.3). Width is 0.75 of the screen's
- * short side; placement is done by the shell.
- *
- * It takes text but does nothing with it yet: webOS's Just Type searched, launched, and handed
- * what was typed to an app, and none of that exists here. What it is good for today is
- * somewhere to type - which is how the companion keyboard gets tried on. Return is swallowed,
- * deliberately, until there is something for it to do.
+ * short side; placement is done by the shell. A tap on it opens Just Type ([JustTypePanel]),
+ * as on a device, where the typing then happens; the pill itself takes no text.
  */
 @SuppressLint("ViewConstructor", "AppCompatCustomView")
 class JustType(context: Context, private val luna: Luna) : EditText(context) {
@@ -50,7 +46,8 @@ class JustType(context: Context, private val luna: Luna) : EditText(context) {
         setSingleLine()
         inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         imeOptions = EditorInfo.IME_ACTION_DONE
-        setOnEditorActionListener { _, _, _ -> true }   // nothing to search yet
+        // The typing is Just Type's; the pill only opens it.
+        isFocusable = false; isFocusableInTouchMode = false; isCursorVisible = false
         addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable) {
                 val face = if (s.isEmpty()) promptFace else typedFace

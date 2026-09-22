@@ -46,6 +46,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var statusBar: StatusBar
     private lateinit var cards: CardLayer
     private lateinit var justType: JustType
+    private lateinit var justTypePanel: JustTypePanel
     private lateinit var quickLaunch: QuickLaunch
     private lateinit var launcher: Launcher
     private lateinit var tabDialog: TabDialog
@@ -148,6 +149,16 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         root.addView(justType, FrameLayout.LayoutParams((shortSide * JustType.WIDTH_OF_SHORT_SIDE).toInt(), luna.px(JustType.HEIGHT)).apply {
             topMargin = luna.px(StatusBar.HEIGHT + JustType.TOP_GAP); gravity = android.view.Gravity.CENTER_HORIZONTAL
         })
+
+        // Just Type, under the status bar, over the cards, launcher, pill and dock.
+        justTypePanel = JustTypePanel(this, luna)
+        root.addView(justTypePanel, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
+        justType.setOnClickListener { openJustType() }
+        justTypePanel.onLaunch = { app -> closeJustType(); launch(app.id) }
+        justTypePanel.onSearch = { url ->
+            closeJustType()
+            org.webosarchive.lunacy.card.WebosLinks.intentFor("", null, url)?.let { org.webosarchive.lunacy.card.WebosLinks.open(this, it) }
+        }
 
         quickLaunch = QuickLaunch(this, luna, onLaunch = { app -> quickLaunch.postDelayed({ launch(app.id) }, LAUNCH_DELAY_MS) }, onLauncher = { toggleLauncher() })
         quickLaunch.onRemoveItem = { i -> setDock(dock().toMutableList().apply { removeAt(i) }) }
@@ -1219,6 +1230,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     override fun onMaximized(card: Card) {
         quickLaunch.cancelLaunchFeedback()
+        if (justTypePanel.showing) justTypePanel.close()
         // A keyboard asked for while this card was still opening (see keyboard()).
         if (keyboardWanted == card.window) {
             keyboardWanted = null
@@ -1341,6 +1353,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (exhibitionOn) { setExhibition(false); return }
         if (notifications.menu.isOpen || systemMenu.isOpen) { closeMenu(); return }
         notifications.popups.newest()?.let { onWindowClosed(it); return }
+        if (justTypePanel.showing) { closeJustType(); return }
         if (tabDialog.showing) { tabDialog.dismiss(); return }
         if (groupOverlay.showing) { groupOverlay.close(); return }
         if (launcher.editing || quickLaunch.editing) { exitEditMode(); return }
@@ -1348,6 +1361,29 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val max = cards.maximized
         if (max != null) { cards.showCardView(); return }
         toggleLauncher()
+    }
+
+    // ---- Just Type ----
+
+    /**
+     * Just Type opens over the card view or the launcher, cross-fading in (150 ms); the pill
+     * and the dock go (reference §3.1), and the status bar says "Just Type" with its ▾, as
+     * SystemUiController::updateStatusBarTitle has it.
+     */
+    private fun openJustType() {
+        if (cards.maximized != null) return
+        if (launcherOpen) closeLauncher()
+        justTypePanel.apps = registry.launchPoints
+        justTypePanel.open()
+        fade(justType, false); showDock(false)
+        statusBar.setMode(StatusBar.Mode.APP)
+        statusBar.title = "Just Type"
+    }
+
+    private fun closeJustType() {
+        if (!justTypePanel.showing) return
+        justTypePanel.close()
+        if (cards.maximized == null) onCardView()
     }
 
     // ---- overlays (reference §3.1, §3.2) ----

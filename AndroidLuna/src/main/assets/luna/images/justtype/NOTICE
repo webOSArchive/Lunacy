@@ -1,0 +1,12 @@
+Just Type's art, for the shell's own Just Type panel.
+
+bg.png, search-header-bg.png, search-header-shadow.png, roundedbox.png,
+groupbox-app-focus.png, groupbox-app-focus-empty.png, underline.png and
+search-icon-duckduckgo.png: from Just Type itself (com.palm.launcher,
+/usr/lib/luna/system/luna-applauncher/images on the reference TouchPad, webOS CE 3.1.0),
+copied 2026-09-22. HP webOS system images, shipped as abandonware, like the Prelude fonts and
+the TouchPad wallpapers.
+
+group-labeled.png, group-unlabeled.png and search-input-cancel.png: Enyo 1.0's Onyx theme
+(framework/source/palm/themes/Onyx/images), which Just Type draws its groups and search field
+with. Enyo 1.0 is Copyright (c) Hewlett-Packard Development Company, L.P., Apache License 2.0.

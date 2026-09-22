@@ -862,6 +862,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         org.webosarchive.lunacy.card.LunacyService(this, registry, jsServices, jsServices.root) { displayInfo() }.register(bus)
         org.webosarchive.lunacy.card.ConnectionManager(this).register(bus)
         org.webosarchive.lunacy.card.ActivityManager().register(bus)
+        // webOS's downloader, which apps hand every file fetch to: drPodder's episodes and
+        // album art, MeTube's "download first". It writes into the webOS tree.
+        org.webosarchive.lunacy.card.DownloadManager(jsServices.root).register(bus)
         val db8 = org.webosarchive.lunacy.card.Db8("com.palm.db", java.io.File(filesDir, "db8.sqlite")).also { it.register(bus) }
         val tempdb = org.webosarchive.lunacy.card.Db8("com.palm.tempdb", null).also { it.register(bus) }
         configurator = org.webosarchive.lunacy.card.Configurator(files, db8, tempdb)

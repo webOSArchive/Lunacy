@@ -648,7 +648,12 @@ model, so apps can't tell the difference.
   - `org.webosarchive.lunacy`: Lunacy's own service, under its own name - the environment
     Lunacy runs in, Android's settings screens, and the file listing its picker needs. Nothing
     of Lunacy's sits on a webOS service name.
-  - `com.palm.downloadmanager`, used by apps like Glimpse.
+  - `com.palm.downloadmanager`: webOS's downloader, which apps hand every file fetch to rather
+    than doing it themselves - drPodder's episodes and album art, MeTube's "download first",
+    Glimpse. Files land in the webOS tree through `UserFiles`, and a subscriber gets the
+    ticket, then progress, then the completion record, in the shapes measured on the
+    reference device. **Ratchet item:** a download lives only as long as the shell's process,
+    where webOS's survived the app closing and a reboot.
   - Installs: the App Museum calls `applicationManager/open` for Preware's id
     (`org.webosinternals.preware`, or `org.webosports.app.preware` on LuneOS) with
     `{type: "install", file: <ipk url>}`. Lunacy's package manager answers for those ids.

@@ -12,12 +12,14 @@
 		"own file puts every settings app on prefs (Exhibition included, which carries no keywords),",
 		"the app catalogue alone on downloads, and names no favorites page at all - so Games starts",
 		"empty here too. Anything not named falls back to the keyword map, then to the first page.",
-		"Once the user moves an icon, their arrangement wins: this is only the starting point."
+		"Once the user moves an icon, their arrangement wins: this is only the starting point.",
+		"Proof of concept (2026-09-23): favorites is named android and holds Android's own apps,",
+		"for when Lunacy is the home screen (shell/AndroidApps.kt)."
 	],
 	"pages": [
 		{"designator": "apps", "name": "apps"},
 		{"designator": "downloads", "name": "downloads"},
-		{"designator": "favorites", "name": "games"},
+		{"designator": "favorites", "name": "android"},
 		{"designator": "prefs", "name": "settings"}
 	],
 	"layout": [

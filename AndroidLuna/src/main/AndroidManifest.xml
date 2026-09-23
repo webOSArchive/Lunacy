@@ -34,6 +34,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Proof of concept: Lunacy as Android's home screen. Android offers it as a
+                 launcher; Home then comes here (onNewIntent). -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
         <!-- Android's screen saver, which Android 5 calls Daydream, showing webOS's
              Exhibition mode. The system is the only thing allowed to start it

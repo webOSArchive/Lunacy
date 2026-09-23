@@ -52,6 +52,9 @@ class AppInfo(
     /** The app's appinfo.json as packaged. */
     val appinfo: JSONObject,
     private val files: AppFiles,
+    /** Set for an Android app shown in the launcher (shell/AndroidApps.kt); null for webOS apps. */
+    val androidComponent: android.content.ComponentName? = null,
+    private val androidIcon: (() -> InputStream?)? = null,
 ) {
     /**
      * Whether this app runs in the phone-sized card a TouchPad gave an app that never said it
@@ -62,9 +65,9 @@ class AppInfo(
     /** The URL of the app's main page, at its webOS path on its own origin. */
     val url get() = AppServer.appUrl(id, main)
     val isWeb get() = type == "web"
-    fun openIcon(): InputStream? = files.open("${Packages.APPS}/$id/$icon")
+    fun openIcon(): InputStream? = androidIcon?.invoke() ?: files.open("${Packages.APPS}/$id/$icon")
     /** appinfo.json's `miniicon`, "miniicon.png" when it names none (ApplicationDescription). */
-    fun openMiniIcon(): InputStream? = files.open("${Packages.APPS}/$id/" + appinfo.optString("miniicon", "miniicon.png").ifEmpty { "miniicon.png" })
+    fun openMiniIcon(): InputStream? = if (androidIcon != null) androidIcon.invoke() else files.open("${Packages.APPS}/$id/" + appinfo.optString("miniicon", "miniicon.png").ifEmpty { "miniicon.png" })
     fun openSplashIcon(): InputStream? =
         if (splashIcon.isEmpty()) null else files.open("${Packages.APPS}/$id/$splashIcon")
 

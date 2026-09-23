@@ -208,7 +208,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             Page(p.optString("designator"), p.optString("name", p.optString("designator")))
         }.toMutableList()
     }?.takeIf { it.isNotEmpty() } ?: mutableListOf(
-        Page("apps", "apps"), Page("downloads", "downloads"), Page("favorites", "games"), Page("prefs", "settings"))
+        Page("apps", "apps"), Page("downloads", "downloads"), Page("favorites", "android"), Page("prefs", "settings"))
 
     /**
      * Where a bundled app starts, from `layout` in that file: webOS shipped the same thing as
@@ -236,6 +236,8 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
      * keywords. Anything unrecognised goes to the first page.
      */
     private fun pageFor(app: AppInfo): Int {
+        // Proof of concept: Android's apps start on the favorites page, named "android".
+        if (app.androidComponent != null) return pages.indexOfFirst { it.designator == "favorites" }.takeIf { it >= 0 } ?: 0
         val designator = keywordPages[app.category.lowercase()]
             ?: app.keywords.firstNotNullOfOrNull { keywordPages[it.lowercase()] }
             // LauncherObject::pageIndexForAppByPredefinedDesignators: an app the user installed
@@ -307,6 +309,8 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
                 val d = t.optString("designator")
                 val page = pages.firstOrNull { it.designator == d } ?: Page(d, t.optString("name")).also { pages += it }
                 page.title = t.optString("name", page.title)
+                // Proof of concept: the old default name for favorites gives way to "android".
+                if (d == "favorites" && page.title == "games") page.title = "android"
                 val ids = t.optJSONArray("apps")
                 for (j in 0 until (ids?.length() ?: 0)) tile(ids!!.opt(j))?.let { page.tiles += it }
             }

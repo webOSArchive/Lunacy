@@ -43,6 +43,20 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var files: AppFiles
     /** The webOS device Lunacy answers as, for every app-visible surface. */
     private val profile by lazy { org.webosarchive.lunacy.card.DeviceProfile.forScreen(this) }
+    /** Proof of concept: Android's own apps in the launcher, for Lunacy as the home screen. */
+    private val androidApps by lazy { AndroidApps(this, files) }
+    private var androidById: Map<String, AppInfo> = emptyMap()
+    /** Whether the shell is on screen (between onStart and onStop): a Home press then is Lunacy's own. */
+    private var started = false
+    override fun onStart() { super.onStart(); started = true }
+    override fun onStop() { started = false; super.onStop() }
+
+    /** What the launcher shows: webOS apps, then Android's. */
+    private fun launchPoints(): List<AppInfo> {
+        val android = androidApps.list()
+        androidById = android.associateBy { it.id }
+        return registry.launchPoints + android
+    }
     private lateinit var statusBar: StatusBar
     private lateinit var cards: CardLayer
     private lateinit var justType: JustType
@@ -116,7 +130,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // The icon glows first; the launch follows a frame later, so the glow is seen.
         launcher = Launcher(this, luna) { app -> launcher.postDelayed({ launch(app.id); closeLauncher() }, LAUNCH_DELAY_MS) }
         launcher.onRemove = { app -> remove(app) }
-        launcher.setApps(registry.launchPoints)
+        launcher.setApps(launchPoints())
         launcher.dockHeight = luna.px(QuickLaunch.HEIGHT).toFloat()
         launcher.visibility = View.INVISIBLE
         root.addView(launcher, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
@@ -244,6 +258,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     /** Lunacy is single-task: later launch requests (e.g. from adb or, later, Android intents) arrive here. */
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
+        // As the home screen: Home while the shell is up is Lunacy's own Home button. From
+        // an Android app it only brings the shell back, as it was.
+        if (intent.action == android.content.Intent.ACTION_MAIN && intent.hasCategory(android.content.Intent.CATEGORY_HOME) && started) homePressed()
         handleIntent(intent)
     }
 
@@ -318,13 +335,18 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (state != "normal") wallpaperView.postDelayed(memoryCheck, MEMORY_CHECK_MS)
     }
 
-    override fun onResume() { super.onResume(); inFront = true }
+    override fun onResume() {
+        super.onResume(); inFront = true
+        // Android apps may have come or gone while the shell was away.
+        if (::launcher.isInitialized && androidApps.list().map { it.id } != androidById.keys.toList()) launcher.setApps(launchPoints())
+    }
 
     override fun onPause() { inFront = false; super.onPause() }
 
     // ---- apps ----
 
     fun launch(appId: String, params: JSONObject? = null) {
+        androidById[appId]?.let { a -> if (!androidApps.launch(a)) systemBanner("", "Couldn't open ${a.title}"); return }
         val app = registry.get(appId) ?: run { Log.w(AppServer.TAG, "launch: no app $appId"); return }
         // A shortcut to one of Android's settings screens: no window, no pretending that
         // Lunacy owns the setting. Only apps Lunacy ships declare this.
@@ -487,7 +509,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             registry.reload()
             configurator.run()
             jsServices.reload()
-            launcher.setApps(registry.launchPoints)
+            launcher.setApps(launchPoints())
             dockMode.launchPointsChanged()
             val app = r.appIds.firstNotNullOfOrNull { registry.get(it) }
             when {
@@ -1193,12 +1215,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * goes, and the launcher, services and db8 kinds are reloaded.
      */
     private fun remove(app: AppInfo) {
+        if (app.androidComponent != null) { androidApps.uninstall(app); return }
         running[app.id]?.toList()?.forEach { w -> onWindowClosed(w) }
         packages.remove(app.id) { error ->
             registry.reload()
             configurator.run()
             jsServices.reload()
-            launcher.setApps(registry.launchPoints)
+            launcher.setApps(launchPoints())
             dockMode.launchPointsChanged()
             showDock()
             systemBanner("", if (error == null) "${app.title} removed" else "Couldn't remove ${app.title}: $error")

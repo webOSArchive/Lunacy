@@ -3,7 +3,34 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-09-22)
+## Where things stand (2026-09-23)
+
+**2026-09-23: 0.2.5, a community preview of fixes from the first community bug reports.**
+Reproduced on an Android 14 tablet, a Nexus 5 (Android 6) and the reference HP, each against
+the reference TouchPad; every fix is in [fix-log.md](fix-log.md).
+
+- *Screens other than the HP's:* on a screen that isn't about 768 px on its short side (shell
+  scale 2 or 3), cards were drawn too large - centred content on the right, the bottom out of
+  reach - because the viewport named the card in device pixels and pinned the scale at 1. The
+  viewport is now in TouchPad px, and its scale is measured into place, exact to the pixel on
+  Chromium 37 and WebView 131.
+- *Dashboards:* Mojo dashboards got no viewport at all (a 52 px window fell under a 64 px
+  floor), so drPodder's player controls were off the edge; app windows also no longer draw
+  Android's scrollbars.
+- *Phones:* an app without `uiRevision` 2 no longer opens in the Pre3 emulator frame on a phone,
+  where apps are already told they are on a Pre3.
+- *Touch:* Mojo buttons and menu items answer a real finger again. A finger's moves are held
+  back inside the tap radius, as LunaSysMgr did; on a touchscreen that reports a move where
+  the finger lands, Mojo had taken every tap for the start of a drag.
+- *Enyo:* a flexed control's share is said with `flex-basis` on engines that count a 0 width,
+  so Clock's clock/alarm switch isn't squashed (patch 0003).
+- *Newer Android:* Lunacy and the keyboard target API 24 (minimum still 21), so Android 14
+  installs them with a plain `adb install` or a tap. Storage and "Modify system settings" are
+  asked for while the app runs on Android 6 and later; Android 5 is unchanged.
+
+Open from these reports: whether a phone should raise the keyboard when an app focuses a field
+itself (a Pre3 had a hardware keyboard), and the shell's own layout on phones.
+
 
 Apps now install from the App Museum and run: Apollo plays music, Plex plays direct and
 transcoded video, Sound Cloud Player streams through its JS service, AccuWeather and USA Today

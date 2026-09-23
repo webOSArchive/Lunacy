@@ -13,8 +13,8 @@ android {
         // Android 15 below 24. minSdk keeps Android 5, which ignores a target above its
         // own level. What 23 and 24 change on newer devices is in Docs/architecture.md.
         targetSdk = 24
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

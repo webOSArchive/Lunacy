@@ -172,6 +172,7 @@ Added to reproduce community bug reports. This is not a supported target yet.
 | "Isn't compatible with the latest version of Android" | Dismissed with OK on first launch | Android shows two of these stacked. One opened Play Store, which was closed. |
 | Play Protect off for adb installs | `adb shell settings put global verifier_verify_adb_installs 0` and `... package_verifier_enable 0` | It scanned and warned on every reinstall of the low-target APK. Undo by setting both back to 1. |
 | Lunacy reinstalled from scratch; storage and "Modify system settings" allowed | `adb uninstall`, then `adb install`; the storage prompt at first launch, and the settings screen Lunacy opens from the brightness slider | Checks the target-24 permission flow a new user sees. |
+| drPodder installed in Lunacy; Lunacy reinstalled several times over it | codepoet installed drPodder; `adb install -r` for each test build | For the Mojo tap report. An event logger was put into drPodder's page over DevTools while testing; it went with the next reinstall. |
 | Screen size and density overridden while testing | `adb shell wm size 1200x1920` and `wm density 240`, then `wm size reset` and `wm density reset` | Stands in for a 1920 x 1200, 240 dpi tablet (shell scale 2). Reset afterwards; the tablet is back at 800 x 1340. |
 | Stay awake on USB | `adb shell svc power stayon usb` | Keeps the screen on while it is driven over adb. Undo with `svc power stayon false`. |
 

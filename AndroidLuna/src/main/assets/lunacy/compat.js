@@ -584,14 +584,17 @@ window.__lunacyFileUrl = function (u, media) {
 		return list.map(function (p) { return p[0] + "=" + p[1]; }).join(", ");
 	}
 	/**
-	 * The card, in device pixels - or nothing, if this window hasn't got one. An app's root
-	 * window is a pixel square and never shown (a `noWindow` app's is), and a card that
-	 * hasn't been laid out yet reads as nothing at all; neither is a viewport worth writing.
+	 * The card, in TouchPad px, with `scale` the device pixels in each - or nothing, if this
+	 * window hasn't got one. An app's root window is a pixel square and never shown (a
+	 * `noWindow` app's is), and a card that hasn't been laid out yet reads as nothing at all;
+	 * neither is a viewport worth writing. Anything bigger is: a dashboard is 52 px tall, and
+	 * a floor of 64 here once left drPodder's with no viewport at all, laid out at the
+	 * engine's default 980 px with its play controls off the right-hand edge.
 	 */
 	function card() {
 		var size;
 		try { size = JSON.parse(N.cardSize()); } catch (e) { return null; }
-		if (!size || !(size.width > 64) || !(size.height > 64)) { return null; }
+		if (!size || !(size.width > 1) || !(size.height > 1)) { return null; }
 		return size;
 	}
 	/** The app's own declaration: the last viewport meta that isn't the one written here. */
@@ -629,22 +632,59 @@ window.__lunacyFileUrl = function (u, media) {
 		if (!has(list, "width")) { list.push(["width", String(size.width)]); }
 		if (!has(list, "height") && size.height) { list.push(["height", String(size.height)]); }
 		// The scale is only pinned for an app that says nothing about it. One that does is
-		// controlling its own, and a minimum of 1 could contradict it.
+		// controlling its own, and a pinned scale could contradict it.
+		//
+		// Pinned at one TouchPad px per CSS px, which is what the shell asked the engine for
+		// (setInitialScale). A viewport scale counts the engine's density-independent pixels,
+		// so it is about the shell's scale over devicePixelRatio - not 1. Pinned at 1 it held
+		// only while the shell's scale was 1: on a 1920 x 1200 tablet at 240 dpi (scale 2,
+		// ratio 1.5) the page came out a third too large, laid out 1920 wide in a 960 px card,
+		// its centred content drawn three quarters of the way across and its bottom off the
+		// screen.
+		//
+		// "About", because the engines round, each its own way, and a pixel matters (see
+		// "innerWidth" above). Chromium 37 sizes the card in whole dips, rounded up - a 320 px
+		// dashboard's 240.375 dips are 241 - and WebView 131 snaps the scale to steps of about
+		// 0.0007. So the first guess is the card's whole dips over its width in TouchPad px,
+		// and then the page is measured: the engine lays it out again as soon as the meta
+		// changes, so a layout width a pixel off is walked towards the card in small steps,
+		// and the first scale that fits is kept. The smallest that fits, because on WebView 131
+		// the scale named still moves the height within one of its steps: an 800 x 1312 card
+		// laid out 800 x 1312 at 0.7515 and 800 x 1311 at 0.7520.
+		// Measured: WebView 131, 1340 px card, the guess is exact; 800 px card, the guess gave
+		// 801. Chromium 37, 320 px dashboard, the guess is exact.
+		var pin = null, key = size.width + "x" + size.height;
 		if (!named) {
-			if (!has(list, "minimum-scale")) { list.push(["minimum-scale", "1"]); }
-			if (!has(list, "maximum-scale")) { list.push(["maximum-scale", "1"]); }
+			pin = fitted[key] || Math.ceil(size.width * (size.scale || 1) / (window.devicePixelRatio || 1) - 0.001) / size.width;
+			if (!has(list, "minimum-scale")) { list.push(["minimum-scale", "@"]); }
+			if (!has(list, "maximum-scale")) { list.push(["maximum-scale", "@"]); }
 		}
 		if (!list.length) { return; }
-		var content = serialize(list);
-		if (mine && mine.content === content) { return; }
-		if (!mine) {
-			mine = document.createElement("meta");
-			mine.name = "viewport";
-		}
-		mine.content = content;
 		var head = document.head || document.getElementsByTagName("head")[0];
-		if (head && mine.parentNode !== head) { head.appendChild(mine); }
+		function write(scale) {
+			var content = serialize(list).replace(/@/g, String(Math.round(scale * 100000) / 100000));
+			if (mine && mine.content === content && mine.parentNode === head) { return false; }
+			if (!mine) {
+				mine = document.createElement("meta");
+				mine.name = "viewport";
+			}
+			mine.content = content;
+			if (head && mine.parentNode !== head) { head.appendChild(mine); }
+			return true;
+		}
+		if (!write(pin || 1) || pin === null || fitted[key]) { return; }
+		var first = document.documentElement.clientWidth, step = first > size.width ? 0.0002 : -0.0002;
+		for (var tries = 0, laid = first; laid && laid !== size.width && tries < 20; tries++) {
+			pin += step;
+			write(pin);
+			laid = document.documentElement.clientWidth;
+			// Walked past it without landing on it: the step before was as close as it gets.
+			if ((step > 0) !== (laid > size.width)) { break; }
+		}
+		fitted[key] = pin;
 	}
+	/** The scale each card size came out right at, once measured. */
+	var fitted = {};
 	// After the document's own metas have been parsed, because the engine takes the last one
 	// it sees rather than merging them, and again whenever the card changes size.
 	// Repeated over the first few seconds as well as on the events, because a card is often

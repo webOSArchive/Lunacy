@@ -171,6 +171,11 @@ class AppWindow(
         // 1 CSS px = 1 TouchPad px, as the shell uses; the layout width follows from it.
         setInitialScale(Math.round(host.pixelScale * 100))
         settings.setSupportZoom(false)
+        // webOS drew no scrollbars on a window: apps scroll in their frameworks' own scrollers.
+        // Android's flashed on a page taller than its window - every Mojo dashboard, whose
+        // body Mojo gives a 480 px minimum height in a 52 px window - on load and at a touch.
+        isVerticalScrollBarEnabled = false
+        isHorizontalScrollBarEnabled = false
         webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(m: ConsoleMessage): Boolean {
                 Log.i(AppServer.TAG, "[$appId] ${m.messageLevel()} ${m.sourceId()?.substringAfterLast('/')}:${m.lineNumber()} ${m.message()}")
@@ -341,16 +346,19 @@ class AppWindow(
 
         @JavascriptInterface fun screenOrientation(): String = host.screenOrientation()
         /**
-         * This card's own size in device pixels, which is the number the page's viewport has
-         * to be told so that one CSS pixel is one device pixel. The window's own size once it
-         * has been laid out; the display's until then.
+         * This card's own size in TouchPad px, which is the number the page's viewport has to
+         * be told so that one CSS pixel is one TouchPad pixel, and `scale`, the device pixels
+         * in each (setInitialScale above). The window's own size once it has been laid out;
+         * the display's until then, which screenSize already gives in TouchPad px.
          */
         @JavascriptInterface
         fun cardSize(): String {
             val w = this@AppWindow.width
             val h = this@AppWindow.height
-            if (w > 0 && h > 0) return JSONObject().put("width", w).put("height", h).toString()
-            return host.screenSize(emulated)
+            val s = host.pixelScale
+            val size = if (w > 0 && h > 0) JSONObject().put("width", Math.round(w / s)).put("height", Math.round(h / s))
+                else JSONObject(host.screenSize(emulated))
+            return size.put("scale", s.toDouble()).toString()
         }
         /**
          * A card fixed at one of the four reports that one, as the reference TouchPad did: asked

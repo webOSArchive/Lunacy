@@ -76,3 +76,26 @@ Two things to know if you change this:
   the kind machinery replaces `rendered` after the override runs.
 
 Files: `framework/source/palm/controls/BasicWebView.js`, `framework/build/enyo-build.js`.
+
+### 0003-flex-share-flex-basis.patch
+
+A flexed child's share of a horizontal box is said with `flex-basis: 0` instead of `width: 0`
+on engines where the two differ.
+
+`FlexLayout` makes a flexed child "exactly its share of the leftover space" by giving it
+`width: 0px` next to its `-webkit-box-flex`. The WebKit of 2011 skipped a fixed width of 0
+when working out how wide a box's content wanted to be (`RenderBlock` only used a fixed width
+above 0 for its preferred width), so a box sized to its content still came out as wide as
+its children's content, then split evenly. Newer Chromium counts the 0, so the same box comes
+out only as wide as its children's borders. Palm's Clock draws its clock/alarm switch with a
+`RadioGroup` between two `Spacer`s in a `Toolbar`. On WebView 131 the group came out 63 px
+wide and its two icons spilled out of 32 px buttons.
+
+`enyo.FlexLayout.zeroWidthCounts()` checks the engine once, on a hidden box: does a 0 width
+count, and does `flex-basis` share a fixed box out evenly? Only when both are true is the
+width said with `flex-basis`, which gives the same even split in a fixed box and counts the
+content in a box sized to it. Everywhere else, including the older engines this was written
+for, Enyo's `width: 0px` stays as it was. Heights are left alone: the old engine worked out a
+box's content height by laying it out, and a 0 height stayed 0 there too.
+
+Files: `framework/source/base/layout/FlexLayout.js`, `framework/build/enyo-build.js`.

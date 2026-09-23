@@ -7,6 +7,12 @@ new test device.
 **Reference device:** HP 10 G2 Tablet: Android 5.0.1 (build LRX21M), MT8127, 1 GB of RAM,
 not rooted, no Google account.
 
+**Target API 24 (2026-09-23).** Lunacy now targets API 24 with a minimum of 21. Installed over
+the old build on the reference HP: Android 5 granted every permission at install, as before,
+and nothing asked. Playback in drPodder was restarted a few times while testing its dashboard,
+and the screen was turned to landscape (`user_rotation 3`) and back to how it was
+(`user_rotation 0`, auto-rotate on).
+
 ## Required
 
 | Step | How | Why |
@@ -151,3 +157,37 @@ decodes its artwork at 1:1, and LunaKeyboard decodes with `inScaled = false` - s
 thing that changes is the size of Android's own UI, which gets smaller. On a tablet given
 over to Lunacy that is arguably what you want; it is codepoet's call, and it is not set on
 the reference device.
+
+## Android 14 test tablet (2026-09-23)
+
+Added to reproduce community bug reports. This is not a supported target yet.
+
+**Device:** Samsung Galaxy Tab A7 Lite (SM-T227U), Android 14, arm64-v8a, about 2.7 GB of RAM,
+800x1340 at 213 dpi, WebView 131.0.6778.135. Airplane mode is on.
+
+| Change | How | Note |
+|---|---|---|
+| Install Lunacy | `adb install -r out/AndroidLuna-debug.apk` | Until 2026-09-23 Lunacy targeted API 21, and Android 14 refused it (`INSTALL_FAILED_DEPRECATED_SDK_VERSION`) without `--bypass-low-target-sdk-block`. It targets 24 now and installs plainly; on a fresh install Android asks for storage at first launch, and for "Modify system settings" the first time the brightness is changed. |
+| Legacy permission review | Accepted the defaults (everything allowed) on first launch | Android shows this for every app that targets below 23; gone since Lunacy targets 24. |
+| "Isn't compatible with the latest version of Android" | Dismissed with OK on first launch | Android shows two of these stacked. One opened Play Store, which was closed. |
+| Play Protect off for adb installs | `adb shell settings put global verifier_verify_adb_installs 0` and `... package_verifier_enable 0` | It scanned and warned on every reinstall of the low-target APK. Undo by setting both back to 1. |
+| Lunacy reinstalled from scratch; storage and "Modify system settings" allowed | `adb uninstall`, then `adb install`; the storage prompt at first launch, and the settings screen Lunacy opens from the brightness slider | Checks the target-24 permission flow a new user sees. |
+| Screen size and density overridden while testing | `adb shell wm size 1200x1920` and `wm density 240`, then `wm size reset` and `wm density reset` | Stands in for a 1920 x 1200, 240 dpi tablet (shell scale 2). Reset afterwards; the tablet is back at 800 x 1340. |
+| Stay awake on USB | `adb shell svc power stayon usb` | Keeps the screen on while it is driven over adb. Undo with `svc power stayon false`. |
+
+## Nexus 5 test phone (2026-09-23)
+
+Added to reproduce a community report. Phones are not a supported target yet.
+
+**Device:** LG Nexus 5 (hammerhead), Android 6.0.1 (API 23), armeabi-v7a, 1080 x 1920 at
+480 dpi (shell scale 3), WebView 44.0.2403.117.
+
+| Change | How | Note |
+|---|---|---|
+| Install Lunacy | `adb install -r --no-streaming out/AndroidLuna-debug.apk` | A streamed install of the 74 MB APK failed with `failed to read copy response` and left the phone `offline` to adb until it was replugged. `--no-streaming` pushes the file first and installs it on the phone. An older Lunacy build that was already on it was removed first. |
+| Apollo for the Pre3 installed in Lunacy | `--es install` from the package mirror | For the emulated-card report. |
+| Stay awake on USB | `adb shell svc power stayon usb` | Undo with `svc power stayon false`. |
+
+When the phone doesn't show in `adb devices` although it is on USB with debugging on, restart
+the adb server (`adb kill-server`).
+

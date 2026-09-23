@@ -353,7 +353,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             }
             return
         }
-        val rootWindow = AppWindow(this, appId, this, registry.get(appId)?.emulated ?: false)
+        // The emulated card is a tablet's answer to a phone app. A Pre3 ran the same app at
+        // its own size, so on a phone - where apps are told they are on a Pre3 - there is
+        // nothing to emulate.
+        val emulate = profile == org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD && registry.get(appId)?.emulated == true
+        val rootWindow = AppWindow(this, appId, this, emulate)
         rootWindow.fixedOrientation = fixedOrientationOf(app)
         running[appId] = mutableListOf(rootWindow)
         if (app.noWindow) hidden.addView(rootWindow, FrameLayout.LayoutParams(1, 1))

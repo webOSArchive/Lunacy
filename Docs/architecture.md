@@ -250,7 +250,13 @@ product; being "close enough" is not the goal.
     events, and Enyo 1 and Mojo only listen for those. Chromium synthesizes mouse events for
     taps only, not drags, so without help no scroller moves. A global script converts
     touches into `mousedown`/`mousemove`/`mouseup` and `click`, and cancels native touch
-    handling. Spike 1 showed it fixes every scroller at once.
+    handling. Spike 1 showed it fixes every scroller at once. Moves are filtered the way
+    LunaSysMgr's `EventThrottler` filtered them for web apps: none reaches the page until the
+    finger leaves a tap radius around where it went down (the TouchPad's `luna.conf`: 25 px,
+    shrinking 10% every 200 ms held, to 5 px), and after that a move to the same spot is
+    dropped. Mojo depends on it - on a device it takes any `mousemove` after a `mousedown` as
+    the start of a drag and drops the tap. LunaSysMgr also capped moves at 30 a second
+    (`MaxPenMoveFreq`); that cap is not reproduced.
   - *The keyboard, the other half of that model.* LunaSysMgr's virtual keyboard put real key
     events into the page, so a keystroke arrived as `keydown`, `keypress` and `keyup` with
     the character's own code. Android's keyboards are input methods: a soft keyboard commits

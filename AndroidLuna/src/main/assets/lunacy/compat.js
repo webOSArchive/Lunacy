@@ -3,7 +3,7 @@
 // + click). Enyo 1 and Mojo only listen for mouse events. Chromium only synthesizes them for
 // taps, never drags, so recreate the webOS input model for every page.
 (function () {
-	var THRESHOLD = 10, st = null;
+	var st = null;
 	// Flicks, as LunaSysMgr sent them: its FlickGestureRecognizer keeps the last 3 touch
 	// samples; above 500 px/s (Manhattan) it reports velocity = displacement / (elapsed ·
 	// samples), and WindowedWebApp passes it to the page as Mojo.handleGesture('flick', …).
@@ -42,19 +42,44 @@
 	document.addEventListener("touchstart", function (ev) {
 		if (ev.touches.length > 1) { st = null; return; }  // leave multi-touch (pinch) alone
 		var t = ev.changedTouches[0];
-		st = { x: t.clientX, y: t.clientY, target: t.target, moved: false };
+		st = { x: t.clientX, y: t.clientY, target: t.target, moved: false, t: Date.now(), px: t.clientX, py: t.clientY };
 		samples = []; sample(t);
 		fire("mouseover", t, t.target);
 		fire("mousedown", t, t.target);
 		ev.preventDefault();
 	}, opts);
+	// A move reaches the page only once the finger has really gone somewhere, as LunaSysMgr's
+	// EventThrottler::shouldDropMove decided for every web app (WebAppMgrProxy): until the
+	// finger leaves a radius around where it went down, moves are dropped, and after that a
+	// move to the same spot is. The radius is the reference TouchPad's own luna.conf -
+	// TapRadiusMax 25, shrinking 10% every 200 ms held down to TapRadiusMin 5 - in screen
+	// pixels, which are TouchPad px here too. Mojo counts on it: off the emulator it treats any
+	// mousemove after a mousedown as the start of a drag and drops the tap, so a finger's
+	// first touchmove - the Galaxy Tab A7 Lite sends one at the very spot it went down - left
+	// drPodder's menu items and buttons dead to a real finger while adb's taps worked.
+	var TAP_RADIUS = 25, TAP_RADIUS_MIN = 5, SHRINK_PERCENT = 10, SHRINK_MS = 200;
+	function stillATap(t) {
+		var held = Date.now() - st.t, radius = TAP_RADIUS;
+		if (held > SHRINK_MS) {
+			radius -= Math.floor(radius * SHRINK_PERCENT * held / (SHRINK_MS * 100));
+			if (radius < TAP_RADIUS_MIN) { radius = TAP_RADIUS_MIN; }
+		}
+		var dx = t.clientX - st.x, dy = t.clientY - st.y;
+		return dx * dx + dy * dy < radius * radius;
+	}
 	document.addEventListener("touchmove", function (ev) {
 		if (!st) { return; }
 		var t = ev.changedTouches[0];
-		if (Math.abs(t.clientX - st.x) > THRESHOLD || Math.abs(t.clientY - st.y) > THRESHOLD) { st.moved = true; }
 		sample(t);
-		fire("mousemove", t, under(t));
 		ev.preventDefault();
+		if (!st.moved) {
+			if (stillATap(t)) { return; }
+			st.moved = true;
+		} else if (t.clientX === st.px && t.clientY === st.py) {
+			return;
+		}
+		st.px = t.clientX; st.py = t.clientY;
+		fire("mousemove", t, under(t));
 	}, opts);
 	/**
 	 * What a tap that didn't land on a field itself means for the keyboard, decided once the

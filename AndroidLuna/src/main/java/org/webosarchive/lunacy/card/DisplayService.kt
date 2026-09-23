@@ -113,13 +113,34 @@ class DisplayService(private val context: Context) {
         return (raw * 100 / 255).coerceIn(1, 100)
     }
 
-    /** True when Android took the value. It refuses without WRITE_SETTINGS, and says so. */
-    private fun write(key: String, value: Int): Boolean = try {
-        Settings.System.putInt(context.contentResolver, key, value)
-    } catch (e: Exception) {
-        Log.w(AppServer.TAG, "display: can't set $key", e)
-        false
+    /**
+     * True when Android took the value. It refuses without WRITE_SETTINGS, and says so. From
+     * Android 6 that is the user's to grant on Android's own screen, which is opened the first
+     * time a write is refused in a run; the write itself still fails, and the next one after
+     * the user has said yes will take.
+     */
+    private fun write(key: String, value: Int): Boolean {
+        if (android.os.Build.VERSION.SDK_INT >= 23 && !Settings.System.canWrite(context)) {
+            if (!askedToWrite) {
+                askedToWrite = true
+                try {
+                    context.startActivity(android.content.Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS,
+                        android.net.Uri.parse("package:" + context.packageName)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (e: Exception) {
+                    Log.w(AppServer.TAG, "display: can't open the write-settings screen", e)
+                }
+            }
+            Log.w(AppServer.TAG, "display: can't set $key without WRITE_SETTINGS")
+            return false
+        }
+        return try {
+            Settings.System.putInt(context.contentResolver, key, value)
+        } catch (e: Exception) {
+            Log.w(AppServer.TAG, "display: can't set $key", e)
+            false
+        }
     }
+    private var askedToWrite = false
 
     /**
      * webOS's Auto Dim, which is a systemservice preference (enableALS) that the display

@@ -39,6 +39,12 @@ What this target means:
 - **Lunacy's own JS runs on the oldest WebView.** The bridge, shims, polyfills and every
   change to the frameworks must run on Chromium 37. In practice that means ES5, or a build
   step that transpiles down to it.
+- **Target API 24, minimum API 21.** Android 14 refuses to install an app that targets below
+  API 23, and Android 15 below 24, so Lunacy targets 24. Android 5 ignores a target above its
+  own level, so this changes nothing there. On Android 6 and later it means: storage and
+  `WRITE_SETTINGS` are asked for while the app runs (see those entries below), and the shell
+  opts out of split screen (`resizeableActivity="false"`), which a target of 24 turns on by
+  default. Anything that would need a target above 24 is a later step, taken on purpose.
 - **Security is ratcheted, not ignored.** Each shortcut that Android 5 allows (the bridge
   transport, mixed content, how widely the bus is exposed) is listed below, so it can be
   tightened when newer Android versions are targeted.
@@ -564,9 +570,11 @@ so it has no icon but still runs, still answers `listApps` and can still be laun
   `{wallpaperName, wallpaperFile, wallpaperThumbFile}` - the shape the reference TouchPad's own
   preference has. Lunacy ships the TouchPad's wallpapers into `/media/internal/wallpapers/`,
   where a device kept them, so there is something to pick on a fresh install.
-- **Android's settings, written for real (ratchet item).** `WRITE_SETTINGS` is granted at
-  install while Lunacy targets API 21. From API 23 it needs the user's consent, so a later
-  target has to ask before Screen & Lock's brightness and timeout will take.
+- **Android's settings, written for real.** `WRITE_SETTINGS` is granted at install on
+  Android 5. Lunacy targets API 24, so from Android 6 it needs the user's consent: the first
+  refused write in a run opens Android's "Modify system settings" screen for Lunacy
+  (`DisplayService.write`). That write still fails, and the bus says so; the ones after the
+  user allows it take.
 - **Bluetooth state for the status bar (ratchet item).** The Bluetooth icon reads the adapter
   and its A2DP and headset connections with `BLUETOOTH`, a normal permission on API 21. From
   API 31 that needs `BLUETOOTH_CONNECT`, which the user grants; until it is asked for, the
@@ -641,8 +649,9 @@ it, so the control works in every app without any app being changed.
   folders are mapped into it under the names webOS used: `downloads`, `music`, `photos`,
   `documents`, `camera`, `video` (`UserFiles.kt`). The card host, the media server and the
   picker all resolve paths through it, and nothing outside those folders is reachable.
-  Reading them needs `READ_EXTERNAL_STORAGE`, which Android 5 grants at install: another
-  ratchet item for API 23 and later.
+  Reading them needs `READ_EXTERNAL_STORAGE`, which Android 5 grants at install. From
+  Android 6 the shell asks for it once at startup (`ShellActivity.askForStorage`). If it's
+  refused, the mapped folders just aren't there.
 - Thumbnails come from `?__lunacy_thumb=<px>` on an image under `/media/internal`, which the
   card host answers with a scaled JPEG. Full-size photos would not fit in 1 GB of RAM. The
   parameter carries Lunacy's own prefix so no app can stumble into it.

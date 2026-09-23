@@ -93,6 +93,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         packages = Packages(files.root, java.io.File(cacheDir, "packages"))
         registerServices()
         jsServices.reload()
+        askForStorage()
 
         // The dock draws an icon being dragged out of it above its own bounds.
         val root = FrameLayout(this).apply { clipChildren = false }
@@ -548,6 +549,18 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             running.remove(w.appId)
         }
         if (cards.cards.isEmpty()) onCardView()
+    }
+
+    /**
+     * /media/internal maps Android's shared folders (UserFiles), which Android 5 granted at
+     * install. From Android 6 the user grants them while the app runs, so the shell asks once
+     * at startup; refused, those folders are simply not there, as UserFiles already handles.
+     */
+    private fun askForStorage() {
+        if (android.os.Build.VERSION.SDK_INT < 23) return
+        val wanted = arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        val missing = wanted.filter { checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
+        if (missing.isNotEmpty()) requestPermissions(missing.toTypedArray(), 1)
     }
 
     /**

@@ -4,14 +4,14 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- Screen & Lock's brightness and "turn off after" really set Android's, through
-         com.palm.display/control. Granted at install while Lunacy targets API 21; from
-         API 23 this needs the user's consent (a ratchet item, Docs/architecture.md). -->
+         com.palm.display/control. Granted at install on Android 5; from Android 6 the user
+         grants it on Android's own screen, which DisplayService opens (Docs/architecture.md). -->
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <!-- The status bar's Bluetooth icon: whether the adapter is on and connected. -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <!-- webOS's /media/internal is the user's own storage, and apps read and wrote it freely.
-         Android's shared folders are mapped into it (UserFiles.kt). Granted at install while
-         Lunacy targets API 21; a ratchet item for API 23 and later. -->
+         Android's shared folders are mapped into it (UserFiles.kt). Granted at install on
+         Android 5; from Android 6 the shell asks for it at startup. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <application
@@ -19,7 +19,11 @@
         android:icon="@mipmap/ic_launcher"
         android:hardwareAccelerated="true"
         android:largeHeap="true"
+        android:resizeableActivity="false"
         android:theme="@style/Theme.Lunacy">
+        <!-- resizeableActivity: from a target of 24, Android runs an app in split screen
+             unless it says no. Lunacy is the whole screen, as the shell was on a device;
+             Android 5 has no split screen and ignores the attribute. -->
         <!-- The splash theme is the shell's alone: its windowBackground is what Android
              paints while the process starts. ShellActivity clears it once it has drawn. -->
         <activity android:name=".shell.ShellActivity" android:exported="true"

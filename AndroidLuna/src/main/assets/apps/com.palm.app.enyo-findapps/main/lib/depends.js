@@ -1,0 +1,23 @@
+ enyo.depends(
+    "services/WebService.js",
+    "services/PalmService.js",
+    "services/BaseServer.js",
+    "services/ACServer.js",
+    "services/PMTServer.js",
+    "services/appinstallservice.js",
+    "services/applicationmanager.js",
+    "services/applicationinstaller.js",
+    "services/accountservices.js",
+    "services/deviceprofile.js",
+    "services/accountparamsfetcher.js",
+    "services/connectionmanager.js",
+    "services/systemproperties.js",
+    "hacks.js",
+    "download/appdownloadmanager.js",
+    "download/applists.js",
+    "download/appdownload.js",
+    "download/DownloadStateManager.js",
+    "download/AppStates.js",
+    "download/model.js",
+    "stars/"
+);

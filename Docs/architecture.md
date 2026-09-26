@@ -71,7 +71,7 @@ Lunacy (Android app)
 │    └─ Android-backed    connectionmanager · power · systemservice · audio · intents
 ├─ WebSQL                 native in Lollipop's WebView; polyfill when targets drop it
 ├─ Package manager        .ipk install · appinfo.json · icons · per-app data
-└─ App Museum             the Museum's own Enyo app, bundled; installs via the bus
+└─ App Catalog            the TouchPad's own client (webOS Archive's 6.2), bundled; installs via the bus
 ```
 
 ## Shell
@@ -529,7 +529,8 @@ Following LunaCE's tablet mode (Docs/luna-shell-reference.md §4 and §5):
   The WebView background is reset to transparent after each load, because the
   `window.open` transport resets it.
 - **Home button order.** It closes the drop-down first, then the newest popup alert.
-- **Test app.** `org.webosarchive.lunacy.notifytest` (bundled) exercises all of this with
+- **Test app.** `org.webosarchive.lunacy.notifytest` (in `AndroidLuna/test-apps/`, in the APK
+  only with `-PtestApps`) exercises all of this with
   standard Enyo 1 calls. Launch parameters (`{"do": "banner" | "banners" | "push" | "pop" |
   "popup"}`) drive it without touches, on a TouchPad (`palm-launch -p`) and in Lunacy (the
   `launch` and `params` intent extras).
@@ -808,7 +809,11 @@ it is. When a later platform target's WebView drops WebSQL, Lunacy provides
 `window.openDatabase` in JS instead. The polyfill is backed by per-app SQLite databases
 over the bus, keeps the original async transaction API, and migrates the existing data.
 
-## Package manager and App Museum
+## Package manager and App Catalog
+
+- **The bundled catalogue** is App Catalog 6.2 (`com.palm.app.enyo-findapps`), the
+  TouchPad's own client as webOS Archive restored it. It replaced the bundled App Museum on
+  2026-09-26 (codepoet); the Museum still installs from its own package.
 
 - **Install from `.ipk`.** Read the `ar` archive (or the tar.gz form some packagers wrote),
   unpack `data.tar.gz` (stripping the `./` prefixes), parse `appinfo.json`, and register the

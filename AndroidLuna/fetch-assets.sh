@@ -88,14 +88,14 @@ and prototype, which is MIT (Sam Stephenson). Palm's own is never released under
 licence; distributed by Lunacy as abandonware, like Mojo itself.
 NOTICE
 
-# Enyo samples as installable apps.
+# Enyo samples as installable apps: test apps, in the APK only with -PtestApps.
 # The SDK samples load Enyo by an SDK-tree relative path; packaging them as apps points them
 # at the framework path installed apps use (what palm-package'd samples needed on a device too).
 for s in Sampler HelloWorld; do
     id=com.palmdts.enyo.$(echo $s | tr A-Z a-z)
-    cp -r $V/enyo-1.0/support/examples/$s $L/apps/$id
-    sed -i 's#"../../../../1.0/framework/enyo.js"#"/usr/palm/frameworks/enyo/1.0/framework/enyo.js"#' $L/apps/$id/index.html
-    sed -i "s#\"id\": *\"[^\"]*\"#\"id\": \"$id\"#" $L/apps/$id/appinfo.json
+    cp -r $V/enyo-1.0/support/examples/$s $T/apps/$id
+    sed -i 's#"../../../../1.0/framework/enyo.js"#"/usr/palm/frameworks/enyo/1.0/framework/enyo.js"#' $T/apps/$id/index.html
+    sed -i "s#\"id\": *\"[^\"]*\"#\"id\": \"$id\"#" $T/apps/$id/appinfo.json
 done
 
 # JS services. Node is nodejs-mobile 0.3.3 (Node 12.19): the last release whose libnode.so loads

@@ -26,11 +26,10 @@
 		{"title": "apps", "items": [
 			"com.palm.app.notes_default",
 			"com.palm.calculator_default",
-			"com.palm.app.clock_default",
-			"org.webosarchive.lunacy.notifytest_default"
+			"com.palm.app.clock_default"
 		]},
 		{"title": "downloads", "items": [
-			"com.palm.app-museum2_default"
+			"com.palm.app.enyo-findapps_default"
 		]},
 		{"title": "prefs", "items": [
 			"com.palm.app.deviceinfo_default",

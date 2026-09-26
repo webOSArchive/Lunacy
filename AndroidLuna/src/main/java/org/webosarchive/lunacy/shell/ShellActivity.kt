@@ -1333,7 +1333,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 return@Handler
             }
             // The App Museum installs through Preware (LuneOS's on LuneOS); Lunacy's package
-            // manager answers for it. See Docs/architecture.md, "Package manager and App Museum".
+            // manager answers for it. See Docs/architecture.md, "Package manager and App Catalog".
             if (id in INSTALLERS && registry.get(id) == null && params?.optString("type") == "install") {
                 // Preware reads "file"; the handler chain the catalogs use also sends the
                 // standard "target".

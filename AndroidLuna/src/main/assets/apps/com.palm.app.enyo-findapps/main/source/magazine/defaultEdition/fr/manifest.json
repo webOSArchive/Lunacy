@@ -1,0 +1,34 @@
+{
+    "publishDate": "01/01/2026 00:00:00",
+    "numPages": 1,
+    "packageSize": 2109,
+    "results": [
+        {
+            "logicalPath": "page0/portrait.lo.js",
+            "checksum": "7c94578430118254a2d80167501dc316",
+            "section": "page0",
+            "type": "layout",
+            "edition": 1,
+            "physicalPath": "source/magazine/defaultEdition/fr/page0/portrait.lo.js",
+            "size": 1053
+        },
+        {
+            "logicalPath": "page0/landscape.lo.js",
+            "checksum": "ee8a39a74ddb2b9697a5de2f7523394a",
+            "section": "page0",
+            "type": "layout",
+            "edition": 1,
+            "physicalPath": "source/magazine/defaultEdition/fr/page0/landscape.lo.js",
+            "size": 1054
+        },
+        {
+            "logicalPath": "page0/bindings.json",
+            "checksum": "99914b932bd37a50b983c5e7c90ae93b",
+            "section": "page0",
+            "type": "binding",
+            "edition": 1,
+            "physicalPath": "source/magazine/defaultEdition/fr/page0/bindings.json",
+            "size": 2
+        }
+    ]
+}

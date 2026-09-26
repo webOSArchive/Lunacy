@@ -47,9 +47,9 @@ screen they are given. So most apps run at the device's real size, on both phone
 3. JS (Node) services that ship with apps
 4. PDK native apps
 
-Apps come from the [App Museum](https://appcatalog.webosarchive.org). The Museum is itself
-an Enyo app, so Lunacy bundles it and it runs inside Lunacy like any other card. A few demo
-apps are bundled as well. The shell's styling target is LunaCE.
+Apps come from webOS Archive's [catalogue](https://appcatalog.webosarchive.org), through the
+TouchPad's own App Catalog. It is itself an Enyo app, so Lunacy bundles it and it runs inside
+Lunacy like any other card. The shell's styling target is LunaCE.
 
 ## Platform
 
@@ -66,8 +66,7 @@ Lunacy is sideloaded: there is no store listing.
    this is asked for per app, when you open the APK.)
 2. **Install `AndroidLuna.apk`** - copy it to the device and tap it, or `adb install`. Open
    **Lunacy** from the Android launcher. The card view, the launcher and the bundled apps are
-   there; **WebOS App Museum II**, on the launcher's Downloads tab, is where the apps come
-   from.
+   there; **App Catalog**, on the launcher's Downloads tab, is where the apps come from.
 3. **Optional: the webOS keyboard.** Install `LunaKeyboard.apk`, open **LunaKeyboard** and
    use its two buttons - switch it on in Android's settings, then choose it while a text field
    has focus. Android's own keyboard stays installed; switching back is the same picker.
@@ -82,7 +81,7 @@ Building from source is [BUILDING.md](BUILDING.md).
 
 In *early* development; 0.2.5 is a community preview. The Luna shell (card view with card
 stacks, launcher, status bar, notifications, Just Type) and Enyo and Mojo apps such as the App
-Museum run on an Android 5 tablet, measured against a real TouchPad. Newer Android installs it
+Catalog run on an Android 5 tablet, measured against a real TouchPad. Newer Android installs it
 without workarounds (tested on Android 14). See [Docs/roadmap.md](Docs/roadmap.md)
 for where things stand.
 

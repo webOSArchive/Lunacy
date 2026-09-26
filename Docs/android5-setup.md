@@ -174,7 +174,12 @@ a `sendevent` helper for injecting touches on `mtk-tpd` (`/dev/input/event3`), p
 launcher's saved layout (`shared_prefs/launcher.xml`) edited by hand to undo the groups and
 moves those tests made, back to the order before them; the system volume and System Sounds
 changed from Sounds & Alerts and put back (Lunacy's `systemSounds` preference is now stored as
-`true` where it was unset). For the group rename, a test group (Clock and Memos) was written into the saved layout and taken out again, leaving codepoet's own Group1 as it was. On the **reference TouchPad**: App Catalog's installed
+`true` where it was unset). For the group rename, a test group (Clock and Memos) was written into the saved layout and taken out again, leaving codepoet's own Group1 as it was. On the **reference TouchPad**, App Catalog's installed `main/source/archive-patch.js`,
+`archive-install.js` and `direct-install.js` were replaced again with the working copies (every
+install failure goes to Preware), and Preware was opened once on a package's page to check its
+`{type: "view", id}` launch; its `ipkgservice` restarted six times while it loaded. Codepoet
+then reinstalled Lunacy on the **HP 10 G2** from scratch, and the build that bundles App Catalog
+in place of the App Museum (and leaves out the test apps) was installed over it. On the **reference TouchPad**: App Catalog's installed
 `main/build.js`, `main/source/archive-install.js` and `main/source/direct-install.js` replaced
 with the working copies (the originals of the first two are in `/tmp/*.bak`); the system volume
 set to 71 and back to 72; `/tmp/audio-probe*.sh`, `/tmp/shot.sh` and a screenshot left in

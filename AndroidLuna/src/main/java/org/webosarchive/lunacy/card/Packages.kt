@@ -12,7 +12,7 @@ import java.util.concurrent.Executors
  * them and AppRegistry finds them, as Preware did: through ipkg, whose `preinst` and
  * `postinst` scripts run around the unpacking and whose records go to
  * /media/cryptofs/apps/usr/lib/ipkg/info. Installs run one at a time, off the main thread;
- * results come back on it. See Docs/architecture.md, "Package manager and App Museum".
+ * results come back on it. See Docs/architecture.md, "Package manager and App Catalog".
  */
 class Packages(val root: File, private val cache: File, private val webos: WebosRoot) {
     /** packageId is the control file's Package; appIds the folders of the apps it unpacked. */

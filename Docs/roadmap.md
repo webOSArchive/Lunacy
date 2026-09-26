@@ -8,6 +8,10 @@ and a phase is finished when its criterion is met, not when its task list runs o
 **2026-09-26: webOS Accounts, install scripts and App Catalog installs.** Three apps, each
 measured beside the reference TouchPad; every fix is in [fix-log.md](fix-log.md).
 
+- *App Catalog is the bundled catalogue,* first on DOWNLOADS, in place of the App Museum
+  (codepoet). Notify Test and the Enyo samples are test apps now, in the APK only with
+  `./gradlew assembleDebug -PtestApps`.
+
 - *A webOS root filesystem.* Services and package scripts now see a real `/`: a ROM from the
   TouchPad (the service frameworks, its own palmprofile and accounts services and their db8
   kinds), busybox's commands, Lunacy's `luna-send` and curl. A file a script changed survives

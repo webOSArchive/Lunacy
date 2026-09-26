@@ -38,9 +38,10 @@ android {
     // Assets that can't be committed (frameworks and apps under review, HP fonts and
     // wallpapers) are populated by fetch-assets.sh into local-assets/, which is gitignored.
     sourceSets["main"].assets.srcDirs("src/main/assets", "local-assets")
-    // Glimpse, a test app users shouldn't get, goes in only when asked for:
-    // ./gradlew assembleDebug -PtestApps. Releases leave it out (codepoet).
-    if (project.hasProperty("testApps")) sourceSets["main"].assets.srcDirs("local-test-apps")
+    // Test apps users shouldn't get go in only when asked for: ./gradlew assembleDebug
+    // -PtestApps. Releases leave them out (codepoet). test-apps/ is Lunacy's own (Notify
+    // Test); local-test-apps/ is fetch-assets.sh's (Glimpse, the Enyo samples).
+    if (project.hasProperty("testApps")) sourceSets["main"].assets.srcDirs("test-apps", "local-test-apps")
     // Node for JS services (fetch-assets.sh): 32-bit ARM, the Android 5 test devices' ABI.
     sourceSets["main"].jniLibs.srcDirs("local-jni")
     packaging { jniLibs.useLegacyPackaging = true }  // installed as files, so Node can run

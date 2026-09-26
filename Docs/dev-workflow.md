@@ -12,13 +12,14 @@ out on the reference devices. Changes made to the Android device are listed sepa
 | `AndroidLuna/src/main/assets/luna/` | LunaCE images (Apache 2.0), Prelude fonts and TouchPad wallpapers (abandonware), each with a NOTICE | yes |
 | `AndroidLuna/src/main/assets/lunacy/` | Injected page scripts: `compat.js` (input model, flicks, uncaught errors), `bridge.js` (PalmSystem, PalmServiceBridge), `net.js` (network shim), `fonts.css` (generated) | yes |
 | `AndroidLuna/src/main/assets/certs/` | Mozilla CA roots for Lunacy's own HTTP (MPL 2.0), with a NOTICE | yes |
-| `AndroidLuna/src/main/assets/apps/` | The bundled apps: Lunacy's own (Device Info, the shortcuts to Android's settings, `org.webosarchive.lunacy.notifytest`), Palm's own that ship as abandonware (Screen & Lock, Help, Exhibition, Clock, and the Video Player, which has no icon and is launched by other apps), and webOS Archive's App Museum. Each carries a NOTICE | yes |
+| `AndroidLuna/src/main/assets/apps/` | The bundled apps: Lunacy's own (Device Info, the shortcuts to Android's settings, Sounds & Alerts), Palm's own that ship as abandonware (Screen & Lock, Help, Exhibition, Clock, Calculator, Memos, and the Video Player, which has no icon and is launched by other apps), and App Catalog 6.2, webOS Archive's restoration of the TouchPad's own. Each carries a NOTICE | yes |
 | `AndroidLuna/src/main/assets/luna-systemui/` | The system UI webOS served from the OS, at its own paths: Lunacy's file picker | yes |
 | `LunaRuntimes/enyo-1.0/` | Lunacy's changes to Enyo, as patches against upstream, with CHANGES.md as the fork's change log | yes |
 | `LunaRuntimes/mojo/` | Lunacy's changes to Palm's Mojo, likewise, with CHANGES.md explaining how Mojo is packaged | yes |
 | `LunaKeyboard/` | The companion keyboard APK, built by the same Gradle root and depending on nothing in Lunacy ([its README](../LunaKeyboard/README.md)) | yes |
-| `AndroidLuna/local-assets/` | Stock Enyo 1.0 with those patches applied, Mojo and the other frameworks, the webOS root's ROM (`rootfs/`), and third-party test apps (Enyo samples, settings apps not yet shipped), populated by `AndroidLuna/fetch-assets.sh` | no |
-| `AndroidLuna/local-test-apps/` | Glimpse, also from `fetch-assets.sh`; in the APK only with `./gradlew assembleDebug -PtestApps` | no |
+| `AndroidLuna/local-assets/` | Stock Enyo 1.0 with those patches applied, Mojo and the other frameworks, the webOS root's ROM (`rootfs/`), and settings apps not yet shipped, populated by `AndroidLuna/fetch-assets.sh` | no |
+| `AndroidLuna/local-test-apps/` | Glimpse and the Enyo samples (Sampler, HelloWorld), also from `fetch-assets.sh`; in the APK only with `./gradlew assembleDebug -PtestApps` | no |
+| `AndroidLuna/test-apps/` | Lunacy's own test apps (`org.webosarchive.lunacy.notifytest`); in the APK only with `-PtestApps` | yes |
 | `AndroidLuna/tools/gen-fonts-css.py` | Regenerates `fonts.css` from the shipped Prelude files | yes |
 | `AndroidLuna/tools/node-launcher.cpp` | Node's `main()`, built by `fetch-assets.sh` into `liblunacynode.so` for JS services | yes |
 | `AndroidLuna/local-jni/` | `libnode.so` (nodejs-mobile 0.3.3), `libc++_shared.so` and the launcher, from `fetch-assets.sh` | no |

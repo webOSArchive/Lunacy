@@ -1,0 +1,10 @@
+enyo.depends(
+"../UserSession.js",
+"build.css",
+"build.js",
+"source/archive-patch.js",
+"source/ipk-inspect.js",
+"source/direct-install.js",
+"source/archive-install.js",
+"source/pivot-hydration.js"
+);

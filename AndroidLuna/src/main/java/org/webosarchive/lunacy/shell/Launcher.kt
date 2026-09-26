@@ -123,7 +123,15 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         const val GROUP_CORE = 0.6f
         const val GROUP_DWELL_MS = 300L
         const val GROUP_NAME = "Group"
-        /** How long a dragged icon's finger must rest before the layout is looked at. */
+        // [LunaCE] DynamicsSettings: a dragged icon is checked against the layout on every
+        // fourth move event (iconReorderSampleRate) that is slow enough - its Manhattan distance
+        // from the last, in TouchPad px, shifted left by distanceMagFactor, over the ms since it,
+        // below maxVelocityForSampling. A resting finger still sends small moves, so that is
+        // where the layout changes.
+        const val SAMPLE_RATE = 4
+        const val VELOCITY_MAG = 3
+        const val MAX_SAMPLE_VELOCITY = 1
+        /** If the screen sends nothing while a finger rests, the layout is looked at after this. */
         const val SAMPLE_STILL_MS = 60L
     }
 
@@ -652,47 +660,67 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val c = drawnCentre(tile, page.tiles.indexOf(tile))
         dragging = tile
         dragX = x; dragY = y
+        lastMoveAt = android.os.SystemClock.uptimeMillis(); moveEvents = 0
         grabDx = x - c.x; grabDy = y + page.scrollY - c.y
         drag = Drag.ICON
         invalidate()
     }
 
+    private var lastMoveAt = 0L
+    private var moveEvents = 0
+    /** The page the dragged icon is on now: during a pan, already the one being panned to. */
+    private fun dragPage() = dragging?.let { d -> pages.indexOfFirst { p -> p.tiles.any { it === d } } } ?: -1
+
     /**
-     * The dragged icon's cell follows the finger; the others make room. Over a tab, the icon
-     * goes to that tab's page, as LunaCE's tab bar takes it; held at a side edge, to the next
-     * page that way. Over the dock, it stays put until dropped.
+     * The dragged icon follows the finger. [LunaCE] ReorderablePage looks at the layout only
+     * while the finger is all but still (DynamicsSettings' velocity sampling), so an icon
+     * passing over the others doesn't shuffle them: see [sampleDrag]. Held at a side edge the
+     * icon goes to the next page that way; over the dock it stays put until dropped.
      */
     private fun dragTo(x: Float, y: Float) {
+        val now = android.os.SystemClock.uptimeMillis()
+        val dist = ((abs(x - dragX) + abs(y - dragY)) / luna.px(1f)).roundToInt()
+        val dt = now - lastMoveAt
+        val slow = dt > 0 && (dist shl Params.VELOCITY_MAG) / dt < Params.MAX_SAMPLE_VELOCITY
+        lastMoveAt = now
         dragX = x; dragY = y
-        val app = dragging ?: return
+        dragging ?: return
         highlightedTab = tabAt(x, y)
-        if (y < tabBarH()) {
-            val i = (x / tabWidth()).toInt()
-            if (i in pages.indices && i != currentPage().let { pages.indexOf(it) }) moveDragged(i)
-            invalidate(); return
+        if (y < tabBarH() || y > pageBottom()) {
+            removeCallbacks(edgeFlip); edgeSide = 0
+            removeCallbacks(vScroll); vSide = 0
+        } else {
+            val vedge = luna.px(Params.VEDGE)
+            val v = if (y < pageTop() + vedge) -1 else if (y > pageBottom() - vedge) 1 else 0
+            if (v != vSide) { vSide = v; removeCallbacks(vScroll); if (v != 0) postDelayed(vScroll, Params.VSCROLL_EVERY_MS) }
+            val edge = luna.px(Params.EDGE)
+            val side = if (x < edge) -1 else if (x > width - edge) 1 else 0
+            if (side != edgeSide) { edgeSide = side; removeCallbacks(edgeFlip); if (side != 0) postDelayed(edgeFlip, Params.EDGE_MS) }
         }
-        if (y > pageBottom()) { removeCallbacks(edgeFlip); removeCallbacks(vScroll); vSide = 0; invalidate(); return }
-        val vedge = luna.px(Params.VEDGE)
-        val v = if (y < pageTop() + vedge) -1 else if (y > pageBottom() - vedge) 1 else 0
-        if (v != vSide) { vSide = v; removeCallbacks(vScroll); if (v != 0) postDelayed(vScroll, Params.VSCROLL_EVERY_MS) }
-        val edge = luna.px(Params.EDGE)
-        val side = if (x < edge) -1 else if (x > width - edge) 1 else 0
-        if (side != edgeSide) { edgeSide = side; removeCallbacks(edgeFlip); if (side != 0) postDelayed(edgeFlip, Params.EDGE_MS) }
-        // ReorderablePage only looks at the layout while the finger is all but still (its
-        // velocity sampling), so an icon passing over the others on its way doesn't shuffle
-        // them. Android sends nothing while a finger rests, so look once it has stopped.
-        removeCallbacks(sampleDrag); postDelayed(sampleDrag, Params.SAMPLE_STILL_MS)
+        removeCallbacks(sampleDrag)
+        if (++moveEvents >= Params.SAMPLE_RATE && slow) sampleDrag.run()
+        else postDelayed(sampleDrag, Params.SAMPLE_STILL_MS)
         invalidate()
     }
 
     /**
-     * Where the finger rests decides: over the middle 60 % of another icon it is aiming to drop
-     * *onto* it - a group, once it has stayed 300 ms - and nothing moves; over the rest of a
-     * cell the dragged icon takes that cell.
+     * The finger has all but stopped. Over another page's tab, the icon goes to that page
+     * (LunaCE's handlePageTabBarSpecialMoveArea); its own page's tab only lights. On the page,
+     * over the middle 60 % of another icon it is aiming to drop *onto* it - a group, once it
+     * has stayed 300 ms - and nothing moves; over the rest of a cell the dragged icon takes
+     * that cell.
      */
     private val sampleDrag = Runnable {
         val app = dragging ?: return@Runnable
+        if (dragY < tabBarH()) {
+            val i = tabAt(dragX, dragY)
+            if (i >= 0 && i != dragPage()) moveDragged(i)
+            return@Runnable
+        }
         if (dragY < pageTop() || dragY > pageBottom()) return@Runnable
+        // Mid-pan or mid-scroll the page under the finger isn't settled yet.
+        if (anim?.isRunning == true) return@Runnable
+        moveEvents = 0
         val page = currentPage()
         val fx = dragX; val fy = dragY + page.scrollY
         val hit = page.tiles.withIndex().firstOrNull { (i, _) ->
@@ -736,7 +764,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         postDelayed(vScroll, Params.VSCROLL_EVERY_MS)
     }
     private val edgeFlip: Runnable = Runnable {
-        val target = pages.indexOf(currentPage()) + edgeSide
+        val target = dragPage() + edgeSide
         if (dragging != null && edgeSide != 0 && target in pages.indices) { moveDragged(target); postDelayed(edgeFlip, Params.EDGE_MS) }
     }
 

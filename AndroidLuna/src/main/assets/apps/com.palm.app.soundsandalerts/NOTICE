@@ -1,10 +1,21 @@
-A shortcut, not Palm's app.
+Lunacy's Sounds & Alerts.
 
-Palm's Sounds & Alerts app sets webOS's ringtones, volumes and system sounds. Those belong to
-Android here, and ringtones need webOS's media indexer besides, so this app is an icon that
-opens Android's sound settings (appinfo.json's lunacyAndroidSettings, a Lunacy extension). It
-holds no code of its own.
+Palm's Sounds & Alerts (com.palm.app.soundsandalerts, webOS 3.x) sets webOS's sounds: a
+master switch, the system volume, system sounds, keyboard clicks, the ringtone and its volume,
+vibration and Beats Audio. Lunacy owns some of those and Android owns the rest, so this app
+keeps Palm's layout and the settings Lunacy really has - Sounds, Volume and System Sounds - and
+opens Android's sound settings for the others. It keeps Palm's app id, so it sits where webOS
+users expect to find it.
 
-icon.png and icon-256x256.png are Palm's, from com.palm.app.soundsandalerts as shipped on
-webOS 3.x. Copyright Palm, Inc. / Hewlett-Packard; never released under an open licence;
-distributed by Lunacy as abandonware, like Mojo and the Prelude fonts.
+The app's code (source/SoundsAndAlerts.js, index.html, depends.js, appinfo.json) is Lunacy's,
+under the same terms as the rest of Lunacy, written against the layout of Palm's
+source/SoundsAndAlertsPrefApp.js on the reference TouchPad (webOS CE 3.1.0). These files are
+not Lunacy's:
+
+- icon.png, icon-256x256.png, images/soundsandalerts_48x48.png,
+  images/light_chrome_drop_shadow_header.png, images/light_chrome_drop_shadow_footer.png and
+  stylesheets/soundsandalerts.css
+
+  Copyright Palm, Inc. / Hewlett-Packard, copied unchanged from com.palm.app.soundsandalerts
+  on the reference TouchPad on 2026-09-26. Never released under an open licence; distributed by
+  Lunacy as abandonware, like Mojo and the Prelude fonts.

@@ -11,7 +11,9 @@ TouchPad, checked by MD5 on 2026-09-22.
 
 feedback/appclose.wav, birdappclose.wav, carddrag.wav, LauncherOpenApp.wav and
 LauncherCloseApp.wav: LunaSysMgr's feedback sounds, copied on 2026-09-22 from
-/usr/share/systemsounds/*.pcm on the reference TouchPad (webOS CE 3.1.0). They are HP webOS
+/usr/share/systemsounds/*.pcm on the reference TouchPad (webOS CE 3.1.0), and
+feedback/AdjustVolume.wav (Sounds & Alerts' volume sound), copied from the same place on
+2026-09-26. They are HP webOS
 system sounds and are not in LunaCE's repository. The only change is a WAV header on
 the raw samples, whose format PulseAudio on the device reports as s16le, 1 channel, 44100 Hz
 (`pactl list samples`). Shipped as abandonware, like the Prelude fonts and the TouchPad

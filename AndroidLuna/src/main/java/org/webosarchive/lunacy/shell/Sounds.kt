@@ -31,8 +31,14 @@ class Sounds(private val context: Context, private val server: AppServer, privat
     private val main = Handler(Looper.getMainLooper())
     private val playing = HashSet<MediaPlayer>()
 
+    /** Sounds & Alerts' master switch is off (webOS's muteSound): the shell plays nothing. */
+    var allMuted: () -> Boolean = { false }
+    /** System sounds are off (webOS's systemSounds, or the system class muted): no feedback sounds. */
+    var feedbackMuted: () -> Boolean = { false }
+
     fun play(appId: String, soundClass: String, soundFile: String, durationMs: Int) {
         if (soundClass.isEmpty() && soundFile.isEmpty()) return
+        if (allMuted()) return
         val cls = when (soundClass) {
             "alert" -> "alerts"; "notification" -> "notifications"; "ringtone" -> "ringtones"
             "alerts", "alarm", "calendar", "notifications", "ringtones", "feedback" -> soundClass
@@ -96,9 +102,10 @@ class Sounds(private val context: Context, private val server: AppServer, privat
      * LunaSysMgr's feedback sounds (SoundPlayerPool::playFeedback): short samples preloaded
      * into PulseAudio, here into a SoundPool on Android's system stream, whose volume is
      * Android's and which the ringer's silent mode mutes. webOS played them unless its
-     * `systemSounds` preference was turned off, and it isn't set on the reference TouchPad.
-     * Android's "Touch sounds" is deliberately not read: it is Android's own click, and it is
-     * off out of the box on the reference tablet, so reading it would mean never hearing these.
+     * `systemSounds` preference was turned off (Sounds & Alerts' System Sounds), and it isn't
+     * set on the reference TouchPad: see [feedbackMuted]. Android's "Touch sounds" is
+     * deliberately not read: it is Android's own click, and it is off out of the box on the
+     * reference tablet, so reading it would mean never hearing these.
      */
     @Suppress("DEPRECATION")
     private val pool by lazy { android.media.SoundPool(2, AudioManager.STREAM_SYSTEM, 0) }
@@ -121,6 +128,9 @@ class Sounds(private val context: Context, private val server: AppServer, privat
     }
 
     fun feedback(name: String) {
+        if (allMuted() || feedbackMuted()) return
+        // A name LunaSysMgr has no sample for plays nothing, as on webOS.
+        if (name !in FEEDBACK) return
         val id = try { sample(name) } catch (e: Exception) { Log.w(AppServer.TAG, "feedback $name: $e"); return }
         if (id in loaded) pool.play(id, 1f, 1f, 1, 0, 1f) else pending[id] = true
     }
@@ -153,6 +163,6 @@ class Sounds(private val context: Context, private val server: AppServer, privat
         /** luna.conf's notificationSoundDuration. */
         const val NOTIFICATION_MS = 5000
         /** The samples Lunacy has a use for; see assets/luna/sounds/NOTICE. */
-        val FEEDBACK = listOf("appclose", "birdappclose", "carddrag", "LauncherOpenApp", "LauncherCloseApp")
+        val FEEDBACK = listOf("appclose", "birdappclose", "carddrag", "LauncherOpenApp", "LauncherCloseApp", "AdjustVolume")
     }
 }

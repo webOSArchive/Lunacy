@@ -553,10 +553,14 @@ actually owns, and each settings app falls into one of three cases:
   `com.palm.systemmanager`) returns the bus's honest error, and the app shows what it showed
   on a device when a service failed.
 - **A shortcut to Android's own screen**, where the setting belongs to the host OS and a copy
-  of webOS's UI could only pretend. Wi-Fi and Sounds & Alerts are icons that open Android's
+  of webOS's UI could only pretend. Wi-Fi is an icon that opens Android's
   settings through `palm://org.webosarchive.lunacy/android/openSettings`. They declare it with
   `"lunacyAndroidSettings": "<panel>"` in `appinfo.json` - a Lunacy extension, only ever used
   by apps Lunacy ships - and launching one opens no window.
+- **A Lunacy app under Palm's id**, where Lunacy owns part of a setting: Device Info reports
+  the environment apps really run in, and Sounds & Alerts keeps Palm's layout for the sounds
+  the shell plays (through `com.palm.audio` and the system service's preferences). Each has a
+  button to Android's own screen for the part Android owns.
 
 A settings app Lunacy can neither answer nor hand over isn't shipped at all. Palm's own
 settings apps that Lunacy ships (Screen & Lock, Help) are in the APK with a NOTICE, as

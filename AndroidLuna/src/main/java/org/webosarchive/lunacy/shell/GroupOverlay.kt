@@ -118,6 +118,10 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
         color = Color.argb(235, 255, 255, 255); textSize = luna.px(22f); typeface = luna.fontBold; textAlign = Paint.Align.CENTER
     }
     private val label = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = luna.px(14f); typeface = luna.fontBold; color = Color.WHITE }
+    // GroupOverlay::paint's rounded rects: the panel (brush 25,25,25,235; pen 255,255,255,90,
+    // 1.5 px) and the name's edit box (brush 0,0,0,180; pen 140,180,255,220). The reference
+    // TouchPad's screen shows them so. (Its takeScreenShot doesn't: the capture fills each
+    // shape with the pen colour, a grey panel and a light-blue box. Compare by eye.)
     private val panelFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(235, 25, 25, 25) }
     private val panelEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = luna.px(1.5f); color = Color.argb(90, 255, 255, 255) }
     private val boxFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(180, 0, 0, 0) }
@@ -132,7 +136,12 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
             return super.onKeyPreIme(keyCode, event)
         }
     }.apply {
-        setTextColor(Color.argb(235, 255, 255, 255))
+        // The field only takes the typing: the name, and LunaCE's trailing-bar cursor, are
+        // drawn with the title (onDraw), centred in the title's rect as Qt's AlignCenter puts it.
+        setTextColor(Color.TRANSPARENT)
+        highlightColor = Color.TRANSPARENT
+        isCursorVisible = false
+        isLongClickable = false
         setTextSize(TypedValue.COMPLEX_UNIT_PX, luna.px(22f))
         typeface = luna.fontBold
         gravity = Gravity.CENTER
@@ -143,6 +152,14 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
         imeOptions = EditorInfo.IME_ACTION_DONE
         setOnEditorActionListener { _, _, _ -> endEdit(commit = true); true }
         visibility = GONE
+    }
+
+    init {
+        field.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(t: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(t: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(t: android.text.Editable?) { invalidate() }
+        })
     }
 
     init {
@@ -226,11 +243,13 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
         c.drawRoundRect(p, r12, r12, panelFill)
         c.drawRoundRect(p, r12, r12, panelEdge)
         val tr = titleRect(p)
-        if (editing) {
+        val text = if (editing) {
             val box = RectF(tr).apply { inset(luna.px(4f), luna.px(4f)) }
             val r6 = luna.px(6f)
             c.drawRoundRect(box, r6, r6, boxFill); c.drawRoundRect(box, r6, r6, boxEdge)
-        } else c.drawText(g.name, tr.centerX(), tr.centerY() - (titlePaint.ascent() + titlePaint.descent()) / 2, titlePaint)
+            field.text.toString() + "|"
+        } else g.name
+        c.drawText(text, tr.centerX(), tr.centerY() - (titlePaint.ascent() + titlePaint.descent()) / 2, titlePaint)
         shown().forEachIndexed { i, app -> drawMember(c, app, cellRect(p, i)) }
         c.restore()
         c.restore()

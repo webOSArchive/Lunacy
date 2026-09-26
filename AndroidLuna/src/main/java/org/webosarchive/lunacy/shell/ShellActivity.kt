@@ -37,6 +37,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var mediaServer: org.webosarchive.lunacy.card.MediaServer
     private lateinit var configurator: org.webosarchive.lunacy.card.Configurator
     private lateinit var systemService: org.webosarchive.lunacy.card.SystemService
+    private lateinit var audio: org.webosarchive.lunacy.card.AudioService
     private lateinit var displayService: org.webosarchive.lunacy.card.DisplayService
     /** The wallpaper view, reloaded when the preference changes. */
     private lateinit var wallpaperView: ImageView
@@ -514,7 +515,16 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         return id
     }
 
-    private val sounds by lazy { Sounds(this, server) { id -> registry.get(id)?.dir ?: id } }
+    private val sounds by lazy {
+        Sounds(this, server) { id -> registry.get(id)?.dir ?: id }.apply {
+            // Sounds & Alerts' switches, read as each sound plays.
+            allMuted = { ::systemService.isInitialized && systemService.get("muteSound") == true }
+            feedbackMuted = {
+                (::systemService.isInitialized && systemService.get("systemSounds") == false) ||
+                    (::audio.isInitialized && audio.muted)
+            }
+        }
+    }
 
     override fun paste(window: AppWindow) {
         val target = cards.maximized?.window ?: return
@@ -1345,6 +1355,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         systemService.onPreferenceChanged = { key, value -> onPreferenceChanged(key, value) }
         systemService.hostPreference = { key -> hostPreference(key) }
         systemService.register(bus)
+        audio = org.webosarchive.lunacy.card.AudioService(this, startMuted = systemService.get("systemSounds") == false) { sounds.feedback(it) }
+        audio.register(bus)
         // Lunacy's own service, on its own name: the environment it really runs in, and
         // Android's settings screens for the settings Android owns.
         org.webosarchive.lunacy.card.LunacyService(this, registry, jsServices, jsServices.root) { displayInfo() }.register(bus)

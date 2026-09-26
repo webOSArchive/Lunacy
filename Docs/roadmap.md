@@ -251,7 +251,8 @@ and the space the keyboard and Android's navigation bar cost a card. Both are in
   - **A file picker** at webOS's own system-UI path, so `enyo.FilePicker` works in every app.
     Android's shared folders are mapped into `/media/internal` under webOS's own names, so it
     shows the user's real files: Papyrus now imports and reads an ePub from Downloads.
-  - **Wi-Fi** and **Sounds & Alerts** are shortcuts to Android's settings.
+  - **Wi-Fi** is a shortcut to Android's settings. **Sounds & Alerts** is Lunacy's app in
+    Palm's layout: Sounds, Volume and System Sounds, and a button to Android's sound settings.
   - An app its owner enables now shows its own exhibition view: the shell launches it with
     `dockMode`, which is how webOS told an app to show that view rather than its ordinary one.
   - **Help** is Palm's, unchanged, and runs; its articles need a path webOS Archive's help host
@@ -316,8 +317,9 @@ and the space the keyboard and Android's navigation bar cost a card. Both are in
     names `com.palm.accountservices` (the Google property ID), `applicationManager/
     launchPointChanges`, `connectCellularDataService` (for its proxy), and the magazine
     edition request failing and then reading a null reply (`'nom' of null`).
-  - **Then Sounds & Alerts (codepoet, 2026-09-22).** Its icon still only opens Android's
-    sound settings. Now that the shell plays webOS's own sounds (B8, A5), Lunacy should offer
+  - **Then Sounds & Alerts (codepoet, 2026-09-22).** Done 2026-09-26 for what the shell
+    plays (the master switch, the system volume, system sounds); the notification and alert
+    tones are still Android's. The original note: Now that the shell plays webOS's own sounds (B8, A5), Lunacy should offer
     control of them itself: Palm's Sounds & Alerts app, answered through `com.palm.audio` and
     `com.palm.systemservice` preferences the shell honours (system sounds on/off, the
     notification and alert tones, volumes), rather than a shortcut. Measure the app's

@@ -167,6 +167,19 @@ Lunacy: `…lunacy.fontprobe` 0.0.5 and 0.0.7 installed through `--es install` (
 Memos; Help, Calculator and Memos run. On the **reference TouchPad**: `…lunacy.fontprobe`
 0.0.1 to 0.0.6 installed with `palm-install`, and Calculator and Memos opened.
 
+Later again, for App Catalog installs, launcher dragging and Sounds & Alerts. On the **HP 10
+G2**: App Catalog 6.2.2926 reinstalled twice inside Lunacy through `--es install`, from
+unreleased working copies (no pause button, the webOS install fix); `/data/local/tmp/touch.sh`,
+a `sendevent` helper for injecting touches on `mtk-tpd` (`/dev/input/event3`), pushed; the
+launcher's saved layout (`shared_prefs/launcher.xml`) edited by hand to undo the groups and
+moves those tests made, back to the order before them; the system volume and System Sounds
+changed from Sounds & Alerts and put back (Lunacy's `systemSounds` preference is now stored as
+`true` where it was unset). For the group rename, a test group (Clock and Memos) was written into the saved layout and taken out again, leaving codepoet's own Group1 as it was. On the **reference TouchPad**: App Catalog's installed
+`main/build.js`, `main/source/archive-install.js` and `main/source/direct-install.js` replaced
+with the working copies (the originals of the first two are in `/tmp/*.bak`); the system volume
+set to 71 and back to 72; `/tmp/audio-probe*.sh`, `/tmp/shot.sh` and a screenshot left in
+`/tmp`; Sounds & Ringtones opened.
+
 ## Display density
 
 The tablet is 213 dpi, which Android reports as a density of 1.33125. Chromium lays a card's

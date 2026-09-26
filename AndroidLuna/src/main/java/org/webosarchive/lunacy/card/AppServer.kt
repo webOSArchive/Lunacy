@@ -30,7 +30,8 @@ class AppServer(
         const val MEDIA_INTERNAL = "media/internal/"
         const val IPKGS = "usr/palm/ipkgs/"
 
-        fun appUrl(id: String, main: String = "index.html") = "https://$id$HOST_SUFFIX/$APPS$id/$main"
+        /** An app's page: its origin is its id, and its path is in its folder ([AppInfo.dir]). */
+        fun appUrl(id: String, main: String = "index.html", dir: String = id) = "https://$id$HOST_SUFFIX/$APPS$dir/$main"
 
         /** The app id an origin belongs to, or null for any other host. */
         fun appIdOf(url: String?): String? {
@@ -106,6 +107,19 @@ class AppServer(
          * front is not the template the framework wrote.
          */
         const val RESOURCE_PARAM = "__lunacy_res"
+        /** The longest a page waits for its fonts before its own scripts run anyway. */
+        const val FONT_WAIT_MS = 1000L
+        /** The page the shell loads at startup to have the default faces decoded (shell/FontWarmer). */
+        const val WARM_URL = "https://lunacy-fonts.media.cryptofs.apps/__lunacy/warm.html"
+        const val WARM_DONE = "warm"
+        private val WARM_PAGE = "<!doctype html><html><head><link rel=\"stylesheet\" href=\"/__lunacy/fonts.css\">" +
+            "<script>window.onload=function(){var w=[];document.fonts.forEach(function(f){" +
+            "if(f.family.replace(/[\"']/g,\"\")===\"Prelude\"&&f.style===\"normal\")w.push(f);});" +
+            "var n=w.length;function one(){if(--n<=0)document.title=\"$WARM_DONE\";}" +
+            "if(!n)one();for(var i=0;i<w.length;i++)w[i].load().then(one,one);};</script></head>" +
+            "<body></body></html>"
+        private fun html(s: String) = WebResourceResponse("text/html", "utf-8", 200, "OK", emptyMap(),
+            ByteArrayInputStream(s.toByteArray()))
     }
 
     fun serve(uri: Uri): WebResourceResponse? {
@@ -117,7 +131,10 @@ class AppServer(
         val encodedPath = uri.encodedPath.orEmpty().trimStart('/')
         val app = host.removeSuffix(HOST_SUFFIX)
         val resource = runCatching { uri.getQueryParameter(RESOURCE_PARAM) != null }.getOrDefault(false)
-        if (path.startsWith("__lunacy/fonts/")) return asset("luna/fonts/" + path.removePrefix("__lunacy/fonts/"), path)
+        if (path == "__lunacy/fonts-loaded") return fontsLoaded(uri)
+        if (path == "__lunacy/warm.html") return html(WARM_PAGE)
+        if (path == "__lunacy/fonts-ready.js") return fontsReady(uri)
+        if (path.startsWith("__lunacy/fonts/")) return font(path.removePrefix("__lunacy/fonts/"))
         if (path.startsWith("__lunacy/")) return asset("lunacy/" + path.removePrefix("__lunacy/"), path)
         // The TouchPad answers this one with 200 and an empty body; Enyo's Tellurium hooks
         // read it while starting, and a 404 makes them throw where a device doesn't.
@@ -302,12 +319,86 @@ class AppServer(
     /** Global serve-time transform: Lunacy's scripts run first in every page. */
     private fun injectInto(source: String, app: String? = null): String {
         var html = source
-        val tag = "<link rel=\"stylesheet\" href=\"/__lunacy/fonts.css\">" +
+        val token = fontToken()
+        val tag = "<link rel=\"stylesheet\" href=\"/__lunacy/fonts.css\">" + fontLoad(token) +
             "<script src=\"/__lunacy/compat.js\"></script><script src=\"/__lunacy/bridge.js\"></script>" +
-            "<script src=\"/__lunacy/net.js\"></script>" + preload(app)
+            "<script src=\"/__lunacy/net.js\"></script>" + preload(app) +
+            "<script src=\"/__lunacy/fonts-ready.js?t=$token\"></script>"
         val m = Regex("<head[^>]*>", RegexOption.IGNORE_CASE).find(html)
         html = if (m != null) html.substring(0, m.range.last + 1) + tag + html.substring(m.range.last + 1) else tag + html
         return mojoBuiltins(html)
+    }
+
+    // ---- the fonts, in hand before the page's own scripts run ----
+
+    /**
+     * On a device Prelude was installed, so a page's first script measured text in it. Here it
+     * is a web font, and Chromium makes a document's web fonts ready only after the script
+     * that is running ends - even a font it already has, from a data: URL or its memory cache
+     * (measured with the font probe, Docs/fix-log.md). So text an app measures while it starts
+     * (Enyo renders in the body's script) came out in the fallback face.
+     *
+     * So every page waits for its fonts while the splash card is still up, as the device
+     * never had to. The page asks for the faces at once ([fontLoad]); when they are ready it
+     * says so ([fontsLoaded]); and a script placed ahead of the app's own is held back until
+     * then ([fontsReady]), with a limit so a page can never hang on it. The parser can't pass
+     * that script, so nothing of the app's runs before the fonts are in.
+     *
+     * The wait is short because the fonts are: every page's fonts.css names them at one origin
+     * (tools/gen-fonts-css.py), so Chromium decodes each once and every card shares it, and the
+     * shell has the default faces decoded while it is idle at startup (shell/FontWarmer).
+     * Measured on the HP 10 G2: the first app after Lunacy starts waits about 40 ms, later
+     * ones 3-5 ms, and text in the page's first script measures as Prelude.
+     */
+    private val fontWaits = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.CountDownLatch>()
+    private val fontTokens = java.util.concurrent.atomic.AtomicLong()
+
+    private fun fontToken(): String {
+        // A page that never asks is forgotten once there are too many to be current.
+        if (fontWaits.size > 64) fontWaits.clear()
+        val t = fontTokens.incrementAndGet().toString(36) + java.lang.Long.toString(System.nanoTime() and 0xffffff, 36)
+        fontWaits[t] = java.util.concurrent.CountDownLatch(1)
+        return t
+    }
+
+    /**
+     * The page asks for the default faces, Prelude and its bold, and reports when they are
+     * ready. Each face is loaded through its own FontFace: FontFaceSet.load() settles only
+     * after the page next lays out, which can't happen while the parser waits on
+     * fonts-ready.js, so it would only ever answer once the wait had timed out.
+     */
+    private fun fontLoad(token: String) = "<script>(function(){var t=\"$token\";" +
+        "function done(){var x=new XMLHttpRequest();x.open(\"GET\",\"/__lunacy/fonts-loaded?t=\"+t,true);x.send();}" +
+        "try{var s=document.fonts,w=[];if(!s||!s.forEach){done();return;}" +
+        "s.forEach(function(f){if(f.family.replace(/[\"']/g,\"\")===\"Prelude\"&&f.style===\"normal\")w.push(f);});" +
+        "var n=w.length;if(!n){done();return;}" +
+        "function one(){if(--n===0)done();}" +
+        "for(var i=0;i<w.length;i++)w[i].load().then(one,one);" +
+        "}catch(e){done();}})();</script>"
+
+    /** A font file, from the one origin every page's fonts.css names, cached for good. */
+    private fun font(name: String): WebResourceResponse? {
+        val stream = try { assets.open("luna/fonts/$name") } catch (e: IOException) { return null }
+        return WebResourceResponse("font/ttf", null, 200, "OK",
+            mapOf("Access-Control-Allow-Origin" to "*", "Cache-Control" to "max-age=31536000, immutable"), stream)
+    }
+
+    private fun fontsLoaded(uri: Uri): WebResourceResponse {
+        uri.getQueryParameter("t")?.let { fontWaits[it]?.countDown() }
+        return WebResourceResponse("text/plain", "utf-8", 204, "No Content", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+    }
+
+    private fun fontsReady(uri: Uri): WebResourceResponse {
+        val t = uri.getQueryParameter("t").orEmpty()
+        val start = System.nanoTime()
+        // The page's word arrives on another thread while this one waits, so the wait stays
+        // listed until it is over.
+        val ready = fontWaits[t]?.await(FONT_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        fontWaits.remove(t)
+        val ms = (System.nanoTime() - start) / 1_000_000
+        Log.i(TAG, "fonts ${if (ready == true) "ready" else "not ready"} after $ms ms (${uri.host})")
+        return WebResourceResponse("application/javascript", "utf-8", 200, "OK", emptyMap(),
+            ByteArrayInputStream("/* Lunacy: this page's fonts are in. */".toByteArray()))
     }
 
     // ---- the framework's art, asked for before the page needs it ----

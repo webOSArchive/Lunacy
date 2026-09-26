@@ -15,7 +15,7 @@ import java.util.concurrent.Executors
  * results come back on it. See Docs/architecture.md, "Package manager and App Museum".
  */
 class Packages(val root: File, private val cache: File, private val webos: WebosRoot) {
-    /** packageId is the control file's Package; appIds the apps it unpacked. */
+    /** packageId is the control file's Package; appIds the folders of the apps it unpacked. */
     class Result(val source: String, val appIds: List<String>, val error: String?, val packageId: String = "")
 
     /** Where ipkg -o /media/cryptofs/apps kept each package's control file, scripts and file list. */
@@ -41,12 +41,12 @@ class Packages(val root: File, private val cache: File, private val webos: Webos
     /**
      * Removes an installed app with its package: the package whose packageinfo.json names it
      * ("app"), that package's services and its record; an app without one, alone. Bundled apps
-     * aren't here to remove. done gets the error, or null.
+     * aren't here to remove. dir is the app's folder ([AppInfo.dir]). done gets the error, or null.
      */
-    fun remove(appId: String, done: (String?) -> Unit) {
+    fun remove(appId: String, dir: String = appId, done: (String?) -> Unit) {
         worker.execute {
             val error = try {
-                val app = File(root, "$APPS/$appId")
+                val app = File(root, "$APPS/$dir")
                 if (!app.isDirectory) throw IOException("$appId isn't installed")
                 val pkgs = File(root, PACKAGES).listFiles().orEmpty().filter { dir ->
                     runCatching { org.json.JSONObject(File(dir, "packageinfo.json").readText()).optString("app") == appId }.getOrDefault(false)

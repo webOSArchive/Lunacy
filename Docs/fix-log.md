@@ -142,6 +142,11 @@ fixed-viewport fallback is allowed).
 | 2026-09-26 | `com.palm.bus/signal/addmatch` unhandled | App Catalog (storaged's MSMProgress) | ls-hubd's own signal subscription was missing. Measured: `{"returnValue":true}` on either bus, no answer without a category | bus (addmatch, and `Bus.signal` for Lunacy's services to send one) |
 | 2026-09-26 | Tapping a group gives no feedback; launching from a group lights nothing; putting the keyboard away mid-rename leaves the group panel lifted | the launcher | [LunaCE] later group fixes weren't ported. From 77bcb40: a tapped group glows as an app does while its panel opens, the glow goes when the panel is dismissed, and stays on the group while a member launches, the member lit while the panel closes. From 9c67036: Back putting the keyboard away ends the rename, as a tap outside does. LunaCE's other group fixes (10d3b58 focus, a5a1a9a tap-through) are Qt-scene problems Android's touch dispatch doesn't have; its web-shortcut icon fix has no counterpart, since Lunacy has no secondary launch points | shell (`GroupOverlay.kt`, `Launcher.kt`) |
 | 2026-09-26 | Home-screen mode: an Android app dropped on the dock vanishes; Android apps can't be uninstalled from edit mode, and the remove dialog says "v." with no version; Just Type doesn't find Android apps; an updated Android app keeps its old label and icon; Android icons are drawn at 64 px and scaled up | the launcher, the dock, Just Type | The dock and Just Type looked apps up in the webOS registry only; Android apps were never `userInstalled`; the list was only compared by id on resume; icons were rendered at TouchPad size. Now: one lookup for both (the dock's remove and move also go by the dock as drawn, so a gone app's id can't shift them); apps outside the system image are `userInstalled` and carry their `versionName`; a package receiver (added, removed, changed, replaced) reloads the launcher and dock and drops that package's cached icons and labels; icons are drawn at their on-screen size from the density that gives it | shell (`AndroidApps.kt`, `ShellActivity.kt`, `Luna.kt`, `Launcher.kt`) |
+| 2026-09-26 | Help shows no Tips, Clips or Featured content | Help (com.palm.app.help, bundled) | Help reads its content from `help.webosarchive.org/<locale>/<x_palm_carrier>/`, where only the TouchPad's `c090-01` exists. Lunacy answered no `x_palm_carrier` preference, so Help fell back to its default `c000-01` and got 404s. It also asks for its product id with `systemProperties/getSysProperty`, which Lunacy didn't answer. Measured on the reference TouchPad: `x_palm_carrier` is `"c090-01"`, the same as its X-Palm-Carrier header; `getSysProperty` answers exactly as `Get`; and both say `missing parameter key` without a key | bus (`x_palm_carrier` from the device profile; `getSysProperty` as an alias of `Get`) |
+| 2026-09-26 | An app whose folder isn't named after its id can't be launched by its id, and a package that installs one lists it under the folder's name | Calculator (`com.palm.calculator`, in `com.palm.app.calculator` on the TouchPad) | webOS takes an app's id from appinfo.json; the application manager on the reference TouchPad lists Calculator as `com.palm.calculator` with its main page in `com.palm.app.calculator/`. Lunacy used the folder name as the id | shell (the registry reads the id from appinfo.json and keeps the folder as `AppInfo.dir`; the app's origin and bus identity are its id, its files are served from its folder, and removal finds the folder) |
+| 2026-09-26 | Text in a Prelude face's full name comes out bold where the TouchPad draws it plain; the Condensed and Compressed names draw faces the TouchPad never shows, and their real family names draw nothing | Calculator's keys (`"Prelude Medium"` in bold); Enyo's alert buttons and dashboards (`Prelude Medium`); Mojo (`'Prelude-CondensedMedium'`) | `fonts.css` was written from the files, not measured. Measured on the reference TouchPad with `Workbench/probe/fontprobe.sh` (every name at normal, 300, bold and 900, identified by text widths against each file's): a face's full name draws that face at every weight, with no emboldening; a family name draws its Bold face when bold, and when normal draws Medium for `Prelude` and `PreludeCondensedWGL` but Black for `PreludeWGL` and `PreludeCompressedWGL`; any other name, including `PreludeCondWGL`, `PreludeCompWGL` and `Prelude Condensed`, draws Prelude | compat (`fonts.css`, regenerated from the measured rules in `tools/gen-fonts-css.py`) |
+| 2026-09-26 | An app's first script measures text in the fallback face, and its text re-flows when Prelude lands | every app (Enyo renders in the body's script) | A device had Prelude installed. Here it is a web font, and Chromium makes a document's web fonts ready only after the running script ends, even from a `data:` URL or its memory cache (measured with the font probe: 460.1 px while the first script runs, 465 at the next `setTimeout(0)`). Checking and decoding a face also cost about 0.4 s the first time, and each app's origin paid it again | card host: each page loads the default faces through `FontFace.load()` and says when they are in; a script injected ahead of the app's own is held until then, 1 s at most (`AppServer`, "the fonts"). Every page's `fonts.css` names the fonts at one origin, so they are decoded once per session, and the shell decodes the default faces while idle at startup (`shell/FontWarmer.kt`). Measured: the first app after Lunacy starts waits about 40 ms, later ones 3–5 ms, and the first script measures Prelude |
+| 2026-09-26 | "Lunacy isn't responding" at startup | the shell, more so with every bundled app | The configurator lists five folders per app on the main thread, and for a bundled app each is `AssetManager.list`, which reads the APK's whole index every time (the ANR trace had the main thread in it) | shell (`AppFiles` reads the APK's index once, off the main thread, and lists bundled folders from it; the rescan takes 112–120 ms) |
 
 ## Known gaps, by the layer they belong to
 
@@ -314,6 +319,11 @@ Found while testing the apps below; each is general, not tied to one app.
   looks like it works - it takes a 400 px element from 313 px back to 400 - but only because
   the engine then fits the page to the card afresh, which is wrong in the other direction: a
   landscape card came back at 1.28, with the list half as much again as it should be.
+- ~~**compat, fonts arrive after the first script**~~ — done 2026-09-26; see the fixes table.
+- **card host, fixed-viewport fallback not built:** Memos hard-codes a 1024 × 768 screen
+  (`.memo-list` 687 px tall, "768 - 55(title) - 26(status)"), so on a card 772 px high its
+  list and paper background stop 30 px short and the body's grey shows below. The
+  architecture doc's per-app fallback (1024 × 768, scaled to fit) is what such an app needs.
 
 ## Apps tested
 
@@ -346,16 +356,18 @@ Added 2026-09-20 (same tablet and WebView):
 | Exhibition 1.0.0 (Palm's, unchanged) | Enyo 1, bundled | Lists the apps that offer an Exhibition face (Glimpse turns up on its own), and Start Exhibition puts the shell into the webOS clock. |
 | Device Info (Lunacy's) | Enyo 1, bundled | Reports the device, Android, the WebView, Lunacy and the display; re-reads them when the screen turns. |
 | Screen & Lock 1.0.0 (Palm's, unchanged) | Enyo 1 | Renders as on the TouchPad. Brightness and "Turn off After" set Android's own; Change Wallpaper opens Lunacy's file picker and the shell's wallpaper follows. Auto Dim sets Android's brightness mode. Secure Unlock has nothing behind it (no `com.palm.systemmanager`). |
-| Help 2.0.0 (Palm's, unchanged) | Enyo 1, `noWindow` | Starts, finds the network and opens its own card. Its articles come from `help.webosarchive.org`, which answers 404 for the path this copy asks for (see below). |
+| Help 2.0.0 (Palm's, unchanged) | Enyo 1, `noWindow` | Starts, finds the network and opens its own card. Shows the TouchPad's Tips from `help.webosarchive.org` since 2026-09-26 (see below), in its phone layout. |
+| Calculator 1.0.0 (HP's, unchanged) | Enyo 1, bundled | Runs as `com.palm.calculator` from its `com.palm.app.calculator` folder, and calculates (2026-09-26). Its keys match the reference TouchPad at the same scale once `fonts.css` followed the device; the faint lines across the keys are the border-image seams above. |
+| Memos 3.0.20 (Palm's, unchanged) | Enyo 1, bundled, db8 (`com.palm.note:1`) | Creates, saves and lists a memo, with the keyboard (2026-09-26). Its layout is a fixed 1024 × 768, so a 30 px grey band shows under the list (known gaps: the fixed-viewport fallback). |
 | Wi-Fi, Sounds & Alerts | Lunacy shortcuts | Open Android's Wi-Fi and sound settings. |
 
-**Help's content, for webOS Archive rather than Lunacy.** The app asks for
-`http://help.webosarchive.org/<locale>/<carrier>/index.json` — this copy's `UrlManager` has the
-device segment commented out ("Remove device code from URL"), while the host keeps the content a
-level deeper, under the device (`/en-us/c000-01/d500-01/index.json` exists, and
-`/en-us/c000-01/index.json` is a 404). Either the app's URL or the host's layout needs to move.
-Lunacy now reports `com.palm.properties.PRODoID`, so the app resolves the TouchPad's `d500-01`
-correctly once the segment is back.
+**Help's content.** The app asks for `http://help.webosarchive.org/<locale>/<x_palm_carrier>/index.json`.
+The host has the TouchPad's content under `c090-01`, the carrier code the reference TouchPad
+reports, and Lunacy reports it too since 2026-09-26 (see the fixes table); before that the app
+fell back to `c000-01`, which the host doesn't have. Help picks its phone layout here, since
+it tests for a screen exactly 1024 wide; codepoet chose to leave that. Its chat pages
+(`/HelpSiteViewer/chat/…/chat.do`) aren't on the host, and aren't wanted: chat is to be a
+chatbot one day.
 
 Added 2026-09-21 (same tablet and WebView). The Mojo suite codepoet named as the apps that
 must work, plus the system app two of them hand off to:

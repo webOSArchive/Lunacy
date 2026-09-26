@@ -4,7 +4,9 @@ import android.content.Context
 import org.json.JSONObject
 
 /**
- * palm://com.palm.preferences/systemProperties/Get: read-only device properties.
+ * palm://com.palm.preferences/systemProperties/Get: read-only device properties. The
+ * reference TouchPad answers getSysProperty exactly as Get, and Palm's Help app asks for
+ * PRODoID that way.
  *
  * Values and reply shapes are the reference TouchPad's (webOS CE 3.1.0), except this
  * install's own ids. Which device Lunacy answers as is DeviceProfile's decision, so the
@@ -37,12 +39,16 @@ class SystemProperties(private val context: Context) {
     ) + listOfNotNull(profile.browserOsName?.let { "com.palm.properties.browserOsName" to it })
 
     fun register(bus: Bus) {
-        bus.register("com.palm.preferences", "systemProperties/Get") { _, p, reply ->
-            val key = p.optString("key")
-            val v = live[key]?.invoke() ?: values[key]
-            // The TouchPad's error has no errorCode.
-            reply(if (v == null) JSONObject().put("returnValue", false).put("errorText", "no such key").toString()
-                  else JSONObject().put(key, v).put("returnValue", true).toString())
+        for (m in listOf("systemProperties/Get", "systemProperties/getSysProperty")) {
+            bus.register("com.palm.preferences", m) { _, p, reply -> reply(get(p.optString("key"))) }
         }
+    }
+
+    /** The TouchPad's errors have no errorCode. */
+    private fun get(key: String): String {
+        if (key.isEmpty()) return JSONObject().put("returnValue", false).put("errorText", "missing parameter key").toString()
+        val v = live[key]?.invoke() ?: values[key]
+        return if (v == null) JSONObject().put("returnValue", false).put("errorText", "no such key").toString()
+               else JSONObject().put(key, v).put("returnValue", true).toString()
     }
 }

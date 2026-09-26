@@ -24,6 +24,8 @@
 	],
 	"layout": [
 		{"title": "apps", "items": [
+			"com.palm.app.notes_default",
+			"com.palm.calculator_default",
 			"com.palm.app.clock_default",
 			"org.webosarchive.lunacy.notifytest_default"
 		]},

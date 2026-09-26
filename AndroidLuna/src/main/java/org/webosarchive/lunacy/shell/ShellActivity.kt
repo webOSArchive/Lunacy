@@ -125,7 +125,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // (again after an update) off the main thread, below; a service's first call and a
         // package script wait for it (WebosRoot.prepare is synchronized).
         webos = org.webosarchive.lunacy.card.WebosRoot(this, bus, installed).apply { lunaSend.start() }
-        files = AppFiles(assets, installed, webos.root)
+        files = AppFiles(assets, installed, webos.root, java.io.File(applicationInfo.sourceDir))
         jsServices = org.webosarchive.lunacy.card.JsServices(bus, files.root, webos)
         server = AppServer(assets, files, jsServices.root, java.io.File(filesDir, "framework-art"))
         mediaServer = org.webosarchive.lunacy.card.MediaServer(jsServices.root)
@@ -137,9 +137,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         Thread({
             val t = System.currentTimeMillis()
             webos.prepare()
+            files.warm()
             Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "webOS root ready in ${System.currentTimeMillis() - t} ms")
             // What the ROM brought: its services and their db8 kinds, and any system apps.
-            runOnUiThread { jsServices.reload(); appsChanged() }
+            runOnUiThread { jsServices.reload(); appsChanged(); FontWarmer(this, server).warmWhenIdle() }
         }, "webos-root").start()
         askForStorage()
 
@@ -513,7 +514,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         return id
     }
 
-    private val sounds by lazy { Sounds(this, server) }
+    private val sounds by lazy { Sounds(this, server) { id -> registry.get(id)?.dir ?: id } }
 
     override fun paste(window: AppWindow) {
         val target = cards.maximized?.window ?: return
@@ -555,7 +556,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             appsChanged()
             jsServices.reload()
             // A package's own apps, or else one its script put in /usr/palm/applications.
-            val app = r.appIds.firstNotNullOfOrNull { registry.get(it) }
+            val app = r.appIds.firstNotNullOfOrNull { registry.inDir(it) }
                 ?: registry.apps.firstOrNull { it.id !in before && it.visible }
             when {
                 r.error != null -> systemBanner(requester, "Couldn't install $name: ${r.error}")
@@ -567,9 +568,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
     /** The installed apps changed (an install, a removal, a script's rescan): the launcher hears it. */
     private fun appsChanged() {
+        val start = System.currentTimeMillis()
         val before = registry.launchPoints.associateBy { it.id }
         registry.reload()
         configurator.run()
+        Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "apps rescanned in ${System.currentTimeMillis() - start} ms")
         launcher.setApps(launchPoints())
         dockMode.launchPointsChanged()
         val after = registry.launchPoints.associateBy { it.id }
@@ -938,7 +941,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         )).toString()
     }
 
-    /** systemservice's locale, region and timeFormat, from Android's settings (SystemService.hostPreference). */
+    /**
+     * systemservice's locale, region and timeFormat, from Android's settings, and the device's
+     * x_palm_carrier (SystemService.hostPreference). The carrier code is the device's own, as
+     * X-Palm-Carrier is: the reference TouchPad answers "c090-01" for both. Help builds its
+     * content URL from it (help.webosarchive.org/en-us/c090-01/index.json).
+     */
     private fun hostPreference(key: String): Any? {
         val locale = resources.configuration.locale
         val country = locale.country.lowercase().ifEmpty { "us" }
@@ -949,6 +957,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 .put("countryCode", country).put("phoneRegion", region)
             "region" -> region
             "timeFormat" -> if (android.text.format.DateFormat.is24HourFormat(this)) "HH24" else "HH12"
+            "x_palm_carrier" -> profile.carrierCode
             else -> null
         }
     }
@@ -1379,7 +1388,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             override fun remove(appId: String, done: (String?) -> Unit) {
                 val app = registry.get(appId)
                 if (app == null || !app.userInstalled) return done("$appId isn't installed")
-                packages.remove(appId) { error -> appsChanged(); jsServices.reload(); done(error) }
+                packages.remove(appId, app.dir) { error -> appsChanged(); jsServices.reload(); done(error) }
             }
             override fun isInstalled(appId: String) = registry.get(appId)?.userInstalled == true
         }).register(bus)
@@ -1398,7 +1407,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun remove(app: AppInfo) {
         if (app.androidComponent != null) { androidApps.uninstall(app); return }
         running[app.id]?.toList()?.forEach { w -> onWindowClosed(w) }
-        packages.remove(app.id) { error ->
+        packages.remove(app.id, app.dir) { error ->
             appsChanged()
             jsServices.reload()
             showDock()

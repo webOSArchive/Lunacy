@@ -87,7 +87,7 @@ class SystemService(private val webosRoot: File, private val store: File) {
 
     /**
      * Preferences the host OS owns, answered from Android's settings when nothing has set them
-     * here: `locale`, `region` and `timeFormat`, in the reference TouchPad's shape
+     * here: `locale`, `region` and `timeFormat`, and the device profile's `x_palm_carrier`, in the reference TouchPad's shape
      * ({"languageCode":"en","countryCode":"us","phoneRegion":{…}}). Services that say they are
      * `globalized` read `locale` as they start - the accounts service does - and stop without it.
      */

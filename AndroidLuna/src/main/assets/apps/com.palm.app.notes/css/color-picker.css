@@ -1,0 +1,8 @@
+.swatch {
+  width: 40px !important;
+}
+
+.swatch.enyo-first,
+.swatch.enyo-last {
+  width: 48px !important;
+}

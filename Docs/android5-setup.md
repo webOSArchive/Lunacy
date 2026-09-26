@@ -161,6 +161,12 @@ removed, and a failed `appInstallService` install of it left in LunaDownloadMgr'
 kind created and deleted, and keymanager keys stored and removed, as
 `org.webosarchive.lunacy.probe`.
 
+Later the same day, for Help, Calculator, Memos and the fonts. On the **HP 10 G2**, inside
+Lunacy: `…lunacy.fontprobe` 0.0.5 and 0.0.7 installed through `--es install` (from
+`/sdcard/Download`, where the packages were left); one memo ("Hello from Lunacy") saved in
+Memos; Help, Calculator and Memos run. On the **reference TouchPad**: `…lunacy.fontprobe`
+0.0.1 to 0.0.6 installed with `palm-install`, and Calculator and Memos opened.
+
 ## Display density
 
 The tablet is 213 dpi, which Android reports as a density of 1.33125. Chromium lays a card's

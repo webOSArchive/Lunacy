@@ -10,6 +10,12 @@ import java.io.InputStream
 /** An installed webOS app, from its appinfo.json. */
 class AppInfo(
     val id: String,
+    /**
+     * The app's folder under /usr/palm/applications. Usually its id, but webOS took the id
+     * from appinfo.json and the folder could be named otherwise: the TouchPad's Calculator is
+     * com.palm.calculator in com.palm.app.calculator.
+     */
+    val dir: String = id,
     val title: String,
     val main: String,
     val icon: String,
@@ -63,25 +69,25 @@ class AppInfo(
     val emulated get() = uiRevision < 2
 
     /** The URL of the app's main page, at its webOS path on its own origin. */
-    val url get() = AppServer.appUrl(id, main)
+    val url get() = AppServer.appUrl(id, main, dir)
     val isWeb get() = type == "web"
-    fun openIcon(): InputStream? = androidIcon?.invoke() ?: files.open("${Packages.APPS}/$id/$icon")
+    fun openIcon(): InputStream? = androidIcon?.invoke() ?: files.open("${Packages.APPS}/$dir/$icon")
     /** appinfo.json's `miniicon`, "miniicon.png" when it names none (ApplicationDescription). */
-    fun openMiniIcon(): InputStream? = if (androidIcon != null) androidIcon.invoke() else files.open("${Packages.APPS}/$id/" + appinfo.optString("miniicon", "miniicon.png").ifEmpty { "miniicon.png" })
+    fun openMiniIcon(): InputStream? = if (androidIcon != null) androidIcon.invoke() else files.open("${Packages.APPS}/$dir/" + appinfo.optString("miniicon", "miniicon.png").ifEmpty { "miniicon.png" })
     fun openSplashIcon(): InputStream? =
-        if (splashIcon.isEmpty()) null else files.open("${Packages.APPS}/$id/$splashIcon")
+        if (splashIcon.isEmpty()) null else files.open("${Packages.APPS}/$dir/$splashIcon")
 
     /** The app's main page as a file:// path, the form webOS's bus answers with. */
-    fun filePath(): String = "file:///media/cryptofs/apps/${Packages.APPS}/$id/$main"
+    fun filePath(): String = "file:///media/cryptofs/apps/${Packages.APPS}/$dir/$main"
 
     /** This app's entry in applicationManager/listApps, with the fields a TouchPad returns. */
     fun listEntry(): JSONObject {
-        val dir = "/media/cryptofs/apps/${Packages.APPS}/$id/"
+        val path = "/media/cryptofs/apps/${Packages.APPS}/$dir/"
         val j = JSONObject()
-            .put("id", id).put("main", "file://$dir$main").put("version", version)
+            .put("id", id).put("main", "file://$path$main").put("version", version)
             .put("category", appinfo.optString("category", "")).put("title", title)
             .put("appmenu", appinfo.optString("appmenu", title)).put("vendor", appinfo.optString("vendor", ""))
-            .put("vendorUrl", appinfo.optString("vendorurl", "")).put("size", 0).put("icon", dir + icon)
+            .put("vendorUrl", appinfo.optString("vendorurl", "")).put("size", 0).put("icon", path + icon)
             .put("removable", userInstalled).put("userInstalled", userInstalled).put("hasAccounts", false)
         appinfo.optJSONObject("universalSearch")?.let { j.put("universalSearch", it) }
         if (appinfo.has("uiRevision")) j.put("uiRevision", appinfo.opt("uiRevision"))
@@ -95,9 +101,50 @@ class AppInfo(
  * script puts a system app, as the webOS Community Account Manager's does - then the apps
  * bundled in the APK's assets/apps/. Every app is served at its /media/cryptofs/apps path.
  */
-class AppFiles(private val assets: AssetManager, val root: File, private val system: File? = null) {
+class AppFiles(private val assets: AssetManager, val root: File, private val system: File? = null, private val apk: File? = null) {
     private val rootPath = root.canonicalPath + File.separator
     private val systemPath = system?.let { it.canonicalPath + File.separator }
+
+    /**
+     * The bundled apps' folders, from one read of the APK's index. AssetManager.list reads the
+     * APK's whole index on every call, and the configurator lists five folders for every app
+     * on the main thread - long enough for Android to report Lunacy as not responding at
+     * startup. The bundled apps can't change while Lunacy runs, so the index is read once
+     * ([warm], off the main thread) and every listing comes from it.
+     */
+    @Volatile private var assetIndex: Map<String, List<String>>? = null
+
+    /** Reads the index now; call it off the main thread before the first rescan. */
+    fun warm() { index() }
+
+    private fun index(): Map<String, List<String>> = assetIndex ?: synchronized(this) {
+        assetIndex ?: readIndex().also { assetIndex = it }
+    }
+
+    private fun readIndex(): Map<String, List<String>> {
+        val dirs = HashMap<String, LinkedHashSet<String>>()
+        val t = System.currentTimeMillis()
+        try {
+            java.util.zip.ZipFile(apk ?: return emptyMap()).use { zip ->
+                for (e in zip.entries()) {
+                    val name = e.name
+                    if (!name.startsWith("assets/apps/")) continue
+                    // Every folder on the way down lists the next name.
+                    val parts = name.removePrefix("assets/").trimEnd('/').split('/')
+                    for (i in 1 until parts.size) {
+                        dirs.getOrPut(parts.subList(0, i).joinToString("/")) { LinkedHashSet() }.add(parts[i])
+                    }
+                }
+            }
+        } catch (e: IOException) {
+            Log.w(AppServer.TAG, "can't read the APK's index: $e"); return emptyMap()
+        }
+        Log.i(AppServer.TAG, "bundled apps indexed in ${System.currentTimeMillis() - t} ms")
+        return dirs.mapValues { it.value.toList() }
+    }
+
+    private fun assetList(path: String): List<String> =
+        if (apk == null) assets.list(path)?.toList().orEmpty() else index()[path].orEmpty()
 
     /** rel is relative to /media/cryptofs/apps, e.g. "usr/palm/applications/<id>/index.html". */
     fun open(rel: String): InputStream? {
@@ -122,7 +169,7 @@ class AppFiles(private val assets: AssetManager, val root: File, private val sys
         val installed = File(root, rel).list().orEmpty().toList()
         val sys = if (system != null && rel.startsWith("${Packages.APPS}/")) File(system, rel).list().orEmpty().toList() else emptyList()
         val bundled = if (rel.startsWith("${Packages.APPS}/"))
-            assets.list("apps/" + rel.removePrefix("${Packages.APPS}/")).orEmpty().toList()
+            assetList("apps/" + rel.removePrefix("${Packages.APPS}/"))
         else emptyList()
         return (installed + sys + bundled).distinct().sorted()
     }
@@ -130,7 +177,7 @@ class AppFiles(private val assets: AssetManager, val root: File, private val sys
     fun appIds(): List<String> =
         (File(root, Packages.APPS).list().orEmpty().toList() +
             (system?.let { File(it, Packages.APPS).list() }.orEmpty()) +
-            assets.list("apps").orEmpty()).distinct().sorted()
+            assetList("apps")).distinct().sorted()
 }
 
 /** Installed apps: bundled apps and installed .ipks, reloaded after each install. */
@@ -142,17 +189,23 @@ class AppRegistry(private val files: AppFiles) {
 
     fun get(id: String) = apps.firstOrNull { it.id == id }
 
+    /** The app in a folder under /usr/palm/applications, as a package unpacked it. */
+    fun inDir(dir: String) = apps.firstOrNull { it.dir == dir }
+
     /** The apps with an icon: what the launcher and the dock draw. See [AppInfo.visible]. */
     val launchPoints get() = apps.filter { it.visible }
 
-    private fun load(): List<AppInfo> = files.appIds().mapNotNull { read(it) }
+    /** An id found in two folders is the first's, as [AppFiles] lists installed packages first. */
+    private fun load(): List<AppInfo> = files.appIds().mapNotNull { read(it) }.distinctBy { it.id }
 
     private fun read(dir: String): AppInfo? = try {
         val text = files.open("${Packages.APPS}/$dir/appinfo.json")?.use { it.bufferedReader().readText() } ?: return null
         // Some packaged appinfo.json files start with a BOM, which webOS tolerated.
         val j = JSONObject(text.trimStart('\uFEFF'))
         AppInfo(
-            id = dir,  // the directory is the id webOS launched it by
+            // webOS launched an app by appinfo.json's id, not by its folder's name.
+            id = j.optString("id").ifEmpty { dir },
+            dir = dir,
             title = j.optString("title", dir),
             main = j.optString("main", "index.html"),
             icon = j.optString("icon", "icon.png"),

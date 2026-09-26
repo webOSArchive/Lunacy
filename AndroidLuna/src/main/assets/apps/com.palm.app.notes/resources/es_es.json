@@ -1,0 +1,12 @@
+{
+	"0#no memos|1#1 memo|##{numMemos} memos": "0#sin notas|1#1 nota|##{numMemos} notas",
+	"0#no search results|1#1 search result|##{results} search results": "0#sin resultados de búsqueda|1#1 resultado de la búsqueda|##{results} resultados de la búsqueda",
+	"All Memos": "Todas las notas",
+	"Are you sure you want to delete this memo?": "¿Estás seguro de que quieres eliminar esta nota?",
+	"Delete memos": "Eliminar notas",
+	"Delete or rearrange memos": "Borrar o reorganizar notas",
+	"Just a quick memo": "Una nota rápida",
+	"Memos": "Notas",
+	"New Memo": "Nota nueva",
+	"Search memos": "Buscar notas"
+}

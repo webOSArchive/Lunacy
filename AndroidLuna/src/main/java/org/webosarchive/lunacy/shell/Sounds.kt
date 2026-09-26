@@ -26,7 +26,8 @@ import org.webosarchive.lunacy.card.AppServer
  * Each plays on the Android stream that matches, so the ringer switch and the volumes are
  * Android's: a notification is silent when the tablet is.
  */
-class Sounds(private val context: Context, private val server: AppServer) {
+/** dirOf gives an app's folder from its id ([org.webosarchive.lunacy.card.AppInfo.dir]). */
+class Sounds(private val context: Context, private val server: AppServer, private val dirOf: (String) -> String = { it }) {
     private val main = Handler(Looper.getMainLooper())
     private val playing = HashSet<MediaPlayer>()
 
@@ -135,7 +136,7 @@ class Sounds(private val context: Context, private val server: AppServer) {
         val base = "https://$appId${AppServer.HOST_SUFFIX}"
         val candidates = if (entry.startsWith("/")) listOf(base + entry) else {
             val locale = context.resources.configuration.locale.let { it.language + "_" + it.country.lowercase() }
-            listOf(AppServer.appUrl(appId, "resources/$locale/$entry"), AppServer.appUrl(appId, entry))
+            listOf(AppServer.appUrl(appId, "resources/$locale/$entry", dirOf(appId)), AppServer.appUrl(appId, entry, dirOf(appId)))
         }
         for (url in candidates) {
             val r = server.serve(android.net.Uri.parse(url)) ?: continue

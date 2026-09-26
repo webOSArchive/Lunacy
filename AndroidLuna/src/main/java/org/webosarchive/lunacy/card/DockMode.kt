@@ -50,7 +50,7 @@ class DockMode(context: Context, private val registry: AppRegistry) {
                 .put("removable", app.userInstalled)
                 .put("launchPointId", app.id + "_default")
                 .put("title", app.title).put("appmenu", info.optString("appmenu", app.title))
-                .put("icon", "/media/cryptofs/apps/${Packages.APPS}/${app.id}/${app.icon}")
+                .put("icon", "/media/cryptofs/apps/${Packages.APPS}/${app.dir}/${app.icon}")
                 .put("enabled", isEnabled(app.id)))
         }
         return JSONObject().put("returnValue", true).put("launchPoints", points).toString()

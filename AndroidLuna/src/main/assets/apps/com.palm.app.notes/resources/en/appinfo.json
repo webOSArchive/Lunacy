@@ -1,0 +1,26 @@
+{
+	"icon": "../../icon.png",
+	"id": "com.palm.app.notes",
+	"keywords": [
+		"Notes",
+		"Stickies",
+		"Notepad"
+	],
+	"main": "../../index.html",
+	"removable": false,
+	"splashBackground": "../../images/splash-background.png",
+	"splashicon": "../../icon-256x256.png",
+	"timestamp": "2011-06-02.10:48:51",
+	"title": "Memos",
+	"type": "web",
+	"uiRevision": 2,
+	"universalSearch": {
+		"action": {
+			"displayName": "New Memo",
+			"launchParam": "text",
+			"url": "com.palm.app.notes"
+		}
+	},
+	"vendor": "Palm, Inc.",
+	"version": "3.0.20"
+}

@@ -1,0 +1,22 @@
+.confirm-delete-popup {
+  width: 320px;
+}
+
+.confirm-delete-popup .large-text {
+  font-size: 1.1em;
+  line-height: 1.5em;
+  margin-bottom: 12px;
+}
+
+.confirm-delete-popup .small-text {
+  color: #353535;
+  margin-bottom: 32px;
+}
+
+.confirm-delete-popup .button-spacer {
+  width: 8px;
+}
+
+.confirm-delete-popup .enyo-button {
+  min-width: 95px;
+}

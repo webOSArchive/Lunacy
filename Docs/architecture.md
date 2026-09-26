@@ -385,7 +385,12 @@ product; being "close enough" is not the goal.
     as an app was launched, with the app's own `splashicon` on a dark background until it had
     drawn. Lunacy draws the same placeholder (`CardSplash`), and the page tells the shell when
     it has actually put a frame up - not when the framework announces itself, which is earlier
-    than it sounds.
+    than it sounds. The card goes into the card view *before* the page loads, and maximizes
+    when the app is ready: the page's scripts run on the shell's thread (the WebView is
+    single-process), so the load starts once the card has slid into the card view
+    (`ShellActivity.loadWhenShown`), and a headless app gets a placeholder card its first
+    card window fills. Not a launch from Exhibition, which shows only what the app opens for
+    the dock. [luna-deltas.md](luna-deltas.md) D, "The startup card", has the measurements.
   - **An app that was written for a phone gets one.** `appinfo.json`'s `uiRevision` is how an
     app says which screen it was laid out for, and a TouchPad ran an app that didn't say `2`
     in a phone-sized card - LunaSysMgr's `Window::Type_Emulated_Card`, drawn as a little phone
@@ -864,7 +869,11 @@ over the bus, keeps the original async transaction API, and migrates the existin
   permissions in `/etc/palm/db` that the Configurator registers) and the palmprofile account
   template. It is laid down off the main thread after each APK update, and a file a script
   has changed since the last APK laid it down is kept, as a package manager keeps changed
-  config files. `/bin` and `/usr/bin` are busybox's commands (a static build, packaged as
+  config files. The device's symlinks (`version/1.0` is a link to `submission/N`) are made as
+  links, from the manifest `fetch-assets.sh` records (`rootfs.links`), since an APK can't hold
+  one; the frameworks served to pages get the same treatment in the app server (`fw.links`,
+  `AppServer.followLinks`), which is what lets Mojo's images link into mojocommon file by file
+  without shipping them twice. `/bin` and `/usr/bin` are busybox's commands (a static build, packaged as
   `libbusybox.so` so Android lets it run), as they were on webOS; `/bin/sh` is its ash;
   `/usr/bin/curl` and `luna-send` are Lunacy's own, in Node. `luna-send` reaches the bus
   over a socket in Lunacy's private storage, as the script's package or the service it runs
@@ -887,6 +896,16 @@ over the bus, keeps the original async transaction API, and migrates the existin
 
 ## Rules
 
+0. **Look and feel fidelity is inviolate.** What a person sees and feels is the TouchPad's:
+   the shell's every surface, motion and timing is measured on the reference device and
+   matched at the same scale, and the apps' runtime is what webOS gave them. Nothing buys a
+   visible difference - not speed, not a simpler design, not a shortcut the engine allows. A
+   slow path is fixed by moving the work (off the main thread, behind the startup card),
+   never by changing what the screen does. Where the engine forces a difference, it is
+   measured, kept as small as the engine allows and recorded in
+   [luna-deltas.md](luna-deltas.md) with why; codepoet decides every exception. The
+   launching card of 2026-09-26 is the cautionary case: made faster by maximizing it at once,
+   which is not what a device did, and put back to waiting in the card view the same day.
 1. **No per-app hacks.** A fix goes into the modernized framework or the global compat layer.
    An app that needs a special case points to a missing general fix. The one allowed per-app
    switch is the fixed-viewport fallback.

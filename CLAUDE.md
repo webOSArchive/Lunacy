@@ -12,6 +12,13 @@ Enyo/Mojo frameworks and a simulated Luna service bus. Read [README.md](README.m
 
 ## Rules
 
+0. **Look and feel fidelity is inviolate.** Lunacy looks, moves and feels like webOS: what
+   a person sees and feels is the TouchPad's, measured on it, not a modernised reading of it.
+   Speed, simplicity or a shortcut never buy a visible difference; a slow path is fixed by
+   moving the work, never by changing what the screen does (the 2026-09-26 launching card:
+   the card waits in the card view as on a device, and the page loads behind it). Where the
+   engine forces a difference, it is measured, recorded in `Docs/luna-deltas.md`, and kept
+   as small as the engine allows. codepoet decides every exception.
 1. **No per-app hacks.** Fix the modernized framework or the global compat layer. If an app
    seems to need a special case, find the general fix. The only allowed per-app setting is the
    fixed-viewport fallback.
@@ -67,4 +74,4 @@ against the reference TouchPad at the same scale before calling it done.
 ## Priority
 
 Enyo 1 → Mojo → JS services → PDK native. The shell's look and feel is a requirement, not
-polish.
+polish: rule 0.

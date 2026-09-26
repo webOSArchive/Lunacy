@@ -5,6 +5,22 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-09-26)
 
+**2026-09-26, later: 0.3.0. The APK at 48 MB, the startup card first, and a review's fixes.** The keyboard is 0.3.0 too, so the pair is easy to match up. The
+shell APK was 82 MB. Text and fonts were stored uncompressed, Enyo's SDK `support/` folder
+was shipped, Node was unstripped, and every framework was in twice because `cp -L` had turned
+the device's `version/1.0` symlinks into copies; each is in [BUILDING.md](BUILDING.md). The
+startup card now goes into the card view before the page loads and maximizes when the app
+is ready (codepoet: the card is what the loading is behind), and a headless app gets a
+placeholder card at launch; Exhibition's launches get
+none - [luna-deltas.md](luna-deltas.md) D. From a code review: the activity's re-creation
+(a font-size change) leaked every card and Node process; db8 loaded the whole store on the
+first lookup by id; `time/getSystemTime` and `display/control/status` subscriptions never
+heard a change; a download whose URL ended in `/` targeted the Download folder itself;
+Node's version and folder listings ran on the main thread; a wallpaper import could overwrite
+a shipped one; an install restarted every JS service; missing icons were decoded on every
+frame; a page's XHR and bus ids could collide with the next page's. Not changed: the
+wallpapers' encoding and the App Catalog package (codepoet).
+
 **2026-09-26: webOS Accounts, install scripts and App Catalog installs.** Three apps, each
 measured beside the reference TouchPad; every fix is in [fix-log.md](fix-log.md).
 
@@ -160,8 +176,9 @@ need.
 
 - An emulated card has no status bar, gesture strip or keyboard button of its own, and in card
   view its thumbnail is a tablet-shaped card with a phone in it rather than a phone.
-- webOS created a launching card when the app was *launched*; Lunacy creates it when the app
-  opens its window, so a `noWindow` app gets its placeholder a little later.
+- webOS held a launching card off the screen for 900 ms before showing it in the card view;
+  Lunacy shows it there at once and loads the page behind it ([luna-deltas.md](luna-deltas.md)
+  D, "The startup card").
 - drPodder's playback row comes out 17/65/17 where the device gives 20/60/20, and this
   Prelude draws its title 300 px wide where the device draws it 290.
 

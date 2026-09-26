@@ -31,6 +31,13 @@ Lunacy reimplements the contract, not the machine:
 Enyo was designed to scale from phone to tablet: its flex layouts and panels fill whatever
 screen they are given. So most apps run at the device's real size, on both phones and tablets.
 
+## What it comes first
+
+The look and feel is the TouchPad's, measured on one: how a card opens, how the launcher
+moves, what a loading card does, where every pixel of the shell sits. That fidelity is the
+project's first rule, ahead of speed or simplicity, and every difference the engine forces is
+measured and written down ([Docs/luna-deltas.md](Docs/luna-deltas.md)).
+
 ## What it is not
 
 - **Not an emulator.** No Palm binaries, no system image, no QEMU.
@@ -79,7 +86,7 @@ Building from source is [BUILDING.md](BUILDING.md).
 
 ## Status
 
-In *early* development; 0.2.5 is a community preview. The Luna shell (card view with card
+In *early* development; 0.3.0 is the current release. The Luna shell (card view with card
 stacks, launcher, status bar, notifications, Just Type) and Enyo and Mojo apps such as the App
 Catalog run on an Android 5 tablet, measured against a real TouchPad. Newer Android installs it
 without workarounds (tested on Android 14). See [Docs/roadmap.md](Docs/roadmap.md)

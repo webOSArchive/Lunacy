@@ -12,6 +12,8 @@ them never needed Palm's hardware. They needed Palm's *contract*.
 
 Lunacy provides that contract on Android.
 
+![Tablet Comparison](Meta/LunacyCompared.png)
+
 ## How it works
 
 Lunacy reimplements the contract, not the machine:

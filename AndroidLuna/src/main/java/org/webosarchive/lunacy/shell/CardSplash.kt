@@ -60,8 +60,12 @@ class CardSplash(context: Context, private val luna: Luna, private val icon: Bit
     }
 
     override fun onDraw(canvas: Canvas) {
+        // A little past its own edges: in the card view the card is scaled, and the page's
+        // edge and this view's edge round to different pixels, which left a thin line of the
+        // page's white along the top of the card until the page had painted (codepoet,
+        // 2026-09-26). The card clips to its outline, so the overdraw ends where the page does.
         background?.let {
-            dst.set(0, 0, width, height)
+            dst.set(-BLEED, -BLEED, width + BLEED, height + BLEED)
             canvas.drawBitmap(it, null, dst, paint)
         } ?: canvas.drawColor(android.graphics.Color.rgb(0x2E, 0x2E, 0x2E))
         val cx = width / 2f
@@ -88,5 +92,6 @@ class CardSplash(context: Context, private val luna: Luna, private val icon: Bit
         const val PULSE_MS = 1000L
         const val QUIET_MS = 1000L
         const val FADE_MS = 300L
+        const val BLEED = 3
     }
 }

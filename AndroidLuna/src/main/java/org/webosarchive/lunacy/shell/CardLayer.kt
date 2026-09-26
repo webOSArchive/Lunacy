@@ -26,7 +26,7 @@ import kotlin.math.roundToInt
 @SuppressLint("ViewConstructor")
 class Card(
     context: Context,
-    val window: AppWindow,
+    window: AppWindow,
     cornerRadius: Float,
     /**
      * The size the page is given, in device pixels, when it isn't the whole card: webOS's
@@ -44,6 +44,28 @@ class Card(
     private val title: String = "",
 ) : FrameLayout(context) {
     private val emulated = emulatedSize != null
+    /** The page in the card. A placeholder card's is the app's headless root until [attach]. */
+    var window: AppWindow = window
+        private set
+    /**
+     * A card shown for a headless app's launch, its splash up, waiting for the app's first card
+     * window (ShellActivity.launch): the root behind the splash isn't the app's card, so its
+     * being ready or drawn doesn't count.
+     */
+    var awaitingWindow = false
+
+    /** The app's first card window arrives: it takes the headless root's place behind the splash, and the root is handed back. */
+    fun attach(w: AppWindow): AppWindow {
+        val old = window
+        val i = indexOfChild(old)
+        val lp = old.layoutParams
+        removeView(old)
+        window = w
+        addView(w, i, lp)
+        w.scaleX = old.scaleX; w.scaleY = old.scaleY
+        awaitingWindow = false
+        return old
+    }
 
     /** What a tap on an emulated card's chrome asks for. */
     enum class ChromeAction { APP_MENU, BACK, KEYBOARD }
@@ -258,6 +280,8 @@ class Card(
         // the phone rather than across the whole card.
         splash?.let { addView(it, LayoutParams(window.layoutParams.width, window.layoutParams.height,
             (window.layoutParams as LayoutParams).gravity)) }
+        // The splash draws past its bounds (CardSplash.onDraw); the outline below is the clip.
+        clipChildren = false
         outlineProvider = object : ViewOutlineProvider() {
             // Small corners in card view; maximized cards are plain rectangles (Docs/luna-shell-reference.md §2.4).
             override fun getOutline(v: View, o: Outline) = o.setRoundRect(0, 0, v.width, v.height, if (scale >= 0.999f) 0f else cornerRadius)
@@ -281,10 +305,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     interface Listener {
         fun onMaximized(card: Card)
         fun onCardView()
-        /**
-         * A launching card ran out of time before its app drew, and has gone to the card view
-         * to wait there; it maximizes by itself when the app is ready.
-         */
+        /** A launching card has gone into the card view to wait for its app; it maximizes by itself when the app is ready. */
         fun onPreparing(card: Card)
         fun onThrownAway(card: Card)
         /** A card is picked up to be reordered, or put down: the dock fades out meanwhile. */
@@ -320,8 +341,6 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         const val GROUP_REORDER_MS = 500L     // cardGroupReorderDuration, OutCubic
         const val HOLD_MS = 700L              // Qt's QTapAndHoldGesture timeout; LunaSysMgr keeps it
         const val REORDER_OPACITY = 0.8f      // a card being reordered
-        const val PREPARE_MS = 150L           // cardPrepareAddDuration: held off-screen for the first frame
-        const val ADD_MAX_MS = 750L           // cardAddMaxDuration: then this long more before the card view
         const val EDGE = 15f                  // kGestureBorderSize
         const val TRIGGER = 15f               // kGestureTriggerDistance
         // Throw away: CardWindowManager kVelocityThreshold/kDistanceThreshold/kMinimumVelocity,
@@ -746,18 +765,21 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         listener.onCardView()
     }
 
-    /** Launching cards whose apps haven't drawn yet: held off-screen, or waiting in the card view. */
+    /** Launching cards whose apps aren't ready yet, waiting in the card view. */
     private val launching = HashSet<Card>()
     /** The newest of them: the card on its way to owning the screen, for [active]. */
     private var lastLaunched: Card? = null
 
     /**
-     * A launch, as LunaSysMgr ran one (reference §2.5, measured on the reference TouchPad with
-     * Workbench/probe's slowprobe). The new card waits full size just below the screen for its
-     * app to be ready - cardPrepareAddDuration and then cardAddMaxDuration, 900 ms in all - and
-     * maximizes upward the moment it is. An app that takes longer gets its card slid up into
-     * the card view instead, where it pulses with the app's icon until the app is ready, and
-     * then maximizes by itself. [ready] is called by the shell; see [ready].
+     * A launch: the loading card goes straight into the card view, where it pulses with the
+     * app's icon until the app is ready, and then maximizes by itself ([ready]). LunaSysMgr
+     * held the new card just below the screen first (cardPrepareAddDuration +
+     * cardAddMaxDuration, 900 ms) in case the app was quick; the app's page runs on the
+     * shell's own thread here (a single-process WebView), so that wait was the app's whole
+     * load with nothing on the screen, and the shell starts the page only once the card is
+     * in the card view (ShellActivity.loadWhenShown): the loading happens behind the startup
+     * card, which is what the card is for (codepoet). Docs/luna-deltas.md D, "The startup
+     * card", records the difference.
      */
     fun openLaunching(card: Card) {
         if (width == 0) { post { openLaunching(card) }; return }
@@ -766,17 +788,14 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         topCard = card
         restack()
         applyTransforms()
-        // The others make room while it waits (slideAllGroups without the new card).
-        if (maximized == null && activating == null) slide(except = card)
         if (card.ready) { maximize(card); return }
         launching += card
         lastLaunched = card
-        postDelayed({
-            if (card in launching && card.group != null && activating == null && drag == Drag.NONE) timedOut(card)
-        }, Params.PREPARE_MS + Params.ADD_MAX_MS)
+        toCardView(card)
     }
 
-    private fun timedOut(card: Card) {
+    /** The launching card slides up into the card view, and the shell shows the card view around it. */
+    private fun toCardView(card: Card) {
         maximized = null
         card.group?.let { it.active = card; setActiveGroup(it) }
         cards.forEach { it.visibility = View.VISIBLE }

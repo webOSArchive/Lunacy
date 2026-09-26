@@ -427,7 +427,8 @@ On the roadmap; the pointers so it can be done without re-reading the C++:
 
 ### B10. The launching card at launch, not window-open
 
-**Not a delta - moved to D.** Measured 2026-09-22 with `Workbench/probe/org.webosarchive.lunacy.headprobe` (a `noWindow` app that opens its card after `{"delay": ms}`): launched with a 15 s delay, the reference TouchPad showed no card at all until the app opened one (LunaSysMgr's log: `APP START ... type: headless` at 21:42:45, `type: card` at 21:43:01; screenshots in between show the card view unchanged). `prepareAddWindow` runs when a window is created, and a headless app has none until it opens it - which is when Lunacy shows it too.
+**Done 2026-09-26, and the launch is a deliberate difference now: see D, "The startup card".**
+Measured 2026-09-22 with `Workbench/probe/org.webosarchive.lunacy.headprobe` (a `noWindow` app that opens its card after `{"delay": ms}`): launched with a 15 s delay, the reference TouchPad showed no card at all until the app opened one (LunaSysMgr's log: `APP START ... type: headless` at 21:42:45, `type: card` at 21:43:01; screenshots in between show the card view unchanged). `prepareAddWindow` runs when a window is created, and a headless app has none until it opens it - which is when Lunacy shows it too.
 
 On the roadmap; the pointer: LunaSysMgr creates the card in
 `CardWindowManager::prepareAddWindow` when the *launch* is requested, before the app's page
@@ -499,6 +500,22 @@ the media indexer's db8 kinds. All in [fix-log.md](fix-log.md) "Known gaps".
 
 ## D. Not deltas - so nobody chases them
 
+- **The startup card (was B10; changed 2026-09-26, codepoet's call).** LunaSysMgr held a
+  launching card just below the screen until its app was ready (cardPrepareAddDuration +
+  cardAddMaxDuration, 900 ms) and slid a slower app's card into the card view to pulse there;
+  measured with the slow probe, a page that had painted but not called stageReady stayed off
+  the screen. Lunacy's WebView is single-process, so the app's page runs on the shell's own
+  thread, and a launch that waited for the app left the launcher frozen for the seconds a big
+  app takes to load with nothing on the screen (Clock and App Catalog, measured 2026-09-26:
+  about 2 s and 3 s from the tap to anything at all). Now the loading card goes straight into
+  the card view, pulses there and maximizes when the app is ready, as a slow app's did on a
+  device - only without the 900 ms off-screen first - and the page loads once the card is in
+  the card view (`CardLayer.openLaunching`, `ShellActivity.loadWhenShown`; Clock's card shows
+  0.4 s after the launch). A headless app gets a placeholder card at launch
+  too, which its first card window fills, and which goes if the app is up and running without
+  one (`ShellActivity.withdrawPlaceholder`, 1 s after it is ready). Exhibition's launches put
+  no startup card up at all, as on a device (codepoet): only the window the app opens for the
+  dock is shown.
 - **`PalmSystem.deactivate`** (was A4). Measured 2026-09-22: a maximized card that calls it
   stays maximized and hears nothing.
 - **`suppressBannerMessages`, `suppressGestures`, `rotationLockMaximized`** (were in A3).

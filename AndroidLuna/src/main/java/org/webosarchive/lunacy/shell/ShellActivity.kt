@@ -300,7 +300,35 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             .unregisterDisplayListener(displayListener)
         if (watchingPower) { unregisterReceiver(powerReceiver); watchingPower = false }
         if (::launcher.isInitialized) unregisterReceiver(packageReceiver)
+        if (watchingSystem) { unregisterReceiver(systemReceiver); watchingSystem = false }
+        // Everything that would outlive the activity: the apps' pages (each a renderer in this
+        // process), the services' Node processes, the luna-send socket and the players. Android
+        // re-creates the activity for a font-size or language change, and without this the old
+        // one's cards ran on, unreachable, beside the new one's.
+        pendingLoads.clear()
+        for (w in running.values.flatten()) { (w.parent as? android.view.ViewGroup)?.removeView(w); w.destroy() }
+        running.clear()
+        if (::jsServices.isInitialized) jsServices.stopAll()
+        if (::webos.isInitialized) webos.lunaSend.stop()
+        if (::audio.isInitialized) audio.close()
+        sounds.release()
         super.onDestroy()
+    }
+
+    /**
+     * What the system tells subscribers about: the time, the zone or the date changing
+     * (systemservice's time/getSystemTime), and the screen going on or off
+     * (display/control/status). Registered once the services exist (registerServices).
+     */
+    private var watchingSystem = false
+    private val systemReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
+            when (intent.action) {
+                android.content.Intent.ACTION_TIME_CHANGED, android.content.Intent.ACTION_TIMEZONE_CHANGED,
+                android.content.Intent.ACTION_DATE_CHANGED -> systemService.timeChanged()
+                android.content.Intent.ACTION_SCREEN_ON, android.content.Intent.ACTION_SCREEN_OFF -> displayService.screenChanged()
+            }
+        }
     }
 
     /** Lunacy is single-task: later launch requests (e.g. from adb or, later, Android intents) arrive here. */
@@ -391,7 +419,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     // ---- apps ----
 
-    fun launch(appId: String, params: JSONObject? = null) {
+    /**
+     * [startupCard]: the launch puts the app's loading card up at once, as a launch from the
+     * launcher did on webOS. Exhibition's launches didn't (codepoet): the app is started for
+     * the dock, and only what it opens for the dock is shown.
+     */
+    fun launch(appId: String, params: JSONObject? = null, startupCard: Boolean = true) {
         androidById[appId]?.let { a -> if (!androidApps.launch(a)) systemBanner("", "Couldn't open ${a.title}"); return }
         val app = registry.get(appId) ?: run { Log.w(AppServer.TAG, "launch: no app $appId"); return }
         // A shortcut to one of Android's settings screens: no window, no pretending that
@@ -426,16 +459,72 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // its own size, so on a phone - where apps are told they are on a Pre3 - there is
         // nothing to emulate.
         val emulate = profile == org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD && registry.get(appId)?.emulated == true
+        val t0 = android.os.SystemClock.uptimeMillis()
         val rootWindow = AppWindow(this, appId, this, emulate)
         rootWindow.fixedOrientation = fixedOrientationOf(app)
         running[appId] = mutableListOf(rootWindow)
-        if (app.noWindow) hidden.addView(rootWindow, FrameLayout.LayoutParams(1, 1))
-        else showAsCard(rootWindow)
         val url = if (params != null) app.url + "?launchParams=" + android.net.Uri.encode(params.toString()) else app.url
-        rootWindow.loadUrl(url)
+        // The startup card first, the page behind it: everything the launch can put off until
+        // the card is on the screen waits for it (loadWhenShown). A headless app (Clock) opens
+        // its card itself once its page has run, so for it the card is a placeholder with the
+        // app's splash, which its first card window fills (onWindowOpened); an app that never
+        // opens one loses the placeholder once it is up and running (withdrawPlaceholder).
+        if (!startupCard) {
+            if (app.noWindow) hidden.addView(rootWindow, FrameLayout.LayoutParams(1, 1)) else showAsCard(rootWindow, splash = false)
+            rootWindow.loadUrl(url)
+            return
+        }
+        showAsCard(rootWindow, placeholder = app.noWindow)
+        Log.i(AppServer.TAG, "launch $appId: window and card in ${android.os.SystemClock.uptimeMillis() - t0} ms")
+        loadWhenShown(rootWindow, url, t0)
     }
 
-    private fun showAsCard(w: AppWindow, parent: AppWindow? = null) {
+    /** The card waiting for a headless app's first card window, if it is [window]'s. */
+    private fun placeholderOf(window: AppWindow): Card? = cards.cards.firstOrNull { it.awaitingWindow && it.window == window }
+
+    /** The app is up and running with no card of its own: the placeholder goes, and the root goes on headless. */
+    private fun withdrawPlaceholder(window: AppWindow) {
+        cards.postDelayed({
+            val card = placeholderOf(window) ?: return@postDelayed
+            Log.i(AppServer.TAG, "launch ${window.appId}: no card opened; the placeholder goes")
+            card.awaitingWindow = false
+            (window.parent as? android.view.ViewGroup)?.removeView(window)
+            hidden.addView(window, FrameLayout.LayoutParams(1, 1))
+            cards.remove(card)
+            if (cards.maximized == null) { statusBar.slide(false); applyOrientation(null) }
+            if (cards.cards.isEmpty()) onCardView()
+        }, PLACEHOLDER_GRACE_MS)
+    }
+
+    /** Page loads waiting for their startup card to be up; see [loadWhenShown]. */
+    private val pendingLoads = HashMap<AppWindow, Runnable>()
+
+    /**
+     * Starts the page once its card has slid into the card view (or up, should it maximize
+     * first). The page's scripts run on this thread - the WebView is single-process on these
+     * Androids - so a load started any earlier froze the card's slide, and the launcher with
+     * it, for as long as the app took to load. This is the point of the startup card
+     * (codepoet): the work happens while it is on the screen.
+     */
+    private fun loadWhenShown(w: AppWindow, url: String, launchedAt: Long) {
+        val load = Runnable {
+            if (pendingLoads.remove(w) == null) return@Runnable
+            Log.i(AppServer.TAG, "launch ${w.appId}: page load started ${android.os.SystemClock.uptimeMillis() - launchedAt} ms in")
+            w.loadUrl(url)
+        }
+        pendingLoads[w] = load
+        cards.postDelayed(load, CardLayer.Params.SLIDE_MS + 50)
+    }
+
+    /** Card view, while a launching card waits in it: the dock and the pill stay away, as on a device. */
+    override fun onPreparing(card: Card) {
+        if (launcherOpen) closeLauncher()
+        onCardView()
+        fade(justType, false)
+        showDock(false)
+    }
+
+    private fun showAsCard(w: AppWindow, parent: AppWindow? = null, placeholder: Boolean = false, splash: Boolean = true) {
         // An app that never said it was laid out for a tablet gets the phone-sized card a
         // TouchPad gave it, rather than being stretched across the whole one.
         val emu = if (!w.emulated) null else Pair(
@@ -444,7 +533,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val card = Card(this, w, luna.px(CardLayer.Params.CORNER), emu,
             if (emu == null) null else luna.image("emucard-device-frame.png"),
             // webOS held the card's space with the app's own icon until it had drawn.
-            registry.get(w.appId)?.let { CardSplash(this, luna, luna.splashIcon(it)) },
+            if (splash) registry.get(w.appId)?.let { CardSplash(this, luna, luna.splashIcon(it)) } else null,
             if (emu == null) null else luna, registry.get(w.appId)?.title ?: w.appId)
         // The emulated card's own chrome: its title is the app menu, its strip the back gesture,
         // its button the keyboard (EmulatedCardWindow).
@@ -456,6 +545,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             }
         }
         card.fullScreen = w.fullScreen && !w.emulated
+        card.awaitingWindow = placeholder
         // A card an app opens while its own card is up joins that card's group
         // (CardWindowManager::prepareAddWindowSibling: the active card is focused and the
         // launch came from the same app).
@@ -475,16 +565,28 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         when (child.type) {
             "dashboard" -> notifications.addDashboard(child, icon(child.attributes.optString("icon"), child.appId))
             "popupalert" -> notifications.popups.show(child, child.attributes.optInt("height", 200))
+            // The headless app's first card: it fills the card its launch put up, and the root
+            // goes on where a headless root lives.
+            "card" -> placeholderOf(parent)?.let { card ->
+                val root = card.attach(child)
+                hidden.addView(root, FrameLayout.LayoutParams(1, 1))
+                card.fullScreen = child.fullScreen && !child.emulated
+                if (cards.maximized == card) onMaximized(card)
+            } ?: showAsCard(child, parent)
             // An app's own Exhibition view. webOS's dock mode showed it in place of the card
             // view, which is where a maximized card already is, so the shell only has to
             // remember it: it is the window whose closing ends the mode, and the one to close
             // when the mode ends.
-            "dockMode" -> { exhibitionWindows += child; showAsCard(child) }
+            // No loading card for the dock's window, as on a device (codepoet).
+            "dockMode" -> { exhibitionWindows += child; showAsCard(child, splash = false) }
             else -> showAsCard(child, parent)
         }
     }
 
     override fun onWindowClosed(window: AppWindow) {
+        // Out of the exhibition set first: ending the mode below closes what is left in it,
+        // and this window mustn't be closed twice over.
+        exhibitionWindows.remove(window)
         // The app that was exhibiting has gone: so has exhibition mode, or the shell would sit
         // there thinking it is still on and ignore the next press of Start Exhibition.
         if (exhibitionOn && window.appId == exhibitionApp &&
@@ -709,6 +811,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     private fun closeWindow(w: AppWindow) {
+        pendingLoads.remove(w)
         val list = running[w.appId] ?: return
         list.remove(w)
         (w.parent as? android.view.ViewGroup)?.removeView(w)
@@ -736,27 +839,34 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     /**
-     * When a launching card's app counts as ready, as WindowedWebApp decided it: when the page
-     * calls stageReady, or - a page that never does - 3 s after it finished loading
+     * When a card's app counts as ready, as WindowedWebApp decided it: when the page calls
+     * stageReady, or - a page that never does - 3 s after it finished loading
      * (kShowWindowTimeoutMs). Having drawn doesn't count: measured with the slow probe, the
      * reference TouchPad kept a page that had painted but not called stageReady off the screen
-     * until it did. The placeholder over a card still waits for the first frame (onPageDrawn).
+     * until it did. Here the card waits in the card view (CardLayer.openLaunching); being ready
+     * maximizes it, and lets its placeholder go once the page has drawn as well (onPageDrawn).
      */
     override fun onPageLoaded(window: AppWindow) {
         cards.postDelayed({
-            if (!window.stageReady) cards.cards.firstOrNull { it.window == window }?.let { cards.ready(it) }
+            if (window.stageReady) return@postDelayed
+            if (placeholderOf(window) != null) withdrawPlaceholder(window)
+            else cardOf(window)?.let { cards.ready(it) }
         }, SHOW_WINDOW_TIMEOUT_MS)
     }
 
-    /** The framework says the app is ready: a launching card can maximize (its placeholder stays until it draws). */
+    /** The framework says the app is ready: a launching card maximizes, and its placeholder goes once the page has drawn. */
     override fun onStageReady(window: AppWindow) {
-        cards.cards.firstOrNull { it.window == window }?.let { cards.ready(it) }
+        if (placeholderOf(window) != null) withdrawPlaceholder(window)
+        else cardOf(window)?.let { cards.ready(it) }
     }
 
     /** The app has drawn: the loading placeholder on its card can go. */
     override fun onPageDrawn(window: AppWindow) {
-        cards.cards.firstOrNull { it.window == window }?.drawn = true
+        cardOf(window)?.drawn = true
     }
+
+    /** The card whose page is [window]; a placeholder's headless root is nobody's page. */
+    private fun cardOf(window: AppWindow): Card? = cards.cards.firstOrNull { it.window == window && !it.awaitingWindow }
 
     override fun mediaBase() = mediaServer.base()
 
@@ -1076,7 +1186,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      */
     private fun showWallpaper() {
         val chosen = systemService.fileOf(systemService.get("wallpaper") as? JSONObject)
-        val bmp = chosen?.let { f -> luna.decodeFull(f) } ?: luna.wallpaper()
+        val dm = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(dm)
+        val bmp = chosen?.let { f -> luna.decodeFull(f, maxOf(dm.widthPixels, dm.heightPixels)) } ?: luna.wallpaper()
         if (bmp != null) {
             // LunaSysMgr filled the screen only with an image that could fill it one way up or
             // the other; a smaller one was drawn at its own size, centred on the screen, over
@@ -1085,8 +1197,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             // "The screen" is at most a TouchPad's 1024 x 768: a screen larger than that would
             // otherwise leave webOS's own 1024 x 1024 wallpapers, made to fill a TouchPad,
             // floating in grey.
-            val dm = android.util.DisplayMetrics()
-            @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(dm)
             val long = minOf(maxOf(dm.widthPixels, dm.heightPixels) / luna.density, 1024f)
             val short = minOf(minOf(dm.widthPixels, dm.heightPixels) / luna.density, 768f)
             val fills = (bmp.width >= long && bmp.height >= short) || (bmp.width >= short && bmp.height >= long)
@@ -1229,7 +1339,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      */
     private fun exhibit(appId: String) {
         if (running[appId] == null) exhibitionOpened += appId
-        launch(appId, dockModeParams())
+        launch(appId, dockModeParams(), startupCard = false)
         statusBar.title = dockMode.title(appId)
     }
 
@@ -1355,6 +1465,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         systemService.onPreferenceChanged = { key, value -> onPreferenceChanged(key, value) }
         systemService.hostPreference = { key -> hostPreference(key) }
         systemService.register(bus)
+        registerReceiver(systemReceiver, android.content.IntentFilter().apply {
+            addAction(android.content.Intent.ACTION_TIME_CHANGED); addAction(android.content.Intent.ACTION_TIMEZONE_CHANGED)
+            addAction(android.content.Intent.ACTION_DATE_CHANGED)
+            addAction(android.content.Intent.ACTION_SCREEN_ON); addAction(android.content.Intent.ACTION_SCREEN_OFF)
+        })
+        watchingSystem = true
         audio = org.webosarchive.lunacy.card.AudioService(this, startMuted = systemService.get("systemSounds") == false) { sounds.feedback(it) }
         audio.register(bus)
         // Lunacy's own service, on its own name: the environment it really runs in, and
@@ -1471,6 +1587,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     override fun onMaximized(card: Card) {
+        pendingLoads[card.window]?.run()
         quickLaunch.cancelLaunchFeedback()
         if (justTypePanel.showing) justTypePanel.close()
         // A keyboard asked for while this card was still opening (see keyboard()).
@@ -1563,14 +1680,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (!launcherOpen) fade(justType, true)
         showDock(true)
         cards.cards.forEach { it.window.setStageActive(false) }
-    }
-
-    /** Card view, while a launching card waits in it: the dock and the pill stay away, as on a device. */
-    override fun onPreparing(card: Card) {
-        if (launcherOpen) closeLauncher()
-        onCardView()
-        fade(justType, false)
-        showDock(false)
     }
 
     /** SystemUiController::enterOrExitCardReorder: the dock fades while a card is being reordered. */
@@ -1703,6 +1812,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         const val MEMORY_CHECK_MS = 10_000L
         /** WindowedWebApp's kShowWindowTimeoutMs: how long a loaded page gets to call stageReady. */
         const val SHOW_WINDOW_TIMEOUT_MS = 3000L
+        /** How long after a headless app is up its placeholder card waits for it to open one. */
+        const val PLACEHOLDER_GRACE_MS = 1000L
         const val MEMORY_CALM_MS = 30_000L
         /** Package installers apps hand .ipks to: Preware on webOS, and LuneOS's Preware. */
         val INSTALLERS = setOf("org.webosinternals.preware", "org.webosports.app.preware")

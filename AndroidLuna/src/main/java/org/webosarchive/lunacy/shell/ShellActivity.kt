@@ -33,6 +33,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var registry: AppRegistry
     private lateinit var packages: Packages
     private lateinit var jsServices: org.webosarchive.lunacy.card.JsServices
+    private lateinit var webos: org.webosarchive.lunacy.card.WebosRoot
     private lateinit var mediaServer: org.webosarchive.lunacy.card.MediaServer
     private lateinit var configurator: org.webosarchive.lunacy.card.Configurator
     private lateinit var systemService: org.webosarchive.lunacy.card.SystemService
@@ -98,15 +99,27 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
         WebView.setWebContentsDebuggingEnabled(true)
         luna = Luna(this)
-        files = AppFiles(assets, java.io.File(filesDir, "cryptofs/apps"))
-        jsServices = org.webosarchive.lunacy.card.JsServices(this, bus, files.root)
+        val installed = java.io.File(filesDir, "cryptofs/apps")
+        // The webOS root filesystem services and package scripts see as /. Its ROM is laid down
+        // (again after an update) off the main thread, below; a service's first call and a
+        // package script wait for it (WebosRoot.prepare is synchronized).
+        webos = org.webosarchive.lunacy.card.WebosRoot(this, bus, installed).apply { lunaSend.start() }
+        files = AppFiles(assets, installed, webos.root)
+        jsServices = org.webosarchive.lunacy.card.JsServices(bus, files.root, webos)
         server = AppServer(assets, files, jsServices.root, java.io.File(filesDir, "framework-art"))
         mediaServer = org.webosarchive.lunacy.card.MediaServer(jsServices.root)
         registry = AppRegistry(files)
         org.webosarchive.lunacy.card.Http.init(assets)
-        packages = Packages(files.root, java.io.File(cacheDir, "packages"))
+        packages = Packages(files.root, java.io.File(cacheDir, "packages"), webos)
         registerServices()
         jsServices.reload()
+        Thread({
+            val t = System.currentTimeMillis()
+            webos.prepare()
+            Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "webOS root ready in ${System.currentTimeMillis() - t} ms")
+            // What the ROM brought: its services and their db8 kinds, and any system apps.
+            runOnUiThread { jsServices.reload(); appsChanged() }
+        }, "webos-root").start()
         askForStorage()
 
         // The dock draws an icon being dragged out of it above its own bounds.
@@ -341,7 +354,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (::launcher.isInitialized && androidApps.list().map { it.id } != androidById.keys.toList()) launcher.setApps(launchPoints())
     }
 
-    override fun onPause() { inFront = false; super.onPause() }
+    override fun onPause() { inFront = false; org.webosarchive.lunacy.card.CookieFlush.now(); super.onPause() }
 
     // ---- apps ----
 
@@ -499,26 +512,119 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * Installs a package, as Preware did for the App Museum: banners report progress, and
      * tapping the "installed" banner launches the app.
      */
-    private fun install(source: String, requester: String = "") {
+    private fun install(source: String, requester: String = "", onProgress: (Int) -> Unit = {},
+                        onDone: (Packages.Result) -> Unit = {}) {
         val name = android.net.Uri.decode(source.substringAfterLast('/'))
         systemBanner(requester, "Installing $name")
         // LunaSysMgr showed the package on the launcher while it installed, with its progress.
         launcher.startInstall(source, name.removeSuffix(".ipk").substringBefore('_'))
-        packages.install(source, progress = { p -> launcher.installProgress(source, p) }) { r ->
+        packages.install(source, progress = { p -> launcher.installProgress(source, p); onProgress(p) }) { r ->
             launcher.endInstall(source)
-            registry.reload()
-            configurator.run()
+            val before = registry.apps.map { it.id }.toSet()
+            appsChanged()
             jsServices.reload()
-            launcher.setApps(launchPoints())
-            dockMode.launchPointsChanged()
+            // A package's own apps, or else one its script put in /usr/palm/applications.
             val app = r.appIds.firstNotNullOfOrNull { registry.get(it) }
+                ?: registry.apps.firstOrNull { it.id !in before && it.visible }
             when {
                 r.error != null -> systemBanner(requester, "Couldn't install $name: ${r.error}")
-                app == null -> systemBanner(requester, "Installed $name, but it has no app Lunacy can read")
+                app == null -> systemBanner(requester, "Installed ${r.packageId.ifEmpty { name }}")
                 else -> systemBanner(app.id, "${app.title} installed")
             }
+            onDone(r)
         }
     }
+    /** The installed apps changed (an install, a removal, a script's rescan): the launcher hears it. */
+    private fun appsChanged() {
+        val before = registry.launchPoints.associateBy { it.id }
+        registry.reload()
+        configurator.run()
+        launcher.setApps(launchPoints())
+        dockMode.launchPointsChanged()
+        val after = registry.launchPoints.associateBy { it.id }
+        for ((id, app) in after) if (id !in before) launchPointChanged(app, "added")
+        for ((id, app) in before) if (id !in after) launchPointChanged(app, "removed")
+    }
+
+    /**
+     * applicationManager/listAllHandlersForMime. Lunacy has no registry of content handlers
+     * yet; it answers for packages, which it installs itself, as the Preware it stands in for
+     * (INSTALLERS) - codepoet's call: Lunacy won't run Preware, so it may answer as Preware.
+     * The reply is the reference TouchPad's, with Preware installed; any other mime gets its
+     * "No handlers found" answer, and no mime its complaint.
+     */
+    private fun handlersForMime(p: JSONObject): String {
+        val mime = p.optString("mime")
+        if (mime.isEmpty() && p.optString("url").isEmpty())
+            return JSONObject().put("subscribed", false).put("returnValue", false)
+                .put("errorCode", "Must have either an url or a mime parameter").toString()
+        val isIpk = mime == IPK_MIME || (mime.isEmpty() && p.optString("url").substringBefore('?').endsWith(".ipk", true))
+        val j = JSONObject().put("subscribed", false).put("mime", mime.ifEmpty { IPK_MIME })
+        if (!isIpk) return j.put("returnValue", false).put("errorCode", "No handlers found for $mime").toString()
+        return j.put("returnValue", true).put("resourceHandlers", JSONObject().put("activeHandler", JSONObject()
+            .put("mime", IPK_MIME).put("extension", "ipk").put("appId", "org.webosinternals.preware")
+            .put("streamable", true).put("index", 0).put("appName", "Preware"))).toString()
+    }
+
+    /**
+     * applicationManager/listPackages, which App Catalog reads before it follows its installs.
+     * Measured on the reference TouchPad: private bus only; `{"returnValue":true, "packages":
+     * [...]}`, every package on the device, the system's with `userInstalled` false, each
+     * with its apps (as listApps gives them) and its services (their services.json, with the
+     * service's `id`). Lunacy knows no package sizes, so they are 0.
+     */
+    private fun listPackages(): String {
+        val list = org.json.JSONArray()
+        for (app in registry.apps) {
+            if (app.androidComponent != null) continue
+            val pkgDir = java.io.File(files.root, "usr/palm/packages/${app.id}")
+            val info = runCatching { JSONObject(java.io.File(pkgDir, "packageinfo.json").readText()) }.getOrNull()
+            val services = org.json.JSONArray()
+            val ids = info?.optJSONArray("services")
+            for (i in 0 until (ids?.length() ?: 0)) {
+                val id = ids!!.optString(i)
+                val json = java.io.File(files.root, "${org.webosarchive.lunacy.card.JsServices.SERVICES}/$id/services.json")
+                runCatching { JSONObject(json.readText()) }.getOrNull()?.let { services.put(JSONObject().put("id", id).also { o -> it.keys().forEach { k -> o.put(k, it.get(k)) } }) }
+            }
+            val entry = app.listEntry()
+            val icon = if (java.io.File(pkgDir, "icon.png").isFile) "/media/cryptofs/apps/usr/palm/packages/${app.id}/icon.png" else entry.optString("icon")
+            list.put(JSONObject().put("id", info?.optString("id")?.ifEmpty { null } ?: app.id).put("loc_name", app.title)
+                .put("package_format_version", 2).put("vendor", entry.optString("vendor")).put("version", app.version)
+                .put("size", 0).put("icon", icon).put("userInstalled", app.userInstalled)
+                .put("apps", org.json.JSONArray().put(entry)).put("services", services))
+        }
+        return JSONObject().put("returnValue", true).put("packages", list).toString()
+    }
+
+    /** Open applicationManager/launchPointChanges subscriptions. */
+    private val launchPointWatchers = ArrayList<Bus.Call>()
+
+    /**
+     * applicationManager/launchPointChanges, which App Catalog watches for its install buttons.
+     * Measured on the reference TouchPad: private bus only (a public caller gets "Unknown
+     * method"), subscriptions only, `{"returnValue":true,"subscribed":true}` first, then each
+     * launch point that comes or goes with `"change":"added"` or `"removed"`.
+     */
+    private fun launchPointChanges(call: Bus.Call) {
+        if (!call.privateBus) return call.reply(Bus.error("Unknown method \"launchPointChanges\" for category \"/\""))
+        if (!call.subscribe) return call.reply(JSONObject().put("returnValue", false).put("subscribed", false)
+            .put("errorText", "Only supports subscriptions").toString())
+        call.reply(JSONObject().put("returnValue", true).put("subscribed", true).toString())
+        launchPointWatchers += call
+        call.onCancel { launchPointWatchers.remove(call) }
+    }
+
+    private fun launchPointChanged(app: AppInfo, change: String) {
+        if (launchPointWatchers.isEmpty()) return
+        val e = app.listEntry()
+        val j = JSONObject().put("id", app.id).put("version", app.version).put("appId", app.id)
+            .put("vendor", e.optString("vendor")).put("vendorUrl", e.optString("vendorUrl")).put("size", 0)
+            .put("packageId", app.id).put("removable", app.userInstalled).put("launchPointId", app.id + "_default")
+            .put("title", app.title).put("appmenu", e.optString("appmenu")).put("icon", e.optString("icon"))
+            .put("change", change).toString()
+        launchPointWatchers.toList().forEach { it.reply(j) }
+    }
+
     override fun removeBanner(window: AppWindow, id: Int) = notifications.removeBanner(window, id)
     override fun clearBanners(window: AppWindow) = notifications.clearBanners(window)
 
@@ -799,6 +905,21 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             // puts the shell into it, and Android's screen saver starts it.
             "dockModeEnabled" to true,
         )).toString()
+    }
+
+    /** systemservice's locale, region and timeFormat, from Android's settings (SystemService.hostPreference). */
+    private fun hostPreference(key: String): Any? {
+        val locale = resources.configuration.locale
+        val country = locale.country.lowercase().ifEmpty { "us" }
+        val region = JSONObject().put("countryCode", country)
+            .put("countryName", java.util.Locale("", country.uppercase()).getDisplayCountry(java.util.Locale.ENGLISH))
+        return when (key) {
+            "locale" -> JSONObject().put("languageCode", locale.language.lowercase().ifEmpty { "en" })
+                .put("countryCode", country).put("phoneRegion", region)
+            "region" -> region
+            "timeFormat" -> if (android.text.format.DateFormat.is24HourFormat(this)) "HH24" else "HH12"
+            else -> null
+        }
     }
 
     /**
@@ -1164,7 +1285,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             // The App Museum installs through Preware (LuneOS's on LuneOS); Lunacy's package
             // manager answers for it. See Docs/architecture.md, "Package manager and App Museum".
             if (id in INSTALLERS && registry.get(id) == null && params?.optString("type") == "install") {
-                val file = params.optString("file")
+                // Preware reads "file"; the handler chain the catalogs use also sends the
+                // standard "target".
+                val file = params.optString("file").ifEmpty { params.optString("target") }
                 if (file.isEmpty()) reply(Bus.error("install: no file given"))
                 else { install(file, caller); reply(Bus.ok(mapOf("processId" to "success"))) }
             } else if (registry.get(id) == null) reply(Bus.error("Application not found: $id"))
@@ -1180,18 +1303,22 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         dockMode = org.webosarchive.lunacy.card.DockMode(this, registry).also { it.register(bus) }
         systemService = org.webosarchive.lunacy.card.SystemService(jsServices.root, java.io.File(filesDir, "systemservice.json"))
         systemService.onPreferenceChanged = { key, value -> onPreferenceChanged(key, value) }
+        systemService.hostPreference = { key -> hostPreference(key) }
         systemService.register(bus)
         // Lunacy's own service, on its own name: the environment it really runs in, and
         // Android's settings screens for the settings Android owns.
         org.webosarchive.lunacy.card.LunacyService(this, registry, jsServices, jsServices.root) { displayInfo() }.register(bus)
         org.webosarchive.lunacy.card.ConnectionManager(this).register(bus)
+        // Secrets, where the accounts service keeps each account's credentials.
+        org.webosarchive.lunacy.card.KeyManager(java.io.File(filesDir, "keymanager.json")).register(bus)
+        org.webosarchive.lunacy.card.DeviceProfileService(this, profile).register(bus)
         org.webosarchive.lunacy.card.ActivityManager().register(bus)
         // webOS's downloader, which apps hand every file fetch to: drPodder's episodes and
         // album art, MeTube's "download first". It writes into the webOS tree.
         org.webosarchive.lunacy.card.DownloadManager(jsServices.root).register(bus)
         val db8 = org.webosarchive.lunacy.card.Db8("com.palm.db", java.io.File(filesDir, "db8.sqlite")).also { it.register(bus) }
         val tempdb = org.webosarchive.lunacy.card.Db8("com.palm.tempdb", null).also { it.register(bus) }
-        configurator = org.webosarchive.lunacy.card.Configurator(files, db8, tempdb)
+        configurator = org.webosarchive.lunacy.card.Configurator(files, db8, tempdb, webos.root)
         configurator.run()
         bus.register("com.palm.applicationManager", "launch", launchHandler)
         bus.register("com.palm.applicationManager", "open", launchHandler)
@@ -1203,6 +1330,29 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                   else Bus.ok(mapOf("appId" to app.id, "basePath" to app.filePath())))
         }
         org.webosarchive.lunacy.card.Keys(this).register(bus)
+        // Package scripts ask for this after putting an app in /usr/palm/applications
+        // themselves. The reference TouchPad answers {"returnValue":true}.
+        bus.register("com.palm.applicationManager", "rescan") { _, _, reply ->
+            appsChanged()
+            reply(Bus.ok())
+        }
+        bus.register("com.palm.applicationManager", "launchPointChanges", Bus.CallHandler { launchPointChanges(it) })
+        bus.register("com.palm.applicationManager", "listAllHandlersForMime") { _, p, reply -> reply(handlersForMime(p)) }
+        bus.register("com.palm.applicationManager", "listPackages", Bus.CallHandler { c ->
+            c.reply(if (!c.privateBus) Bus.error("Unknown method \"listPackages\" for category \"/\"") else listPackages())
+        })
+        // App Catalog's installer, over the same install path as Preware's (AppInstallService.kt).
+        org.webosarchive.lunacy.card.AppInstallService(object : org.webosarchive.lunacy.card.AppInstallService.Installer {
+            override fun install(url: String, requester: String, progress: (Int) -> Unit, done: (Packages.Result) -> Unit) =
+                this@ShellActivity.install(url, requester, progress, done)
+            override fun remove(appId: String, done: (String?) -> Unit) {
+                val app = registry.get(appId)
+                if (app == null || !app.userInstalled) return done("$appId isn't installed")
+                packages.remove(appId) { error -> appsChanged(); jsServices.reload(); done(error) }
+            }
+            override fun isInstalled(appId: String) = registry.get(appId)?.userInstalled == true
+        }).register(bus)
+        org.webosarchive.lunacy.card.AppInstallService.AppInstaller { filesDir.usableSpace }.register(bus)
         bus.register("com.palm.applicationManager", "listApps") { _, _, reply ->
             reply(Bus.ok(mapOf("apps" to org.json.JSONArray(registry.apps.map { it.listEntry() }))))
         }
@@ -1218,11 +1368,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (app.androidComponent != null) { androidApps.uninstall(app); return }
         running[app.id]?.toList()?.forEach { w -> onWindowClosed(w) }
         packages.remove(app.id) { error ->
-            registry.reload()
-            configurator.run()
+            appsChanged()
             jsServices.reload()
-            launcher.setApps(launchPoints())
-            dockMode.launchPointsChanged()
             showDock()
             systemBanner("", if (error == null) "${app.title} removed" else "Couldn't remove ${app.title}: $error")
         }
@@ -1504,6 +1651,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         const val MEMORY_CALM_MS = 30_000L
         /** Package installers apps hand .ipks to: Preware on webOS, and LuneOS's Preware. */
         val INSTALLERS = setOf("org.webosinternals.preware", "org.webosports.app.preware")
+        const val IPK_MIME = "application/vnd.webos.ipk"
     }
 
     /** A hardware keyboard's Escape is webOS's back gesture, delivered to the maximized card. */

@@ -85,8 +85,16 @@ class SystemService(private val webosRoot: File, private val store: File) {
 
     // ---- preferences ----
 
+    /**
+     * Preferences the host OS owns, answered from Android's settings when nothing has set them
+     * here: `locale`, `region` and `timeFormat`, in the reference TouchPad's shape
+     * ({"languageCode":"en","countryCode":"us","phoneRegion":{…}}). Services that say they are
+     * `globalized` read `locale` as they start - the accounts service does - and stop without it.
+     */
+    var hostPreference: (String) -> Any? = { null }
+
     /** The current value of a key, or null. */
-    fun get(key: String): Any? = if (prefs.has(key)) prefs.get(key) else null
+    fun get(key: String): Any? = if (prefs.has(key)) prefs.get(key) else hostPreference(key)
 
     private fun getPreferences(call: Bus.Call) {
         val keys = call.params.optJSONArray("keys")
@@ -101,7 +109,7 @@ class SystemService(private val webosRoot: File, private val store: File) {
     /** Only the keys that exist, as the TouchPad answers. */
     private fun reply(keys: List<String>): String {
         val out = JSONObject()
-        for (k in keys) if (prefs.has(k)) out.put(k, prefs.get(k))
+        for (k in keys) get(k)?.let { out.put(k, it) }
         return out.put("returnValue", true).toString()
     }
 

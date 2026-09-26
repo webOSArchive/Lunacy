@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html><head><title>Bus Probe</title>
+<script type="text/javascript">
+// Which bus a page's PalmServiceBridge reaches, by app id: the same page is packaged under
+// several ids (busprobe.sh). Read with palm-log -f <id>.
+var out = [];
+function say(s) { out.push(s); try { console.log("BUSPROBE " + s); } catch (e) {} try { console.error("BUSPROBE " + s); } catch (e) {} }
+var calls = [
+	["private method", "palm://com.palm.service.accounts/listAccounts", "{}"],
+	["public method", "palm://com.palm.service.accounts/listAccountTemplates", "{}"],
+	["private-only service", "palm://com.palm.accountservices/getAccountToken", "{}"],
+	["private db8 kind", "palm://com.palm.db/find", "{\"query\":{\"from\":\"com.palm.palmprofile:1\"}}"]
+];
+var bridges = [];
+function next(i) {
+	if (i >= calls.length) { document.getElementById("out").appendChild(document.createTextNode(out.join("\n"))); return; }
+	var b = new PalmServiceBridge(); bridges.push(b);
+	b.onservicecallback = function (r) { say(calls[i][0] + ": " + String(r).substring(0, 110)); next(i + 1); };
+	b.call(calls[i][1], calls[i][2]);
+}
+window.onload = function () { say("id " + (window.PalmSystem && PalmSystem.identifier)); next(0); };
+</script></head>
+<body style="background:#fff"><pre id="out" style="font:16px monospace"></pre></body></html>

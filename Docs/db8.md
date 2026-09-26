@@ -35,8 +35,9 @@ apart from ids, revisions and page tokens.
   - With the current `_rev`, the object is replaced.
 - `get {ids}` returns the objects, `_id`, `_kind` and `_rev` included; missing ids are left
   out, and deleted objects come back with `"_del": true`.
-- `merge {objects}` merges props by `_id` and returns `{id, rev}` results. `merge {query,
-  props}` returns `{"count": n}`.
+- `merge {objects}` merges props by `_id` and returns `{id, rev}` results. An `_id` that
+  doesn't exist yet, given with a `_kind`, is created, as `put` would (palmprofile keeps its
+  token object that way). `merge {query, props}` returns `{"count": n}`.
 - `del {ids}` marks objects `_del` and returns `{id, rev}`; with `"purge": true` they're
   removed and only `{id}` returns. `del {query}` returns `{"count": n}`.
 - `reserveIds {count}` returns `{"ids": [...]}`. `batch {operations: [{method, params}]}`

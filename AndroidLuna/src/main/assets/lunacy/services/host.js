@@ -177,6 +177,12 @@ function receive(m) {
 	if (m.t === "request") {
 		const key = (m.category === "/" ? "" : m.category) + "/" + m.method;
 		const h = handleFor(key, m.outside);
+		// A service with nothing on the public bus isn't there at all for a public caller.
+		if (!h && m.outside && !handles.some((x) => x.name === m.service && x.isPublic)) {
+			send({ t: "response", id: m.id, payload: JSON.stringify({ returnValue: false, errorCode: -1,
+				errorText: "Service does not exist: " + m.service + "." }) });
+			return;
+		}
 		if (!h) {
 			send({ t: "response", id: m.id, payload: JSON.stringify({ returnValue: false, errorCode: -1,
 				errorText: "Unknown method \"" + m.method + "\" for category \"" + m.category + "\"" }) });

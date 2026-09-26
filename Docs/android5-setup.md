@@ -139,6 +139,28 @@ screenshots were set with `user_rotation` and undone. Android's "Touch sounds"
 `AndroidLuna/src/main/assets/apps`) installed; the wallpaper was set to a 600 × 400 test image
 and put back to `22.jpg`, and the test image deleted from the wallpaper store.
 
+## Accounts and installs (2026-09-26)
+
+On the **HP 10 G2**, inside Lunacy (all of it goes with a `pm clear`):
+
+- Installed through Lunacy's package manager: the webOS Community Account Manager 1.1.15 (its
+  postinst ran and patched Lunacy's copy of the palmprofile service), `…lunacy.jsprobe` and
+  `…lunacy.scriptprobe`. Compass 1.0.1 was installed and removed again through
+  `appInstallService`.
+- Signed in to the test webOS Account in the account app. That registered the tablet as a
+  device on that account (twice, with one more from a request made by hand from the
+  workstation, all under Lunacy's nduid).
+- Check Mate was logged out of codepoet's own list and signed itself in to the test account's
+  (the account restore being tested). codepoet's own log-in is no longer on this tablet.
+
+On the **reference TouchPad** (a dev unit, codepoet's word; it can be reset): `…lunacy.jsprobe`
+and the three `busprobe` packages (`org.webosarchive.…`, `com.palm.…`, `com.webos.…`)
+installed with `palm-install`; Compass installed through `appinstaller/installNoVerify` and
+removed, and a failed `appInstallService` install of it left in LunaDownloadMgr's history
+(`/var/palm/data/com.palm.appInstallService`); probe scripts under `/tmp`; a throwaway db8
+kind created and deleted, and keymanager keys stored and removed, as
+`org.webosarchive.lunacy.probe`.
+
 ## Display density
 
 The tablet is 213 dpi, which Android reports as a density of 1.33125. Chromium lays a card's

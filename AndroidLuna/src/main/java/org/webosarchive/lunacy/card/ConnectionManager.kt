@@ -33,6 +33,9 @@ class ConnectionManager(private val context: Context) {
         }
         bus.register(SERVICE, "getstatus", h)
         bus.register(SERVICE, "getStatus", h)
+        // A cellular data connection for a service ("proxy" is App Catalog's). Lunacy's device
+        // has no modem, and a wifi TouchPad answers exactly this (measured).
+        bus.register(SERVICE, "connectCellularDataService") { _, _, reply -> reply(Bus.error("APN Not found in CarrierDB")) }
     }
 
     private fun startWatching() {

@@ -9,11 +9,17 @@ import java.util.concurrent.Executors
 
 /**
  * Installs .ipk packages into Lunacy's copy of /media/cryptofs/apps, where AppServer serves
- * them and AppRegistry finds them. Installs run one at a time, off the main thread; results
- * come back on it. See Docs/architecture.md, "Package manager and App Museum".
+ * them and AppRegistry finds them, as Preware did: through ipkg, whose `preinst` and
+ * `postinst` scripts run around the unpacking and whose records go to
+ * /media/cryptofs/apps/usr/lib/ipkg/info. Installs run one at a time, off the main thread;
+ * results come back on it. See Docs/architecture.md, "Package manager and App Museum".
  */
-class Packages(val root: File, private val cache: File) {
-    class Result(val source: String, val appIds: List<String>, val error: String?)
+class Packages(val root: File, private val cache: File, private val webos: WebosRoot) {
+    /** packageId is the control file's Package; appIds the apps it unpacked. */
+    class Result(val source: String, val appIds: List<String>, val error: String?, val packageId: String = "")
+
+    /** Where ipkg -o /media/cryptofs/apps kept each package's control file, scripts and file list. */
+    private val info = File(root, INFO)
 
     private val worker = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
@@ -24,7 +30,7 @@ class Packages(val root: File, private val cache: File) {
      */
     fun install(source: String, progress: (Int) -> Unit = {}, done: (Result) -> Unit) {
         worker.execute {
-            val r = try { Result(source, installNow(source) { p -> main.post { progress(p) } }, null) } catch (e: Exception) {
+            val r = try { installNow(source) { p -> main.post { progress(p) } } } catch (e: Exception) {
                 Log.w(AppServer.TAG, "install $source failed", e)
                 Result(source, emptyList(), e.message ?: e.javaClass.simpleName)
             }
@@ -45,12 +51,18 @@ class Packages(val root: File, private val cache: File) {
                 val pkgs = File(root, PACKAGES).listFiles().orEmpty().filter { dir ->
                     runCatching { org.json.JSONObject(File(dir, "packageinfo.json").readText()).optString("app") == appId }.getOrDefault(false)
                 }
+                // ipkg's own record names the package; an app installed before Lunacy kept one
+                // has only its packageinfo.json, whose id is the package's.
+                val ids = pkgs.mapNotNull { runCatching { org.json.JSONObject(File(it, "packageinfo.json").readText()).optString("id") }.getOrNull() }
+                    .ifEmpty { listOf(appId) }
+                for (id in ids) script(id, "prerm", "remove")
                 for (pkg in pkgs) {
                     val services = runCatching { org.json.JSONObject(File(pkg, "packageinfo.json").readText()).optJSONArray("services") }.getOrNull()
                     for (i in 0 until (services?.length() ?: 0)) File(root, "$SERVICES/${services!!.getString(i)}").deleteRecursively()
                     pkg.deleteRecursively()
                 }
                 app.deleteRecursively()
+                for (id in ids) { removeListed(id); script(id, "postrm", "remove"); forget(id) }
                 Log.i(AppServer.TAG, "removed $appId")
                 null
             } catch (e: Exception) {
@@ -60,15 +72,25 @@ class Packages(val root: File, private val cache: File) {
         }
     }
 
-    private fun installNow(source: String, progress: (Int) -> Unit): List<String> {
+    private fun installNow(source: String, progress: (Int) -> Unit): Result {
         val (ipk, temporary) = fetch(source, progress)
         val staging = File(root.parentFile, "staging").apply { deleteRecursively(); mkdirs() }
         try {
+            val control = Ipk.control(ipk)
+            val fields = control["control"]?.toString(Charsets.UTF_8).orEmpty()
+            val pkg = Regex("(?m)^Package:\\s*(\\S+)").find(fields)?.groupValues?.get(1)
+                ?: source.substringAfterLast('/').substringBefore('_')
+            val old = File(info, "$pkg.control").takeIf { it.isFile }?.readText()
+                ?.let { Regex("(?m)^Version:\\s*(\\S+)").find(it)?.groupValues?.get(1) ?: "" }
             val files = Ipk.extract(ipk, staging)
-            Log.i(AppServer.TAG, "install $source: ${files.size} files")
+            Log.i(AppServer.TAG, "install $source: package $pkg, ${files.size} files")
+            // ipkg ran preinst before unpacking, and stopped if it failed.
+            control["preinst"]?.let { body ->
+                val (code, out) = run(pkg, "preinst", body, if (old == null) listOf("install") else listOf("upgrade", old))
+                if (code != 0) throw IOException("its preinst script failed ($code)${lastLine(out)}")
+            }
             // Each app directory replaces any earlier version whole; other files merge in.
             val apps = File(staging, APPS).list().orEmpty().sorted()
-            if (apps.isEmpty()) throw Ipk.BadPackage("package has no apps (usr/palm/applications is empty)")
             for (dir in listOf(APPS, "usr/palm/packages", "usr/palm/services")) {
                 File(staging, dir).listFiles()?.forEach { f ->
                     val dest = File(root, "$dir/${f.name}")
@@ -77,12 +99,102 @@ class Packages(val root: File, private val cache: File) {
                 }
             }
             mergeInto(staging, root)
+            // ipkg's record: the control file, the scripts and the list of files.
+            info.mkdirs()
+            for (name in listOf("control", "preinst", "postinst", "prerm", "postrm", "conffiles")) {
+                val f = File(info, "$pkg.$name")
+                val body = control[name]
+                if (body == null) f.delete() else { f.writeBytes(body); if (name != "control" && name != "conffiles") f.setExecutable(true, false) }
+            }
+            File(info, "$pkg.list").writeText(files.joinToString("") { "/media/cryptofs/apps/$it\n" })
+            // Preware ran postinst as root once the files were in place. When it failed, the
+            // install was reverted and reported as failed (ipkgservice's do_install).
+            control["postinst"]?.let { body ->
+                val (code, out) = run(pkg, "postinst", body, listOf("configure"))
+                if (code != 0) {
+                    script(pkg, "prerm", "remove")
+                    for (a in apps) File(root, "$APPS/$a").deleteRecursively()
+                    removeListed(pkg); script(pkg, "postrm", "remove"); forget(pkg)
+                    throw IOException("its postinst script failed ($code)${lastLine(out)}")
+                }
+            }
             progress(100)
-            return apps
+            return Result(source, apps, null, pkg)
         } finally {
             staging.deleteRecursively()
             if (temporary) ipk.delete()
         }
+    }
+
+    private fun lastLine(out: List<String>) = out.lastOrNull { it.isNotBlank() }?.let { ": $it" } ?: ""
+
+    /** Runs an installed package's script from its ipkg record, if it has that one. */
+    private fun script(pkg: String, name: String, vararg args: String) {
+        val f = File(info, "$pkg.$name")
+        if (f.isFile) run(pkg, name, f.readBytes(), args.toList())
+    }
+
+    /** Deletes the files ipkg listed for the package, and the folders that leaves empty. */
+    private fun removeListed(pkg: String) {
+        val list = File(info, "$pkg.list").takeIf { it.isFile } ?: return
+        val dirs = HashSet<File>()
+        for (line in list.readLines()) {
+            val rel = line.trim().removePrefix("/media/cryptofs/apps/")
+            if (rel.isEmpty() || rel.split('/').any { it == ".." }) continue
+            val f = File(root, rel)
+            if (f.delete()) generateSequence(f.parentFile) { it.parentFile }.takeWhile { it != root }.forEach { dirs += it }
+        }
+        dirs.sortedByDescending { it.path.length }.forEach { if (it.list()?.isEmpty() == true) it.delete() }
+    }
+
+    private fun forget(pkg: String) {
+        for (name in listOf("control", "list", "preinst", "postinst", "prerm", "postrm", "conffiles")) File(info, "$pkg.$name").delete()
+    }
+
+    /**
+     * Runs one of a package's scripts as ipkgservice did - `IPKG_OFFLINE_ROOT=/media/cryptofs/apps
+     * /bin/sh <script>` - in Lunacy's webOS root: busybox's sh, webOS's paths pointed into the
+     * root ([WebosRoot.mapPaths]), and luna-send calling the bus as the package. Returns the exit
+     * code and what it printed, which the log gets line by line.
+     */
+    private fun run(pkg: String, name: String, body: ByteArray, args: List<String>): Pair<Int, List<String>> {
+        webos.prepare()
+        webos.lunaSend.start()
+        val r = webos.root
+        val file = File(r, "tmp/ipkg-$pkg.$name").apply { parentFile?.mkdirs(); writeText(webos.mapPaths(body.toString(Charsets.UTF_8))) }
+        val sh = File(r, "bin/sh").takeIf { it.exists() }?.path ?: "/system/bin/sh"
+        val out = ArrayList<String>()
+        val code = try {
+            val pb = ProcessBuilder(listOf(sh, file.path) + args).directory(r).redirectErrorStream(true)
+            pb.environment().apply {
+                putAll(webos.environment(pkg))
+                put("IPKG_OFFLINE_ROOT", File(r, "media/cryptofs/apps").path)
+                put("PKG_ROOT", File(r, "media/cryptofs/apps").path)
+            }
+            val p = pb.start()
+            p.outputStream.close()
+            val reader = Thread({
+                p.inputStream.bufferedReader().forEachLine { line ->
+                    Log.i(AppServer.TAG, "script [$pkg $name] $line")
+                    synchronized(out) { out += line }
+                }
+            }, "ipkg-script").apply { start() }
+            val deadline = System.currentTimeMillis() + SCRIPT_TIMEOUT_MS
+            var exit: Int? = null
+            while (exit == null) {
+                exit = try { p.exitValue() } catch (e: IllegalThreadStateException) { null }
+                if (exit == null) {
+                    if (System.currentTimeMillis() > deadline) { p.destroy(); exit = 124; synchronized(out) { out += "timed out" } }
+                    else Thread.sleep(50)
+                }
+            }
+            reader.join(2000)
+            exit
+        } catch (e: Exception) {
+            Log.w(AppServer.TAG, "script [$pkg $name] can't run: $e"); synchronized(out) { out += e.toString() }; 127
+        } finally { file.delete() }
+        Log.i(AppServer.TAG, "script [$pkg $name] exit $code")
+        return code to synchronized(out) { out.toList() }
     }
 
     private fun mergeInto(from: File, to: File) {
@@ -122,5 +234,8 @@ class Packages(val root: File, private val cache: File) {
         const val APPS = "usr/palm/applications"
         const val PACKAGES = "usr/palm/packages"
         const val SERVICES = "usr/palm/services"
+        const val INFO = "usr/lib/ipkg/info"
+        /** ipkgservice put no limit on a script; this one is only against a hang. */
+        const val SCRIPT_TIMEOUT_MS = 5 * 60_000L
     }
 }

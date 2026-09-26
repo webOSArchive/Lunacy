@@ -1,0 +1,13 @@
+#!/bin/sh
+# What a package script sees: run by Preware (ipkgservice) as root after unpacking, or by
+# Lunacy's package manager. Every line goes to the install log.
+echo "whoami: $(id)"
+echo "pwd: $(pwd)"
+echo "IPKG_OFFLINE_ROOT=$IPKG_OFFLINE_ROOT"
+echo "args: $*"
+ls -d /usr/palm/applications /media/cryptofs/apps/usr/palm/applications/org.webosarchive.lunacy.scriptprobe && echo "paths ok"
+echo "basename: $(basename /a/b/c.js) sed: $(echo abc | sed s/b/X/) awk: $(echo 1 2 | awk '{print $2}')"
+mount -o remount,rw / && echo "remount ok"
+echo "luna-send: $(luna-send -n 1 palm://com.palm.applicationManager/rescan '{}' 2>&1)"
+echo "luna-send path: $(/usr/bin/luna-send -n 1 palm://com.palm.nope/x '{}' 2>&1)"
+exit 0

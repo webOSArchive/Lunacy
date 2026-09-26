@@ -13,6 +13,8 @@ ID=$(echo "$P" | sed -n 's/.*"id": *"\([^"]*\)".*/\1/p' | head -1)
 c "get by id" get "{\"ids\":[\"$ID\"]}"
 c "merge by id" merge "{\"objects\":[{\"_id\":\"$ID\",\"nick\":\"cc\"}]}"
 c "get after merge" get "{\"ids\":[\"$ID\"]}"
+c "merge new id with kind" merge "{\"objects\":[{\"_kind\":\"$K\",\"_id\":\"probe.fixed.id\",\"a\":1}]}"
+c "get merged new id" get "{\"ids\":[\"probe.fixed.id\"]}"
 c "put replace by id" put "{\"objects\":[{\"_id\":\"$ID\",\"_kind\":\"$K\",\"name\":\"carol\",\"age\":33}]}"
 c "get after put" get "{\"ids\":[\"$ID\"]}"
 c "del by id" del "{\"ids\":[\"$ID\"]}"

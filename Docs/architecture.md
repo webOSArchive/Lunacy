@@ -824,6 +824,39 @@ over the bus, keeps the original async transaction API, and migrates the existin
     default, so later targets need a network security config or an `https` catalog.
   - **For development,** `--es install <url or path>` on the launch intent installs a
     package; see [dev-workflow.md](dev-workflow.md).
+  - **Install scripts, as Preware ran them.** Lunacy stands in for Preware, whose
+    ipkgservice unpacked a package with ipkg and then ran its `postinst` as root
+    (`IPKG_OFFLINE_ROOT=/media/cryptofs/apps /bin/sh <script>`), reverting the install if it
+    failed, and ran `prerm` on removal. Lunacy does the same - `preinst install|upgrade`,
+    unpack, `postinst configure`; `prerm remove`, the listed files, `postrm remove` - in the
+    webOS root (below), and keeps ipkg's records (`<pkg>.control`, `.list` and the scripts)
+    in `/media/cryptofs/apps/usr/lib/ipkg/info`. A package may hold no apps at all: the
+    webOS Community Account Manager stages files, and its postinst puts its app in
+    `/usr/palm/applications` and patches the palmprofile service, as it does on a TouchPad.
+    **Ratchet item:** scripts run with Lunacy's own permissions, as root's stand-in.
+  - **App Catalog's installer.** `com.palm.appInstallService` (on the private bus, measured
+    on the reference TouchPad) takes a package's URL and reports icon download, ipk download
+    with progress, installing and installed through its `status` subscription, over the same
+    install path as Preware's; `appinstaller/queryInstallCapacity` answers its check for room,
+    and `applicationManager/listPackages` lists packages with their apps and services. `applicationManager/listAllHandlersForMime` names Preware as
+    the handler for `.ipk` (Lunacy answers for Preware's ids), and `launchPointChanges`
+    tells subscribers of apps added and removed.
+- **Secrets.** `com.palm.keymanager` keeps each caller's keys, as the accounts service keeps
+  every account's credentials. **Ratchet item:** the device kept them encrypted; Lunacy keeps
+  them in a file in its private storage, which a later target can wrap with Android's keystore.
+- **The webOS root.** `files/webos` is the filesystem JS services and package scripts see as
+  `/` (`WebosRoot.kt`). Its ROM, `assets/rootfs/` from `fetch-assets.sh`, holds the service
+  frameworks, the TouchPad's own palmprofile and accounts services (with the db8 kinds and
+  permissions in `/etc/palm/db` that the Configurator registers) and the palmprofile account
+  template. It is laid down off the main thread after each APK update, and a file a script
+  has changed since the last APK laid it down is kept, as a package manager keeps changed
+  config files. `/bin` and `/usr/bin` are busybox's commands (a static build, packaged as
+  `libbusybox.so` so Android lets it run), as they were on webOS; `/bin/sh` is its ash;
+  `/usr/bin/curl` and `luna-send` are Lunacy's own, in Node. `luna-send` reaches the bus
+  over a socket in Lunacy's private storage, as the script's package or the service it runs
+  under - identity comes from a token Lunacy gave the process, never from `-a`. Apps a script
+  puts in `/usr/palm/applications` are system apps: they launch and list like any other, and
+  aren't removable from the launcher.
 - **Hybrid apps.** Some web apps declare `"plug-ins": true` and ship native PDK plugins
   (Kindle does). They can run only as far as their web side goes until the PDK layer
   exists, and the compatibility score says so.
@@ -907,6 +940,10 @@ webOS apps could ship JS services (`usr/palm/services/<id>/`, with `services.jso
   `com.palm.activitymanager` answers `create`, `start`, `complete`, `cancel` and `stop` with the
   TouchPad's replies and events. Scheduled, triggered and callback activities return an error
   until they're built.
+- **System services.** The webOS root's own `/usr/palm/services` (the ROM's, or a package
+  script's) register alongside installed packages'. A page's call reaches a service's private
+  methods only if the app's id is privileged (`com.palm.*`, measured); services' own calls and
+  `luna-send` are private, as on webOS.
 - **Not yet:** services in Mojo apps' own frameworks, db8 (next), `activitymanager` background
   work, ABIs other than 32-bit ARM, and a jail: services run with Lunacy's own permissions
   (ratchet item).

@@ -99,3 +99,21 @@ for, Enyo's `width: 0px` stays as it was. Heights are left alone: the old engine
 box's content height by laying it out, and a 0 height stayed 0 there too.
 
 Files: `framework/source/base/layout/FlexLayout.js`, `framework/build/enyo-build.js`.
+
+## Added
+
+Files upstream never had, added whole by `fetch-assets.sh` rather than patched in.
+
+### lib/networkproxy
+
+HP's network-proxy settings library, which the TouchPad ships in its framework folder beside
+the libraries the Apache 2.0 release does include. The Wi-Fi library and anything built on it
+load it (`$enyo-lib/networkproxy/`); the webOS Community Account Manager's app does, and
+without it its Wi-Fi popup kind never defined and the app stopped while starting. Copied from
+the reference TouchPad with a NOTICE (HP's, abandonware); `fetch-assets.sh` fails if upstream
+ever gains a folder of that name.
+
+**Not done:** the TouchPad's copies of the other libraries (`accounts`, `authlib`,
+`addressing` and more) are newer than upstream's and carry localized `resources/`. Lunacy
+still serves upstream's; any app that trips over the difference is the case for taking the
+device's.

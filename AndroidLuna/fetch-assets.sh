@@ -20,6 +20,18 @@ for patch in ../LunaRuntimes/enyo-1.0/patches/*.patch; do
         { echo "fetch-assets: $patch does not apply to stock Enyo" >&2; exit 1; }
     echo "enyo: applied $(basename "$patch")"
 done
+# Enyo libraries HP shipped in the TouchPad's framework folder and never released with the
+# source: added whole from the reference TouchPad (LunaRuntimes/enyo-1.0/CHANGES.md, "Added").
+for lib in networkproxy; do
+    [ -d $L/fw/enyo/1.0/framework/lib/$lib ] && { echo "fetch-assets: upstream Enyo has lib/$lib now" >&2; exit 1; }
+    cp -r $V/touchpad/enyo-0.10/framework/lib/$lib $L/fw/enyo/1.0/framework/lib/
+    cat > $L/fw/enyo/1.0/framework/lib/$lib/NOTICE <<'NOTICE'
+From /usr/palm/frameworks/enyo/0.10/framework/lib on the reference TouchPad (webOS CE 3.1.0).
+Copyright Palm, Inc. / Hewlett-Packard; not part of the Apache 2.0 Enyo release. Distributed by
+Lunacy as abandonware, like Mojo.
+NOTICE
+    echo "enyo: added lib/$lib"
+done
 cp -r ../Workbench/apps-src/com.ingloriousapps.glimpse/usr/palm/applications/com.ingloriousapps.glimpse $T/apps/
 # Palm's own settings apps that Lunacy ships (Screen & Lock, Help) are committed under
 # assets/apps/ with their NOTICE, like Mojo and the fonts. Any others under
@@ -98,15 +110,83 @@ rm -rf local-jni && mkdir -p $J
 cp $NM/libnode.so $J/
 cp $TC/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so $J/
 $TC/bin/armv7a-linux-androideabi21-clang++ -pie -fPIE -O2 -s -o $J/liblunacynode.so tools/node-launcher.cpp -L$NM -lnode
-mkdir -p $L/services-fw/frameworks
-for f in foundations foundations.crypto foundations.io foundations.json mojoservice mojoservice.transport underscore mojoloader.js; do
-    cp -rL $V/touchpad/services-fw/$f $L/services-fw/frameworks/
+# The webOS root filesystem's ROM (WebosRoot.kt): what the TouchPad's rootfs held for JS
+# services and package scripts, laid into Lunacy's files/webos. Palm's service frameworks and
+# jsservicelauncher, the system's own JS services and the db8 kinds they own, from the
+# reference TouchPad (Workbench/vendor/touchpad/services-fw, os-services and etc-db).
+R=$L/rootfs
+mkdir -p $R/usr/palm/frameworks $R/usr/palm/services $R/usr/palm/public/accounts $R/etc/palm/db/kinds $R/etc/palm/db/permissions $R/etc/palm/tempdb
+for f in foundations foundations.crypto foundations.io foundations.json mojoservice mojoservice.transport underscore globalization mojoloader.js; do
+    cp -rL $V/touchpad/services-fw/$f $R/usr/palm/frameworks/ 2>/dev/null || cp -rL $V/touchpad/$f $R/usr/palm/frameworks/
 done
-cp -rL $V/touchpad/services-fw/jsservicelauncher $L/services-fw/
-cat > $L/services-fw/NOTICE <<'NOTICE'
-Palm's JS service frameworks (foundations*, mojoservice*, underscore, mojoloader.js) and
-jsservicelauncher, copied from /usr/palm on the reference TouchPad (webOS CE 3.1.0).
-Status: treated as abandonware, like Mojo: no owner has asserted rights since webOS was
-discontinued. underscore is MIT (Jeremy Ashkenas).
+cp -rL $V/touchpad/services-fw/jsservicelauncher $R/usr/palm/services/
+cat > $R/usr/palm/frameworks/NOTICE <<'NOTICE'
+Palm's JS service frameworks (foundations*, mojoservice*, globalization, underscore,
+mojoloader.js) and jsservicelauncher, copied from /usr/palm on the reference TouchPad
+(webOS CE 3.1.0). Status: treated as abandonware, like Mojo: no owner has asserted rights
+since webOS was discontinued. underscore is MIT (Jeremy Ashkenas).
 NOTICE
+# The accounts service: LG's Apache 2.0 release, as the TouchPad runs it (its LICENSE comes along).
+cp -r $V/touchpad/os-services/com.palm.service.accounts $R/usr/palm/services/
+# The palmprofile service (com.palm.accountservices), as HP shipped it. The reference TouchPad
+# runs it patched by the webOS Community Account Manager, whose postinst kept HP's originals as
+# <file>.stock; those go back in place and the package's own additions come out, so that the
+# package patches Lunacy's copy exactly as it patches a device's.
+P=$R/usr/palm/services/com.palm.service.palmprofile
+cp -r $V/touchpad/os-services/com.palm.service.palmprofile $P
+find $P -name '*.stock' | while read f; do mv "$f" "${f%.stock}"; done
+rm -f $P/handlers/UpdateUsernameCommandAssistant.js $P/handlers/SyncDeviceNameCommandAssistant.js $P/handlers/SignOutCommandAssistant.js
+cat > $P/NOTICE <<'NOTICE'
+HP's palmprofile service (bus name com.palm.accountservices), copied from
+/usr/palm/services/com.palm.service.palmprofile on the reference TouchPad (webOS CE 3.1.0),
+with the files the webOS Community Account Manager patches restored from the stock copies it
+keeps. Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence;
+distributed by Lunacy as abandonware, like Mojo.
+NOTICE
+# The system's own account template, which the accounts service reads.
+cp -r $V/touchpad/os-services/public/accounts/com.palm.palmprofile $R/usr/palm/public/accounts/
+cat > $R/usr/palm/public/accounts/NOTICE <<'NOTICE'
+The palmprofile account template and its images, from /usr/palm/public/accounts on the
+reference TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. / Hewlett-Packard; abandonware.
+NOTICE
+# db8 kinds and permissions those services own, from /etc/palm on the reference TouchPad.
+for k in com.palm.palmprofile com.palm.account.credentials com.palm.service.accounts; do
+    cp -r $V/touchpad/etc-db/db/kinds/$k $R/etc/palm/db/kinds/
+done
+cp -r $V/touchpad/etc-db/db/permissions/com.palm.service.accounts $R/etc/palm/db/permissions/
+# App Catalog's magazine kinds, owned on the device by com.palm.service.appcatalog: the catalog
+# looks its edition up in them as it starts, and an unknown kind was an error where the device
+# answers an empty list.
+for k in com.palm.appcatalog com.palm.appcatalog.editionfile com.palm.appcatalog.editioninfo; do
+    cp $V/touchpad/etc-db/db/kinds/$k $R/etc/palm/db/kinds/
+    cp $V/touchpad/etc-db/db/permissions/$k $R/etc/palm/db/permissions/
+done
+# /usr/palm/ipkgs/manifest.json lists the packages a device's ROM ships, which App Catalog offers
+# to revert to (the reference TouchPad lists 14, the catalog among them). Lunacy's ROM ships no
+# packages, so it lists none.
+mkdir -p $R/usr/palm/ipkgs && echo '[]' > $R/usr/palm/ipkgs/manifest.json
+cp -r $V/touchpad/etc-db/tempdb/kinds $V/touchpad/etc-db/tempdb/permissions $R/etc/palm/tempdb/
+rm -rf $R/etc/palm/tempdb/permissions/com.palm.imbuddystatus
+cat > $R/etc/palm/NOTICE <<'NOTICE'
+db8 kind and permission files for the accounts and palmprofile services, from /etc/palm on the
+reference TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. / LG Electronics.
+NOTICE
+
+# busybox: webOS's /bin and /usr/bin were busybox, and package scripts are written for it.
+# The static ARM build busybox.net publishes, checked against the hash it was first fetched
+# with; packaged as a library so that Android installs it where it may be run.
+BB=$V/busybox/busybox-armv7l
+BB_URL=https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/busybox-armv7l
+BB_SHA=cd04052b8b6885f75f50b2a280bfcbf849d8710c8e61d369c533acf307eda064
+[ -f $BB ] || { mkdir -p $(dirname $BB) && curl -sfL -o $BB $BB_URL; }
+echo "$BB_SHA  $BB" | sha256sum -c --quiet || { echo "fetch-assets: $BB isn't the busybox it should be" >&2; exit 1; }
+cp $BB $J/libbusybox.so
+cat > $L/rootfs/NOTICE.busybox <<'NOTICE'
+busybox 1.31.0 (libbusybox.so in the APK): the static armv7l build from
+https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/ , unmodified.
+GPL-2.0. Source: https://busybox.net/downloads/busybox-1.31.0.tar.bz2
+NOTICE
+# The ROM's file list, so that Lunacy needn't walk it with AssetManager.list(), which reads the
+# APK's whole asset index on every call (WebosRoot.syncRom).
+(cd $L/rootfs && find . -type f | sed 's#^\./##' | sort) > $L/rootfs.index
 echo "local-assets ready: $(du -sh $L | cut -f1); local-jni: $(du -sh local-jni | cut -f1)"

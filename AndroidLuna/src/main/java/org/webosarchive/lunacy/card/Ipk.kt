@@ -10,8 +10,9 @@ import java.util.zip.GZIPInputStream
 
 /**
  * Reads a webOS .ipk: an `ar` archive (or, from some packagers, a tar.gz) holding
- * debian-binary, control.tar.gz and data.tar.gz. Only data.tar.gz is unpacked: its tree is the
- * package's files relative to /media/cryptofs/apps. See Docs/architecture.md, "Package manager".
+ * debian-binary, control.tar.gz and data.tar.gz. data.tar.gz's tree is the package's files
+ * relative to /media/cryptofs/apps; control.tar.gz holds its control file and the scripts ipkg
+ * ran around the install ([control]). See Docs/architecture.md, "Package manager".
  */
 object Ipk {
     class BadPackage(msg: String) : IOException(msg)
@@ -28,6 +29,30 @@ object Ipk {
                 else -> null
             } ?: throw BadPackage("no data.tar.gz")
             return untar(GZIPInputStream(data), dest)
+        }
+    }
+
+    /**
+     * control.tar.gz's files by name: `control`, and `preinst`, `postinst`, `prerm` and `postrm`
+     * when the package has them. Empty if the package has no control.tar.gz.
+     */
+    fun control(ipk: File): Map<String, ByteArray> {
+        BufferedInputStream(ipk.inputStream()).use { input ->
+            input.mark(8)
+            val magic = ByteArray(8).also { input.readFully(it) }
+            input.reset()
+            val control = when {
+                String(magic, Charsets.ISO_8859_1) == "!<arch>\n" -> arMember(input, "control.tar.gz")
+                magic[0] == 0x1f.toByte() && magic[1] == 0x8b.toByte() -> tarMember(GZIPInputStream(input), "control.tar.gz")
+                else -> null
+            } ?: return emptyMap()
+            val out = LinkedHashMap<String, ByteArray>()
+            readTar(GZIPInputStream(control)) { path, type, size, body ->
+                val name = path.substringAfterLast('/')
+                if (type == '0' && name.isNotEmpty() && size < 1_000_000) out[name] = body.readBytes(size)
+                true
+            }
+            return out
         }
     }
 

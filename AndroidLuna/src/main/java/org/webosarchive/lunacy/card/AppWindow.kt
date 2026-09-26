@@ -388,6 +388,9 @@ class AppWindow(
         fun fullScreen(on: Boolean) { main.post { if (fullScreen != on) { fullScreen = on; host.fullScreen(this@AppWindow) } } }
         @JavascriptInterface fun statusBarColor(rgb: Int) { statusBarColor = rgb and 0xFFFFFF }
 
+        /** The page set a cookie (compat.js): it goes to disk shortly, as a device's did at once. */
+        @JavascriptInterface fun cookieWritten() { main.post { CookieFlush.soon() } }
+
         @JavascriptInterface fun log(msg: String) { Log.i(AppServer.TAG, "[$appId] palm $msg") }
 
         /** Called by the page's window.open wrapper just before the native open. */
@@ -416,4 +419,17 @@ class AppWindow(
         @JavascriptInterface fun removeBanner(id: Int) { main.post { host.removeBanner(this@AppWindow, id) } }
         @JavascriptInterface fun clearBanners() { main.post { host.clearBanners(this@AppWindow) } }
     }
+}
+
+/**
+ * Writes WebView's cookies to disk. Chromium flushes them on its own schedule, some seconds
+ * after a write; webOS had them on disk at once, and apps (Mojo.Model.Cookie) keep settings and
+ * logins there, which Android killing Lunacy in between would lose. Main thread.
+ */
+object CookieFlush {
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val flush = Runnable { android.webkit.CookieManager.getInstance().flush() }
+    /** After a write: batched, since a page often writes several at once. */
+    fun soon() { main.removeCallbacks(flush); main.postDelayed(flush, 300) }
+    fun now() { main.removeCallbacks(flush); flush.run() }
 }

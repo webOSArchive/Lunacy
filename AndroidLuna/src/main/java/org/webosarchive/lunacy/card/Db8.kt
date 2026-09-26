@@ -256,7 +256,21 @@ class Db8(private val service: String, file: File?) {
         transaction {
             for (i in 0 until objs.length()) {
                 val patch = objs.getJSONObject(i)
-                val old = byId(patch.optString("_id")) ?: throw DbError(-3950, "db: object not found")
+                val old = byId(patch.optString("_id"))
+                // A new id with a kind is created, as a put would: measured on the reference
+                // TouchPad (merge of "probe.fixed.id" into an empty kind returned its id and rev,
+                // and get found it). palmprofile keeps its token that way, merging into
+                // "com.palm.palmprofile.token" from the first sign-in on.
+                if (old == null) {
+                    val kindId = patch.optString("_kind").takeIf { it.isNotEmpty() && patch.optString("_id").isNotEmpty() }
+                        ?: throw DbError(-3950, "db: object not found")
+                    checkAccess(caller, kindId, "create")
+                    val o = JSONObject(patch.toString()).put("_rev", nextRev())
+                    store(o)
+                    changed(null, o)
+                    results.put(JSONObject().put("id", o.getString("_id")).put("rev", o.getLong("_rev")))
+                    continue
+                }
                 checkAccess(caller, old.getString("_kind"), "update")
                 if (patch.has("_rev")) checkRev(old, patch.optLong("_rev"))
                 val o = mergeOne(old, patch)

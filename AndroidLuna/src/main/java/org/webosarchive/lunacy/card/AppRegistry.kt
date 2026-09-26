@@ -91,36 +91,46 @@ class AppInfo(
 
 /**
  * The files under /media/cryptofs/apps: packages installed on the device (Packages.root)
- * first, then the apps bundled in the APK's assets/apps/.
+ * first, then apps in the webOS root's /usr/palm/applications - where a package's install
+ * script puts a system app, as the webOS Community Account Manager's does - then the apps
+ * bundled in the APK's assets/apps/. Every app is served at its /media/cryptofs/apps path.
  */
-class AppFiles(private val assets: AssetManager, val root: File) {
+class AppFiles(private val assets: AssetManager, val root: File, private val system: File? = null) {
     private val rootPath = root.canonicalPath + File.separator
+    private val systemPath = system?.let { it.canonicalPath + File.separator }
 
     /** rel is relative to /media/cryptofs/apps, e.g. "usr/palm/applications/<id>/index.html". */
     fun open(rel: String): InputStream? {
         val f = File(root, rel)
         if (f.isFile && f.canonicalPath.startsWith(rootPath)) return f.inputStream()
         if (!rel.startsWith("${Packages.APPS}/")) return null
+        if (system != null) {
+            val s = File(system, rel)
+            if (s.isFile && s.canonicalPath.startsWith(systemPath!!)) return s.inputStream()
+        }
         return try { assets.open("apps/" + rel.removePrefix("${Packages.APPS}/")) } catch (e: IOException) { null }
     }
 
     fun isInstalled(id: String) = File(root, "${Packages.APPS}/$id/appinfo.json").isFile
 
     /**
-     * The names in a folder under /media/cryptofs/apps, installed packages and bundled apps
-     * merged, the way [open] merges files. A bundled app's configuration lives in the APK, so
-     * anything that walks an app's folders has to look in both.
+     * The names in a folder under /media/cryptofs/apps, installed packages, system apps and
+     * bundled apps merged, the way [open] merges files. A bundled app's configuration lives in
+     * the APK, so anything that walks an app's folders has to look in all of them.
      */
     fun list(rel: String): List<String> {
         val installed = File(root, rel).list().orEmpty().toList()
+        val sys = if (system != null && rel.startsWith("${Packages.APPS}/")) File(system, rel).list().orEmpty().toList() else emptyList()
         val bundled = if (rel.startsWith("${Packages.APPS}/"))
             assets.list("apps/" + rel.removePrefix("${Packages.APPS}/")).orEmpty().toList()
         else emptyList()
-        return (installed + bundled).distinct().sorted()
+        return (installed + sys + bundled).distinct().sorted()
     }
 
     fun appIds(): List<String> =
-        (File(root, Packages.APPS).list().orEmpty().toList() + assets.list("apps").orEmpty()).distinct().sorted()
+        (File(root, Packages.APPS).list().orEmpty().toList() +
+            (system?.let { File(it, Packages.APPS).list() }.orEmpty()) +
+            assets.list("apps").orEmpty()).distinct().sorted()
 }
 
 /** Installed apps: bundled apps and installed .ipks, reloaded after each install. */

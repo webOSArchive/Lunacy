@@ -759,3 +759,20 @@ window.__lunacyFileUrl = function (u, media) {
 	function start() { tell(180); }
 	if (document.readyState === "complete") { start(); } else { window.addEventListener("load", start); }
 })();
+
+// A cookie an app writes is on disk at once, as it was on webOS. Chromium keeps cookie writes
+// in memory and flushes them some seconds later, so an app killed in between - Android stops
+// Lunacy whenever it likes - lost them: Mojo's Mojo.Model.Cookie keeps apps' settings and
+// logins in cookies, and Check Mate's log-out came back after a restart. The host flushes
+// shortly after each write (AppWindow.cookieWritten).
+(function () {
+	var d = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
+	if (!d || !d.set || !d.configurable || !window.LunacyNative || !LunacyNative.cookieWritten) { return; }
+	Object.defineProperty(Document.prototype, "cookie", {
+		configurable: true, enumerable: d.enumerable, get: d.get,
+		set: function (v) {
+			d.set.call(this, v);
+			try { LunacyNative.cookieWritten(); } catch (e) {}
+		}
+	});
+})();

@@ -28,6 +28,7 @@ class AppServer(
         const val CRYPTOFS = "media/cryptofs/apps/"
         const val APPS = CRYPTOFS + Packages.APPS + "/"
         const val MEDIA_INTERNAL = "media/internal/"
+        const val IPKGS = "usr/palm/ipkgs/"
 
         fun appUrl(id: String, main: String = "index.html") = "https://$id$HOST_SUFFIX/$APPS$id/$main"
 
@@ -135,6 +136,10 @@ class AppServer(
             mojo != null -> asset("fw/mojo/" + mojo.groupValues[1], path, resource)
             frameworks != null -> asset("fw/frameworks/" + frameworks.groupValues[1], path, resource)
             path.startsWith(SYSTEM_UI) -> asset("luna-systemui/" + path.removePrefix(SYSTEM_UI), path, resource)
+            // The webOS root's list of the packages its ROM ships (WebosRoot), which App Catalog
+            // reads as the apps it can revert to their shipped version.
+            path.startsWith(IPKGS) -> java.io.File(webosRoot, path).takeIf { it.isFile && it.canonicalPath.startsWith(java.io.File(webosRoot, IPKGS).canonicalPath) }
+                ?.let { respond(it.inputStream(), path, resource, app) }
             encodedPath.startsWith(EXTRACTFS) ->
                 extractfs(Uri.decode(encodedPath.removePrefix(EXTRACTFS)))
             path.startsWith(CRYPTOFS) -> files.open(path.removePrefix(CRYPTOFS))?.let { respond(it, path, resource, app) }
@@ -277,6 +282,7 @@ class AppServer(
         val body = when (mime) {
             "text/html" -> html(stream, resource, app)
             "text/css" -> CssTransforms.apply(stream)
+            "application/javascript" -> if (resource) stream else JsTransforms.apply(stream)
             else -> stream
         }
         return WebResourceResponse(mime, "utf-8", 200, "OK", mapOf("Access-Control-Allow-Origin" to "*"), body)
@@ -290,7 +296,7 @@ class AppServer(
      */
     private fun html(s: InputStream, resource: Boolean, app: String? = null): InputStream {
         val text = HtmlTransforms.selfClosingTags(s.bufferedReader().readText())
-        return ByteArrayInputStream((if (resource) text else injectInto(text, app)).toByteArray())
+        return ByteArrayInputStream((if (resource) text else injectInto(JsTransforms.sloppyMode(text), app)).toByteArray())
     }
 
     /** Global serve-time transform: Lunacy's scripts run first in every page. */
@@ -501,6 +507,41 @@ object HtmlTransforms {
             }
         }
         return out.toString()
+    }
+}
+
+/**
+ * Global serve-time JavaScript transforms, applied to every script a page loads and to a page's
+ * inline scripts. A file an app reads through `palmGetResource` comes back as it is.
+ */
+object JsTransforms {
+    /**
+     * A `"use strict"` directive: at the start of a file, a script element or a function body,
+     * after any comments. Only there is the string a directive; elsewhere it is left alone.
+     */
+    private val directive = Regex(
+        "((?:^|[{};>])(?:\\s|/\\*[\\s\\S]*?\\*/|//[^\\n]*\\n)*)([\"'])use strict\\2")
+
+    fun apply(s: InputStream): InputStream =
+        ByteArrayInputStream(sloppyMode(s.bufferedReader().readText()).toByteArray())
+
+    /**
+     * `"use strict"` does nothing, as on the device: the directive becomes a string of the
+     * same length that means nothing, so line and column numbers are unchanged.
+     *
+     * webOS 3's WebKit (534.6) predates strict mode and ignores the directive. Measured on the
+     * reference TouchPad with `Workbench/probe/org.webosarchive.lunacy.jsprobe`: in a strict
+     * function `this` is the global object, assigning an undeclared variable creates it,
+     * `arguments.callee` and a caller's `.caller` answer, and `with`, octal literals and
+     * duplicate parameters are all accepted. Chromium enforces every one of those. Apps were
+     * only ever run on the device, so a strict file that breaks a rule worked there and throws
+     * here - the revived App Catalog's own patch files are strict, and Enyo's `warn()` reads
+     * `arguments.callee.caller.nom`, which is null when the caller is strict, so the catalog's
+     * first warning threw and its Featured page never loaded.
+     */
+    fun sloppyMode(js: String): String {
+        if (!js.contains("use strict")) return js
+        return directive.replace(js) { m -> m.groupValues[1] + m.groupValues[2] + "not strict" + m.groupValues[2] }
     }
 }
 

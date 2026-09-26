@@ -1,0 +1,5 @@
+Package: org.webosarchive.lunacy.scriptprobe
+Version: 0.0.1
+Architecture: all
+Maintainer: webOS Archive
+Description: Script Probe

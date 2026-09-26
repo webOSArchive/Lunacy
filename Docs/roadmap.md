@@ -3,7 +3,32 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-09-23)
+## Where things stand (2026-09-26)
+
+**2026-09-26: webOS Accounts, install scripts and App Catalog installs.** Three apps, each
+measured beside the reference TouchPad; every fix is in [fix-log.md](fix-log.md).
+
+- *A webOS root filesystem.* Services and package scripts now see a real `/`: a ROM from the
+  TouchPad (the service frameworks, its own palmprofile and accounts services and their db8
+  kinds), busybox's commands, Lunacy's `luna-send` and curl. A file a script changed survives
+  an APK update. See [architecture.md](architecture.md), "The webOS root".
+- *Install scripts run,* as Preware ran them. The webOS Community Account Manager installs
+  from its Museum package, and signing in with a webOS Account works; Check Mate restores
+  its log-in from the account. New on the bus: keymanager, deviceprofile, the private bus for
+  `com.palm.*` apps, and systemservice's locale.
+- *App Catalog installs,* through HP's own `com.palm.appInstallService` path, which Lunacy now
+  provides (with `listPackages`, `launchPointChanges`, `queryInstallCapacity` and the `.ipk`
+  handler list). App Catalog 6.2 (webOS Archive's revival) installs with its own progress on
+  Lunacy, and by itself on webOS for packages without scripts; App Catalog Phones 3.1 and the
+  App Museum 2.9.9 hand packages to whichever app handles `.ipk` files. Those three live in
+  their own repositories.
+- *Engine:* `"use strict"` does nothing, as on the TouchPad (a serve-time transform), and a
+  cookie is on disk right after it is written.
+
+Open: App Catalog 6.2 as Lunacy's pack-in; phones catalog not yet run on a phone; cookies are
+shared between apps' origins (`.media.cryptofs.apps`); a package whose script put its app in
+the rootfs can't be removed from the launcher; the Enyo libraries other than `networkproxy`
+are upstream's, not the TouchPad's newer ones.
 
 **2026-09-23: 0.2.5, a community preview of fixes from the first community bug reports.**
 Reproduced on an Android 14 tablet, a Nexus 5 (Android 6) and the reference HP, each against

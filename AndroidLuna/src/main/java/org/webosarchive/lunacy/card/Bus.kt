@@ -19,7 +19,9 @@ class Bus {
      * One bus call. For a subscription, reply may run many times until cancel(). method is
      * everything after the service name, with its category ("time/getSystemTime").
      */
-    class Call(val appId: String, val service: String, val method: String, val params: JSONObject, private val send: (String) -> Unit) {
+    class Call(val appId: String, val service: String, val method: String, val params: JSONObject, private val send: (String) -> Unit,
+               /** Sent on the private bus: see [privileged]. */
+               val privateBus: Boolean = false) {
         /** Stays open: "subscribe": true, or a db8 watch ("watch": true on find, or the watch method). */
         val subscribe get() = params.optBoolean("subscribe", false) || params.optBoolean("watch", false) || method == "watch"
         @Volatile var cancelled = false
@@ -41,8 +43,35 @@ class Bus {
     /** Open registerServerStatus calls, by the service name each one is watching. */
     private val statusWatchers = ArrayList<Pair<Bus.Call, String>>()
 
+    /** Open com.palm.bus/signal/addmatch calls: the call and the category/method it matches. */
+    private val signalWatchers = ArrayList<Triple<Call, String, String>>()
+
     init {
         register("com.palm.bus", "signal/registerServerStatus", CallHandler { serverStatus(it) })
+        register("com.palm.bus", "signal/addmatch", CallHandler { addMatch(it) })
+    }
+
+    /**
+     * palm://com.palm.bus/signal/addmatch: hear a signal a service sends, by its category and,
+     * optionally, method. ls-hubd's own, like registerServerStatus. Measured on the reference
+     * TouchPad, on either bus: `{"returnValue":true}` with or without `subscribe`, then the
+     * signals themselves; with no category it never answers. App Catalog matches storaged's
+     * MSMProgress (USB mass-storage mode), which Lunacy, having no such mode, never sends.
+     */
+    private fun addMatch(call: Call) {
+        val category = call.params.optString("category")
+        if (category.isEmpty()) return
+        call.reply(ok())
+        if (call.cancelled) return
+        signalWatchers += Triple(call, category, call.params.optString("method"))
+        call.onCancel { signalWatchers.removeAll { it.first === call } }
+    }
+
+    /** Sends a signal to whoever matched it with addmatch. */
+    fun signal(category: String, method: String, payload: JSONObject) {
+        signalWatchers.toList().forEach { (c, cat, m) ->
+            if (cat == category && (m.isEmpty() || m == method)) c.reply(payload.toString())
+        }
     }
 
     fun register(service: String, method: String, h: Handler) {
@@ -82,14 +111,19 @@ class Bus {
         }
     }
 
-    fun call(appId: String, url: String, params: String, reply: (String) -> Unit): Call {
+    /**
+     * A call. [privateBus] is for callers that are part of the system - JS services and
+     * package scripts' luna-send - which webOS put on the private bus; an app's page gets it
+     * only if its id is privileged ([privileged]).
+     */
+    fun call(appId: String, url: String, params: String, privateBus: Boolean = false, reply: (String) -> Unit): Call {
         val m = Regex("^(?:palm|luna)://([^/]+)/(.*?)/?$").find(url)
         val service = m?.groupValues?.get(1) ?: ""
         val method = m?.groupValues?.get(2) ?: ""
         val h = handlers["$service/$method"] ?: services[service]
         Log.i(AppServer.TAG, "bus [$appId] $service/$method ${if (h == null) "UNHANDLED" else ""} $params")
         val p = try { JSONObject(params.ifEmpty { "{}" }) } catch (e: Exception) { JSONObject() }
-        val call = Call(appId, service, method, p, reply)
+        val call = Call(appId, service, method, p, reply, privateBus || privileged(appId))
         if (h == null) {
             // webOS names the category the method sits in: a call to
             // com.palm.systemservice/wallpaper/listWallpapers is unknown "for category
@@ -102,6 +136,16 @@ class Bus {
     }
 
     companion object {
+        /**
+         * Whether an app's page reaches the private bus: its id starts with "com.palm.".
+         * Measured on the reference TouchPad with `Workbench/probe/busprobe.sh` - the same page
+         * as com.palm.lunacy.busprobe reached the accounts service's private methods and the
+         * palmprofile service (which has no public side), while as org.webosarchive.… and as
+         * com.webos.… it got "Unknown method" and "Service does not exist". The community's
+         * apps that use the account take com.palm.* ids for exactly this reason.
+         */
+        fun privileged(appId: String) = appId.startsWith("com.palm.")
+
         fun error(text: String, code: Int = -1): String =
             JSONObject(mapOf("returnValue" to false, "errorCode" to code, "errorText" to text)).toString()
         fun ok(extra: Map<String, Any?> = emptyMap()): String =

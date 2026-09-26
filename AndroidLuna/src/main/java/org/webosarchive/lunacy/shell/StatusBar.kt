@@ -274,7 +274,6 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
         if (translationY == to) { done(); return }
         animate().translationY(to).setDuration(400).setInterpolator(Easing.OutCubic).withEndAction(done).start()
     }
-    val slidOut get() = translationY != 0f
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {

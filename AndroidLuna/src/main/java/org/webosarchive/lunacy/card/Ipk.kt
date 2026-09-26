@@ -165,7 +165,12 @@ object Ipk {
         return true
     }
 
-    private fun InputStream.readBytes(n: Long): ByteArray = ByteArray(n.toInt()).also { readFully(it) }
+    /** Reads n bytes; n comes from a header field, so a corrupt package can't ask for gigabytes. */
+    private fun InputStream.readBytes(n: Long): ByteArray {
+        if (n < 0 || n > MAX_READ) throw java.io.IOException("archive entry of $n bytes")
+        return ByteArray(n.toInt()).also { readFully(it) }
+    }
+    private val MAX_READ = 8L shl 20
 
     private fun InputStream.skipFully(n: Long) {
         var left = n

@@ -79,14 +79,22 @@ class ExhibitionLayer(context: Context, private val luna: Luna) : View(context) 
     private fun longDate(date: Date): String =
         java.text.DateFormat.getDateInstance(java.text.DateFormat.FULL, resources.configuration.locale).format(date)
 
+    /** The clock ticks only while it can be seen; the view is in the tree, hidden, for the whole run. */
+    private fun ticking(on: Boolean) { ticker.removeCallbacks(tick); if (on) ticker.post(tick) }
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        ticker.post(tick)
+        ticking(isShown)
     }
 
     override fun onDetachedFromWindow() {
-        ticker.removeCallbacks(tick)
+        ticking(false)
         super.onDetachedFromWindow()
+    }
+
+    override fun onVisibilityChanged(changedView: android.view.View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        ticking(isShown && isAttachedToWindow)
     }
 
     override fun onDraw(c: Canvas) {

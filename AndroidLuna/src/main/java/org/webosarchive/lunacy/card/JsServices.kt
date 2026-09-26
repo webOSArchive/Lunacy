@@ -27,35 +27,54 @@ class JsServices(private val bus: Bus, private val installed: File, private val 
     /** Running packages, by directory. Main thread. */
     private val running = HashMap<String, Proc>()
 
+    /** What each package's files came to at the last reload, by directory: a change means a restart. */
+    private val signatures = HashMap<String, String>()
+
     /**
      * Registers every service's bus names, the system's (/usr/palm/services, from the ROM or a
      * package's script) and then installed packages' (/media/cryptofs/apps/usr/palm/services),
-     * and stops running services whose package changed.
+     * and stops running services whose package changed or went. The others keep running, with
+     * their subscriptions: installing one package is no reason to end another's.
      */
     fun reload() {
-        running.values.toList().forEach { it.stop() }
         names.keys.forEach { bus.unregisterService(it) }
         names.clear()
-        scan(File(webos.root, SERVICES), "/$SERVICES")
-        scan(File(installed, SERVICES), "/media/cryptofs/apps/$SERVICES")
+        val seen = HashMap<String, String>()
+        scan(File(webos.root, SERVICES), "/$SERVICES", seen)
+        scan(File(installed, SERVICES), "/media/cryptofs/apps/$SERVICES", seen)
+        for (p in running.values.toList()) if (seen[p.dir] != signatures[p.dir]) p.stop()
+        signatures.clear(); signatures += seen
         if (names.isNotEmpty()) Log.i(AppServer.TAG, "js services: ${names.keys.sorted()}")
     }
 
-    private fun scan(parent: File, webosPath: String) {
+    /** Ends every service's process: the shell is going. */
+    fun stopAll() { running.values.toList().forEach { it.stop() } }
+
+    private fun scan(parent: File, webosPath: String, seen: HashMap<String, String>) {
         parent.listFiles()?.sortedBy { it.name }?.forEach { dir ->
             val json = File(dir, "services.json").takeIf { it.isFile } ?: return@forEach
             try {
-                val services = JSONObject(json.readText()).optJSONArray("services") ?: return@forEach
+                val text = json.readText()
+                val services = JSONObject(text).optJSONArray("services") ?: return@forEach
+                val path = "$webosPath/${dir.name}"
+                seen[path] = signature(dir, text)
                 for (i in 0 until services.length()) {
                     val name = services.getJSONObject(i).optString("name")
                     if (name.isEmpty()) continue
-                    names[name] = "$webosPath/${dir.name}"
+                    names[name] = path
                     bus.registerService(name, Bus.CallHandler { call(it) })
                 }
             } catch (e: Exception) {
                 Log.w(AppServer.TAG, "services.json of ${dir.name} unreadable: $e")
             }
         }
+    }
+
+    /** services.json and the newest change anywhere in the package: what an install or a script would alter. */
+    private fun signature(dir: File, servicesJson: String): String {
+        var newest = 0L; var count = 0
+        dir.walkTopDown().forEach { newest = maxOf(newest, it.lastModified()); count++ }
+        return "$count:$newest:${servicesJson.hashCode()}"
     }
 
     /** The bus names installed packages' services answer to. */
@@ -98,6 +117,8 @@ class JsServices(private val bus: Bus, private val installed: File, private val 
                     main.post { exited("exit $code") }
                 }, "svc-out").start()
                 main.post {
+                    // Stopped while it was still starting: the process must not be left running.
+                    if (ended) { p.destroy(); return@post }
                     process = p; stdin = p.outputStream
                     queue.forEach { write(it) }; queue.clear()
                 }
@@ -150,16 +171,14 @@ class JsServices(private val bus: Bus, private val installed: File, private val 
             stdin?.apply { write((line + "\n").toByteArray()); flush() }
         } catch (e: IOException) { Log.w(AppServer.TAG, "js service $name: $e") }
 
-        fun stop() {
-            try { stdin?.close() } catch (e: IOException) {}
-            process?.destroy()
-            exited("stopped")
-        }
+        fun stop() = exited("stopped")
 
-        /** The process is gone: open calls get an error, the service's own calls end. */
+        /** The process is gone (or is to go): open calls get an error, the service's own calls end. */
         private fun exited(why: String) {
             if (ended) return
             ended = true
+            try { stdin?.close() } catch (e: IOException) {}
+            process?.destroy()
             if (running[dir] == this) running.remove(dir)
             Log.i(AppServer.TAG, "js service $name ended: $why")
             requests.values.toList().also { requests.clear() }.forEach { it.reply(Bus.error("Service exited: ${it.service}.")) }

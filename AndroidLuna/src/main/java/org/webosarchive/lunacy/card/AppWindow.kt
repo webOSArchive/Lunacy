@@ -98,6 +98,8 @@ class AppWindow(
     val emulated: Boolean = false,
 ) : WebView(context) {
     private val main = Handler(Looper.getMainLooper())
+    /** Counts the pages this window has loaded; see [Native.call]. Main thread. */
+    private var page = 0
     var stageReady = false
         private set
     /** webOS window attributes from window.open: "window" is card, dashboard or popupalert. */
@@ -197,7 +199,7 @@ class AppWindow(
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? =
                 host.server.serve(req.url)
             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
-                net.reset(); endCalls()
+                page++; net.reset(); endCalls()
                 pageReady = false; told = null
             }
             override fun onPageFinished(view: WebView, url: String) {
@@ -318,8 +320,11 @@ class AppWindow(
         @JavascriptInterface
         fun call(token: Int, url: String, params: String) {
             main.post {
+                // The page numbers its calls from 1, and a new page starts over: a reply that
+                // arrives after the page changed is the old page's, and stays with it.
+                val from = page
                 val call = host.bus.call(appId, url, params) { reply ->
-                    main.post { if (!destroyed) evaluateJavascript("PalmServiceBridge.__reply($token, ${JSONObject.quote(reply)})", null) }
+                    main.post { if (!destroyed && from == page) evaluateJavascript("PalmServiceBridge.__reply($token, ${JSONObject.quote(reply)})", null) }
                 }
                 if (call.subscribe && !call.cancelled) calls[token] = call
             }

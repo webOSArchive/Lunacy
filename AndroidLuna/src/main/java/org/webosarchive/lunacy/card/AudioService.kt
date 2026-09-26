@@ -40,6 +40,7 @@ class AudioService(
     startMuted: Boolean,
     private val playFeedback: (String) -> Unit,
 ) {
+    private val app: Context = context.applicationContext
     private val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val watchers = ArrayList<Bus.Call>()
 
@@ -51,13 +52,18 @@ class AudioService(
     private var asked = -1
     private var reported = -1
 
+    // Android's own volume keys and its settings change the stream too.
+    private val receiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) { changed(listOf("volume")) }
+    }
+
     init {
         reported = volume()
-        // Android's own volume keys and its settings change the stream too.
-        context.applicationContext.registerReceiver(object : BroadcastReceiver() {
-            override fun onReceive(c: Context, i: Intent) { changed(listOf("volume")) }
-        }, IntentFilter(VOLUME_CHANGED))
+        app.registerReceiver(receiver, IntentFilter(VOLUME_CHANGED))
     }
+
+    /** The shell is going: the receiver, which holds it, goes too. */
+    fun close() { runCatching { app.unregisterReceiver(receiver) } }
 
     fun register(bus: Bus) {
         bus.register(SERVICE, "system/status", Bus.CallHandler { status(it) })

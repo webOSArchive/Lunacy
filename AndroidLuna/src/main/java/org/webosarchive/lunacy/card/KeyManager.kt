@@ -76,9 +76,13 @@ class KeyManager(private val store: File) {
         .put("shared", k.optBoolean("nohide")).put("type", k.optString("type")).put("unwrap_only", false)
 
     private fun save() {
-        val tmp = File(store.path + ".tmp")
-        tmp.writeText(keys.toString())
-        tmp.renameTo(store)
+        try {
+            val tmp = File(store.path + ".tmp")
+            tmp.writeText(keys.toString())
+            if (!tmp.renameTo(store)) throw java.io.IOException("can't replace ${store.name}")
+        } catch (e: Exception) {
+            android.util.Log.w(AppServer.TAG, "keymanager: can't save: $e")
+        }
     }
 
     companion object { const val SERVICE = "com.palm.keymanager" }

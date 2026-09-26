@@ -30,6 +30,14 @@ import org.webosarchive.lunacy.card.AppServer
 class Sounds(private val context: Context, private val server: AppServer, private val dirOf: (String) -> String = { it }) {
     private val main = Handler(Looper.getMainLooper())
     private val playing = HashSet<MediaPlayer>()
+    /** The app sound files copied into the cache this run (appFile). */
+    private val copied = HashSet<String>()
+
+    /** The shell is going: whatever is playing stops, and the samples go. */
+    fun release() {
+        playing.toList().forEach { release(it) }
+        if (samples.isNotEmpty()) pool.release()
+    }
 
     /** Sounds & Alerts' master switch is off (webOS's muteSound): the shell plays nothing. */
     var allMuted: () -> Boolean = { false }
@@ -149,10 +157,13 @@ class Sounds(private val context: Context, private val server: AppServer, privat
             listOf(AppServer.appUrl(appId, "resources/$locale/$entry", dirOf(appId)), AppServer.appUrl(appId, entry, dirOf(appId)))
         }
         for (url in candidates) {
+            val out = java.io.File(context.cacheDir, "sound-" + Integer.toHexString(url.hashCode()) + "." + entry.substringAfterLast('.', "snd"))
+            // Copied once per run: every banner of the app played this on the main thread before.
+            if (url in copied && out.isFile) return out
             val r = server.serve(android.net.Uri.parse(url)) ?: continue
             if (r.statusCode != 200 || r.data == null) continue
-            val out = java.io.File(context.cacheDir, "sound-" + Integer.toHexString(url.hashCode()) + "." + entry.substringAfterLast('.', "snd"))
             r.data.use { i -> out.outputStream().use { i.copyTo(it) } }
+            copied += url
             return out
         }
         Log.w(AppServer.TAG, "[$appId] sound not found: $entry")

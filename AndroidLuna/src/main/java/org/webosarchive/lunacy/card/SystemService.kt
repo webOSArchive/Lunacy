@@ -21,6 +21,9 @@ import java.io.File
 class SystemService(private val webosRoot: File, private val store: File) {
     /** Called on the main thread when a stored preference changes. */
     var onPreferenceChanged: (String, Any?) -> Unit = { _, _ -> }
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    /** The wallpaper imports: a copy and two decodes, which stalled the shell when they ran on the bus's thread. */
+    private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
 
     private val prefs: JSONObject = runCatching { JSONObject(store.readText()) }.getOrDefault(JSONObject())
     private val subscribers = ArrayList<Pair<Bus.Call, List<String>>>()
@@ -183,28 +186,38 @@ class SystemService(private val webosRoot: File, private val store: File) {
         if (source == null || !source.isFile) {
             return call.reply(Bus.error("importWallpaper: can't read $path"))
         }
-        try {
-            wallpaperDir.mkdirs(); thumbDir.mkdirs()
-            val name = uniqueName(source.name)
-            val dest = File(wallpaperDir, name)
-            // Already in the store (the shipped wallpapers are): keep one copy.
-            if (source.canonicalPath == dest.canonicalPath) {
-                thumbnail(source, File(thumbDir, name))
-                return call.reply(JSONObject().put("returnValue", true).put("wallpaper", wallpaper(name)).toString())
+        worker.execute {
+            val reply = try {
+                wallpaperDir.mkdirs(); thumbDir.mkdirs()
+                val name = uniqueName(source)
+                val dest = File(wallpaperDir, name)
+                // Already in the store (the shipped wallpapers are): keep one copy.
+                if (source.canonicalPath != dest.canonicalPath) source.copyTo(dest)
+                thumbnail(dest, File(thumbDir, name))
+                JSONObject().put("returnValue", true).put("wallpaper", wallpaper(name)).toString()
+            } catch (e: Exception) {
+                Log.w(AppServer.TAG, "importWallpaper failed", e)
+                Bus.error("importWallpaper: ${e.message}")
             }
-            source.copyTo(dest, overwrite = true)
-            thumbnail(dest, File(thumbDir, name))
-            call.reply(JSONObject().put("returnValue", true).put("wallpaper", wallpaper(name)).toString())
-        } catch (e: Exception) {
-            Log.w(AppServer.TAG, "importWallpaper failed", e)
-            call.reply(Bus.error("importWallpaper: ${e.message}"))
+            main.post { call.reply(reply) }
         }
     }
 
-    /** A picked file that's already a stored wallpaper keeps its name; anything else gets a free one. */
-    private fun uniqueName(name: String): String {
-        if (File(wallpaperDir, name).isFile) return name
-        return name
+    /**
+     * The picked file's own name, unless the store already has a different file by it: then
+     * name-2, name-3 and so on, so an import never writes over a wallpaper (a shipped one, or
+     * an earlier import of another picture with the same name).
+     */
+    private fun uniqueName(source: File): String {
+        val name = source.name
+        val taken = File(wallpaperDir, name)
+        if (!taken.isFile || taken.canonicalPath == source.canonicalPath) return name
+        val dot = name.lastIndexOf('.')
+        val base = if (dot > 0) name.substring(0, dot) else name
+        val ext = if (dot > 0) name.substring(dot) else ""
+        var n = 2
+        while (File(wallpaperDir, "$base-$n$ext").isFile) n++
+        return "$base-$n$ext"
     }
 
     private fun inside(f: File) = f.canonicalPath.startsWith(webosRoot.canonicalPath + File.separator)

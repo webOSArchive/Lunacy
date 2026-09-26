@@ -187,9 +187,15 @@ class Db8(private val service: String, file: File?) {
         m
     }
 
+    /**
+     * The object's kind is looked up first, so only that kind's objects are loaded: walking
+     * every kind pulled the whole store - every app's data - into memory on the first get,
+     * merge or del from anywhere, and kept it there.
+     */
     private fun byId(id: String): JSONObject? {
-        for (k in kinds.keys) objects(k)[id]?.let { return it }
-        return null
+        for (m in cache.values) m[id]?.let { return it }
+        val kind = db.rawQuery("SELECT kind FROM objects WHERE id = ?", arrayOf(id)).use { c -> if (c.moveToNext()) c.getString(0) else null }
+        return if (kind != null && kind in kinds) objects(kind)[id] else null
     }
 
     private fun store(o: JSONObject) {
@@ -448,9 +454,11 @@ class Db8(private val service: String, file: File?) {
         }
     }
 
+    private val collators = HashMap<String, Collator>()
     private fun collator(collate: String?): Collator? = when (collate) {
         null, "", "default", "identical" -> null
-        else -> Collator.getInstance().apply { strength = when (collate) { "primary" -> Collator.PRIMARY; "secondary" -> Collator.SECONDARY; else -> Collator.TERTIARY } }
+        // One per strength: a sort asked for a new instance per comparison before.
+        else -> collators.getOrPut(collate) { Collator.getInstance().apply { strength = when (collate) { "primary" -> Collator.PRIMARY; "secondary" -> Collator.SECONDARY; else -> Collator.TERTIARY } } }
     }
 
     private fun project(o: JSONObject, select: List<String>): JSONObject {

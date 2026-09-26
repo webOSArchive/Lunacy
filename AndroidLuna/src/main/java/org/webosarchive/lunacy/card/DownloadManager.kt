@@ -118,9 +118,15 @@ class DownloadManager(private val webosRoot: File) {
         }
         val dir = call.params.optString("targetDir").ifEmpty { DEFAULT_DIR }
         val name = call.params.optString("targetFilename").ifEmpty { target.substringAfterLast('/').substringBefore('?') }
+        // A URL that ends in a slash names no file; without this the download's target was the
+        // folder itself, which it then deleted to put the file in its place.
+        if (name.isEmpty() || name == "." || name == ".." || '/' in name) {
+            return call.reply(JSONObject(mapOf("returnValue" to false, "errorCode" to "-1",
+                "errorText" to "Invalid target filename", "subscribed" to false)).toString())
+        }
         val destPath = if (dir.endsWith("/")) dir else "$dir/"
         val file = resolve(destPath + name)
-        if (file == null) {
+        if (file == null || file.isDirectory) {
             return call.reply(JSONObject(mapOf("returnValue" to false, "errorCode" to "-1",
                 "errorText" to "Invalid target directory", "subscribed" to false)).toString())
         }

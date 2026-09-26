@@ -29,7 +29,11 @@
         <activity android:name=".shell.ShellActivity" android:exported="true"
             android:theme="@style/Theme.Lunacy.Splash"
             android:launchMode="singleTask"
-            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|screenLayout">
+            android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|keyboard|screenLayout|fontScale|density|uiMode|layoutDirection">
+            <!-- fontScale, density, uiMode: none of them changes what the shell draws (it
+                 scales to the screen itself), and each would otherwise re-create the activity
+                 and end every running app. A language change still does, as changing the
+                 language restarted Luna on a device. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

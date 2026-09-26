@@ -32,6 +32,10 @@ class Luna(private val context: Context) {
     private val bitmaps = HashMap<String, Bitmap?>()
     private val fonts = HashMap<String, Typeface>()
 
+    /** getOrPut for a cache whose values may be null: a miss is remembered, not decoded again on every frame. */
+    private inline fun <T> HashMap<String, T?>.memo(key: String, f: () -> T?): T? =
+        if (containsKey(key)) get(key) else f().also { put(key, it) }
+
     /** TouchPad pixels to Android pixels. */
     /** SplashIconSize, from the reference TouchPad's luna-platform.conf. */
     val SPLASH_ICON_SIZE = 192
@@ -40,7 +44,7 @@ class Luna(private val context: Context) {
     fun px(tp: Int) = (tp * density).toInt()
 
     /** An image from LunaCE's images/ folder, at its TouchPad size. */
-    fun image(path: String): Bitmap? = bitmaps.getOrPut(path) {
+    fun image(path: String): Bitmap? = bitmaps.memo(path) {
         try {
             context.assets.open("luna/images/$path").use {
                 BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inDensity = 160; inTargetDensity = targetDpi; inScaled = true })
@@ -58,7 +62,7 @@ class Luna(private val context: Context) {
      * An Android app's is drawn at its size on screen already (AndroidApps), so isn't scaled.
      */
     fun appIcon(app: org.webosarchive.lunacy.card.AppInfo): Bitmap? =
-        bitmaps.getOrPut("icon:${app.id}:${app.version}") {
+        bitmaps.memo("icon:${app.id}:${app.version}") {
             if (app.androidComponent == null) decode(app.openIcon())
             else try { app.openIcon()?.use { BitmapFactory.decodeStream(it) } } catch (e: Exception) { null }
         }
@@ -76,9 +80,9 @@ class Luna(private val context: Context) {
      * a dashboard from an app without a mini icon shows its icon grey.
      */
     fun miniIcon(app: org.webosarchive.lunacy.card.AppInfo): Bitmap? =
-        bitmaps.getOrPut("mini:${app.id}:${app.version}") {
-            decode(app.openMiniIcon())?.let { return@getOrPut it }
-            val icon = decode(app.openIcon()) ?: return@getOrPut null
+        bitmaps.memo("mini:${app.id}:${app.version}") {
+            decode(app.openMiniIcon())?.let { return@memo it }
+            val icon = decode(app.openIcon()) ?: return@memo null
             val size = px(28)
             val b = Bitmap.createScaledBitmap(icon, size, size, true).copy(Bitmap.Config.ARGB_8888, true)
             val px = IntArray(size * size)
@@ -98,10 +102,10 @@ class Luna(private val context: Context) {
      * is 192 on a TouchPad, from luna-topaz.conf). In TouchPad px, scaled like the rest.
      */
     fun splashIcon(app: org.webosarchive.lunacy.card.AppInfo): Bitmap? =
-        bitmaps.getOrPut("splash:${app.id}:${app.version}") {
+        bitmaps.memo("splash:${app.id}:${app.version}") {
             val size = px(SPLASH_ICON_SIZE)
             val own = decode(app.openSplashIcon())
-            val bmp = own ?: appIcon(app) ?: return@getOrPut null
+            val bmp = own ?: appIcon(app) ?: return@memo null
             val want = if (own != null) size else minOf(size, (maxOf(bmp.width, bmp.height) * 1.5f).toInt())
             val longest = maxOf(bmp.width, bmp.height)
             if (longest <= 0 || longest == want) bmp
@@ -116,9 +120,17 @@ class Luna(private val context: Context) {
     val fontBold get() = font("Prelude-Bold.ttf", Typeface.BOLD)
     val fontLight get() = font("PreludeWGL-Light.ttf")
 
-    /** An image file at its own size: a wallpaper the user picked, which isn't shell art. */
-    fun decodeFull(file: java.io.File): Bitmap? = try {
-        BitmapFactory.decodeFile(file.path)
+    /**
+     * An image file at its own size, or halved until it is within [maxPx] on its longer side:
+     * a wallpaper the user picked, which isn't shell art. A photo from a camera is many times
+     * the screen, and decoded whole was tens of MB held for the run.
+     */
+    fun decodeFull(file: java.io.File, maxPx: Int): Bitmap? = try {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.path, bounds)
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxPx) sample *= 2
+        BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })
     } catch (e: Exception) { null } catch (e: OutOfMemoryError) { null }
 
     /** A TouchPad wallpaper (assets/luna/wallpapers, shipped as abandonware). */

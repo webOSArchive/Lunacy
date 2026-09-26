@@ -29,9 +29,13 @@ class LunacyService(
     private val webosRoot: File,
     private val display: () -> JSONObject,
 ) {
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    /** The two answers that take real time - Node's version is asked of Node, and a listing walks a folder - come from here. */
+    private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
+
     fun register(bus: Bus) {
-        bus.register(SERVICE, "system/getEnvironment") { _, _, reply -> reply(environment()) }
-        bus.register(SERVICE, "files/list") { _, p, reply -> reply(listFiles(p)) }
+        bus.register(SERVICE, "system/getEnvironment") { _, _, reply -> worker.execute { val r = environment(); main.post { reply(r) } } }
+        bus.register(SERVICE, "files/list") { _, p, reply -> worker.execute { val r = runCatching { listFiles(p) }.getOrElse { Bus.error("files/list: $it") }; main.post { reply(r) } } }
         bus.register(SERVICE, "system/setDeviceId") { caller, p, reply -> reply(setDeviceId(caller, p)) }
         bus.register(SERVICE, "android/openSettings") { _, p, reply -> reply(openSettings(p.optString("panel"))) }
         bus.register(SERVICE, "android/settingsPanels") { _, _, reply ->
@@ -205,7 +209,7 @@ class LunacyService(
         val internal = path.removePrefix("/media/internal").trimStart('/')
         val root = if (path.trimEnd('/') == "/media/internal" || path.startsWith("/media/internal/")) {
             UserFiles.resolve(webosRoot, internal)
-        } else File(webosRoot, path.trimStart('/')).takeIf { it.canonicalPath.startsWith(webosRoot.canonicalPath) }
+        } else File(webosRoot, path.trimStart('/')).takeIf { it.canonicalPath.startsWith(webosRoot.canonicalPath + File.separator) || it.canonicalPath == webosRoot.canonicalPath }
         if (root == null || !root.isDirectory) return Bus.error("No such folder: $path")
         // Lunacy's own folders, then the Android ones mapped in beside them (UserFiles), which
         // is where the files a person actually has live.

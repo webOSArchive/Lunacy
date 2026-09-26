@@ -26,14 +26,22 @@ import java.io.ByteArrayOutputStream
  * Icons are drawn at that size so they stay sharp whatever the scale.
  */
 class AndroidApps(private val context: Context, private val files: AppFiles, private val iconPx: Int) {
-    private val icons = HashMap<String, ByteArray?>()
+    /** Each activity's icon as a PNG, or null where none could be drawn; a miss is kept too. */
+    private val icons = java.util.Collections.synchronizedMap(HashMap<String, ByteArray?>())
+
+    private fun icon(id: String, ri: android.content.pm.ResolveInfo): ByteArray? = synchronized(icons) {
+        if (icons.containsKey(id)) icons[id] else png(ri).also { icons[id] = it }
+    }
 
     fun list(): List<AppInfo> {
         val pm = context.packageManager
         val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         @Suppress("DEPRECATION")
-        return pm.queryIntentActivities(main, 0)
-            .filter { it.activityInfo.packageName != context.packageName }
+        val found = pm.queryIntentActivities(main, 0).filter { it.activityInfo.packageName != context.packageName }
+        // Drawn ahead, off the main thread: rendering forty icons on the launcher's first
+        // draw of the page cost it about half a second on the HP tablet.
+        Thread({ for (ri in found) icon(PREFIX + ComponentName(ri.activityInfo.packageName, ri.activityInfo.name).flattenToShortString(), ri) }, "android-icons").start()
+        return found
             .map { ri ->
                 val cn = ComponentName(ri.activityInfo.packageName, ri.activityInfo.name)
                 val id = PREFIX + cn.flattenToShortString()
@@ -45,7 +53,7 @@ class AndroidApps(private val context: Context, private val files: AppFiles, pri
                     androidSettings = "", splashIcon = "", uiRevision = 2, category = "android",
                     keywords = emptyList(), appinfo = JSONObject(), files = files,
                     androidComponent = cn,
-                    androidIcon = { icons.getOrPut(id) { png(ri) }?.let { ByteArrayInputStream(it) } },
+                    androidIcon = { icon(id, ri)?.let { ByteArrayInputStream(it) } },
                 )
             }
             .sortedBy { it.title.lowercase() }

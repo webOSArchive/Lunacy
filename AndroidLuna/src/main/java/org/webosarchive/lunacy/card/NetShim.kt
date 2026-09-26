@@ -26,11 +26,20 @@ class NetShim(
     private val results: MutableMap<Int, String> = ConcurrentHashMap()
     private val inFlight: MutableMap<Int, HttpURLConnection> = ConcurrentHashMap()
     private val aborted: MutableSet<Int> = java.util.Collections.newSetFromMap(ConcurrentHashMap())
+    /**
+     * Which page's requests these are. The page numbers its requests from 1, and a new page
+     * starts over, so a request still queued (the pool is shared and six wide) when the page
+     * changed would otherwise answer the new page's request of the same number.
+     */
+    @Volatile private var page = 0
 
     /** Queues a request; deliver(id) is called when netResult(id) has its answer. */
     fun send(id: Int, request: String) {
+        val from = page
         pool.execute {
+            if (from != page) return@execute
             val r = run(id, request)
+            if (from != page) return@execute
             if (id in aborted) { aborted.remove(id); return@execute }
             results[id] = r
             deliver(id)
@@ -47,9 +56,11 @@ class NetShim(
         inFlight.remove(id)?.let { c -> Thread { c.disconnect() }.start() }
     }
 
-    /** A new page in the window: earlier pages' requests are dropped. */
+    /** A new page in the window: earlier pages' requests are dropped, answered or not. */
     fun reset() {
+        page++
         inFlight.keys.toList().forEach { abort(it) }
+        aborted.clear()
         results.clear()
     }
 

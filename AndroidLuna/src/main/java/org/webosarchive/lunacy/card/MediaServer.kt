@@ -62,7 +62,7 @@ class MediaServer(private val webosRoot: File) {
             if (range != null) {
                 val (a, b) = range.destructured
                 if (a.isEmpty()) { start = maxOf(0, len - (b.toLongOrNull() ?: 0)) } else { start = a.toLong(); if (b.isNotEmpty()) end = minOf(b.toLong(), len - 1) }
-                if (start >= len) return status(out, 416, "Range Not Satisfiable")
+                if (start >= len || end < start) return status(out, 416, "Range Not Satisfiable")
             }
             val count = end - start + 1
             val head = StringBuilder()

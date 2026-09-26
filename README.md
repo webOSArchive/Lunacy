@@ -62,10 +62,10 @@ Lunacy like any other card. The shell's styling target is LunaCE.
 
 ## Platform
 
-Lunacy starts on Android 5.0.1, and newer Android versions follow.
-- Era-appropriate Android tablets are close to the TouchPad in spec and cheap to test on.
-- Android 5 is a permissive platform, so things work first. Security is tightened as newer
-  versions are targeted.
+Lunacy supports Android 5.0.1 through Android 14 on Tablets. Newer Android versions to follow.
+- Can run as the default Android Launcher (optional)
+- Pair it with the optional webOS-style keyboard
+- Launches Mojo, Enyo and Android apps
 
 ## Using it
 

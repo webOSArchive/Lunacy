@@ -283,6 +283,8 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     fun setApps(apps: List<AppInfo>) {
         val byId = apps.associateBy { it.id }
         val placed = HashSet<String>()
+        // Titles and icons may have changed with the list (an Android app updated in place).
+        labels.clear(); groupComposites.clear()
         pages.forEach { it.tiles.clear() }
         fun app(id: String) = byId[id]?.takeIf { placed.add(it.id) }?.let { Tile.App(it) }
         /** A saved cell: an app's id, or a group ({"group": name, "uid": ..., "apps": [ids]}). */
@@ -354,8 +356,11 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private val clearFeedback = Runnable { feedbackId = null; invalidate() }
 
     /** The glow behind a tapped icon, until the launcher closes or LunaCE's 3 s run out. */
-    fun showLaunchFeedback(app: AppInfo) {
-        feedbackId = app.id
+    fun showLaunchFeedback(app: AppInfo) = showLaunchFeedback(app.id)
+
+    /** The same glow on any tile by its id: an app, or [LunaCE] a group being opened. */
+    fun showLaunchFeedback(tileId: String) {
+        feedbackId = tileId
         removeCallbacks(clearFeedback)
         postDelayed(clearFeedback, Params.FEEDBACK_MS)
         invalidate()
@@ -515,7 +520,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             val fh = luna.px(Params.CELL) / 2
             luna.image("launcher3/edit-icon-bg.png")?.let { c.drawBitmap(it, null, RectF(cx - fh, cy - fh, cx + fh, cy + fh), null) }
         }
-        if (groupTarget == g.id) {
+        if (groupTarget == g.id || feedbackId == g.id) {
             val gh = luna.px(Params.FEEDBACK) / 2
             luna.image("launcher3/launcher-touch-feedback.png")?.let { c.drawBitmap(it, null, RectF(cx - gh, iy - gh, cx + gh, iy + gh), null) }
         }
@@ -969,7 +974,8 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         if (editing) return  // icons don't launch while being arranged
         when (val t = tileAt(x, y)) {
             is Tile.App -> { showLaunchFeedback(t.app); onLaunch(t.app) }
-            is Tile.Group -> onOpenGroup(t, groupScreenCentre(t))
+            // [LunaCE] a group lights up as an app does while its panel opens (77bcb40).
+            is Tile.Group -> { showLaunchFeedback(t.id); onOpenGroup(t, groupScreenCentre(t)) }
             null -> {}
         }
     }

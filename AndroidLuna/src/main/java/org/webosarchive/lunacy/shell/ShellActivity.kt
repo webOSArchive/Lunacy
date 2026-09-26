@@ -45,7 +45,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     /** The webOS device Lunacy answers as, for every app-visible surface. */
     private val profile by lazy { org.webosarchive.lunacy.card.DeviceProfile.forScreen(this) }
     /** Proof of concept: Android's own apps in the launcher, for Lunacy as the home screen. */
-    private val androidApps by lazy { AndroidApps(this, files) }
+    private val androidApps by lazy { AndroidApps(this, files, luna.px(Launcher.Params.ICON.toInt())) }
     private var androidById: Map<String, AppInfo> = emptyMap()
     /** Whether the shell is on screen (between onStart and onStop): a Home press then is Lunacy's own. */
     private var started = false
@@ -57,6 +57,27 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val android = androidApps.list()
         androidById = android.associateBy { it.id }
         return registry.launchPoints + android
+    }
+
+    /** An app by id, webOS or Android: what the dock and Just Type can hold. */
+    private fun appById(id: String): AppInfo? = registry.get(id) ?: androidById[id]
+
+    /**
+     * Android's packages coming, going or changing (an update, a component enabled or
+     * disabled): the launcher, dock and Just Type follow, with the package's icons and
+     * labels drawn again.
+     */
+    private val packageReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
+            val pkg = intent.data?.schemeSpecificPart ?: return
+            // An update removes the old package and adds the new; wait for the second.
+            if (intent.action == android.content.Intent.ACTION_PACKAGE_REMOVED && intent.getBooleanExtra(android.content.Intent.EXTRA_REPLACING, false)) return
+            if (pkg == packageName) return
+            androidApps.forget(pkg)
+            androidById.keys.filter { it.startsWith("${AndroidApps.PREFIX}$pkg/") }.forEach { luna.forgetIcons(it) }
+            launcher.setApps(launchPoints())
+            showDock()
+        }
     }
     private lateinit var statusBar: StatusBar
     private lateinit var cards: CardLayer
@@ -144,6 +165,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         launcher = Launcher(this, luna) { app -> launcher.postDelayed({ launch(app.id); closeLauncher() }, LAUNCH_DELAY_MS) }
         launcher.onRemove = { app -> remove(app) }
         launcher.setApps(launchPoints())
+        registerReceiver(packageReceiver, android.content.IntentFilter().apply {
+            addAction(android.content.Intent.ACTION_PACKAGE_ADDED)
+            addAction(android.content.Intent.ACTION_PACKAGE_REMOVED)
+            addAction(android.content.Intent.ACTION_PACKAGE_CHANGED)
+            addAction(android.content.Intent.ACTION_PACKAGE_REPLACED)
+            addDataScheme("package")
+        })
         launcher.dockHeight = luna.px(QuickLaunch.HEIGHT).toFloat()
         launcher.visibility = View.INVISIBLE
         root.addView(launcher, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
@@ -151,7 +179,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         groupOverlay = GroupOverlay(this, luna)
         root.addView(groupOverlay, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
         launcher.onOpenGroup = { g, from -> groupOverlay.show(g, from) }
-        groupOverlay.onLaunch = { app -> launcher.showLaunchFeedback(app); launcher.postDelayed({ launch(app.id); closeLauncher() }, LAUNCH_DELAY_MS) }
+        groupOverlay.onLaunch = { app -> launcher.postDelayed({ launch(app.id); closeLauncher() }, LAUNCH_DELAY_MS) }
+        // [LunaCE] The group's glow stays while one of its members launches, and goes when
+        // the panel is simply dismissed.
+        groupOverlay.onDismissed = { g, launched -> if (launched) launcher.showLaunchFeedback(g.id) else launcher.cancelLaunchFeedback() }
         groupOverlay.onPopOut = { g, app -> launcher.popOut(g, app) }
         groupOverlay.onRenamed = { g -> launcher.groupChanged(g) }
         // [LunaCE] Renaming, adding and deleting launcher tabs.
@@ -189,8 +220,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
 
         quickLaunch = QuickLaunch(this, luna, onLaunch = { app -> quickLaunch.postDelayed({ launch(app.id) }, LAUNCH_DELAY_MS) }, onLauncher = { toggleLauncher() })
-        quickLaunch.onRemoveItem = { i -> setDock(dock().toMutableList().apply { removeAt(i) }) }
-        quickLaunch.onMoveItem = { from, to -> setDock(dock().toMutableList().apply { add(to, removeAt(from)) }) }
+        // By position in the dock as drawn, which leaves out apps since removed.
+        quickLaunch.onRemoveItem = { i -> setDock(shownDock().toMutableList().apply { removeAt(i) }) }
+        quickLaunch.onMoveItem = { from, to -> setDock(shownDock().toMutableList().apply { add(to, removeAt(from)) }) }
         launcher.onDropOnDock = { app, x -> dropOnDock(app, x) }
         launcher.onEditModeChanged = { on -> quickLaunch.editing = on }
         showDock()
@@ -265,6 +297,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         (getSystemService(DISPLAY_SERVICE) as android.hardware.display.DisplayManager)
             .unregisterDisplayListener(displayListener)
         if (watchingPower) { unregisterReceiver(powerReceiver); watchingPower = false }
+        if (::launcher.isInitialized) unregisterReceiver(packageReceiver)
         super.onDestroy()
     }
 
@@ -350,8 +383,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     override fun onResume() {
         super.onResume(); inFront = true
-        // Android apps may have come or gone while the shell was away.
-        if (::launcher.isInitialized && androidApps.list().map { it.id } != androidById.keys.toList()) launcher.setApps(launchPoints())
     }
 
     override fun onPause() { inFront = false; org.webosarchive.lunacy.card.CookieFlush.now(); super.onPause() }
@@ -1392,7 +1423,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         showDock()
     }
 
-    private fun showDock() { quickLaunch.apps = dock().mapNotNull { registry.get(it) } }
+    /** The dock's ids that are still apps, in the order they are drawn. */
+    private fun shownDock() = dock().filter { appById(it) != null }
+
+    private fun showDock() { quickLaunch.apps = shownDock().mapNotNull { appById(it) } }
 
     /**
      * A launcher icon dropped on the dock. It joins at the slot under it; one already on the
@@ -1400,7 +1434,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * refused a sixth icon; swapping is Lunacy's).
      */
     private fun dropOnDock(app: AppInfo, x: Float) {
-        val ids = dock().filter { registry.get(it) != null }.toMutableList()
+        val ids = shownDock().toMutableList()
         val present = ids.indexOf(app.id)
         when {
             present >= 0 -> { ids.removeAt(present); ids.add(quickLaunch.slotAt(x, ids.size + 1), app.id) }
@@ -1560,7 +1594,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun openJustType() {
         if (cards.maximized != null) return
         if (launcherOpen) closeLauncher()
-        justTypePanel.apps = registry.launchPoints
+        justTypePanel.apps = registry.launchPoints + androidById.values
         justTypePanel.open()
         fade(justType, false); showDock(false)
         statusBar.setMode(StatusBar.Mode.APP)

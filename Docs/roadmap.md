@@ -559,7 +559,21 @@ corpus survey says how many apps this phase can reach, and whether it is worth d
   - Add the WebSQL polyfill when a target's WebView drops WebSQL.
   - Move to current AndroidX once `minSdk` rises.
 - Launcher mode: Lunacy as the Android home screen, with Android apps shown alongside webOS
-  cards.
+  cards. A proof of concept is in (`shell/AndroidApps.kt`): Android's apps in the launcher,
+  the dock and Just Type, launched and uninstalled through Android. Reviewed 2026-09-26; what
+  it still lacks, none of it started:
+  - **Running Android apps have no cards.** Switching between them is Android's Recents,
+    so "alongside webOS cards" isn't met. This is the largest gap.
+  - **Android's notifications don't reach Lunacy's notification area.** It needs a
+    `NotificationListenerService`, which the user grants on Android's own settings screen.
+  - **Android apps are listed whether or not Lunacy is the home screen**, and the favorites
+    page is renamed "android" for everyone. Decide whether both should follow being the
+    default home screen.
+  - **Starting as the home screen hasn't been timed.** Android starts Lunacy at boot and
+    after every low-memory kill, and on a 1 GB device each start first readies the webOS
+    root (`WebosRoot`).
+  - Not planned (codepoet, 2026-09-26): Android widgets and Android's own wallpaper. webOS
+    had neither.
 - Just Type (universal search).
 
 ## Open questions

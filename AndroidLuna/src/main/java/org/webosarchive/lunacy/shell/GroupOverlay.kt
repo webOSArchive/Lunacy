@@ -102,12 +102,16 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
     var onLaunch: (AppInfo) -> Unit = {}
     var onPopOut: (Launcher.Tile.Group, AppInfo) -> Unit = { _, _ -> }
     var onRenamed: (Launcher.Tile.Group) -> Unit = {}
+    /** The panel started to close; [launched] says whether a member was tapped to get there. */
+    var onDismissed: (group: Launcher.Tile.Group, launched: Boolean) -> Unit = { _, _ -> }
 
     private var group: Launcher.Tile.Group? = null
     private var origin = PointF()
     private var progress = 0f
     private var anim: ValueAnimator? = null
     private var editing = false
+    /** The member tapped to launch, lit while the panel closes (LunaCE 77bcb40). */
+    private var launching: AppInfo? = null
     val showing get() = group != null
 
     private val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -119,7 +123,15 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
     private val boxFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(180, 0, 0, 0) }
     private val boxEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = luna.px(1.5f); color = Color.argb(220, 140, 180, 255) }
 
-    private val field = object : EditText(context) { init { background = null } }.apply {
+    private val field = object : EditText(context) {
+        init { background = null }
+        // [LunaCE] 9c67036: the keyboard put away mid-rename ends the rename, as a tap
+        // outside does, rather than leaving the panel lifted and waiting.
+        override fun onKeyPreIme(keyCode: Int, event: android.view.KeyEvent): Boolean {
+            if (keyCode == android.view.KeyEvent.KEYCODE_BACK && event.action == android.view.KeyEvent.ACTION_UP && editing) endEdit(commit = true)
+            return super.onKeyPreIme(keyCode, event)
+        }
+    }.apply {
         setTextColor(Color.argb(235, 255, 255, 255))
         setTextSize(TypedValue.COMPLEX_UNIT_PX, luna.px(22f))
         typeface = luna.fontBold
@@ -140,16 +152,17 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
     }
 
     fun show(g: Launcher.Tile.Group, from: PointF) {
-        group = g; origin = from; editing = false
+        group = g; origin = from; editing = false; launching = null
         visibility = VISIBLE
         animateTo(1f, OPEN_MS, Easing.OutCubic)
     }
 
     fun close() {
-        if (group == null) return
+        val g = group ?: return
         if (editing) endEdit(commit = true)
+        onDismissed(g, launching != null)
         animateTo(0f, CLOSE_MS, android.animation.TimeInterpolator { it * it * it }) {
-            group = null; visibility = GONE
+            group = null; launching = null; visibility = GONE
         }
     }
 
@@ -300,7 +313,7 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
                     editing -> if (!titleRect(p).contains(e.x, e.y)) endEdit(commit = true)
                     !p.contains(e.x, e.y) -> close()
                     titleRect(p).contains(e.x, e.y) -> startEdit()
-                    else -> memberAt(e.x, e.y)?.let { onLaunch(it); close() }
+                    else -> memberAt(e.x, e.y)?.let { launching = it; onLaunch(it); close() }
                 }
             }
             MotionEvent.ACTION_CANCEL -> removeCallbacks(hold)

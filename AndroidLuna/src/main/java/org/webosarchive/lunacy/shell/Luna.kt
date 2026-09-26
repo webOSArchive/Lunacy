@@ -53,9 +53,20 @@ class Luna(private val context: Context) {
         stream?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inDensity = 160; inTargetDensity = targetDpi; inScaled = true }) }
     } catch (e: Exception) { null }
 
-    /** An app's icon (bundled or installed), scaled like the Luna images; cached per version. */
+    /**
+     * An app's icon (bundled or installed), scaled like the Luna images; cached per version.
+     * An Android app's is drawn at its size on screen already (AndroidApps), so isn't scaled.
+     */
     fun appIcon(app: org.webosarchive.lunacy.card.AppInfo): Bitmap? =
-        bitmaps.getOrPut("icon:${app.id}:${app.version}") { decode(app.openIcon()) }
+        bitmaps.getOrPut("icon:${app.id}:${app.version}") {
+            if (app.androidComponent == null) decode(app.openIcon())
+            else try { app.openIcon()?.use { BitmapFactory.decodeStream(it) } } catch (e: Exception) { null }
+        }
+
+    /** Drops an app's cached icons, for an app that changed without a new version (an Android package). */
+    fun forgetIcons(appId: String) {
+        bitmaps.keys.removeAll { k -> listOf("icon:", "mini:", "splash:").any { k.startsWith("$it$appId:") } }
+    }
 
     /**
      * An app's mini icon, which a dashboard or banner without an icon of its own shows in the

@@ -11,12 +11,14 @@ V=../Workbench/vendor
 L=local-assets
 T=local-test-apps
 rm -rf $L $T && mkdir -p $L/fw/enyo $L/apps $T/apps
-cp -r $V/enyo-1.0 $L/fw/enyo/1.0 && rm -rf $L/fw/enyo/1.0/.git $L/fw/enyo/1.0/support/docs
+# The framework only: support/ is the SDK's examples, docs and enyo-compress (with its
+# node_modules), none of it on a device, and 11 MB of APK when it was shipped.
+cp -r $V/enyo-1.0 $L/fw/enyo/1.0 && rm -rf $L/fw/enyo/1.0/.git $L/fw/enyo/1.0/support
 # Lunacy's changes to Enyo, as diffs against upstream: LunaRuntimes/enyo-1.0/CHANGES.md says what
 # each one is and why. A patch that no longer applies is a build failure, not a silent skip.
 for patch in ../LunaRuntimes/enyo-1.0/patches/*.patch; do
     [ -e "$patch" ] || continue
-    (cd $L/fw/enyo/1.0 && patch -p1 --forward --silent < "$HERE/$patch") ||
+    (cd $L/fw/enyo/1.0 && patch -p1 --forward --silent --follow-symlinks < "$HERE/$patch") ||
         { echo "fetch-assets: $patch does not apply to stock Enyo" >&2; exit 1; }
     echo "enyo: applied $(basename "$patch")"
 done
@@ -40,20 +42,40 @@ for a in $V/settings-apps/*; do
     id=$(basename "$a")
     [ -d "$a" ] && [ ! -d "src/main/assets/apps/$id" ] && cp -r "$a" $L/apps/
 done
+# Records a tree's symlinks as a manifest - "link target", both relative to the tree, the
+# target followed to a real file - and takes the links out. Gradle's asset merger refuses a
+# symlink, and copying every link's target in its place (cp -L, as before) shipped the
+# frameworks twice over: on the device version/1.0 is a link to submission/N, and Mojo's
+# images and templates link into mojocommon file by file. The app server follows the manifest
+# as it serves (AppServer.followLinks), and the ROM is laid down with real links
+# (WebosRoot.syncRom), as the device had them.
+links() {  # links <tree> <manifest>
+    tree=$1; out=$2; : > "$out"
+    find "$tree" -type l | sort | while read -r l; do
+        rel=${l#"$tree"/}
+        t=$(realpath -m --relative-to="$tree" "$(dirname "$l")/$(readlink "$l")")
+        case $t in ../*|/*) echo "fetch-assets: link $rel -> $t leaves the tree; dropped" >&2; continue;; esac
+        [ -e "$tree/$t" ] || { echo "fetch-assets: link $rel -> $t is dangling; dropped" >&2; continue; }
+        echo "$rel $t" >> "$out"
+    done
+    find "$tree" -type l -delete
+    echo "links: $(wc -l < "$out") in $tree"
+}
+
 # Mojo, from the reference TouchPad. webOS's browser had the framework compiled in, so the
 # submission on disk carries only its assets and builtins/ carries the code; Lunacy serves
 # both. Palm's code, shipped as abandonware like the fonts (see the NOTICE it gets).
 mkdir -p $L/fw/mojo $L/fw/mojocommon
-# -L: the submission symlinks into mojocommon, and Gradle's asset merger chokes on symlinks.
-cp -rL $V/touchpad/mojo/. $L/fw/mojo/
+# The submission symlinks into mojocommon; links() below records those.
+cp -r $V/touchpad/mojo/. $L/fw/mojo/
 # mojocommon is a framework of its own beside Mojo, and the submission symlinks into it for
 # shared resources and images; Lunacy serves it at its own path so those links resolve.
-cp -rL $V/touchpad/mojocommon/. $L/fw/mojocommon/
+cp -r $V/touchpad/mojocommon/. $L/fw/mojocommon/
 chmod -R u+w $L/fw/mojo $L/fw/mojocommon
 # Lunacy's changes to Mojo, as diffs against the device's own copy (LunaRuntimes/mojo/CHANGES.md).
 for patch in ../LunaRuntimes/mojo/patches/*.patch; do
     [ -e "$patch" ] || continue
-    (cd $L/fw/mojo && patch -p1 --forward --silent < "$HERE/$patch") ||
+    (cd $L/fw/mojo && patch -p1 --forward --silent --follow-symlinks < "$HERE/$patch") ||
         { echo "fetch-assets: $patch does not apply to the TouchPad's Mojo" >&2; exit 1; }
     echo "mojo: applied $(basename "$patch")"
 done
@@ -74,9 +96,14 @@ mkdir -p $L/fw/frameworks
 for f in mojo2 prototype mojo.core underscore foundations globalization mojoloader.js \
          metascene.base metascene.videos metascene.videos.share \
          mediastream mediaextension mediacapture imagethumbnail mojodbshim media; do
-    cp -rL $V/touchpad/$f $L/fw/frameworks/
+    cp -r $V/touchpad/$f $L/fw/frameworks/
 done
 chmod -R u+w $L/fw/frameworks
+# mojo2's images and templates link to ../../../../mojocommon, which on the device is
+# /usr/palm/frameworks/mojocommon, beside it; here mojocommon is served from fw/mojocommon, so
+# a stand-in link lets those links resolve (and goes with the rest, below).
+ln -s ../mojocommon $L/fw/frameworks/mojocommon
+links $L/fw $L/fw.links
 cat > $L/fw/frameworks/NOTICE <<'NOTICE'
 Palm's frameworks, copied from /usr/palm/frameworks on the reference TouchPad
 (webOS CE 3.1.0): mojo2 (submission 205), prototype, mojo.core, foundations, globalization,
@@ -107,8 +134,10 @@ TC=$NDK/toolchains/llvm/prebuilt/linux-x86_64
 NM=$V/nodejs-mobile/v0.3.3/bin/armeabi-v7a
 J=local-jni/armeabi-v7a
 rm -rf local-jni && mkdir -p $J
-cp $NM/libnode.so $J/
-cp $TC/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so $J/
+# Both stripped: nodejs-mobile ships libnode.so with its symbol tables and DWARF (10 MB of
+# the 44), and the NDK's libc++_shared.so is its unstripped copy (4.1 MB for 0.5).
+cp $NM/libnode.so $TC/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so $J/
+$TC/bin/llvm-strip --strip-all $J/libnode.so $J/libc++_shared.so
 $TC/bin/armv7a-linux-androideabi21-clang++ -pie -fPIE -O2 -s -o $J/liblunacynode.so tools/node-launcher.cpp -L$NM -lnode
 # The webOS root filesystem's ROM (WebosRoot.kt): what the TouchPad's rootfs held for JS
 # services and package scripts, laid into Lunacy's files/webos. Palm's service frameworks and
@@ -117,9 +146,9 @@ $TC/bin/armv7a-linux-androideabi21-clang++ -pie -fPIE -O2 -s -o $J/liblunacynode
 R=$L/rootfs
 mkdir -p $R/usr/palm/frameworks $R/usr/palm/services $R/usr/palm/public/accounts $R/etc/palm/db/kinds $R/etc/palm/db/permissions $R/etc/palm/tempdb
 for f in foundations foundations.crypto foundations.io foundations.json mojoservice mojoservice.transport underscore globalization mojoloader.js; do
-    cp -rL $V/touchpad/services-fw/$f $R/usr/palm/frameworks/ 2>/dev/null || cp -rL $V/touchpad/$f $R/usr/palm/frameworks/
+    cp -r $V/touchpad/services-fw/$f $R/usr/palm/frameworks/ 2>/dev/null || cp -r $V/touchpad/$f $R/usr/palm/frameworks/
 done
-cp -rL $V/touchpad/services-fw/jsservicelauncher $R/usr/palm/services/
+cp -r $V/touchpad/services-fw/jsservicelauncher $R/usr/palm/services/
 cat > $R/usr/palm/frameworks/NOTICE <<'NOTICE'
 Palm's JS service frameworks (foundations*, mojoservice*, globalization, underscore,
 mojoloader.js) and jsservicelauncher, copied from /usr/palm on the reference TouchPad
@@ -186,7 +215,10 @@ busybox 1.31.0 (libbusybox.so in the APK): the static armv7l build from
 https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/ , unmodified.
 GPL-2.0. Source: https://busybox.net/downloads/busybox-1.31.0.tar.bz2
 NOTICE
-# The ROM's file list, so that Lunacy needn't walk it with AssetManager.list(), which reads the
-# APK's whole asset index on every call (WebosRoot.syncRom).
+# The ROM's symlinks, made on the device as links (WebosRoot.syncRom), and its file list, so
+# that Lunacy needn't walk it with AssetManager.list(), which reads the APK's whole asset
+# index on every call.
+chmod -R u+w $R
+links $R $L/rootfs.links
 (cd $L/rootfs && find . -type f | sed 's#^\./##' | sort) > $L/rootfs.index
 echo "local-assets ready: $(du -sh $L | cut -f1); local-jni: $(du -sh local-jni | cut -f1)"

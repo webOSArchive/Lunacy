@@ -100,4 +100,6 @@ full-bleed gradient (codepoet's screenshot, 2026-09-22).
 only bites where the scroller has a definite height - which is exactly the case the fallback
 broke. A scene that isn't in a scroller (webOS IAmA reddit's is not) is untouched.
 
-File: `submissions/506/stylesheets/global-base.css`.
+File: `submissions/506/stylesheets/global-base.css`, which on the device is a symlink to
+`mojocommon/stylesheets/global-base.css`; the patch is applied through the link
+(`patch --follow-symlinks`), so it is mojocommon's file that changes, as it would on a device.

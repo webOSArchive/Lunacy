@@ -24,7 +24,7 @@ android {
         // own level. What 23 and 24 change on newer devices is in Docs/architecture.md.
         targetSdk = 24
         versionCode = buildNumber
-        versionName = "0.2.5"
+        versionName = "0.3.0"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -34,9 +34,21 @@ android {
     // One lint policy for both modules (../lint.xml): NewApi is fatal because minSdk 21 has
     // to hold, and the expired-targetSdk warning is deliberate - Lunacy is sideloaded.
     lint { lintConfig = rootProject.file("lint.xml") }
-    androidResources { noCompress += listOf("js", "css", "html", "json", "png", "ttf", "jpg") }
-    // Assets that can't be committed (frameworks and apps under review, HP fonts and
-    // wallpapers) are populated by fetch-assets.sh into local-assets/, which is gitignored.
+    // Everything in the APK is deflated except what is read through a file descriptor: the
+    // sounds (Sounds.kt's openFd). Storing text and fonts uncompressed, as an earlier build
+    // did, cost 21 MB of APK; AssetManager.open inflates a file as it is read, which the app
+    // server streams anyway. (aapt leaves jpg, png and the audio formats stored by itself.)
+    androidResources { noCompress += listOf("wav", "mp3") }
+    buildTypes {
+        // The debug APK is the one codepoet hands out, so it is the one R8 shrinks: without it
+        // the whole Kotlin stdlib ships (2.3 MB of dex for 0.9 MB of Lunacy). Obfuscation
+        // is off (proguard-rules.pro) so stack traces and chrome://inspect stay readable.
+        debug { isMinifyEnabled = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }
+        release { isMinifyEnabled = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }
+    }
+    // Assets that can't be committed (the frameworks, Palm's other apps, the rootfs) are
+    // populated by fetch-assets.sh into local-assets/, which is gitignored. The fonts and
+    // wallpapers are committed under src/main/assets/luna with their NOTICE.
     sourceSets["main"].assets.srcDirs("src/main/assets", "local-assets")
     // Test apps users shouldn't get go in only when asked for: ./gradlew assembleDebug
     // -PtestApps. Releases leave them out (codepoet). test-apps/ is Lunacy's own (Notify

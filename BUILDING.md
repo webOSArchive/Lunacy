@@ -52,7 +52,13 @@ for it:
 ```
 
 A release is always built without `-PtestApps`. A patch that no longer applies is a
-build failure, not a silent skip. It needs the local clones under `Workbench/vendor/`, so a fresh
+build failure, not a silent skip. The script also keeps the APK small: Enyo's `support/` (the
+SDK's examples and enyo-compress) is left out, Node and its libc++ are stripped, and the
+frameworks' symlinks - which the device is full of, and which Gradle's asset merger refuses -
+are recorded in a manifest (`fw.links`, `rootfs.links`) and followed at run time rather than
+copied as files, which had shipped every framework twice. The Gradle build deflates every
+asset but the sounds and runs R8 on the debug build too (shrinking only, no renaming:
+`proguard-rules.pro`). The shell APK is about 48 MB. It needs the local clones under `Workbench/vendor/`, so a fresh
 checkout builds the shell but starts without Enyo until those are in place.
 
 ## Install and run

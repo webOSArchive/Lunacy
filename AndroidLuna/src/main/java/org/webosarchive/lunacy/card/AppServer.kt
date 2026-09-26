@@ -155,7 +155,7 @@ class AppServer(
             path.startsWith(SYSTEM_UI) -> asset("luna-systemui/" + path.removePrefix(SYSTEM_UI), path, resource)
             // The webOS root's list of the packages its ROM ships (WebosRoot), which App Catalog
             // reads as the apps it can revert to their shipped version.
-            path.startsWith(IPKGS) -> java.io.File(webosRoot, path).takeIf { it.isFile && it.canonicalPath.startsWith(java.io.File(webosRoot, IPKGS).canonicalPath) }
+            path.startsWith(IPKGS) -> java.io.File(webosRoot, path).takeIf { it.isFile && it.canonicalPath.startsWith(java.io.File(webosRoot, IPKGS).canonicalPath + java.io.File.separator) }
                 ?.let { respond(it.inputStream(), path, resource, app) }
             encodedPath.startsWith(EXTRACTFS) ->
                 extractfs(Uri.decode(encodedPath.removePrefix(EXTRACTFS)))
@@ -289,8 +289,35 @@ class AppServer(
     }
 
     private fun asset(assetPath: String, name: String, resource: Boolean = false): WebResourceResponse? {
-        val stream: InputStream = try { assets.open(assetPath) } catch (e: IOException) { return null }
+        val path = if (assetPath.startsWith("fw/")) "fw/" + followLinks(assetPath.removePrefix("fw/")) else assetPath
+        val stream: InputStream = try { assets.open(path) } catch (e: IOException) { return null }
         return respond(stream, name, resource)
+    }
+
+    /**
+     * The framework trees' symlinks, as fetch-assets.sh records them in fw.links: a link's
+     * path to the file it points at, both under assets/fw. The device's frameworks are full
+     * of them - version/1.0 is a link to submission/N, and Mojo's images and templates link
+     * into mojocommon file by file - and an APK can't hold a link, so the server follows them.
+     */
+    private val links: Map<String, String> by lazy {
+        val lines = try { assets.open("fw.links").bufferedReader().readLines() } catch (e: IOException) { emptyList() }
+        lines.mapNotNull { l -> l.split(' ', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] } }.toMap()
+    }
+
+    /** [path] under fw/ with every link on it followed, the longest prefix first, a few times over for a link inside a linked folder. */
+    private fun followLinks(path: String): String {
+        var p = path
+        repeat(8) {
+            var end = p.length
+            while (end > 0) {
+                val target = links[p.substring(0, end)]
+                if (target != null) { p = target + p.substring(end); break }
+                end = p.lastIndexOf('/', end - 1)
+            }
+            if (end <= 0) return p
+        }
+        return p
     }
 
     private fun respond(stream: InputStream, name: String, resource: Boolean = false,
@@ -350,12 +377,15 @@ class AppServer(
      * Measured on the HP 10 G2: the first app after Lunacy starts waits about 40 ms, later
      * ones 3-5 ms, and text in the page's first script measures as Prelude.
      */
-    private val fontWaits = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.CountDownLatch>()
+    // A page that never asks is forgotten once there are too many to be current: the oldest
+    // goes, not - as before - every page still loading.
+    private val fontWaits: MutableMap<String, java.util.concurrent.CountDownLatch> = java.util.Collections.synchronizedMap(
+        object : LinkedHashMap<String, java.util.concurrent.CountDownLatch>() {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, java.util.concurrent.CountDownLatch>?) = size > 64
+        })
     private val fontTokens = java.util.concurrent.atomic.AtomicLong()
 
     private fun fontToken(): String {
-        // A page that never asks is forgotten once there are too many to be current.
-        if (fontWaits.size > 64) fontWaits.clear()
         val t = fontTokens.incrementAndGet().toString(36) + java.lang.Long.toString(System.nanoTime() and 0xffffff, 36)
         fontWaits[t] = java.util.concurrent.CountDownLatch(1)
         return t

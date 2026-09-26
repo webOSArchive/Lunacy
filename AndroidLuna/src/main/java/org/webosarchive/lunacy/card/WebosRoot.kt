@@ -95,7 +95,34 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
         }
         manifest.parentFile?.mkdirs()
         manifest.writeText(now.entries.joinToString("") { "${it.value} ${it.key}\n" })
-        Log.i(AppServer.TAG, "rootfs: ${now.size} files from the ROM, $kept kept as changed")
+        // The ROM's symlinks (fetch-assets' rootfs.links), made as the device had them -
+        // version/1.0 -> ../submission/48 - since an APK can't carry a link. An earlier ROM
+        // laid the link's target down in its place; that copy goes.
+        val links = try { context.assets.open("$ROM.links").bufferedReader().readLines() } catch (e: IOException) { emptyList() }
+        for (l in links) {
+            val (rel, target) = l.split(' ', limit = 2).takeIf { it.size == 2 } ?: continue
+            relink(relativePath(rel.substringBeforeLast('/', ""), target), File(root, rel))
+        }
+        Log.i(AppServer.TAG, "rootfs: ${now.size} files and ${links.size} links from the ROM, $kept kept as changed")
+    }
+
+    /** A symlink at [at] to [target], replacing whatever was there unless it is that link already. */
+    private fun relink(target: String, at: File) {
+        if (runCatching { Os.readlink(at.path) }.getOrNull() == target) return
+        if (runCatching { Os.readlink(at.path) }.isSuccess) at.delete()
+        else if (at.isDirectory) at.deleteRecursively()
+        else if (at.exists()) at.delete()
+        at.parentFile?.mkdirs()
+        Os.symlink(target, at.path)
+    }
+
+    /** [to] as a relative path from the folder [from], both relative to the root: ("a/b/version", "a/b/submission/48") is "../submission/48". */
+    private fun relativePath(from: String, to: String): String {
+        val f = if (from.isEmpty()) emptyList() else from.split('/')
+        val t = to.split('/')
+        var common = 0
+        while (common < f.size && common < t.size && f[common] == t[common]) common++
+        return (List(f.size - common) { ".." } + t.drop(common)).joinToString("/")
     }
 
     private fun walkAssets(dir: String, rel: String = "", each: (String) -> Unit) {
@@ -209,6 +236,8 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
  * reach it. (Not an abstract socket: Node 12's libuv can't name one.)
  */
 class LunaSendServer(private val bus: Bus, private val socket: File) {
+    /** The writer thread's stop sign (compared by identity). */
+    private val END = String()
     private val random = SecureRandom()
     val address: String get() = socket.path
     private val tokens = java.util.concurrent.ConcurrentHashMap<String, String>()
@@ -239,17 +268,35 @@ class LunaSendServer(private val bus: Bus, private val socket: File) {
         }, "luna-send-accept").apply { isDaemon = true }.start()
     }
 
+    /** Ends the socket: the accept loop stops, and a command that connects now gets nothing. */
+    @Synchronized fun stop() {
+        runCatching { server?.close() }; runCatching { listening?.close() }
+        server = null; listening = null
+        socket.delete()
+    }
+
     private fun serve(c: LocalSocket) {
         val out = c.outputStream
-        val lock = Object()
+        // Replies are written by a thread of the connection's own, never by the bus's (the main
+        // thread, for most services): a reply longer than the socket's buffer - a db8 find of
+        // a few hundred objects - would otherwise hold the shell until the command read it.
+        val replies = java.util.concurrent.LinkedBlockingQueue<String>()
+        Thread({
+            while (true) {
+                val r = replies.take()
+                if (r === END) break
+                try { out.write((r + "\n").toByteArray()); out.flush() } catch (e: IOException) { break }
+            }
+            runCatching { c.close() }
+        }, "luna-send-write").apply { isDaemon = true }.start()
         var call: Bus.Call? = null
-        fun close() { runCatching { c.close() } }
+        fun close() { replies.offer(END) }
         try {
             val line = c.inputStream.bufferedReader().readLine() ?: return close()
             val m = JSONObject(line)
             val caller = tokens[m.optString("token")]
             if (caller == null) {
-                out.write((Bus.error("luna-send: not a caller Lunacy knows") + "\n").toByteArray()); return close()
+                replies.offer(Bus.error("luna-send: not a caller Lunacy knows")); return close()
             }
             val url = m.optString("url")
             val payload = m.optString("payload")
@@ -259,10 +306,8 @@ class LunaSendServer(private val bus: Bus, private val socket: File) {
             main.post {
                 // luna-send sends on the private bus unless told -P, as webOS's did.
                 call = bus.call(caller, url, payload, privateBus = !m.optBoolean("public")) { reply ->
-                    val ended = synchronized(lock) {
-                        try { out.write((reply.replace("\n", " ") + "\n").toByteArray()); out.flush(); false } catch (e: IOException) { true }
-                    }
-                    if (ended || !stays) close()
+                    replies.offer(reply.replace("\n", " "))
+                    if (!stays) close()
                 }
             }
             // The command closing its end (it had its -n replies, or was killed) ends the call.

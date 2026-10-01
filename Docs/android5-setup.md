@@ -222,6 +222,21 @@ Added to reproduce community bug reports. This is not a supported target yet.
 | Screen size and density overridden while testing | `adb shell wm size 1200x1920` and `wm density 240`, then `wm size reset` and `wm density reset` | Stands in for a 1920 x 1200, 240 dpi tablet (shell scale 2). Reset afterwards; the tablet is back at 800 x 1340. |
 | Stay awake on USB | `adb shell svc power stayon usb` | Keeps the screen on while it is driven over adb. Undo with `svc power stayon false`. |
 
+## Nexus 7 (2012), Android 5.1.1 (2026-10-01)
+
+Added as a second API 21-class device. It arrived on Android 4.3, which was assessed and declined
+as a target ([roadmap.md](roadmap.md), 2026-10-01); codepoet flashed Google's 5.1.1 factory image
+(LMY47V). Not a supported target yet beyond what the HP already covers.
+
+**Device:** Asus Nexus 7 (grouper), Android 5.1.1 (API 22, build LMY47V), `armeabi-v7a`, Tegra 3,
+1 GB of RAM, 1280 x 800 at 213 dpi, WebView 39 (1836172-arm).
+
+| Change | How | Note |
+|---|---|---|
+| USB debugging accepted | The prompt on the device, "Always allow" | Over the VM's USB the device drops during any large push (`failed to read copy response`), as the Nexus 5 did, so USB is used only to switch adb to TCP. |
+| adb over Wi-Fi | `adb tcpip 5555` over the cable, then `adb connect 192.168.10.198:5555` | Android 5 has no wireless-debugging pairing; `tcpip` is reset by a reboot and must be issued over USB again. |
+| Install Lunacy and the keyboard | `adb -s 192.168.10.198:5555 install -r out/AndroidLuna-arm32-debug.apk`, and the keyboard APK | The 32-bit flavour, target 24. |
+
 ## Pixel Tablet, Android 17 (2026-10-01)
 
 Added as the first 64-bit-only and first Android 17 device. Not a supported target yet.
@@ -240,6 +255,10 @@ WebView 149.0.7827.5. The memory limiter reports itself disabled on this build.
 | Storage allowed | The permission prompt at first launch, accepted by codepoet | |
 | Hello (`com.davidvogt.hello` 1.1.0) installed in Lunacy | `--es install http://localhost:8123/…` from the package mirror over `adb reverse`, the mirror served with `python3 -m http.server`; the server was stopped and the reverse removed afterwards | Proves plain http still works with the `arm64` flavour at target 28 (the network security config), and the install path on 64-bit. |
 | Screen kept on | `adb shell svc power stayon true`, and `wm dismiss-keyguard` once after the screen had locked | Keeps the screen on while charging, so screenshots over Wi-Fi don't hit the lock screen. Undo with `svc power stayon false`. |
+| "Modify system settings" allowed for Lunacy | Lunacy's First Use opened Android's screen for it; the toggle was turned on there | Testing First Use. The Screen & Lock brightness now sets Android's. |
+| Storage revoked and re-granted, First Use reset | `pm revoke` of both storage permissions, the `firstUseDone` key deleted from `shared_prefs/device.xml` with `run-as`, then `pm grant` of both after Android had refused twice | Walking First Use's refusal paths. Android 17 makes a second refusal final (`USER_FIXED`), which is what the page's "Open Android Settings" button is for. First Use was then finished normally, so the flag is set. |
+| Lunacy uninstalled and installed afresh, twice | `adb uninstall org.webosarchive.lunacy`, then `adb install out/AndroidLuna-arm64-debug.apk` | For codepoet to go through First Use by hand on a clean install; again after the Start Over and auto-prompt changes. Each uninstall took the installed apps, the derived device id and both grants with it; the keyboard stayed. In between, First Use was driven over DevTools (`Workbench/cdp.sh`, `adb forward` removed afterwards) to find why the Start Over link took no taps. |
+| First Use reset once more, home-app dialog cancelled | the `firstUseDone` key deleted again with `run-as`; Android's "Set Lunacy as your default home app?" dialog, opened from First Use's Home Screen page, was cancelled | Testing the Home Screen page. The Pixel Launcher stays the home app. |
 | 64-bit Node and busybox checked | `run-as org.webosarchive.lunacy`, running `liblunacynode.so -e …` (Node 12.19.0, arm64) and busybox through a temporary symlink named `busybox` in the app's data folder, removed afterwards | The webOS root had already linked `/bin/sh` and `/bin/busybox` to the arm64 busybox. |
 
 ## Nexus 5 test phone (2026-09-23)

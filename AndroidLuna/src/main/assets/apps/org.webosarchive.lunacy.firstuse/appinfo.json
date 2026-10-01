@@ -1,0 +1,11 @@
+{
+	"id": "org.webosarchive.lunacy.firstuse",
+	"version": "1.0.0",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "First Use",
+	"icon": "icon.png",
+	"visible": false,
+	"uiRevision": 2
+}

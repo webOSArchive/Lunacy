@@ -1,0 +1,119 @@
+/* Palm's First Use look: the blue page, its title and its translucent box, and the button
+   sizes, as in com.palm.app.firstuse's Firstuse.css (NOTICE). The layout rules at the end are
+   Lunacy's. */
+body, html {
+	margin: 0;
+	padding: 0;
+	height: 100%;
+	position: relative;
+}
+body, input, button {
+	font-family: Prelude Medium, Segoe UI, Arial, Verdana, Helvetica;
+}
+body {
+	background: #26427a url(../images/bg_body_p.png) no-repeat 50% 50%;
+	color: rgba(255,255,255,1);
+	background-size: 100%;
+}
+.contentDefaults {
+	text-align: left;
+	width: 504px;
+}
+.title {
+	font-size: 24px;
+	text-align: center;
+	margin: 50px 0 24px;
+}
+.subtitle {
+	font-size: 20px;
+	margin: 0 20px 18px;
+}
+.box {
+	border-radius: 12px;
+	-webkit-border-image: url(../images/bg_box.png) 12 repeat;
+	-webkit-box-sizing: border-box;
+	margin: 0 0 15px 0;
+	padding: 10px 10px 5px;
+	border-width: 12px;
+}
+.enyo-button {
+	height: 32px;
+	font-size: 20px;
+	line-height: 1.6em;
+	text-transform: none;
+	margin: 0 0 5px;
+}
+.enyo-button.enyo-button-disabled {
+	color: rgba(255,255,255,0.4);
+}
+.enyo-button.restart {
+	width: 130px;
+	bottom: 5px;
+	left: 5px;
+	background: none;
+	height: 36px;
+	position: fixed;
+	border-width: 0;
+	-webkit-border-image: none;
+	border-image: none;
+	-webkit-box-shadow: none;
+	text-transform: uppercase;
+	font-size: 14px;
+	color: rgba(255,255,255,0.9);
+}
+.enyo-button.restart .enyo-button-icon {
+	float: left;
+}
+.enyo-button.restart.enyo-button-down {
+	color: #fff;
+}
+.enyo-button.restart.enyo-button-down .enyo-button-icon {
+	background-position: 0 -32px;
+}
+.popup {
+	color: #555;
+}
+.popup .enyo-button {
+	height: 1.3em;
+	line-height: 1.3em;
+}
+.popup .enyo-text-body {
+	font-size: 18px;
+	padding: 0 0 15px 0;
+}
+.message {
+	color: #fbcf70;
+	line-height: 25px;
+	font-weight: bold;
+	background: url(../images/bg_message.png) no-repeat 0 0;
+	font-size: 14px;
+	padding: 0 0 0 30px;
+	margin: 0 0 20px 0;
+}
+
+/* Lunacy: one page at a time, its column centred on the card. */
+.firstuse, .firstuse .pages {
+	height: 100%;
+}
+.firstuse .page {
+	height: 100%;
+}
+.firstuse .box .text {
+	font-size: 20px;
+	line-height: 1.3em;
+	margin: 0 0 12px 0;
+}
+.firstuse .box .text.small {
+	font-size: 16px;
+	color: rgba(255,255,255,0.8);
+}
+.firstuse .ok {
+	color: rgba(255,255,255,0.9);
+	line-height: 25px;
+	font-size: 16px;
+	margin: 0 0 20px 0;
+}
+.firstuse .buttons .enyo-button {
+	width: 240px;
+	margin: 0 8px 5px;
+}

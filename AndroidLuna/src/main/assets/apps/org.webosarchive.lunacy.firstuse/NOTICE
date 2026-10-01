@@ -1,0 +1,13 @@
+Lunacy's First Use.
+
+webOS put a First Use app in front of a new device: language, Wi-Fi, terms and the Palm
+profile, each on its own page, before anything else could be reached. Lunacy's First Use asks
+for what Lunacy needs from Android instead, and is written for Lunacy (source/FirstUse.js, the
+stylesheet's layout rules).
+
+The look is Palm's. images/ and the matching rules in css/firstuse.css come from Palm's own
+First Use app (com.palm.app.firstuse, webOS 3.x), as reworked into webOS Archive's webOS
+Account Manager 1.1.12 (webos-doctor-ce, AddToImage/OOBE), whose art and stylesheet are
+Palm's unchanged. Copyright Palm, Inc. / Hewlett-Packard. Never released under an open
+licence; distributed by Lunacy as abandonware, like Mojo, the Prelude fonts and the TouchPad
+wallpapers: no owner has asserted rights since webOS was discontinued.

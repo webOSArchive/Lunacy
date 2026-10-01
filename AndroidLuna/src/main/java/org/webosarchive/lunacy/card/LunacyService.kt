@@ -21,6 +21,14 @@ import java.io.File
  *
  * - `system/getEnvironment` reports what Lunacy actually runs on, for Lunacy's Device Info.
  * - `android/openSettings` hands a setting that belongs to the host OS to Android's own UI.
+ * - `permissions/status` and `permissions/request` are Android's runtime permissions, for
+ *   Lunacy's First Use; `firstUse/done` is how First Use says it has run.
+ *
+ * [requestPermissions] is the shell's: a runtime permission is asked for by an Activity, and
+ * answered to it, with whether Android would put the question again (from Android 11 a
+ * refusal given twice is final, and later asks are refused without a dialog). [startForResult]
+ * is the shell's too, for the system dialogs that must be started for a result (the home
+ * role).
  */
 class LunacyService(
     private val context: Context,
@@ -28,6 +36,8 @@ class LunacyService(
     private val jsServices: JsServices,
     private val webosRoot: File,
     private val display: () -> JSONObject,
+    private val requestPermissions: (List<String>, (granted: Boolean, askAgain: Boolean) -> Unit) -> Unit,
+    private val startForResult: (Intent) -> Boolean,
 ) {
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     /** The two answers that take real time - Node's version is asked of Node, and a listing walks a folder - come from here. */
@@ -41,6 +51,113 @@ class LunacyService(
         bus.register(SERVICE, "android/settingsPanels") { _, _, reply ->
             reply(Bus.ok(mapOf("panels" to org.json.JSONArray(PANELS.keys.sorted()))))
         }
+        bus.register(SERVICE, "permissions/status") { _, _, reply -> reply(permissionsStatus()) }
+        bus.register(SERVICE, "permissions/request") { caller, p, reply -> requestPermission(caller, p, reply) }
+        bus.register(SERVICE, "firstUse/done") { caller, _, reply -> reply(firstUseDone(caller)) }
+    }
+
+    // ---- Android's permissions, for First Use ----
+
+    /**
+     * What Lunacy may do on this device. Each permission says whether Android asks for it at
+     * all (`asked`: from Android 6; Android 5 granted everything at install) and whether it
+     * is granted now. `storage` is the shared storage behind /media/internal;
+     * `systemSettings` is "Modify system settings", which Screen & Lock's brightness needs;
+     * `homeLauncher` is whether Lunacy is the device's home screen, which is offered on
+     * every Android version and is the owner's choice rather than a permission.
+     */
+    private fun permissionsStatus(): String {
+        val asked = Build.VERSION.SDK_INT >= 23
+        return Bus.ok(mapOf(
+            "storage" to JSONObject().put("asked", asked).put("granted", storageGranted()),
+            "systemSettings" to JSONObject().put("asked", asked).put("granted", systemSettingsGranted()),
+            "homeLauncher" to JSONObject().put("asked", true).put("granted", isDefaultHome()),
+            "firstUseDone" to firstUseDone(context),
+        ))
+    }
+
+    /** Whether Android starts Lunacy as the home screen: the default handler for the HOME intent is Lunacy's own activity. */
+    private fun isDefaultHome(): Boolean {
+        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val resolved = context.packageManager.resolveActivity(home, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+        return resolved?.activityInfo?.packageName == context.packageName
+    }
+
+    private fun storageGranted(): Boolean = STORAGE.all {
+        context.checkPermission(it, android.os.Process.myPid(), android.os.Process.myUid()) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun systemSettingsGranted(): Boolean = Build.VERSION.SDK_INT < 23 || Settings.System.canWrite(context)
+
+    /**
+     * Asks Android. Storage is a dialog, answered when the user has: the reply waits for it,
+     * and says whether Android would ask again (`askAgain`); once it won't, the only way left
+     * is Android's own settings screen for Lunacy, which `viaSettings` opens instead.
+     * "Modify system settings" has no dialog; Android grants it only on its own screen, which
+     * is opened, and the reply says so (`opened`): the caller sees the grant in the next
+     * `permissions/status`. Only Lunacy's own apps may ask: an installed app has no business
+     * putting Android's dialogs in front of the user.
+     */
+    private fun requestPermission(caller: String, p: JSONObject, reply: (String) -> Unit) {
+        if (!ownApp(caller)) {
+            reply(Bus.error("Only Lunacy's own apps can ask for Android's permissions (asked by $caller)", -1)); return
+        }
+        when (val which = p.optString("permission")) {
+            "storage" -> {
+                if (storageGranted()) { reply(Bus.ok(mapOf("permission" to which, "granted" to true))); return }
+                if (p.optBoolean("viaSettings")) {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + context.packageName))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    reply(try {
+                        context.startActivity(intent)
+                        Bus.ok(mapOf("permission" to which, "granted" to false, "opened" to true))
+                    } catch (e: Exception) {
+                        Log.w(AppServer.TAG, "permissions: can't open Lunacy's app settings", e)
+                        Bus.error("Couldn't open Android's settings for Lunacy: ${e.message}")
+                    })
+                    return
+                }
+                requestPermissions(STORAGE) { granted, askAgain ->
+                    reply(Bus.ok(mapOf("permission" to which, "granted" to granted, "askAgain" to askAgain)))
+                }
+            }
+            "systemSettings" -> {
+                if (systemSettingsGranted()) { reply(Bus.ok(mapOf("permission" to which, "granted" to true))); return }
+                val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, android.net.Uri.parse("package:" + context.packageName))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                try {
+                    context.startActivity(intent)
+                    reply(Bus.ok(mapOf("permission" to which, "granted" to false, "opened" to true)))
+                } catch (e: Exception) {
+                    Log.w(AppServer.TAG, "permissions: can't open the write-settings screen", e)
+                    reply(Bus.error("Couldn't open Android's screen for modifying system settings: ${e.message}"))
+                }
+            }
+            "homeLauncher" -> {
+                if (isDefaultHome()) { reply(Bus.ok(mapOf("permission" to which, "granted" to true))); return }
+                // From Android 10 the system puts up its own "set as default home" dialog, which
+                // has to be started for a result; before that, Android's Home settings screen.
+                val opened = if (Build.VERSION.SDK_INT >= 29) {
+                    val roles = context.getSystemService(android.app.role.RoleManager::class.java)
+                    if (roles != null && roles.isRoleAvailable(android.app.role.RoleManager.ROLE_HOME)) {
+                        startForResult(roles.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME))
+                    } else false
+                } else false
+                val ok = opened || runCatching {
+                    context.startActivity(Intent(Settings.ACTION_HOME_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); true
+                }.getOrElse { Log.w(AppServer.TAG, "permissions: can't open the home settings", it); false }
+                reply(if (ok) Bus.ok(mapOf("permission" to which, "granted" to false, "opened" to true))
+                      else Bus.error("Couldn't open Android's home screen choice"))
+            }
+            else -> reply(Bus.error("No permission \"$which\": storage, systemSettings or homeLauncher"))
+        }
+    }
+
+    /** First Use has run. The shell won't launch it again, and asks for storage itself from then on if it is missing. */
+    private fun firstUseDone(caller: String): String {
+        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can finish First Use (asked by $caller)", -1)
+        setFirstUseDone(context)
+        return Bus.ok()
     }
 
     // ---- the environment ----
@@ -281,6 +398,14 @@ class LunacyService(
 
     companion object {
         const val SERVICE = "org.webosarchive.lunacy"
+        /** Lunacy's First Use app, launched by the shell on the first start (ShellActivity). */
+        const val FIRST_USE_APP = "org.webosarchive.lunacy.firstuse"
+        private val STORAGE = listOf(android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        fun firstUseDone(context: Context): Boolean =
+            context.getSharedPreferences("device", Context.MODE_PRIVATE).getBoolean("firstUseDone", false)
+        fun setFirstUseDone(context: Context) {
+            context.getSharedPreferences("device", Context.MODE_PRIVATE).edit().putBoolean("firstUseDone", true).apply()
+        }
         private var cachedNode: String? = null
         /** The packages that can provide the WebView on the Android versions Lunacy targets. */
         private val WEBVIEW_PACKAGES = listOf(

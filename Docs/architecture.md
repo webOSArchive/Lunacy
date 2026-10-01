@@ -51,7 +51,19 @@ What this target means:
   reads "unknown" (the derived device id is stored the first time it is computed, so an
   install keeps its id across that change), background-started services and manifest
   receivers for implicit broadcasts are refused (Lunacy has neither), and Android's autofill
-  reaches WebView forms (to check against the TouchPad). Android 5 ignores a target above its
+  reaches WebView forms (to check against the TouchPad).
+- **First Use.** A webOS device put a First Use app in front of a new owner. Lunacy's
+  (`assets/apps/org.webosarchive.lunacy.firstuse`, no launcher icon) is launched by the shell
+  on the first start and asks for the Android permissions above, one page each, in Palm's
+  First Use look; on Android 5, which granted them at install, it is a welcome and Done. It
+  talks to Lunacy's own service: `permissions/status`, `permissions/request` (storage puts up
+  Android's dialog and answers when the user has, with whether Android would ask again;
+  "Modify system settings" opens Android's own screen; the home screen asks for the home role
+  from Android 10, and opens the Home settings before that) and `firstUse/done`. A page that
+  waits on something granted on Android's own screen asks for the status again every couple
+  of seconds while it waits. Only Lunacy's own
+  apps may call the last two. After it has run, the shell asks for storage itself at startup
+  if it is still missing, as it did before. Android 5 ignores a target above its
   own level, so this changes nothing there. On Android 6 and later it means: storage and
   `WRITE_SETTINGS` are asked for while the app runs (see those entries below), and the shell
   opts out of split screen (`resizeableActivity="false"`), which a target of 24 turns on by

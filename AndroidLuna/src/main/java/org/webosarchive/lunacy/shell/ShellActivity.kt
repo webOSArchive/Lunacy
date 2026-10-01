@@ -143,7 +143,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             // What the ROM brought: its services and their db8 kinds, and any system apps.
             runOnUiThread { jsServices.reload(); appsChanged(); FontWarmer(this, server).warmWhenIdle() }
         }, "webos-root").start()
-        askForStorage()
 
         // The dock draws an icon being dragged out of it above its own bounds.
         val root = FrameLayout(this).apply { clipChildren = false }
@@ -291,6 +290,15 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         statusBar.onTitleTap = { if (exhibitionOn) toggleExhibitionMenu() else toggleAppMenu() }
         onCardView()
         goImmersive()
+
+        // First Use, as a webOS device put it in front of a new owner: once, on the first
+        // start, it asks for Android's permissions (LunacyService). After it has run, the
+        // shell asks for storage itself if it is still missing, as it did before First Use.
+        if (!org.webosarchive.lunacy.card.LunacyService.firstUseDone(this)) {
+            cards.post { launch(org.webosarchive.lunacy.card.LunacyService.FIRST_USE_APP) }
+        } else {
+            askForStorage()
+        }
 
         handleIntent(intent)
     }
@@ -836,6 +844,30 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val wanted = arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
         val missing = wanted.filter { checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
         if (missing.isNotEmpty()) requestPermissions(missing.toTypedArray(), 1)
+    }
+
+    /** Runtime permission requests made on the bus (LunacyService), each answered to its caller when Android has. */
+    private val permissionCallbacks = mutableMapOf<Int, (Boolean, Boolean) -> Unit>()
+    private var nextPermissionCode = 100
+
+    /**
+     * Asks Android for [permissions] and calls [done] with whether every one was granted and,
+     * if not, whether Android would still show the question next time: from Android 11 a
+     * refusal given twice is final, and a later ask is refused with no dialog. Before Android 6
+     * they were granted at install.
+     */
+    private fun askPermissions(permissions: List<String>, done: (granted: Boolean, askAgain: Boolean) -> Unit) {
+        if (android.os.Build.VERSION.SDK_INT < 23) { done(true, false); return }
+        val code = nextPermissionCode++
+        permissionCallbacks[code] = done
+        requestPermissions(permissions.toTypedArray(), code)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        val granted = grantResults.isNotEmpty() && grantResults.all { it == android.content.pm.PackageManager.PERMISSION_GRANTED }
+        val askAgain = android.os.Build.VERSION.SDK_INT >= 23 && permissions.any { shouldShowRequestPermissionRationale(it) }
+        permissionCallbacks.remove(requestCode)?.invoke(granted, askAgain)
     }
 
     /**
@@ -1475,7 +1507,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         audio.register(bus)
         // Lunacy's own service, on its own name: the environment it really runs in, and
         // Android's settings screens for the settings Android owns.
-        org.webosarchive.lunacy.card.LunacyService(this, registry, jsServices, jsServices.root) { displayInfo() }.register(bus)
+        org.webosarchive.lunacy.card.LunacyService(this, registry, jsServices, jsServices.root, { displayInfo() }, ::askPermissions,
+            { intent -> runCatching { startActivityForResult(intent, 200) }.isSuccess }).register(bus)
         org.webosarchive.lunacy.card.ConnectionManager(this).register(bus)
         // Secrets, where the accounts service keeps each account's credentials.
         org.webosarchive.lunacy.card.KeyManager(java.io.File(filesDir, "keymanager.json")).register(bus)

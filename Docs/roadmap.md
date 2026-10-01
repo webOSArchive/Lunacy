@@ -21,6 +21,26 @@ Run the same day on a Pixel Tablet (Android 17, arm64 only): the 32-bit APK is r
 older-version warning, and an app installs over plain http
 ([android5-setup.md](android5-setup.md)).
 
+*First Use, the same evening.* Lunacy has a First Use app (`org.webosarchive.lunacy.firstuse`,
+bundled, no launcher icon), as a webOS device put one in front of a new owner. The shell
+launches it on the first start; it asks for what Lunacy needs from Android - the shared
+storage behind `/media/internal`, and "Modify system settings" for Screen & Lock's brightness -
+one page each, skipping what the Android version doesn't ask for (Android 5: a welcome and
+Done), then says it has run (`firstUse/done`) and closes. The pages are Palm's First Use's
+in look (its background, box and buttons, with a NOTICE); the words are Lunacy's. The bus
+gained `permissions/status` and `permissions/request` on Lunacy's own service, callable by
+Lunacy's own apps only; a refusal Android has made final turns the page's button into one
+that opens Android's settings for Lunacy, and the page notices a grant made there. From
+codepoet's first walk-through: the storage page puts Android's dialog up as it opens, rather
+than waiting for a tap; going on without a grant is labelled Skip; and Palm's "Start Over"
+link sits bottom left with its confirmation (above the pane's views, which carry a z-index
+of their own). A Home Screen page (codepoet) offers to make Lunacy the device's home screen:
+from Android 10 through the system's own "set as default home" dialog (the home role), before
+that through Android's Home settings screen; it is a choice, not a permission, so it is
+offered on every Android version. Walked through on the Pixel Tablet, including the refusal
+paths; the home dialog was cancelled there, so the tablet's home app is unchanged. Not yet compared with the
+TouchPad's own First Use at the same scale, and not yet run on the HP.
+
 *16 KB pages, the same evening.* Android 17 put up an "Android App Compatibility" dialog on
 every launch of the (debuggable) build, naming `libnode.so` and `libc++_shared.so` as not
 16 KB-aligned: both were other projects' prebuilts linked at 4 KB. The 64-bit build is now
@@ -635,15 +655,12 @@ corpus survey says how many apps this phase can reach, and whether it is worth d
     user agent. None of it applies at target 24.
   - On 17 the keyboard no longer comes back by itself after a rotation; check what the
     TouchPad did. Add WebView 140 to the versions the suite runs on.
-- **A First Use app** (codepoet, 2026-10-01): webOS's first-run app, remade to ask for the
-  Android permissions Lunacy needs where it now asks piecemeal (`ShellActivity.askForStorage`;
-  "Modify system settings" from the brightness slider): storage on Android 6 and later,
-  Bluetooth on 12 and later, notification access for launcher mode, the local network later.
-  The look is Palm's First Use app on the TouchPad. The model is webOS Archive's webOS Account
-  app (`org.webosarchive.webosaccount` 1.1.12, in webos-doctor-ce under `AddToImage/OOBE`),
-  which is Palm's First Use (`FirstUse.js`, `css/Firstuse.css`, the `bg_*` art, Enyo 0.10) put
-  to another purpose on real hardware: its language, terms, sign-in and Wi-Fi pages are the
-  ones to mimic.
+- **First Use: what is left** (the app is in, 2026-10-01). Compare it with the TouchPad's own
+  First Use at the same scale (the model is webOS Archive's webOS Account app,
+  `org.webosarchive.webosaccount` 1.1.12 in webos-doctor-ce under `AddToImage/OOBE`, which is
+  Palm's First Use put to another purpose). Pages still to come as the targets rise:
+  Bluetooth from a target of 31, notification access for launcher mode, the local network at
+  37. A way to run it again from Device Info.
 - Launcher mode: Lunacy as the Android home screen, with Android apps shown alongside webOS
   cards. A proof of concept is in (`shell/AndroidApps.kt`): Android's apps in the launcher,
   the dock and Just Type, launched and uninstalled through Android. Reviewed 2026-09-26; what

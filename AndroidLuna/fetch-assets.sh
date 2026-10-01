@@ -126,19 +126,46 @@ for s in Sampler HelloWorld; do
 done
 
 # JS services. Node is nodejs-mobile 0.3.3 (Node 12.19): the last release whose libnode.so loads
-# on Android 5 (later ones need API 24). tools/node-launcher.cpp makes it an executable, built
-# with NDK r21, whose libc++_shared.so matches. Palm's service frameworks are the reference
-# TouchPad's (Workbench/vendor/touchpad/services-fw), with their version symlinks resolved.
-NDK=${ANDROID_NDK:-$HOME/Android/Sdk/ndk/21.4.7075529}
+# on Android 5 (later ones need API 24). tools/node-launcher.cpp makes it an executable. Both
+# ARM ABIs are built: 32-bit for the Android 5 test devices (webOS's own CPU class), 64-bit for
+# the SoCs that can no longer run 32-bit code at all (Pixel 7 and later, and most phones
+# since). Android installs the one the device runs.
+#
+# 16 KB memory pages: a device with them loads only libraries whose segments are 16 KB
+# aligned, and Android 17 names any that aren't in a dialog on every launch of a debuggable
+# build. nodejs-mobile's prebuilt libnode.so is 4 KB aligned, so for 64-bit tools/build-node.sh
+# rebuilds it from the same source with the alignment, into v0.3.3-16k/; that copy is used
+# when it exists, and the prebuilt otherwise, with a warning. 32-bit stays on the prebuilt
+# (codepoet, 2026-10-01): it is the one proven on the Android 5 devices, and no 32-bit device
+# has 16 KB pages. libc++_shared.so and the launcher come from NDK r28, which aligns 64-bit
+# libraries to 16 KB by itself. Palm's service frameworks are the reference TouchPad's
+# (Workbench/vendor/touchpad/services-fw), with their version symlinks resolved.
+NDK=${ANDROID_NDK:-$HOME/Android/Sdk/ndk/android-ndk-r28c}
 TC=$NDK/toolchains/llvm/prebuilt/linux-x86_64
-NM=$V/nodejs-mobile/v0.3.3/bin/armeabi-v7a
-J=local-jni/armeabi-v7a
-rm -rf local-jni && mkdir -p $J
-# Both stripped: nodejs-mobile ships libnode.so with its symbol tables and DWARF (10 MB of
-# the 44), and the NDK's libc++_shared.so is its unstripped copy (4.1 MB for 0.5).
-cp $NM/libnode.so $TC/sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so $J/
-$TC/bin/llvm-strip --strip-all $J/libnode.so $J/libc++_shared.so
-$TC/bin/armv7a-linux-androideabi21-clang++ -pie -fPIE -O2 -s -o $J/liblunacynode.so tools/node-launcher.cpp -L$NM -lnode
+[ -x $TC/bin/clang++ ] || { echo "fetch-assets: no NDK at $NDK (set ANDROID_NDK; BUILDING.md)" >&2; exit 1; }
+rm -rf local-jni
+for ABI in armeabi-v7a arm64-v8a; do
+    case $ABI in
+        armeabi-v7a) CXX=armv7a-linux-androideabi21-clang++; SYS=arm-linux-androideabi ;;
+        arm64-v8a)   CXX=aarch64-linux-android21-clang++;    SYS=aarch64-linux-android ;;
+    esac
+    NM=$V/nodejs-mobile/v0.3.3/bin/$ABI
+    if [ $ABI = arm64-v8a ]; then
+        NM16=$V/nodejs-mobile/v0.3.3-16k/bin/$ABI
+        if [ -f $NM16/libnode.so ]; then NM=$NM16; else echo "fetch-assets: $ABI: no 16 KB libnode.so (tools/build-node.sh); using nodejs-mobile's 4 KB prebuilt" >&2; fi
+    fi
+    J=local-jni/$ABI
+    mkdir -p $J
+    # Both stripped: nodejs-mobile ships libnode.so with its symbol tables and DWARF (10 MB of
+    # the 44), and the NDK's libc++_shared.so is its unstripped copy.
+    cp $NM/libnode.so $TC/sysroot/usr/lib/$SYS/libc++_shared.so $J/
+    $TC/bin/llvm-strip --strip-all $J/libnode.so $J/libc++_shared.so
+    # max-page-size aligns the launcher's LOAD segments and common-page-size ends its RELRO
+    # region on a 16 KB boundary; NDK r28 does both by default for 64-bit, and the options
+    # keep the 32-bit build the same.
+    $TC/bin/$CXX -pie -fPIE -O2 -s -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384 -o $J/liblunacynode.so tools/node-launcher.cpp -L$NM -lnode -llog
+    echo "node: $ABI from $NM"
+done
 # The webOS root filesystem's ROM (WebosRoot.kt): what the TouchPad's rootfs held for JS
 # services and package scripts, laid into Lunacy's files/webos. Palm's service frameworks and
 # jsservicelauncher, the system's own JS services and the db8 kinds they own, from the
@@ -202,18 +229,35 @@ reference TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. / LG Electronics.
 NOTICE
 
 # busybox: webOS's /bin and /usr/bin were busybox, and package scripts are written for it.
-# The static ARM build busybox.net publishes, checked against the hash it was first fetched
-# with; packaged as a library so that Android installs it where it may be run.
-BB=$V/busybox/busybox-armv7l
-BB_URL=https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/busybox-armv7l
-BB_SHA=cd04052b8b6885f75f50b2a280bfcbf849d8710c8e61d369c533acf307eda064
-[ -f $BB ] || { mkdir -p $(dirname $BB) && curl -sfL -o $BB $BB_URL; }
-echo "$BB_SHA  $BB" | sha256sum -c --quiet || { echo "fetch-assets: $BB isn't the busybox it should be" >&2; exit 1; }
-cp $BB $J/libbusybox.so
+# Packaged as a library so that Android installs it where it may be run, one per ABI, each
+# checked against the hash it was first fetched with. 32-bit is the static ARM build
+# busybox.net publishes (1.31.0). busybox.net has no 64-bit ARM build, so 64-bit is Alpine's
+# busybox-static package (1.36.1), a static musl build like busybox.net's.
+BBD=$V/busybox
+mkdir -p $BBD
+fetch_checked() { # file url sha256
+    [ -f "$1" ] || curl -sfL -o "$1" "$2"
+    echo "$3  $1" | sha256sum -c --quiet || { echo "fetch-assets: $1 isn't the busybox it should be" >&2; exit 1; }
+}
+BB32=$BBD/busybox-armv7l
+fetch_checked $BB32 https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/busybox-armv7l \
+    cd04052b8b6885f75f50b2a280bfcbf849d8710c8e61d369c533acf307eda064
+cp $BB32 local-jni/armeabi-v7a/libbusybox.so
+BB64=$BBD/busybox-static-1.36.1-r31-aarch64.apk
+fetch_checked $BB64 https://dl-cdn.alpinelinux.org/alpine/v3.20/main/aarch64/busybox-static-1.36.1-r31.apk \
+    1d8e7a7fc2ed69bdb8eb7be9d962489c21a0f75b72d8a325437c8a09d4cfac70
+tar -xzOf $BB64 bin/busybox.static > local-jni/arm64-v8a/libbusybox.so
+echo "ebd2865edcab0b590c7d0edb70d3e782cbfb541e518a390ced3a3e186509bc7f  local-jni/arm64-v8a/libbusybox.so" | sha256sum -c --quiet ||
+    { echo "fetch-assets: the 64-bit busybox isn't the one it should be" >&2; exit 1; }
 cat > $L/rootfs/NOTICE.busybox <<'NOTICE'
-busybox 1.31.0 (libbusybox.so in the APK): the static armv7l build from
-https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/ , unmodified.
-GPL-2.0. Source: https://busybox.net/downloads/busybox-1.31.0.tar.bz2
+busybox (libbusybox.so in the APK), unmodified, GPL-2.0:
+- armeabi-v7a: 1.31.0, the static armv7l build from
+  https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/ .
+  Source: https://busybox.net/downloads/busybox-1.31.0.tar.bz2
+- arm64-v8a: 1.36.1, bin/busybox.static from Alpine Linux's busybox-static-1.36.1-r31 package
+  (https://dl-cdn.alpinelinux.org/alpine/v3.20/main/aarch64/). Source:
+  https://busybox.net/downloads/busybox-1.36.1.tar.bz2 with Alpine's patches
+  (https://gitlab.alpinelinux.org/alpine/aports/-/tree/v3.20-stable/main/busybox).
 NOTICE
 # The ROM's symlinks, made on the device as links (WebosRoot.syncRom), and its file list, so
 # that Lunacy needn't walk it with AssetManager.list(), which reads the APK's whole asset

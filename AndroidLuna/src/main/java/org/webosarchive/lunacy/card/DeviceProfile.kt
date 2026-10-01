@@ -287,11 +287,16 @@ enum class DeviceProfile(
          * This device's own id: the same after a reinstall, different on another device.
          *
          * ANDROID_ID survives reinstalling and changes on a factory reset, which is as close
-         * to a webOS nduid as Android offers. From API 26 it is per signing key as well, so an
-         * unsigned rebuild would land on a different id; a later target should keep the first
-         * one it computes instead (a ratchet item).
+         * to a webOS nduid as Android offers. The first id computed is kept in the app's
+         * preferences and reused, because the ingredients drift under the device: from API 26
+         * ANDROID_ID is per signing key, and from a target of 26 `Build.SERIAL` reads "unknown"
+         * (the 64-bit build targets 28), so a build change would otherwise hand the same
+         * device a new id. A reinstall still clears the preferences and recomputes the id
+         * from the same hardware, which is what "the same after a reinstall" relies on.
          */
         fun derivedNduid(context: Context): String {
+            val prefs = context.getSharedPreferences("device", Context.MODE_PRIVATE)
+            prefs.getString("derivedNduid", null)?.let { return it }
             @Suppress("HardwareIds")
             val androidId = android.provider.Settings.Secure.getString(
                 context.contentResolver, android.provider.Settings.Secure.ANDROID_ID).orEmpty()
@@ -299,8 +304,10 @@ enum class DeviceProfile(
             val serial = Build.SERIAL.orEmpty()
             val seed = "lunacy-nduid:" + androidId + ":" + serial + ":" + Build.MANUFACTURER + ":" + Build.MODEL
             // A webOS nduid is 40 hex digits, which is exactly a SHA-1.
-            return java.security.MessageDigest.getInstance("SHA-1")
+            val id = java.security.MessageDigest.getInstance("SHA-1")
                 .digest(seed.toByteArray()).joinToString("") { "%02x".format(it) }
+            prefs.edit().putString("derivedNduid", id).apply()
+            return id
         }
 
         /**

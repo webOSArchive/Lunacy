@@ -222,6 +222,26 @@ Added to reproduce community bug reports. This is not a supported target yet.
 | Screen size and density overridden while testing | `adb shell wm size 1200x1920` and `wm density 240`, then `wm size reset` and `wm density reset` | Stands in for a 1920 x 1200, 240 dpi tablet (shell scale 2). Reset afterwards; the tablet is back at 800 x 1340. |
 | Stay awake on USB | `adb shell svc power stayon usb` | Keeps the screen on while it is driven over adb. Undo with `svc power stayon false`. |
 
+## Pixel Tablet, Android 17 (2026-10-01)
+
+Added as the first 64-bit-only and first Android 17 device. Not a supported target yet.
+
+**Device:** Google Pixel Tablet (tangorpro), Android 17 (API 37, build CP3A.260905.009), `arm64-v8a`
+only, Tensor G2, 7.6 GB of RAM, 2560 x 1600 at 320 dpi (shell scale 2), 4 KB memory pages,
+WebView 149.0.7827.5. The memory limiter reports itself disabled on this build.
+
+| Change | How | Note |
+|---|---|---|
+| Wireless debugging | Developer options → Wireless debugging; paired once with `adb pair <ip>:<pairing port> <code>`, then `adb connect <ip>:<port>` | Over USB the tablet enumerates and drops within a second on the VM's emulated USB 2.0 controller, so USB is not used. The connect port changes after a reboot; pairing holds. |
+| Install Lunacy | `adb install -r out/AndroidLuna-arm64-debug.apk` | The 32-bit APK is refused first (`INSTALL_FAILED_NO_MATCHING_ABIS`), as expected on an arm64-only SoC. The 64-bit one installs plainly. Installed three times the same day: the split build at target 24, the one with the relinked launcher, and the `arm64` flavour at target 28. The last of these computed the device's derived id afresh with `Build.SERIAL` reading "unknown" (and stored it, which later installs keep), so this tablet's `nduid` is not the one the target-24 build reported earlier that day. No account was signed in. |
+| Install the keyboard | `adb install -r out/LunaKeyboard-debug.apk` | |
+| "Android App Compatibility" dialog | OK, each launch, until the 18:06 build | Android 17 shows it for a *debuggable* app whose native libraries aren't 16 KB-aligned, listing them: `libnode.so`, `libc++_shared.so`, and "Unknown error" for the two static executables (busybox, the launcher). The device itself has 4 KB pages. With libc++ and the launcher from NDK r28 (17:52 build) only `libnode.so` was still named, the rest "Unknown error" - which is how a passing library is listed beside a failing one. With `libnode.so` rebuilt 16 KB-aligned (18:06 build) the dialog is gone: no `AppWarnings` line at launch, Node 12.19.0 runs. |
+| "Built for an older version of Android" dialog | OK, once | Android 17's warning threshold is target 28 (`ro.build.version.min_supported_target_sdk`); the install floor is still 24. Shown on the first launch after an install only, and gone with the `arm64` flavour at target 28. |
+| Storage allowed | The permission prompt at first launch, accepted by codepoet | |
+| Hello (`com.davidvogt.hello` 1.1.0) installed in Lunacy | `--es install http://localhost:8123/…` from the package mirror over `adb reverse`, the mirror served with `python3 -m http.server`; the server was stopped and the reverse removed afterwards | Proves plain http still works with the `arm64` flavour at target 28 (the network security config), and the install path on 64-bit. |
+| Screen kept on | `adb shell svc power stayon true`, and `wm dismiss-keyguard` once after the screen had locked | Keeps the screen on while charging, so screenshots over Wi-Fi don't hit the lock screen. Undo with `svc power stayon false`. |
+| 64-bit Node and busybox checked | `run-as org.webosarchive.lunacy`, running `liblunacynode.so -e …` (Node 12.19.0, arm64) and busybox through a temporary symlink named `busybox` in the app's data folder, removed afterwards | The webOS root had already linked `/bin/sh` and `/bin/busybox` to the arm64 busybox. |
+
 ## Nexus 5 test phone (2026-09-23)
 
 Added to reproduce a community report. Phones are not a supported target yet.

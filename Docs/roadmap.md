@@ -3,7 +3,38 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-09-26)
+## Where things stand (2026-10-01)
+
+**2026-10-01: 64-bit ARM, Android 17 and a 2012 Nexus 7.** Node, its libc++, the launcher and
+busybox are now built for `arm64-v8a` as well as `armeabi-v7a` (`fetch-assets.sh`), so the APK
+installs on the 64-bit-only SoCs (Pixel 7 and later, most phones since) that refused it with
+`INSTALL_FAILED_NO_MATCHING_ABIS`; the 64-bit busybox is Alpine's static build, busybox.net
+having none. The build makes one APK per ABI (codepoet) rather than one 60 MB APK with both:
+`AndroidLuna-arm32-debug.apk` and `AndroidLuna-arm64-debug.apk`, 47 MB each, as two product
+flavours with their own targets: `arm32` keeps 24, the proven setting for the Android 5
+devices; `arm64` targets 28 (codepoet), which ends Android 17's "built for an older version"
+warning and is the last target with legacy external storage. With it: plain http is allowed
+by a network security config, WebView Safe Browsing is off, and the derived device id is
+stored the first time it is computed ([architecture.md](architecture.md), "Platform target").
+Run the same day on a Pixel Tablet (Android 17, arm64 only): the 32-bit APK is refused, the
+64-bit one installs, 64-bit Node 12 and busybox run, the target-28 build launches with no
+older-version warning, and an app installs over plain http
+([android5-setup.md](android5-setup.md)).
+
+*16 KB pages, the same evening.* Android 17 put up an "Android App Compatibility" dialog on
+every launch of the (debuggable) build, naming `libnode.so` and `libc++_shared.so` as not
+16 KB-aligned: both were other projects' prebuilts linked at 4 KB. The 64-bit build is now
+clean: libc++ and the launcher come from NDK r28c, and `libnode.so` is rebuilt from the
+nodejs-mobile 0.3.3 source with the two linker options the alignment needs
+(`AndroidLuna/tools/build-node.sh`; the host-side V8 tools also needed `<cstdint>` under GCC
+13). The dialog is gone on the Pixel Tablet and Node 12.19 runs there. The 32-bit build keeps
+nodejs-mobile's prebuilt, the one proven on the Android 5 devices (codepoet). Android 17 (API 37) was read for what it does to a
+target-24, sideloaded Lunacy: it keeps the install floor at 24 but warns at first launch below
+target 28 (measured), and nearly everything else in it applies only to apps targeting 37; what
+does reach Lunacy is listed under "Later". A 2012
+Nexus 7 on Android 4.3 was looked at and declined as a target (legacy WebKit, no DevTools, no
+immersive mode, Node built for API 21); codepoet is flashing it to 5.1.1, where it is simply
+another API 21 device. Added to the list: a First Use app (below, "Later").
 
 **2026-09-26, later: 0.3.0. The APK at 48 MB, the startup card first, and a review's fixes.** The keyboard is 0.3.0 too, so the pair is easy to match up. The
 shell APK was 82 MB. Text and fonts were stored uncompressed, Enyo's SDK `support/` folder
@@ -581,6 +612,38 @@ corpus survey says how many apps this phase can reach, and whether it is worth d
     and later).
   - Add the WebSQL polyfill when a target's WebView drops WebSQL.
   - Move to current AndroidX once `minSdk` rises.
+  - **Developer verification** (Google, not an Android version: it arrives through Google
+    System Updates). From 2026-09-30 in Brazil, Indonesia, Singapore and Thailand, and
+    worldwide in 2027, an APK from an unregistered developer installs only over `adb` or
+    through Android's "advanced flow" (a developer option, a reboot and a 24-hour wait).
+    Either codepoet registers (a limited-distribution account opened in August 2026) or the
+    install guide documents the advanced flow. Both APKs are affected. codepoet decides.
+  - **16 KB memory pages: test on a device that has them.** The 64-bit build's libraries are
+    all 16 KB-aligned now (2026-10-01, below), and Android 17's dialog is gone on the 4 KB
+    Pixel Tablet, but no 16 KB-page device has run it yet.
+  - **Target 28 on the 64-bit build: what is left to check.** Android's autofill reaches
+    WebView forms from a target of 26; see what it does in a card against the TouchPad.
+    Android 8.0 alone refuses an orientation lock on a translucent activity (the shell's
+    theme is opaque, so this should not bite). The 32-bit build stays at 24, so the HP is
+    unaffected.
+  - **Android 17's memory limiter** kills any app's process past a RAM-derived limit (exit
+    reason `MemoryLimiter:AnonSwap`; the figures aren't published). On the Pixel Tablet's
+    Android 17 it reports itself disabled, so there was nothing to measure; check again on
+    another 17 device or a later build.
+  - **If the target ever reaches 37:** `ACCESS_LOCAL_NETWORK` for the loopback app server and
+    LAN services such as Plex; orientation locks ignored on tablets; the shorter WebView
+    user agent. None of it applies at target 24.
+  - On 17 the keyboard no longer comes back by itself after a rotation; check what the
+    TouchPad did. Add WebView 140 to the versions the suite runs on.
+- **A First Use app** (codepoet, 2026-10-01): webOS's first-run app, remade to ask for the
+  Android permissions Lunacy needs where it now asks piecemeal (`ShellActivity.askForStorage`;
+  "Modify system settings" from the brightness slider): storage on Android 6 and later,
+  Bluetooth on 12 and later, notification access for launcher mode, the local network later.
+  The look is Palm's First Use app on the TouchPad. The model is webOS Archive's webOS Account
+  app (`org.webosarchive.webosaccount` 1.1.12, in webos-doctor-ce under `AddToImage/OOBE`),
+  which is Palm's First Use (`FirstUse.js`, `css/Firstuse.css`, the `bg_*` art, Enyo 0.10) put
+  to another purpose on real hardware: its language, terms, sign-in and Wi-Fi pages are the
+  ones to mimic.
 - Launcher mode: Lunacy as the Android home screen, with Android apps shown alongside webOS
   cards. A proof of concept is in (`shell/AndroidApps.kt`): Android's apps in the launcher,
   the dock and Just Type, launched and uninstalled through Android. Reviewed 2026-09-26; what

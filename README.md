@@ -73,8 +73,10 @@ Lunacy is sideloaded: there is no store listing.
 
 1. **Allow unknown sources.** Settings → Security → Unknown sources. (On Android 8 and later
    this is asked for per app, when you open the APK.)
-2. **Install `AndroidLuna.apk`** - copy it to the device and tap it, or `adb install`. Open
-   **Lunacy** from the Android launcher. The card view, the launcher and the bundled apps are
+2. **Install the APK for your device** - `AndroidLuna-arm64.apk` for a 64-bit device,
+   `AndroidLuna-arm32.apk` for a 32-bit one (every Android 5 device; if unsure, try the
+   64-bit one first, which a 32-bit device refuses). Copy it to the device and tap it, or
+   `adb install`. Open **Lunacy** from the Android launcher. The card view, the launcher and the bundled apps are
    there; **App Catalog**, on the launcher's Downloads tab, is where the apps come from.
 3. **Optional: the webOS keyboard.** Install `LunaKeyboard.apk`, open **LunaKeyboard** and
    use its two buttons - switch it on in Android's settings, then choose it while a text field

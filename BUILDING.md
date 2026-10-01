@@ -7,8 +7,12 @@ optional companion keyboard. Neither depends on the other.
 
 - **JDK 17** and the **Android SDK** (`compileSdk 35`). Point Gradle at the SDK with a
   `local.properties` at the top of the repo: `sdk.dir=/path/to/Android/Sdk`.
-- **Android NDK r21e**, only for `fetch-assets.sh`: it compiles the small launcher that lets
-  Node run as a library for JS services. Skip it and everything but JS services still builds.
+- **Android NDK r28c** (`android-ndk-r28c` under the SDK's `ndk/`, or `ANDROID_NDK`), only for
+  `fetch-assets.sh`: it compiles the small launcher that lets Node run as a library for JS
+  services and supplies a 16 KB-aligned libc++. Skip it and everything but JS services still
+  builds. **NDK r21e** as well, only to rebuild Node itself with 16 KB alignment
+  (`AndroidLuna/tools/build-node.sh`); without that, `fetch-assets.sh` falls back to
+  nodejs-mobile's 4 KB prebuilt and says so.
 - **Python 3 with Pillow**, for the tools that generate assets and compare screenshots.
 - A device or emulator running **Android 5.0 (API 21)** or later.
 
@@ -58,13 +62,17 @@ frameworks' symlinks - which the device is full of, and which Gradle's asset mer
 are recorded in a manifest (`fw.links`, `rootfs.links`) and followed at run time rather than
 copied as files, which had shipped every framework twice. The Gradle build deflates every
 asset but the sounds and runs R8 on the debug build too (shrinking only, no renaming:
-`proguard-rules.pro`). The shell APK is about 48 MB. It needs the local clones under `Workbench/vendor/`, so a fresh
-checkout builds the shell but starts without Enyo until those are in place.
+`proguard-rules.pro`). The shell builds one APK per ABI, each about 47 MB:
+`AndroidLuna-arm32-debug.apk` for 32-bit devices (every Android 5 one), targeting API 24, and
+`AndroidLuna-arm64-debug.apk` for 64-bit ones, targeting API 28 (two product flavours, `arm32`
+and `arm64`). It needs the local clones under
+`Workbench/vendor/`, so a fresh checkout builds the shell but starts without Enyo until those
+are in place.
 
 ## Install and run
 
 ```sh
-adb install -r out/AndroidLuna-debug.apk
+adb install -r out/AndroidLuna-arm32-debug.apk   # or -arm64- for a 64-bit device
 adb install -r out/LunaKeyboard-debug.apk
 adb shell am start -n org.webosarchive.lunacy/.shell.ShellActivity \
     --es launch <appid> [--es params '<json>']

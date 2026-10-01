@@ -22,6 +22,7 @@ android {
         // The oldest target newer Android will install: Android 14 refuses below 23 and
         // Android 15 below 24. minSdk keeps Android 5, which ignores a target above its
         // own level. What 23 and 24 change on newer devices is in Docs/architecture.md.
+        // The 64-bit flavour targets 28 (below): Android 17 warns at launch under that.
         targetSdk = 24
         versionCode = buildNumber
         versionName = "0.3.0"
@@ -54,7 +55,21 @@ android {
     // -PtestApps. Releases leave them out (codepoet). test-apps/ is Lunacy's own (Notify
     // Test); local-test-apps/ is fetch-assets.sh's (Glimpse, the Enyo samples).
     if (project.hasProperty("testApps")) sourceSets["main"].assets.srcDirs("test-apps", "local-test-apps")
-    // Node for JS services (fetch-assets.sh): 32-bit ARM, the Android 5 test devices' ABI.
+    // Node and busybox for JS services and package scripts (fetch-assets.sh): 32-bit ARM for
+    // the Android 5 test devices, 64-bit ARM for the SoCs that can't run 32-bit code.
     sourceSets["main"].jniLibs.srcDirs("local-jni")
     packaging { jniLibs.useLegacyPackaging = true }  // installed as files, so Node can run
+    // One APK per ABI, each with its own target (codepoet). arm32 (AndroidLuna-arm32-debug.apk)
+    // is for 32-bit devices, which is every Android 5 one, and keeps target 24: the proven
+    // configuration. arm64 (AndroidLuna-arm64-debug.apk) is for 64-bit devices, which run
+    // Android 8 or later in practice, and targets 28: Android 17 shows "built for an older
+    // version of Android" at launch below that, and 28 is the last target with legacy
+    // external storage. What 26 to 28 change is in Docs/architecture.md, "Platform target".
+    // A single APK with both ABIs would be 60 MB instead of 47. A 64-bit device that can still
+    // run 32-bit code takes either; one that can't refuses the 32-bit APK.
+    flavorDimensions += "abi"
+    productFlavors {
+        create("arm32") { dimension = "abi"; ndk { abiFilters += "armeabi-v7a" }; targetSdk = 24 }
+        create("arm64") { dimension = "abi"; ndk { abiFilters += "arm64-v8a" }; targetSdk = 28 }
+    }
 }

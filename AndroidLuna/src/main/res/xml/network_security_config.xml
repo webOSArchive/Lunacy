@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Plain http is allowed everywhere: webOS apps were written for it, and the loopback media
+     server speaks it (AndroidManifest.xml). Trust anchors stay Android's own. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

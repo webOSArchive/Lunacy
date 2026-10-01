@@ -20,7 +20,15 @@
         android:hardwareAccelerated="true"
         android:largeHeap="true"
         android:resizeableActivity="false"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/Theme.Lunacy">
+        <!-- networkSecurityConfig: from a target of 28, Android blocks plain http unless the
+             app says otherwise; webOS apps and the loopback media server use it freely
+             (Docs/architecture.md, "Unrestricted HTTP", a ratchet item). Android 5 and 6
+             ignore the attribute, and targets below 28 allowed cleartext anyway. -->
+        <!-- Safe Browsing: on from a target of 27, it would put Chrome's red interstitial in
+             a card for a flagged site, which a webOS device never did. Off (ratchet item). -->
+        <meta-data android:name="android.webkit.WebView.EnableSafeBrowsing" android:value="false" />
         <!-- resizeableActivity: from a target of 24, Android runs an app in split screen
              unless it says no. Lunacy is the whole screen, as the shell was on a device;
              Android 5 has no split screen and ignores the attribute. -->

@@ -22,7 +22,8 @@ out on the reference devices. Changes made to the Android device are listed sepa
 | `AndroidLuna/test-apps/` | Lunacy's own test apps (`org.webosarchive.lunacy.notifytest`); in the APK only with `-PtestApps` | yes |
 | `AndroidLuna/tools/gen-fonts-css.py` | Regenerates `fonts.css` from the shipped Prelude files | yes |
 | `AndroidLuna/tools/node-launcher.cpp` | Node's `main()`, built by `fetch-assets.sh` into `liblunacynode.so` for JS services | yes |
-| `AndroidLuna/local-jni/` | `libnode.so` (nodejs-mobile 0.3.3), `libc++_shared.so` and the launcher, from `fetch-assets.sh` | no |
+| `AndroidLuna/tools/build-node.sh` | Rebuilds nodejs-mobile's `libnode.so` from source with 16 KB-aligned segments, into `Workbench/vendor/nodejs-mobile/v0.3.3-16k/` | yes |
+| `AndroidLuna/local-jni/` | `libnode.so` (nodejs-mobile 0.3.3), `libc++_shared.so`, the launcher and busybox, for 32-bit and 64-bit ARM, from `fetch-assets.sh` | no |
 | `Workbench/probe/` | TouchPad probe apps that record the contract: `…lunacy.probe` (PalmSystem, the input model, WebSQL, the text indexer), `…lunacy.netprobe` (the network, from a 2.2.4 phone), `…lunacy.htmlprobe` (how the device's parser reads a self-closed tag), `…lunacy.cssprobe` (window metrics and the layout webOS apps were written against, no framework) and `…lunacy.mojoprobe` (a Mojo app that builds a piece of another app's scene with real widgets and logs the geometry) and `…lunacy.emuprobe` (what an app that carries no `uiRevision` is told about the machine - deliberately the only one without it), `…lunacy.winprobe` (the app-facing window calls and properties, driven by launch parameters; its `card` and `dash` actions open more windows), `…lunacy.slowprobe` (an app slow to call `stageReady`) `…lunacy.headprobe` (a `noWindow` app that opens its first card late), `…lunacy.jsprobe` (what the engine does with `"use strict"`), `…lunacy.fontprobe` (which font file each Prelude name and weight draws, and when the default face is ready; built with its fonts by `fontprobe.sh`), `busprobe.sh` (one page packaged under several app ids, for which bus a page reaches), `…lunacy.scriptprobe` (what a package's install script sees), `installprobe.sh` (App Catalog 6.2's own direct-install files run under a `com.palm.*` id), and the root-shell scripts `keymanager-probe.sh` and `appinstallservice-probe.sh` | yes |
 | `Workbench/*.sh`, `Workbench/cdp.mjs`, `Workbench/seams.py` | Device helper scripts, DevTools from the command line, and the border-image seam finder (both below) | yes |
 | `Workbench/vendor/` | Local clones: enyo-1.0, LunaCE, luna-sysmgr, webos-catalog-service, and files pulled from the TouchPad (frameworks, `/etc/palm`, fonts, wallpapers, a WebView 64 APK) | no |
@@ -41,7 +42,7 @@ out on the reference devices. Changes made to the Android device are listed sepa
 AndroidLuna/fetch-assets.sh     # once, and whenever the vendor clones change (needs NDK r21e)
 ./gradlew assembleDebug         # both modules; :AndroidLuna:assembleDebug for the shell alone
 ./gradlew lintDebug             # NewApi is fatal: minSdk 21 must hold
-adb install -r out/AndroidLuna-debug.apk        # every APK builds to out/
+adb install -r out/AndroidLuna-arm32-debug.apk   # every APK builds to out/; -arm64- for a 64-bit device
 adb install -r out/LunaKeyboard-debug.apk
 adb shell am start -n org.webosarchive.lunacy/.shell.ShellActivity \
     --es launch <appid> [--es params '<json>']
@@ -53,9 +54,11 @@ adb shell am start -n org.webosarchive.lunacy/.shell.ShellActivity \
   `--es install http://localhost:8123/<file>.ipk`. Installed apps live in the app's data
   (`adb shell run-as org.webosarchive.lunacy ls files/cryptofs/apps/usr/palm/applications`),
   and `adb shell pm clear org.webosarchive.lunacy` removes them all.
-- **JS services** need the Android NDK r21e (`sdkmanager 'ndk;21.4.7075529'`, or set
-  `ANDROID_NDK`) and nodejs-mobile 0.3.3's Android zip unpacked in
-  `Workbench/vendor/nodejs-mobile/v0.3.3/`. Their logs appear as `svc [<name>] …`; their files are
+- **JS services** need the Android NDK r28c (unpacked as `ndk/android-ndk-r28c` under the SDK,
+  or set `ANDROID_NDK`) and nodejs-mobile 0.3.3's Android zip unpacked in
+  `Workbench/vendor/nodejs-mobile/v0.3.3/`; `AndroidLuna/tools/build-node.sh` (NDK r21e and the
+  nodejs-mobile source in `Workbench/vendor/nodejs-mobile/src`) rebuilds Node 16 KB-aligned
+  into `v0.3.3-16k/`, which `fetch-assets.sh` prefers. Their logs appear as `svc [<name>] …`; their files are
   under `files/webos/` in the app's data (`/media/internal` is `files/webos/media/internal`).
 - `--ei trimMemory <level>` hands the shell an Android memory warning (Android 5's `am` has
   no `send-trim-memory`): 10 is `RUNNING_LOW`, 15 `RUNNING_CRITICAL`. Apps hear it as

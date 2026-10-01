@@ -39,8 +39,19 @@ What this target means:
 - **Lunacy's own JS runs on the oldest WebView.** The bridge, shims, polyfills and every
   change to the frameworks must run on Chromium 37. In practice that means ES5, or a build
   step that transpiles down to it.
-- **Target API 24, minimum API 21.** Android 14 refuses to install an app that targets below
-  API 23, and Android 15 below 24, so Lunacy targets 24. Android 5 ignores a target above its
+- **Target API 24 (32-bit) and 28 (64-bit), minimum API 21.** Android 14 refuses to install an
+  app that targets below API 23, and Android 15 below 24 (Android 16 and 17 keep that floor),
+  so the 32-bit build targets 24: the proven configuration for the Android 5 devices, which
+  are all 32-bit. Android 17 installs a target-24 app but warns at first launch ("built for an
+  older version of Android") below target 28, measured on a Pixel Tablet, so the 64-bit build,
+  whose devices run Android 8 or later in practice, targets 28: the last target with legacy
+  external storage. What 26 to 28 add on those devices: plain http needs the network security
+  config (`res/xml/network_security_config.xml`), WebView Safe Browsing is on unless the
+  manifest turns it off (it is off: a Chrome interstitial in a card is not webOS), `Build.SERIAL`
+  reads "unknown" (the derived device id is stored the first time it is computed, so an
+  install keeps its id across that change), background-started services and manifest
+  receivers for implicit broadcasts are refused (Lunacy has neither), and Android's autofill
+  reaches WebView forms (to check against the TouchPad). Android 5 ignores a target above its
   own level, so this changes nothing there. On Android 6 and later it means: storage and
   `WRITE_SETTINGS` are asked for while the app runs (see those entries below), and the shell
   opts out of split screen (`resizeableActivity="false"`), which a target of 24 turns on by
@@ -933,7 +944,13 @@ webOS apps could ship JS services (`usr/palm/services/<id>/`, with `services.jso
   Android 5 (later ones need API 24: `getifaddrs`, `pthread_barrier_*` and more). A two-line
   launcher (`AndroidLuna/tools/node-launcher.cpp`, packaged as `liblunacynode.so`) makes it an
   executable, so each service package runs in its own process: its memory is its own, a crash
-  can't take the shell down, and stopping it is ending the process. 32-bit ARM only for now.
+  can't take the shell down, and stopping it is ending the process. Built for 32-bit and
+  64-bit ARM (Node, its libc++, the launcher and busybox); Android installs the device's own.
+  The 64-bit build is 16 KB-page clean: `libnode.so` is rebuilt from nodejs-mobile's source
+  with 16 KB-aligned segments (`AndroidLuna/tools/build-node.sh`), libc++ and the launcher
+  come from NDK r28, and Android 17 shows no compatibility dialog for it (measured on a Pixel
+  Tablet). The 32-bit build keeps nodejs-mobile's 4 KB prebuilt, the one proven on the
+  Android 5 devices; no 32-bit device has 16 KB pages.
 - **Install.** A package's services install with its apps. Their bus names come from
   `services.json` and are registered on install and at startup. The first call starts the
   package's process; it ends when mojoservice's activity timeout exits it, or when the package
@@ -978,7 +995,7 @@ webOS apps could ship JS services (`usr/palm/services/<id>/`, with `services.jso
   methods only if the app's id is privileged (`com.palm.*`, measured); services' own calls and
   `luna-send` are private, as on webOS.
 - **Not yet:** services in Mojo apps' own frameworks, db8 (next), `activitymanager` background
-  work, ABIs other than 32-bit ARM, and a jail: services run with Lunacy's own permissions
+  work, and a jail: services run with Lunacy's own permissions
   (ratchet item).
 
 ## Mojo

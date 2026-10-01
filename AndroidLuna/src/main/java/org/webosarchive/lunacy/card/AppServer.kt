@@ -150,8 +150,8 @@ class AppServer(
         val resp = when {
             fw != null -> asset("fw/enyo/1.0/" + fw.groupValues[1], path, resource)
             mojoCommon != null -> asset("fw/mojocommon/" + mojoCommon.groupValues[1], path, resource)
-            mojo != null -> asset("fw/mojo/" + mojo.groupValues[1], path, resource)
-            frameworks != null -> asset("fw/frameworks/" + frameworks.groupValues[1], path, resource)
+            mojo != null -> if (mojo.groupValues[1] == "mojo.js" && !resource) mojoJs("fw/mojo/mojo.js") else asset("fw/mojo/" + mojo.groupValues[1], path, resource)
+            frameworks != null -> if (frameworks.groupValues[1] == "mojo2/mojo.js" && !resource) mojoJs("fw/frameworks/mojo2/mojo.js") else asset("fw/frameworks/" + frameworks.groupValues[1], path, resource)
             path.startsWith(SYSTEM_UI) -> asset("luna-systemui/" + path.removePrefix(SYSTEM_UI), path, resource)
             // The webOS root's list of the packages its ROM ships (WebosRoot), which App Catalog
             // reads as the apps it can revert to their shipped version.
@@ -516,6 +516,10 @@ class AppServer(
      * javascripts/loader.js, which webOS doesn't ship. Chromium has no such global, so the
      * files that carry it (Prototype, and the framework itself) are loaded first and the
      * app's own tag then finds what it expects. See "Mojo" in Docs/architecture.md.
+     *
+     * This sees only a tag in the page's HTML. A tag a script writes (an Ares app's ares.js
+     * writes it with document.write) is handled by [mojoJs]: mojo.js itself goes out with a
+     * prelude that loads the same builtins when they aren't there yet.
      */
     private fun mojoBuiltins(html: String): String {
         val tag = MOJO_TAG.find(html) ?: return html
@@ -539,6 +543,21 @@ class AppServer(
         } + "<script src=\"/usr/palm/frameworks/mojo/builtins/palmInitFramework$submission.js\"></script>" +
             "<script src=\"/__lunacy/mojo-boot.js\"></script>"
         return html.substring(0, tag.range.first) + boot + html.substring(tag.range.first)
+    }
+
+    /**
+     * mojo.js itself (either version's), with lunacy/mojo-prelude.js in front: for a page that
+     * loads Mojo from a script rather than from its HTML, where [mojoBuiltins] can't see the
+     * tag, the prelude fetches the builtins the transform would have written and evaluates
+     * them before mojo.js's own code runs. A page that had the tag in its HTML already has
+     * them, and the prelude does nothing. Not for a `palmGetResource` read, which gets the
+     * file as it is.
+     */
+    private fun mojoJs(assetPath: String): WebResourceResponse? {
+        val js = try { assets.open("fw/" + followLinks(assetPath.removePrefix("fw/"))).bufferedReader().readText() } catch (e: IOException) { return null }
+        val prelude = try { assets.open("lunacy/mojo-prelude.js").bufferedReader().readText() } catch (e: IOException) { "" }
+        return WebResourceResponse("application/javascript", "utf-8", 200, "OK", mapOf("Access-Control-Allow-Origin" to "*"),
+            ByteArrayInputStream((prelude + "\n" + JsTransforms.sloppyMode(js)).toByteArray()))
     }
 
     private fun mimeOf(p: String) = when (p.substringAfterLast('.', "").lowercase()) {

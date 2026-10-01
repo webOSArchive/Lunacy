@@ -41,6 +41,19 @@ offered on every Android version. Walked through on the Pixel Tablet, including 
 paths; the home dialog was cancelled there, so the tablet's home app is unchanged. Not yet compared with the
 TouchPad's own First Use at the same scale, and not yet run on the HP.
 
+*App compat on the Pixel Tablet.* Hello! Name Tag, an Ares app, died at launch with "The load
+of framework submission 506 failed": `ares.js` writes the `mojo.js` tag with `document.write`,
+out of sight of the HTML transform that puts Mojo's builtins in front of it. `mojo.js` now goes
+out with a prelude that loads the builtins itself when they aren't there
+([fix-log.md](fix-log.md)). Seen while checking the normal path with Quick Tip Calculator: its
+first scene is Mojo's `WebView` widget, a `BrowserAdapter` object, which Lunacy provides for
+Enyo's `WebView` but not yet for Mojo's, so the card is an empty panel. Open. WebView 149
+takes `flex-basis` literally inside a
+`-webkit-box`, so App Catalog's sort buttons, a `RadioGroup` sized to its content, were split
+evenly and "Recommended" lost its end. Enyo patch 0004 probes for that engine and lets a
+content-sized box keep its children's natural widths, measured against the reference TouchPad
+to within 2 px ([fix-log.md](fix-log.md)).
+
 *16 KB pages, the same evening.* Android 17 put up an "Android App Compatibility" dialog on
 every launch of the (debuggable) build, naming `libnode.so` and `libc++_shared.so` as not
 16 KB-aligned: both were other projects' prebuilts linked at 4 KB. The 64-bit build is now

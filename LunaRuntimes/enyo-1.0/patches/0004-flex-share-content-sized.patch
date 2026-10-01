@@ -1,0 +1,140 @@
+--- a/framework/source/base/layout/FlexLayout.js	2026-10-01 19:18:39.592301898 -0400
++++ b/framework/source/base/layout/FlexLayout.js	2026-10-01 19:18:39.605300959 -0400
+@@ -78,7 +78,12 @@
+ 					// Lunacy: a width is said with flex-basis where the engine counts a 0
+ 					// width (see enyo.FlexLayout.zeroWidthCounts below). Heights are left be.
+ 					if (inExtent == "width" && enyo.FlexLayout.zeroWidthCounts()) {
+-						s["flex-basis"] = "0px";
++						// Lunacy: an engine that takes the basis literally would split a box
++						// sized to its content evenly; there each child keeps its natural
++						// width, as every engine before did (enyo.FlexLayout.basisSplitsContent).
++						if (!(enyo.FlexLayout.basisSplitsContent() && this._container && enyo.FlexLayout.contentSized(this._container))) {
++							s["flex-basis"] = "0px";
++						}
+ 					} else {
+ 						s[inExtent] = "0px";
+ 					}
+@@ -95,6 +100,8 @@
+ 		s[this.prefix + "-box-pack"] = inContainer.pack || this.pack;
+ 		s[this.prefix + "-box-align"] = inContainer.align || this.align;
+ 		inContainer.addClass(this.flexClass);
++		// Lunacy: flowExtent needs to know whose children it is laying out.
++		this._container = inContainer;
+ 		this._flow(inContainer.children);
+ 	}
+ });
+@@ -222,4 +229,44 @@
+ 	//* @protected
+ 	kind: enyo.Control,
+ 	layoutKind: enyo.VFlexLayout
+-});
+\ No newline at end of file
++});
++
++// Lunacy: whether this engine takes flex-basis literally inside a -webkit-box. Chromium 37 to
++// 131 laid -webkit-box out with the old flexible-box code, which never read flex-basis: a
++// flexed child kept its natural width and grew by its share of what was left, as the WebKit
++// of 2011 did. WebView 149 builds -webkit-box on flexbox and honours the basis, so a box sized
++// to its content - the sort buttons at the top of App Catalog's category lists - is split
++// evenly among its children, and the widest child's caption is cut off. Checked once, on a
++// hidden box: two children with flex-basis 0 and very different text come out the same width.
++enyo.FlexLayout.basisSplitsContent = function() {
++	var f = enyo.FlexLayout, root = document.body || document.documentElement;
++	if (f._basisSplitsContent === undefined && root) {
++		var box = document.createElement("div"), a = document.createElement("div"), b = document.createElement("div");
++		box.style.cssText = "position:absolute;visibility:hidden;display:-webkit-inline-box";
++		a.style.cssText = b.style.cssText = "-webkit-box-flex:1;flex-basis:0px;white-space:nowrap";
++		a.textContent = "xx";
++		b.textContent = "xxxxxxxxxxxxxxxxxxxx";
++		box.appendChild(a);
++		box.appendChild(b);
++		root.appendChild(box);
++		f._basisSplitsContent = Math.abs(a.offsetWidth - b.offsetWidth) <= 1;
++		root.removeChild(box);
++	}
++	return Boolean(f._basisSplitsContent);
++};
++
++// Lunacy: whether a container's width comes from its content rather than from its parent or
++// from a style of its own: nothing sets its width, it isn't flexed, and it sits in a horizontal
++// box (whose children are as wide as their content) or in a vertical box that doesn't stretch
++// its children. Anything else - a plain block's child, a stretched one - is as wide as its
++// parent, and there every engine splits the children evenly. This is what Enyo knows at
++// layout time; a width given by a stylesheet it can't see.
++enyo.FlexLayout.contentSized = function(inContainer) {
++	var s = inContainer.domStyles || {};
++	if (s.width || inContainer.width || inContainer.flex) { return false; }
++	var p = inContainer.parent, l = p && p.layout;
++	if (!l) { return false; }
++	if (l instanceof enyo.HFlexLayout) { return true; }
++	if (l instanceof enyo.VFlexLayout) { return (p.align || l.align) != "stretch"; }
++	return false;
++};
+--- a/framework/build/enyo-build.js	2026-10-01 19:18:39.593301826 -0400
++++ b/framework/build/enyo-build.js	2026-10-01 19:18:39.607300815 -0400
+@@ -13232,3 +13232,65 @@
+ 		}
+ 	};
+ })();
++
++// ---------------------------------------------------------------------------
++// Lunacy: a box sized to its content keeps its children at their natural widths on an engine
++// that takes flex-basis literally inside -webkit-box (WebView 149).
++//
++// The same change as in framework/source/base/layout/FlexLayout.js, over the override above;
++// the comments there say why.
++// ---------------------------------------------------------------------------
++(function () {
++	if (!window.enyo || !enyo.FlexLayout) { return; }
++	enyo.FlexLayout.basisSplitsContent = function () {
++		var f = enyo.FlexLayout, root = document.body || document.documentElement;
++		if (f._basisSplitsContent === undefined && root) {
++			var box = document.createElement("div"), a = document.createElement("div"), b = document.createElement("div");
++			box.style.cssText = "position:absolute;visibility:hidden;display:-webkit-inline-box";
++			a.style.cssText = b.style.cssText = "-webkit-box-flex:1;flex-basis:0px;white-space:nowrap";
++			a.textContent = "xx";
++			b.textContent = "xxxxxxxxxxxxxxxxxxxx";
++			box.appendChild(a);
++			box.appendChild(b);
++			root.appendChild(box);
++			f._basisSplitsContent = Math.abs(a.offsetWidth - b.offsetWidth) <= 1;
++			root.removeChild(box);
++		}
++		return Boolean(f._basisSplitsContent);
++	};
++	enyo.FlexLayout.contentSized = function (inContainer) {
++		var s = inContainer.domStyles || {};
++		if (s.width || inContainer.width || inContainer.flex) { return false; }
++		var p = inContainer.parent, l = p && p.layout;
++		if (!l) { return false; }
++		if (l instanceof enyo.HFlexLayout) { return true; }
++		if (l instanceof enyo.VFlexLayout) { return (p.align || l.align) != "stretch"; }
++		return false;
++	};
++	var flow = enyo.FlexLayout.prototype.flow;
++	enyo.FlexLayout.prototype.flow = function (inContainer) {
++		this._container = inContainer;
++		return flow.apply(this, arguments);
++	};
++	enyo.FlexLayout.prototype.flowExtent = function (inControls, inExtent, inExtentNick) {
++		for (var i = 0, c, s, f; (c = inControls[i]); i++) {
++			f = this.calcControlFlex(c, inExtent, inExtentNick);
++			s = c.domStyles;
++			s[this.prefix + "-box-flex"] = f;
++			if (f) {
++				if (!s[inExtent]) {
++					if (inExtent == "width" && enyo.FlexLayout.zeroWidthCounts()) {
++						if (!(enyo.FlexLayout.basisSplitsContent() && this._container && enyo.FlexLayout.contentSized(this._container))) {
++							s["flex-basis"] = "0px";
++						}
++					} else {
++						s[inExtent] = "0px";
++					}
++				}
++				if (enyo.isMoz && inExtent == "height" && this.align == "stretch") {
++					s.width = "100%";
++				}
++			}
++		}
++	};
++})();

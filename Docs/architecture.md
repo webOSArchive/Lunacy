@@ -1031,7 +1031,11 @@ Mojo isn't packaged the way Enyo is, and that shapes what Lunacy has to do:
   serve-time transform that injects Lunacy's own scripts: a page whose HTML loads
   `/usr/palm/frameworks/mojo/mojo.js` gets Prototype and the framework before it, with the
   submission taken from the tag's own `x-mojo-version` (1 is submission 506, as mojo.js maps
-  it). No app is named and no app is changed.
+  it). No app is named and no app is changed. A tag a script writes - an Ares app's `ares.js`
+  writes it with `document.write` - is out of that transform's sight, so `mojo.js` itself goes
+  out with a prelude (`lunacy/mojo-prelude.js`) that, when the builtins aren't there yet,
+  fetches them synchronously and evaluates them in the global scope before mojo.js's own code
+  runs; where the HTML had the tag, the prelude finds the global and does nothing.
 - **The builtins are patched to load as ordinary scripts**: V8's `global`, `%SetProperty`, the
   `$Object`-style aliases and `builtinEval` are given their plain JavaScript meanings. The
   last one matters more than it looks - webOS's Prototype parses JSON with it, so without it

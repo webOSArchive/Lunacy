@@ -100,6 +100,35 @@ box's content height by laying it out, and a 0 height stayed 0 there too.
 
 Files: `framework/source/base/layout/FlexLayout.js`, `framework/build/enyo-build.js`.
 
+### 0004-flex-share-content-sized.patch
+
+A box sized to its content keeps its flexed children at their natural widths on an engine
+that takes `flex-basis` literally inside a `-webkit-box`.
+
+Patch 0003 says a child's share with `flex-basis: 0` on engines that count a 0 width. Chromium
+37 to 131 laid `-webkit-box` out with the old flexible-box code, which never read `flex-basis`,
+so in a box sized to its content each child kept its natural width and the box grew to fit
+them, as it did on the TouchPad. WebView 149 builds `-webkit-box` on flexbox and honours the
+basis: the same box is split evenly, and the widest child's caption is cut off. App Catalog's
+category lists sort with a `RadioGroup` of three buttons centred in a `VFlexBox`; on the Pixel
+Tablet "Recommended" lost its last letters.
+
+`enyo.FlexLayout.basisSplitsContent()` checks the engine once, on a hidden box: two children
+with `flex-basis: 0` and very different text that come out the same width. On such an engine,
+and only for a container Enyo can see is sized to its content (`enyo.FlexLayout.contentSized`:
+no width of its own, not flexed, and a child of a horizontal box or of a vertical box that
+doesn't stretch its children), the share is not said at all, and the children take their
+natural widths. A container with a definite width keeps the even split every engine agrees
+on; and the engines patch 0003 was written for answer no and are unchanged.
+
+Measured on 2026-10-01: the three buttons are 142, 110 and 109 px on the reference TouchPad
+and 144, 110 and 110 on the Pixel Tablet with this patch, against 121, 121 and 121 without it.
+On the Nexus 7's WebView 39 both probes answer no, Enyo's own `width: 0px` stays, and the
+buttons measure the same 144, 110 and 110.
+`flow()` now notes the container it lays out, which `flowExtent()` reads.
+
+Files: `framework/source/base/layout/FlexLayout.js`, `framework/build/enyo-build.js`.
+
 ## Added
 
 Files upstream never had, added whole by `fetch-assets.sh` rather than patched in.

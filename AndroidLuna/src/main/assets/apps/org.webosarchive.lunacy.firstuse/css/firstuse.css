@@ -18,6 +18,8 @@ body {
 .contentDefaults {
 	text-align: left;
 	width: 504px;
+	max-width: 100%;
+	-webkit-box-sizing: border-box;
 }
 .title {
 	font-size: 24px;
@@ -91,12 +93,21 @@ body {
 	margin: 0 0 20px 0;
 }
 
-/* Lunacy: one page at a time, its column centred on the card. */
+/* Lunacy: one page at a time, its column centred on the card. On a phone-sized card the
+   column is the card's width less a margin, and the two buttons stack. */
 .firstuse, .firstuse .pages {
 	height: 100%;
 }
 .firstuse .page {
 	height: 100%;
+	-webkit-box-sizing: border-box;
+	padding: 0 12px;
+}
+.firstuse .buttons {
+	-webkit-box-orient: horizontal;
+	-webkit-flex-wrap: wrap;
+	flex-wrap: wrap;
+	-webkit-box-pack: center;
 }
 .firstuse .box .text {
 	font-size: 20px;

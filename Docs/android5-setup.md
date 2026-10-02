@@ -274,6 +274,8 @@ Added to reproduce a community report. Phones are not a supported target yet.
 | Install Lunacy | `adb install -r --no-streaming out/AndroidLuna-debug.apk` | A streamed install of the 74 MB APK failed with `failed to read copy response` and left the phone `offline` to adb until it was replugged. `--no-streaming` pushes the file first and installs it on the phone. An older Lunacy build that was already on it was removed first. |
 | Apollo for the Pre3 installed in Lunacy | `--es install` from the package mirror | For the emulated-card report. |
 | Stay awake on USB | `adb shell svc power stayon usb` | Undo with `svc power stayon false`. |
+| adb over Wi-Fi (2026-10-01) | `adb tcpip 5555` over the cable, then `adb connect 192.168.10.195:5555` | The VM's USB drops the phone during any large push, as on 2026-09-23; `tcpip` is a few bytes and goes through. Reset by a reboot. |
+| Lunacy 32-bit flavour and the keyboard installed (2026-10-01) | `adb -s 192.168.10.195:5555 install -r out/AndroidLuna-arm32-debug.apk`, and the keyboard APK | Over Wi-Fi. First Use came up in portrait; it was finished over DevTools (`FirstUse.finish()`) rather than tapped through, and its flag deleted and set again while testing the portrait layout. |
 
 When the phone doesn't show in `adb devices` although it is on USB with debugging on, restart
 the adb server (`adb kill-server`).

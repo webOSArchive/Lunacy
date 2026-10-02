@@ -319,6 +319,8 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     object Params {
         const val ACTIVE_RATIO = 0.55f        // ActiveCardWindowRatio
         const val NON_ACTIVE_RATIO = 0.50f    // NonActiveCardWindowRatio
+        const val PRE3_ACTIVE_RATIO = 0.659f  // the Pre3's luna.conf (Docs/pre3.md), for a phone
+        const val PRE3_NON_ACTIVE_RATIO = 0.61f
         const val PILL_RESERVE = 48f          // space kept for the Just Type pill
         const val ORIGIN_RATIO = 0.40f        // kWindowOriginRatio: card centre within the rest
         const val MIN_SCALE = 0.26f           // kMinimumWindowScale
@@ -434,8 +436,10 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     }
 
     private fun reserve() = luna.px(Params.PILL_RESERVE)
-    private fun activeScale() = max(Params.MIN_SCALE, (areaHeight - reserve()) * Params.ACTIVE_RATIO / areaHeight)
-    private fun nonActiveScale() = max(Params.MIN_SCALE, (areaHeight - reserve()) * Params.NON_ACTIVE_RATIO / areaHeight)
+    /** A phone-sized screen: the card view uses the Pre3's ratios (Docs/pre3.md) rather than the TouchPad's. */
+    var phone = false
+    private fun activeScale() = max(Params.MIN_SCALE, (areaHeight - reserve()) * (if (phone) Params.PRE3_ACTIVE_RATIO else Params.ACTIVE_RATIO) / areaHeight)
+    private fun nonActiveScale() = max(Params.MIN_SCALE, (areaHeight - reserve()) * (if (phone) Params.PRE3_NON_ACTIVE_RATIO else Params.NON_ACTIVE_RATIO) / areaHeight)
     /** CardWindowManager's kWindowOrigin: where every group's centre sits in the card view. */
     private fun originY() = inset + reserve() + (areaHeight - reserve()) * Params.ORIGIN_RATIO
 

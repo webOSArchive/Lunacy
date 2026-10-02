@@ -156,6 +156,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // The whole screen, so that a full-screen card can be laid out under the status bar;
         // every other card starts below it (CardLayer.inset).
         cards = CardLayer(this, luna, this).apply { inset = luna.px(StatusBar.HEIGHT); feedback = { sounds.feedback(it) }
+            // A phone's card view is the Pre3's: its own card ratios (Docs/pre3.md).
+            phone = profile == org.webosarchive.lunacy.card.DeviceProfile.PRE3
             // The TouchPad's landscape turned end for end, which Lunacy calls "left".
             upsideDown = { screenOrientation() == "left" } }
         sounds.preload()
@@ -205,7 +207,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // The pill takes text now, so something else has to hold focus first, or the shell
         // opens with a cursor blinking in it.
         root.isFocusableInTouchMode = true
-        val shortSide = (luna.density * 768).toInt()
+        // The pill is 3/4 of the short side: a TouchPad's 768 px on a tablet, whatever the
+        // screen (the shell keeps the TouchPad's proportions there); on a phone, the screen's
+        // own, as the Pre3's shell laid it out on its 480 px (Docs/pre3.md). Phones are not a
+        // target yet; this keeps the pill on the screen.
+        val shortSide = if (profile == org.webosarchive.lunacy.card.DeviceProfile.PRE3) {
+            android.util.DisplayMetrics().also { @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(it) }.let { minOf(it.widthPixels, it.heightPixels) }
+        } else (luna.density * 768).toInt()
         root.addView(justType, FrameLayout.LayoutParams((shortSide * JustType.WIDTH_OF_SHORT_SIDE).toInt(), luna.px(JustType.HEIGHT)).apply {
             topMargin = luna.px(StatusBar.HEIGHT + JustType.TOP_GAP); gravity = android.view.Gravity.CENTER_HORIZONTAL
         })

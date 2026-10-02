@@ -61,10 +61,14 @@ class QuickLaunch(context: Context, private val luna: Luna, private val onLaunch
         return RectF(cx - s / 2, cy - s / 2, cx + s / 2, cy + s / 2)
     }
     private fun areaWidth() = buttonRect().centerX() - luna.px(31f)
-    /** Items share the space left of the launcher button in equal slots. */
+    /**
+     * Items share the space left of the launcher button in equal slots. On a tablet a slot is
+     * always wider than an icon; on a phone-sized screen (not a target yet) it isn't, and the
+     * icons shrink to their slots rather than overlap.
+     */
     private fun itemRect(i: Int, count: Int = apps.size): RectF {
         val slot = areaWidth() / count.coerceAtLeast(1)
-        val s = luna.px(ICON.toFloat())
+        val s = minOf(luna.px(ICON.toFloat()), slot * 0.85f)
         val cx = slot * (i + 0.5f); val cy = luna.px(ICON_Y.toFloat())
         return RectF(cx - s / 2, cy - s / 2, cx + s / 2, cy + s / 2)
     }

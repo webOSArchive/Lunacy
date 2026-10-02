@@ -595,7 +595,13 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             else if (i == selected) luna.nine(c, "launcher3/tab-selected-bg.png", r, 20, 20, 20, 20)
             if (i > 0 && i != selected) luna.nine(c, "launcher3/tab-divider.png", RectF(r.left - luna.px(1f), 0f, r.left + luna.px(1f), h), 0, 20, 0, 20)
             tabText.color = if (i == selected) Color.WHITE else Color.rgb(0xC8, 0xC8, 0xC8)
-            c.drawText(p.title.uppercase(), r.centerX(), h / 2 - (tabText.ascent() + tabText.descent()) / 2, tabText)
+            // A tab too narrow for its title (a phone-sized screen, not a target yet) squeezes
+            // the text to fit rather than running it into the next tab; a tablet's never is.
+            val title = p.title.uppercase()
+            val room = tw - luna.px(8f)
+            tabText.textScaleX = tabText.measureText(title).let { w -> if (w > room) room / w else 1f }
+            c.drawText(title, r.centerX(), h / 2 - (tabText.ascent() + tabText.descent()) / 2, tabText)
+            tabText.textScaleX = 1f
         }
         if (showAddTab) addTabRect()?.let { r ->
             // tab-add-icon.png's normal state is its upper half.

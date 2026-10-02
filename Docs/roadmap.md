@@ -5,7 +5,8 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-10-01)
 
-**2026-10-01: 64-bit ARM, Android 17 and a 2012 Nexus 7.** Node, its libc++, the launcher and
+**2026-10-01: 0.4.0. 64-bit ARM, Android 17, First Use, and a 2012 Nexus 7.** Both Lunacy APKs
+and the keyboard are 0.4.0. Node, its libc++, the launcher and
 busybox are now built for `arm64-v8a` as well as `armeabi-v7a` (`fetch-assets.sh`), so the APK
 installs on the 64-bit-only SoCs (Pixel 7 and later, most phones since) that refused it with
 `INSTALL_FAILED_NO_MATCHING_ABIS`; the 64-bit busybox is Alpine's static build, busybox.net
@@ -40,6 +41,19 @@ that through Android's Home settings screen; it is a choice, not a permission, s
 offered on every Android version. Walked through on the Pixel Tablet, including the refusal
 paths; the home dialog was cancelled there, so the tablet's home app is unchanged. Not yet compared with the
 TouchPad's own First Use at the same scale, and not yet run on the HP.
+
+*A phone in portrait, not a phone target.* On the Nexus 5 (1080 x 1920, shell scale 3, so a
+360 x 640 px shell, near the Pre3's own 320 x 533 at its `ScaleFactor=1.5`), apps are told
+they are on a Prē3 - webOS 2.2.4, the Pre3's user agent, a 360 x 640 screen - which is what
+decides a phone layout; Palm's Calculator, a tablet app, is simply clipped. The shell's own
+layout had three tablet assumptions that broke in portrait and are fixed (codepoet: not
+full phone support, just not broken): the Just Type pill was sized from a 768 px short side
+and ran off the screen, so on a phone it takes the screen's own; the dock's icons overlapped
+in slots narrower than an icon, so they shrink to the slot; the launcher's tab titles ran
+into each other, so a title wider than its tab is squeezed to fit. The card view takes the
+Pre3's card ratios ([pre3.md](pre3.md)) on a phone. First Use's column fits a phone-width
+card. Nothing changes on a tablet. Still open on phones: the keyboard raised by a focused
+field, and everything in "the shell's own layout on phones" beyond these.
 
 *App compat on the Pixel Tablet.* Hello! Name Tag, an Ares app, died at launch with "The load
 of framework submission 506 failed": `ares.js` writes the `mojo.js` tag with `document.write`,

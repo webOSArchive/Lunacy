@@ -99,6 +99,11 @@ Lunacy (Android app)
 
 ## Shell
 
+**Phone or tablet** is decided once, by `FormFactor` (the screen's size in dp, its size in
+inches and its shape, or the owner's setting), and both the shell's layout and the device
+apps are told about follow it. On a phone the shell draws the TouchPad's parts tightened for
+the width, and lays app pages out wider than the card, scaled to fit: [phone.md](phone.md).
+
 The shell is a **simulator**: native Android Views that recreates the webOS experience. The
 styling target is **LunaCE**, with stock TouchPad 3.0.5 as the reference where LunaCE
 doesn't differ. It doesn't run LunaSysMgr or any Palm code. The webOS look and feel *is* the
@@ -380,8 +385,10 @@ product; being "close enough" is not the goal.
   reports Android's value (1.33 on the HP 10 G2); a TouchPad reported 1.
 - **Screen size.** Cards render at the device's real width. Enyo's flex boxes and panels
   fill the vertical space and split the horizontal space into panes, so apps adapt on their
-  own. A per-app **fixed-viewport fallback** (1024×768, scaled to fit) exists for the few
-  apps that hardcode sizes. It is a metadata or user setting, never a default.
+  own. A per-app **fixed-viewport fallback** exists for the few apps that hardcode sizes:
+  the page is laid out at a set width (640 px) and scaled down into a narrower card. It is
+  a user setting, on by default only for the bundled Palm apps known to need it
+  ([phone.md](phone.md), "Fixed viewport").
 - **PalmSystem / PalmServiceBridge.** JS objects matching the webOS API, backed by a native
   bridge.
   - **Transport.** Android 5 offers only `addJavascriptInterface`: `WebMessageListener` and

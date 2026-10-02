@@ -136,13 +136,49 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     }
 
     /** [LunaCE] A group was tapped: open its panel, growing out of [from] (its icon, in this view). */
+    /**
+     * The phone layout (Docs/phone.md): the TouchPad's launcher, tightened for a screen a
+     * third as wide. A shorter tab bar whose tabs keep the TouchPad's width and scroll
+     * sideways instead of squeezing, so a phone can hold as many tabs as a tablet; cells and
+     * icons seven-eighths the size, so four columns fit a 360 px portrait; and two permanent
+     * tabs rather than four, so the owner can take a phone down to two.
+     */
+    object Phone {
+        const val TAB_BAR = 40f
+        const val TAB_W = 150f            // the TouchPad's tab width, scrolled rather than shrunk
+        const val CELL = 84f
+        const val ICON = 56f
+        const val ICON_DY = -9f
+        const val LABEL_W = 80f
+        const val LEFT_MARGIN = 6f
+        const val TOP_MARGIN = 12f
+        const val ROW_GAP = 6f
+        const val FEEDBACK = 80f
+        const val DELETE_DX = -36f
+        const val DELETE_DY = -36f
+        const val PERMANENT_TABS = 2
+        const val TAB_SCROLL_MS = 250L    // the selected tab brought into view, with the page snap
+    }
+    private val phone = luna.phone
+    private val cell = if (phone) Phone.CELL else Params.CELL
+    private val icon = if (phone) Phone.ICON else Params.ICON
+    private val iconDy = if (phone) Phone.ICON_DY else Params.ICON_DY
+    private val labelW = if (phone) Phone.LABEL_W else Params.LABEL_W
+    private val leftMargin = if (phone) Phone.LEFT_MARGIN else Params.LEFT_MARGIN
+    private val topMargin = if (phone) Phone.TOP_MARGIN else Params.TOP_MARGIN
+    private val rowGap = if (phone) Phone.ROW_GAP else Params.ROW_GAP
+    private val glow = if (phone) Phone.FEEDBACK else Params.FEEDBACK
+    private val deleteDx = if (phone) Phone.DELETE_DX else Params.DELETE_DX
+    private val deleteDy = if (phone) Phone.DELETE_DY else Params.DELETE_DY
+    private val permanentTabs = if (phone) Phone.PERMANENT_TABS else Params.PERMANENT_TABS
+
     var onOpenGroup: (Tile.Group, PointF) -> Unit = { _, _ -> }
 
     /** Where a group's icon is drawn, for the panel to grow out of. */
     private fun groupScreenCentre(g: Tile.Group): PointF {
         val page = currentPage()
         val c = cellCentre(page.tiles.indexOf(g))
-        return PointF(c.x, c.y - page.scrollY + luna.px(Params.ICON_DY))
+        return PointF(c.x, c.y - page.scrollY + luna.px(iconDy))
     }
 
     /** The group's panel changed it: a new name, or a member launched or taken out. */
@@ -185,7 +221,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
 
     /** LauncherObject::deleteUserTab: its icons go to the first page, in order. */
     fun deleteTab(index: Int) {
-        if (index < Params.PERMANENT_TABS || index >= pages.size) return
+        if (index < permanentTabs || index >= pages.size) return
         val dying = pages.removeAt(index)
         pages[0].tiles += dying.tiles
         pagePos = pagePos.coerceAtMost(pages.size - 1f)
@@ -378,7 +414,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
 
     // ---- geometry ----
 
-    private fun tabBarH() = luna.px(Params.TAB_BAR)
+    private fun tabBarH() = luna.px(if (phone) Phone.TAB_BAR else Params.TAB_BAR)
     private fun pageTop() = tabBarH()
     private fun pageBottom() = height - dockHeight - 1
     /**
@@ -389,6 +425,13 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
      */
     private fun columnLayout(): Pair<Int, Int> {
         val w = (width / luna.density).toInt()
+        if (phone) {
+            // As many cells as fit between the margins, with what is left shared out as the
+            // gaps: four across a 360 px portrait, seven across its 640 px landscape.
+            val room = w - 2 * leftMargin.toInt()
+            val n = (room / cell.toInt()).coerceIn(1, Params.MAX_COLUMNS)
+            return n to (room - n * cell.toInt()) / n
+        }
         for (n in Params.MAX_COLUMNS downTo 2) {
             val free = w - Params.CELL.toInt() * (n + 1) + Params.SPACE_ADJUST * Params.MAX_COLUMNS
             val gap = if (free <= 0) 0 else free / (n - 1)
@@ -397,25 +440,48 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         return 1 to 0
     }
     private fun columns(): Int = columnLayout().first
-    private fun columnPitch(): Float = luna.px(Params.CELL + columnLayout().second)
-    private fun rowPitch() = luna.px(Params.CELL + Params.ROW_GAP)
+    private fun columnPitch(): Float = luna.px(cell + columnLayout().second)
+    private fun rowPitch() = luna.px(cell + rowGap)
     private fun cellCentre(i: Int): PointF {
         val n = columns()
-        val x = luna.px(Params.LEFT_MARGIN) + (i % n) * columnPitch() + luna.px(Params.CELL) / 2
-        val y = pageTop() + luna.px(Params.TOP_MARGIN) + (i / n) * rowPitch() + luna.px(Params.CELL) / 2
+        val x = luna.px(leftMargin) + (i % n) * columnPitch() + luna.px(cell) / 2
+        val y = pageTop() + luna.px(topMargin) + (i / n) * rowPitch() + luna.px(cell) / 2
         return PointF(x, y)
     }
     /** The cell under a point in page coordinates. */
     private fun cellAt(x: Float, y: Float, count: Int): Int {
-        val col = ((x - luna.px(Params.LEFT_MARGIN)) / columnPitch()).toInt().coerceIn(0, columns() - 1)
-        val row = max(0, ((y - pageTop() - luna.px(Params.TOP_MARGIN)) / rowPitch()).toInt())
+        val col = ((x - luna.px(leftMargin)) / columnPitch()).toInt().coerceIn(0, columns() - 1)
+        val row = max(0, ((y - pageTop() - luna.px(topMargin)) / rowPitch()).toInt())
         return (row * columns() + col).coerceIn(0, max(0, count - 1))
     }
-    private fun contentHeight(p: Page) = luna.px(Params.TOP_MARGIN) + ((p.tiles.size + installsOn(p).size + columns() - 1) / columns()) * rowPitch()
+    private fun contentHeight(p: Page) = luna.px(topMargin) + ((p.tiles.size + installsOn(p).size + columns() - 1) / columns()) * rowPitch()
     private fun maxScroll(p: Page) = max(0f, contentHeight(p) - (pageBottom() - pageTop()))
-    private fun tabWidth() = min(width.toFloat() / pages.size, luna.px(Params.TAB_MAX_W))
+    private fun tabWidth() = if (phone) luna.px(Phone.TAB_W) else min(width.toFloat() / pages.size, luna.px(Params.TAB_MAX_W))
+    /** How far the phone's tab bar is scrolled, in px; always 0 on a tablet, whose tabs all fit. */
+    private var tabScroll = 0f
+    private var downTabScroll = 0f
+    private var tabAnim: ValueAnimator? = null
+    /** The tab bar's content: the tabs, and room after them for the "+" while another can be added. */
+    private fun tabsWidth() = pages.size * tabWidth() + if (phone && pages.size < Params.MAX_TABS) luna.px(Params.ADD_LEFT + Params.ADD_BUTTON + 8f) else 0f
+    private fun maxTabScroll() = max(0f, tabsWidth() - width)
+    /** Scrolls the bar so that a tab is wholly in view, animated with the page snap. */
+    private fun revealTab(i: Int) {
+        if (!phone) return
+        val tw = tabWidth(); val left = i * tw; val right = left + tw
+        val target = when {
+            left < tabScroll -> left
+            right > tabScroll + width -> right - width
+            else -> return
+        }.coerceIn(0f, maxTabScroll())
+        tabAnim?.cancel()
+        tabAnim = ValueAnimator.ofFloat(tabScroll, target).apply {
+            duration = Phone.TAB_SCROLL_MS; interpolator = Easing.InQuad
+            addUpdateListener { tabScroll = it.animatedValue as Float; invalidate() }
+            start()
+        }
+    }
     private fun currentPage() = pages[pagePos.roundToInt().coerceIn(0, pages.size - 1)]
-    private fun deleteCentre(c: PointF) = PointF(c.x + luna.px(Params.DELETE_DX), c.y + luna.px(Params.DELETE_DY))
+    private fun deleteCentre(c: PointF) = PointF(c.x + luna.px(deleteDx), c.y + luna.px(deleteDy))
     private fun doneRect(): RectF {
         val w = luna.px(Params.DONE_W); val h = luna.px(Params.DONE_H)
         val right = width - luna.px(Params.DONE_RIGHT); val top = (tabBarH() - h) / 2
@@ -501,8 +567,8 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
 
     /** A package being installed: the default icon at half opacity, its name, and the progress strip. */
     private fun drawInstalling(c: Canvas, inst: Installing, centre: PointF) {
-        val half = luna.px(Params.ICON) / 2
-        val iy = centre.y + luna.px(Params.ICON_DY)
+        val half = luna.px(icon) / 2
+        val iy = centre.y + luna.px(iconDy)
         val faded = Paint(Paint.FILTER_BITMAP_FLAG).apply { alpha = 128 }
         luna.image("default-app-icon.png")?.let { c.drawBitmap(it, null, RectF(centre.x - half, iy - half, centre.x + half, iy + half), faded) }
         val layout = labels.getOrPut("installing:" + inst.title) { twoLineLabel(inst.title) }
@@ -523,34 +589,34 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
      */
     private fun drawGroup(c: Canvas, g: Tile.Group, centre: PointF) {
         val cx = centre.x; val cy = centre.y
-        val iy = cy + luna.px(Params.ICON_DY)
+        val iy = cy + luna.px(iconDy)
         if (editing) {
-            val fh = luna.px(Params.CELL) / 2
+            val fh = luna.px(cell) / 2
             luna.image("launcher3/edit-icon-bg.png")?.let { c.drawBitmap(it, null, RectF(cx - fh, cy - fh, cx + fh, cy + fh), null) }
         }
         if (groupTarget == g.id || feedbackId == g.id) {
-            val gh = luna.px(Params.FEEDBACK) / 2
+            val gh = luna.px(glow) / 2
             luna.image("launcher3/launcher-touch-feedback.png")?.let { c.drawBitmap(it, null, RectF(cx - gh, iy - gh, cx + gh, iy + gh), null) }
         }
         val composite = groupComposites.getOrPut(g.id + ":" + g.members.joinToString(",") { it.id }) { GroupArt.composite(luna, g.members) }
         val half = composite.width / 2f
         c.drawBitmap(composite, cx - half, iy - composite.height / 2f, null)
         val layout = labels.getOrPut("group:" + g.name) { twoLineLabel(g.name) }
-        c.save(); c.translate(cx - layout.width / 2f, iy + luna.px(Params.ICON) / 2 + luna.px(Params.LABEL_GAP)); layout.draw(c); c.restore()
+        c.save(); c.translate(cx - layout.width / 2f, iy + luna.px(icon) / 2 + luna.px(Params.LABEL_GAP)); layout.draw(c); c.restore()
     }
     private val groupComposites = HashMap<String, android.graphics.Bitmap>()
 
     /** centre is the cell centre: the icon sits above it, its label below. */
     private fun drawIcon(c: Canvas, app: AppInfo, centre: PointF) {
         val cx = centre.x; val cy = centre.y
-        val half = luna.px(Params.ICON) / 2
-        val iy = cy + luna.px(Params.ICON_DY)
+        val half = luna.px(icon) / 2
+        val iy = cy + luna.px(iconDy)
         if (editing) {
-            val fh = luna.px(Params.CELL) / 2
+            val fh = luna.px(cell) / 2
             luna.image("launcher3/edit-icon-bg.png")?.let { c.drawBitmap(it, null, RectF(cx - fh, cy - fh, cx + fh, cy + fh), null) }
         }
         if (feedbackId == app.id || groupTarget == app.id) {
-            val gh = luna.px(Params.FEEDBACK) / 2
+            val gh = luna.px(glow) / 2
             luna.image("launcher3/launcher-touch-feedback.png")?.let { c.drawBitmap(it, null, RectF(cx - gh, iy - gh, cx + gh, iy + gh), null) }
         }
         val bmp = luna.appIcon(app) ?: luna.image("default-app-icon.png")
@@ -574,7 +640,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     /** Centred, wrapped to at most two lines, the second elided with "…" (API 21 has no maxLines). */
     @Suppress("DEPRECATION")
     private fun twoLineLabel(text: String): StaticLayout {
-        val w = luna.px(Params.LABEL_W).toInt()
+        val w = luna.px(labelW).toInt()
         fun make(t: CharSequence) = StaticLayout(t, label, w, Layout.Alignment.ALIGN_CENTER, 1f, 0f, false)
         val full = make(text)
         if (full.lineCount <= 2) return full
@@ -587,6 +653,9 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val h = tabBarH(); val tw = tabWidth()
         luna.nine(c, "launcher3/tab-bg.png", RectF(0f, 0f, width.toFloat(), h), 4, 20, 4, 20)
         val selected = pagePos.roundToInt()
+        // The phone's tabs scroll under the bar; the Done button, drawn after, doesn't.
+        tabScroll = tabScroll.coerceIn(0f, maxTabScroll())
+        c.save(); c.clipRect(0f, 0f, width.toFloat(), h); c.translate(-tabScroll, 0f)
         pages.forEachIndexed { i, p ->
             val r = RectF(i * tw, 0f, (i + 1) * tw, h)
             // LunaCE's PageTab: the highlighted background (a dragged icon over the tab, or a
@@ -605,8 +674,9 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         }
         if (showAddTab) addTabRect()?.let { r ->
             // tab-add-icon.png's normal state is its upper half.
-            luna.image("launcher3/tab-add-icon.png")?.let { b -> c.drawBitmap(b, Rect(0, 0, b.width, b.height / 2), r, null) }
+            luna.image("launcher3/tab-add-icon.png")?.let { b -> c.drawBitmap(b, Rect(0, 0, b.width, b.height / 2), RectF(r).apply { offset(tabScroll, 0f) }, null) }
         }
+        c.restore()
         if (editing) {
             val r = doneRect()
             drawDone(c, r, pressed = donePressed)
@@ -614,11 +684,14 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         }
     }
 
-    /** The "+" (PageTabBar::addTabButtonRect), in the bar's unused space, if there is room for it. */
+    /**
+     * The "+" (PageTabBar::addTabButtonRect), in the bar's unused space, if there is room for
+     * it; in view coordinates. A phone's bar scrolls to make the room.
+     */
     private fun addTabRect(): RectF? {
-        val left = pages.size * tabWidth()
+        val left = pages.size * tabWidth() - tabScroll
         val edge = luna.px(Params.ADD_BUTTON)
-        if (width - left < edge + luna.px(8f)) return null
+        if (!phone && width - left < edge + luna.px(8f)) return null
         val top = (tabBarH() - edge) / 2
         return RectF(left + luna.px(Params.ADD_LEFT), top, left + luna.px(Params.ADD_LEFT) + edge, top + edge)
     }
@@ -629,7 +702,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val i = tabAt(downX, downY)
         if (drag != Drag.UNDECIDED || i < 0) return@Runnable
         tabHeld = true; highlightedTab = -1; invalidate()
-        onRenameTab(i, pages[i].title, i >= Params.PERMANENT_TABS)
+        onRenameTab(i, pages[i].title, i >= permanentTabs)
     }
     private val addHold = Runnable {
         if (drag != Drag.UNDECIDED) return@Runnable
@@ -638,7 +711,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
 
     /** The tab under a dragged icon or a pressing finger, or -1. */
     private var highlightedTab = -1
-    private fun tabAt(x: Float, y: Float) = if (y < tabBarH()) (x / tabWidth()).toInt().takeIf { it in pages.indices } ?: -1 else -1
+    private fun tabAt(x: Float, y: Float) = if (y < tabBarH()) ((x + tabScroll) / tabWidth()).toInt().takeIf { it in pages.indices } ?: -1 else -1
 
     // ---- edit mode ----
 
@@ -730,11 +803,11 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val page = currentPage()
         val fx = dragX; val fy = dragY + page.scrollY
         val hit = page.tiles.withIndex().firstOrNull { (i, _) ->
-            val c = cellCentre(i); val half = luna.px(Params.CELL) / 2
+            val c = cellCentre(i); val half = luna.px(cell) / 2
             abs(fx - c.x) < half && abs(fy - c.y) < half
         }
         if (hit != null && hit.value !== app && app is Tile.App) {
-            val c = cellCentre(hit.index); val core = luna.px(Params.CELL) * Params.GROUP_CORE / 2
+            val c = cellCentre(hit.index); val core = luna.px(cell) * Params.GROUP_CORE / 2
             if (abs(fx - c.x) < core && abs(fy - c.y) < core) {
                 if (hit.value.id != hovering) { hovering = hit.value.id; groupTarget = null; removeCallbacks(armGroup); postDelayed(armGroup, Params.GROUP_DWELL_MS) }
                 invalidate(); return@Runnable
@@ -881,7 +954,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
 
     // ---- touch ----
 
-    private enum class Drag { NONE, UNDECIDED, PAGE, SCROLL, ICON }
+    private enum class Drag { NONE, UNDECIDED, PAGE, SCROLL, ICON, TABS }
     private var drag = Drag.NONE
     private var downX = 0f; private var downY = 0f; private var downPage = 0f; private var downScroll = 0f
     private var downApp: Tile? = null
@@ -898,7 +971,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private fun tileAt(x: Float, y: Float): Tile? {
         if (y < pageTop() || y > pageBottom() || abs(pagePos - pagePos.roundToInt()) > 0.01f) return null
         val page = currentPage()
-        val half = luna.px(Params.CELL) / 2
+        val half = luna.px(cell) / 2
         return page.tiles.withIndex().firstOrNull { (i, _) -> val c = cellCentre(i); abs(x - c.x) < half && abs(y + page.scrollY - c.y) < half }?.value
     }
 
@@ -922,7 +995,8 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 anim?.cancel(); drag = Drag.UNDECIDED
-                downX = e.x; downY = e.y; downPage = pagePos; downScroll = page.scrollY
+                downX = e.x; downY = e.y; downPage = pagePos; downScroll = page.scrollY; downTabScroll = tabScroll
+                tabAnim?.cancel()
                 pressedDelete = deleteAt(e.x, e.y)?.id
                 donePressed = editing && doneTouchRect().contains(e.x, e.y)
                 downApp = if (pressedDelete == null && !donePressed) tileAt(e.x, e.y) else null
@@ -945,10 +1019,13 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
                     // In edit mode an icon moves with the finger; otherwise the first axis past
                     // the tap radius wins (reference §3.7).
                     if (editing && app != null) pickUp(app, downX, downY)
+                    // On a phone a sideways drag that started on the tab bar scrolls the bar.
+                    else if (phone && downY < tabBarH() && abs(dx) >= abs(dy)) drag = Drag.TABS
                     else drag = if (abs(dx) >= abs(dy)) Drag.PAGE else Drag.SCROLL
                 }
                 when (drag) {
                     Drag.ICON -> dragTo(e.x, e.y)
+                    Drag.TABS -> { tabScroll = (downTabScroll - dx).coerceIn(0f, maxTabScroll()); invalidate() }
                     Drag.PAGE -> { pagePos = (downPage - dx / width).coerceIn(-0.2f, pages.size - 0.8f); invalidate() }
                     Drag.SCROLL -> {
                         var y = downScroll - dy
@@ -975,6 +1052,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
                         } else animatePage(pagePos.roundToInt().coerceIn(0, pages.size - 1), Params.SNAP_MS, Easing.InQuad)
                     }
                     Drag.SCROLL -> fling(page, -vy)
+                    Drag.TABS -> {}
                     Drag.UNDECIDED -> if (e.actionMasked == MotionEvent.ACTION_UP) tap(e.x, e.y)
                     Drag.NONE -> {}
                 }
@@ -1001,8 +1079,8 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             deleteAt(x, y)?.let { dialogApp = it; return }
         }
         if (y < tabBarH()) {
-            val i = (x / tabWidth()).toInt()
-            if (i in pages.indices) animatePage(i, Params.SNAP_MS, Easing.InQuad)
+            val i = tabAt(x, y)
+            if (i >= 0) animatePage(i, Params.SNAP_MS, Easing.InQuad)
             return
         }
         if (editing) return  // icons don't launch while being arranged
@@ -1015,6 +1093,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     }
 
     private fun animatePage(target: Int, ms: Long, easing: android.animation.TimeInterpolator) {
+        revealTab(target)
         anim?.cancel()
         anim = ValueAnimator.ofFloat(pagePos, target.toFloat()).apply {
             duration = ms; interpolator = easing

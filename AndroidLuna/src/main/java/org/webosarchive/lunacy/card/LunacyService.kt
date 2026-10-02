@@ -47,6 +47,8 @@ class LunacyService(
         bus.register(SERVICE, "system/getEnvironment") { _, _, reply -> worker.execute { val r = environment(); main.post { reply(r) } } }
         bus.register(SERVICE, "files/list") { _, p, reply -> worker.execute { val r = runCatching { listFiles(p) }.getOrElse { Bus.error("files/list: $it") }; main.post { reply(r) } } }
         bus.register(SERVICE, "system/setDeviceId") { caller, p, reply -> reply(setDeviceId(caller, p)) }
+        bus.register(SERVICE, "system/setLayout") { caller, p, reply -> reply(setLayout(caller, p)) }
+        bus.register(SERVICE, "system/setFixedViewport") { caller, p, reply -> reply(setFixedViewport(caller, p)) }
         bus.register(SERVICE, "android/openSettings") { _, p, reply -> reply(openSettings(p.optString("panel"))) }
         bus.register(SERVICE, "android/settingsPanels") { _, _, reply ->
             reply(Bus.ok(mapOf("panels" to org.json.JSONArray(PANELS.keys.sorted()))))
@@ -190,6 +192,8 @@ class LunacyService(
             .put("battery", battery()).put("charging", charging()))
         j.put("webview", webView())
         j.put("display", display())
+        j.put("layout", FormFactor.describe(context).put("appLayoutWidth", FormFactor.appLayoutWidth(context)))
+        j.put("software", FixedViewport.describe(context, registry.apps.filter { it.androidComponent == null }.sortedBy { it.title.lowercase() }))
         return j.toString()
     }
 
@@ -287,6 +291,33 @@ class LunacyService(
      * called in, never from anything the page says (rule 10), so an installed app can't
      * quietly change the device's identity underneath its owner.
      */
+    /**
+     * The layout setting (FormFactor): `layout` "auto", "phone" or "tablet", and
+     * `appLayoutWidth`, the width in px a phone lays an app's page out at (0: the card's own).
+     * Lunacy's own apps only. The shell takes it up when it next starts.
+     */
+    private fun setLayout(caller: String, p: JSONObject): String {
+        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can set the layout (asked by $caller)", -1)
+        if (p.has("layout") && !FormFactor.setSetting(context, p.optString("layout"))) {
+            return Bus.error("layout is auto, phone or tablet")
+        }
+        if (p.has("appLayoutWidth")) FormFactor.setAppLayoutWidth(context, p.optInt("appLayoutWidth"))
+        return Bus.ok(mapOf("layout" to FormFactor.describe(context).put("appLayoutWidth", FormFactor.appLayoutWidth(context)), "restart" to true))
+    }
+
+    /**
+     * The fixed-viewport fallback for one app (FixedViewport): `id`, and `on` true or false,
+     * or absent to put the app back on its default. Lunacy's own apps only. Takes effect
+     * when the app's window next loads a page.
+     */
+    private fun setFixedViewport(caller: String, p: JSONObject): String {
+        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can set an app's viewport (asked by $caller)", -1)
+        val id = p.optString("id")
+        val app = registry.get(id) ?: return Bus.error("No app $id")
+        FixedViewport.set(context, id, if (p.has("on")) p.optBoolean("on") else null)
+        return Bus.ok(mapOf("id" to id, "on" to FixedViewport.isOn(context, id), "default" to FixedViewport.default(id), "title" to app.title))
+    }
+
     private fun setDeviceId(caller: String, p: JSONObject): String {
         if (!ownApp(caller)) {
             return Bus.error("Only Lunacy's own apps can set the device id (asked by $caller)", -1)

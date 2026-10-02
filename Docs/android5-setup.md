@@ -267,7 +267,8 @@ WebView 149.0.7827.5 (153.0.8010.36 by 2026-10-02). The memory limiter reports i
 
 ## Nexus 5 test phone (2026-09-23)
 
-Added to reproduce a community report. Phones are not a supported target yet.
+Added to reproduce a community report. Since 2026-10-02 the phone layout's test device
+([phone.md](phone.md)).
 
 **Device:** LG Nexus 5 (hammerhead), Android 6.0.1 (API 23), armeabi-v7a, 1080 x 1920 at
 480 dpi (shell scale 3), WebView 44.0.2403.117.
@@ -279,6 +280,11 @@ Added to reproduce a community report. Phones are not a supported target yet.
 | Stay awake on USB | `adb shell svc power stayon usb` | Undo with `svc power stayon false`. |
 | adb over Wi-Fi (2026-10-01) | `adb tcpip 5555` over the cable, then `adb connect 192.168.10.195:5555` | The VM's USB drops the phone during any large push, as on 2026-09-23; `tcpip` is a few bytes and goes through. Reset by a reboot. |
 | Lunacy 32-bit flavour and the keyboard installed (2026-10-01) | `adb -s 192.168.10.195:5555 install -r out/AndroidLuna-arm32-debug.apk`, and the keyboard APK | Over Wi-Fi. First Use came up in portrait; it was finished over DevTools (`FirstUse.finish()`) rather than tapped through, and its flag deleted and set again while testing the portrait layout. |
+
+| adb over Wi-Fi again (2026-10-02) | `adb kill-server` first (the phone didn't list over USB until then), `adb tcpip 5555`, `adb connect 192.168.10.195:5555` | The USB entry lingered beside the Wi-Fi one until unplugged. |
+| Phone-layout builds installed (2026-10-02) | `adb -s 192.168.10.195:5555 install -r out/AndroidLuna-arm32-debug.apk`, three times through the day | The launcher, dock and app-scale screenshots in the session; opened over adb with `--ez launcher true`. |
+| Fixed-viewport builds installed, Memos' switch flipped off and back (2026-10-02, later) | two more `adb install -r` of the 32-bit APK; `system/setFixedViewport` for `com.palm.app.notes` called from Device Info's page over DevTools, with a force-stop and restart between | Device Info's Software group, and Memos at the card's own width with the switch off. The switch is back on its default; `shared_prefs/viewport.xml` is empty. |
+| App layout width set to 0 and back to 640 | `system/setLayout` on Lunacy's service, called from Device Info's page over DevTools, with a force-stop and restart each time | To compare Memos with the app scale off. The setting is 640 again. |
 
 When the phone doesn't show in `adb devices` although it is on USB with debugging on, restart
 the adb server (`adb kill-server`).

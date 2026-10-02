@@ -77,6 +77,12 @@ interface WindowHost {
     fun localeInfo(): String
     /** Android pixels per CSS pixel: apps get TouchPad-sized pixels (Docs/architecture.md, Screen size). */
     val pixelScale: Float
+    /**
+     * The width in px this app's page is laid out at, scaled down to fit a narrower card
+     * ([AppWindow.fit]): the fixed-viewport fallback's width for an app with it on
+     * ([FixedViewport]), 0 for the card's own width.
+     */
+    fun fixedViewportWidth(appId: String): Int
 }
 
 /**
@@ -175,8 +181,10 @@ class AppWindow(
         sql = WebSql(context, appId) { id ->
             main.post { if (!destroyed) evaluateJavascript("window.__lunacySqlDone&&__lunacySqlDone($id)", null) }
         }
-        // 1 CSS px = 1 TouchPad px, as the shell uses; the layout width follows from it.
-        setInitialScale(Math.round(host.pixelScale * 100))
+        // 1 CSS px = 1 TouchPad px, as the shell uses; the layout width follows from it. On a
+        // phone that may be scaled down ([fit]); the display's own width stands in for the
+        // card's until it is laid out, and the viewport meta sets the scale for real.
+        setInitialScale(Math.round(host.pixelScale * fit(context.resources.displayMetrics.widthPixels) * 100))
         settings.setSupportZoom(false)
         // webOS drew no scrollbars on a window: apps scroll in their frameworks' own scrollers.
         // Android's flashed on a page taller than its window - every Mojo dashboard, whose
@@ -313,6 +321,23 @@ class AppWindow(
     fun sendBack() = evaluateJavascript(
         "(function(){function k(t){var e=document.createEvent('Events');e.initEvent(t,true,true);e.keyCode=27;e.which=27;(document.activeElement||document).dispatchEvent(e);}k('keydown');k('keyup');})()", null)
 
+    /**
+     * The fixed-viewport fallback (Docs/phone.md, "Fixed viewport"): an app with it on has
+     * its page laid out [WindowHost.fixedViewportWidth] px wide and shown scaled down to the
+     * card, so a TouchPad app has the room it was written for. 1 where the card is at least
+     * that wide already (a tablet, a phone in landscape), or for an app without it. The
+     * factor the CSS px are shown at, relative to a TouchPad px: 360 px card, 640 px
+     * layout -> 0.5625.
+     */
+    /** Device px per CSS px in this window's page: the shell's scale, less the phone's app scale. */
+    val pageScale: Float get() = host.pixelScale * fit(width)
+
+    private fun fit(widthPx: Int): Float {
+        val layoutWidth = host.fixedViewportWidth(appId)
+        if (layoutWidth <= 0 || widthPx <= 0) return 1f
+        return minOf(1f, widthPx / host.pixelScale / layoutWidth)
+    }
+
     private companion object {
         /** Plausible process ids, in the range webOS apps started at. */
         val nextPid = java.util.concurrent.atomic.AtomicInteger(1183)
@@ -371,9 +396,11 @@ class AppWindow(
         fun cardSize(): String {
             val w = this@AppWindow.width
             val h = this@AppWindow.height
-            val s = host.pixelScale
-            val size = if (w > 0 && h > 0) JSONObject().put("width", Math.round(w / s)).put("height", Math.round(h / s))
-                else JSONObject(host.screenSize(emulated))
+            val laid = w > 0 && h > 0
+            val f = fit(if (laid) w else context.resources.displayMetrics.widthPixels)
+            val s = host.pixelScale * f
+            val size = if (laid) JSONObject().put("width", Math.round(w / s)).put("height", Math.round(h / s))
+                else JSONObject(host.screenSize(emulated)).let { JSONObject().put("width", Math.round(it.getInt("width") / f)).put("height", Math.round(it.getInt("height") / f)) }
             return size.put("scale", s.toDouble()).toString()
         }
         /**

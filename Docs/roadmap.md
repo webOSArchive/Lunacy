@@ -5,6 +5,17 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-10-02)
 
+**2026-10-02, afternoon: a phone layout.** `FormFactor` decides phone or tablet from the
+screen (short side in dp, diagonal in inches, shape as the tie-breaker) or the owner's
+setting (Device Info, `system/setLayout`, `--es layout`), and the shell and the device
+profile both follow it. On a phone the launcher has a 40 px tab bar whose 150 px tabs scroll
+sideways, two permanent tabs instead of four, 84 px cells with 56 px icons (four across a
+Nexus 5 portrait), and a dock of four icons with the launcher button as the fifth equal
+slot. What an app is told (a Pre3) follows the same decision; whether its page is scaled
+is the per-app fixed-viewport switch, in Device Info's new Software group, on by default
+for Palm's Clock, Calculator and Memos, which then fit whole. All in [phone.md](phone.md),
+with what is still unmeasured. The tablet is unchanged (checked on the Pixel Tablet).
+
 **2026-10-02: WebSQL where the WebView has none.** The Pixel Tablet's WebView (153) has no
 `openDatabase`, Chromium having removed WebSQL in 119, so Apollo, and every Mojo app's Depot,
 stopped at the first store. `websql.js` now provides the device's API over `WebSql.kt`, one

@@ -103,7 +103,8 @@ class TabDialog(context: Context, private val luna: Luna) : FrameLayout(context)
     // ---- geometry (renamedialog.cpp's recalculateLayout) ----
 
     private fun panel(): RectF {
-        val w = luna.px(PANEL_W); val h = luna.px(PANEL_H)
+        // The TouchPad's 520 px panel, or as wide as a phone's screen allows (Docs/phone.md).
+        val w = minOf(luna.px(PANEL_W), width - 2 * luna.px(PADDING)); val h = luna.px(PANEL_H)
         val cx = width / 2f; val cy = height / 2f - luna.px(SHIFT_UP)
         return RectF(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2)
     }

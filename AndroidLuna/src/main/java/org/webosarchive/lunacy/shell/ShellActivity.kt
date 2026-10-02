@@ -157,7 +157,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // every other card starts below it (CardLayer.inset).
         cards = CardLayer(this, luna, this).apply { inset = luna.px(StatusBar.HEIGHT); feedback = { sounds.feedback(it) }
             // A phone's card view is the Pre3's: its own card ratios (Docs/pre3.md).
-            phone = profile == org.webosarchive.lunacy.card.DeviceProfile.PRE3
+            phone = luna.phone
             // The TouchPad's landscape turned end for end, which Lunacy calls "left".
             upsideDown = { screenOrientation() == "left" } }
         sounds.preload()
@@ -209,9 +209,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         root.isFocusableInTouchMode = true
         // The pill is 3/4 of the short side: a TouchPad's 768 px on a tablet, whatever the
         // screen (the shell keeps the TouchPad's proportions there); on a phone, the screen's
-        // own, as the Pre3's shell laid it out on its 480 px (Docs/pre3.md). Phones are not a
-        // target yet; this keeps the pill on the screen.
-        val shortSide = if (profile == org.webosarchive.lunacy.card.DeviceProfile.PRE3) {
+        // own, as the Pre3's shell laid it out on its 480 px (Docs/pre3.md).
+        val shortSide = if (luna.phone) {
             android.util.DisplayMetrics().also { @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(it) }.let { minOf(it.widthPixels, it.heightPixels) }
         } else (luna.density * 768).toInt()
         root.addView(justType, FrameLayout.LayoutParams((shortSide * JustType.WIDTH_OF_SHORT_SIDE).toInt(), luna.px(JustType.HEIGHT)).apply {
@@ -358,10 +357,16 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     /**
      * Android's screen saver asking for Exhibition (ExhibitionDream), and extras for
-     * development over adb: launch <appid> [params <json>], install <url or path>.
+     * development over adb: launch <appid> [params <json>], install <url or path>, layout
+     * auto|phone|tablet (the FormFactor setting; the shell restarts), launcher (opens it).
      */
     private fun handleIntent(intent: android.content.Intent) {
         intent.getStringExtra("install")?.let { install(it) }
+        intent.getStringExtra("layout")?.let { v ->
+            if (org.webosarchive.lunacy.card.FormFactor.setSetting(this, v)) { intent.removeExtra("layout"); recreate() }
+            else Log.w(AppServer.TAG, "layout: $v is not auto, phone or tablet")
+        }
+        if (intent.hasExtra("launcher")) { intent.removeExtra("launcher"); if (started && !launcherOpen) openLauncher() }
         // Say so and launch without them rather than throwing: the activity is singleTask, so
         // a bad `params` would otherwise be replayed on every restart and the shell could
         // never start again. Quoting one of these on a command line is easy to get wrong.
@@ -1023,11 +1028,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (h > 0) {
             w?.callMojo("keyboardShown", "true")
             if (w == null || w.keyboardResizes) { lp.bottomMargin = h; cards.layoutParams = lp }
-            else w.callMojo("positiveSpaceChanged", "${Math.round(cards.width / luna.density)},${Math.round((cards.areaHeight - h) / luna.density)}")
+            // In the page's own px, which on a phone may be scaled (AppWindow.pageScale).
+            else w.callMojo("positiveSpaceChanged", "${Math.round(cards.width / w.pageScale)},${Math.round((cards.areaHeight - h) / w.pageScale)}")
         } else {
             val resized = lp.bottomMargin != 0
             lp.bottomMargin = 0; cards.layoutParams = lp
-            if (w != null && !resized) w.callMojo("positiveSpaceChanged", "${Math.round(cards.width / luna.density)},${Math.round(cards.areaHeight / luna.density)}")
+            if (w != null && !resized) w.callMojo("positiveSpaceChanged", "${Math.round(cards.width / w.pageScale)},${Math.round(cards.areaHeight / w.pageScale)}")
             w?.let { win -> cards.post { win.callMojo("keyboardShown", "false") } }
             w?.removeInputFocus()
             goImmersive()  // Android shows its bars with the keyboard and leaves them up
@@ -1039,6 +1045,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     override val pixelScale get() = luna.density
+    override fun fixedViewportWidth(appId: String) =
+        if (org.webosarchive.lunacy.card.FixedViewport.isOn(this, appId)) org.webosarchive.lunacy.card.FormFactor.appLayoutWidth(this) else 0
 
     /**
      * The device an app sees. Which one is DeviceProfile's decision - a TouchPad on a
@@ -1576,6 +1584,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun remove(app: AppInfo) {
         if (app.androidComponent != null) { androidApps.uninstall(app); return }
         running[app.id]?.toList()?.forEach { w -> onWindowClosed(w) }
+        org.webosarchive.lunacy.card.FixedViewport.forget(this, app.id)
         packages.remove(app.id, app.dir) { error ->
             appsChanged()
             jsServices.reload()
@@ -1591,13 +1600,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     /** The dock's apps, as the user arranged them; at first, the first five apps. */
     private fun dock(): List<String> {
         val saved = dockPrefs.getString("dock", null)
-            ?: return registry.launchPoints.take(QuickLaunch.MAX_ITEMS).map { it.id }
+            ?: return registry.launchPoints.take(quickLaunch.maxItems).map { it.id }
         val a = runCatching { org.json.JSONArray(saved) }.getOrDefault(org.json.JSONArray())
         return (0 until a.length()).map { a.optString(it) }
     }
 
     private fun setDock(ids: List<String>) {
-        dockPrefs.edit().putString("dock", org.json.JSONArray(ids.distinct().take(QuickLaunch.MAX_ITEMS)).toString()).apply()
+        dockPrefs.edit().putString("dock", org.json.JSONArray(ids.distinct().take(quickLaunch.maxItems)).toString()).apply()
         showDock()
     }
 
@@ -1616,7 +1625,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val present = ids.indexOf(app.id)
         when {
             present >= 0 -> { ids.removeAt(present); ids.add(quickLaunch.slotAt(x, ids.size + 1), app.id) }
-            ids.size < QuickLaunch.MAX_ITEMS -> ids.add(quickLaunch.slotAt(x, ids.size + 1), app.id)
+            ids.size < quickLaunch.maxItems -> ids.add(quickLaunch.slotAt(x, ids.size + 1), app.id)
             else -> ids[quickLaunch.slotAt(x, ids.size)] = app.id
         }
         setDock(ids)

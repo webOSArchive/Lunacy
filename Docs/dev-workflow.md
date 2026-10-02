@@ -63,6 +63,8 @@ adb shell am start -n org.webosarchive.lunacy/.shell.ShellActivity \
 - `--ei trimMemory <level>` hands the shell an Android memory warning (Android 5's `am` has
   no `send-trim-memory`): 10 is `RUNNING_LOW`, 15 `RUNNING_CRITICAL`. Apps hear it as
   `Mojo.lowMemoryNotification`, and "normal" follows once 30 s pass without another.
+- `--es layout auto|phone|tablet` sets the FormFactor preference ([phone.md](phone.md)) and
+  restarts the shell; `--ez launcher true` opens the launcher, for screenshots over adb.
 - The activity is `singleTask`. A second `am start` with `launch` arrives through
   `onNewIntent`, which launches or relaunches the app.
 - **Lint matters.** A plain debug build does not stop calls to APIs newer than Android 5.

@@ -332,7 +332,9 @@ Found while testing the apps below; each is general, not tied to one app.
   the engine then fits the page to the card afresh, which is wrong in the other direction: a
   landscape card came back at 1.28, with the list half as much again as it should be.
 - ~~**compat, fonts arrive after the first script**~~ — done 2026-09-26; see the fixes table.
-- **card host, fixed-viewport fallback not built:** Memos hard-codes a 1024 × 768 screen
+- ~~**card host, fixed-viewport fallback not built**~~ — built 2026-10-02 as the per-app switch
+  in [phone.md](phone.md) "Fixed viewport"; Memos still leaves its band on a card taller
+  than a TouchPad's. Memos hard-codes a 1024 × 768 screen
   (`.memo-list` 687 px tall, "768 - 55(title) - 26(status)"), so on a card 772 px high its
   list and paper background stop 30 px short and the body's grey shows below. The
   architecture doc's per-app fallback (1024 × 768, scaled to fit) is what such an app needs.

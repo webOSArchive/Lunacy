@@ -30,12 +30,16 @@ class QuickLaunch(context: Context, private val luna: Luna, private val onLaunch
         // reference TouchPad (the 65 in LunaCE's layout settings is not what it shows).
         const val ICON_Y = 54
         const val MAX_ITEMS = 5
+        /** On a phone: four, with the launcher button the fifth of five equal slots (Docs/phone.md). */
+        const val PHONE_MAX_ITEMS = 4
         /** A picked-up icon's centre sits this far above the finger (LunaCE's MOVING_ICON_Y_OFFSET). */
         const val LIFT = 15f
     }
 
+    private val phone = luna.phone
+    val maxItems = if (phone) PHONE_MAX_ITEMS else MAX_ITEMS
     var apps: List<AppInfo> = emptyList()
-        set(v) { field = v.take(MAX_ITEMS); invalidate() }
+        set(v) { field = v.take(maxItems); invalidate() }
     var editing = false
         set(v) { field = v; if (!v) dragging = -1; invalidate() }
     /** An icon dragged up and out: it leaves the dock. */
@@ -55,25 +59,34 @@ class QuickLaunch(context: Context, private val luna: Luna, private val onLaunch
 
     override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(MeasureSpec.getSize(w), luna.px(HEIGHT))
 
+    /**
+     * The launcher button: on a tablet, 64 px in from the right, level with the icons; on a
+     * phone, just another slot - the last of the row the icons share, at their size, with no
+     * room of its own on the right.
+     */
     private fun buttonRect(): RectF {
+        if (phone) return slotRect(apps.size, apps.size)
         val s = luna.px(ICON.toFloat())
         val cx = width - luna.px(64f); val cy = luna.px(22f + 32f)
         return RectF(cx - s / 2, cy - s / 2, cx + s / 2, cy + s / 2)
     }
-    private fun areaWidth() = buttonRect().centerX() - luna.px(31f)
+    private fun areaWidth() = if (phone) width.toFloat() else width - luna.px(64f) - luna.px(31f)
+    /** A slot's width when count items are in the dock: a phone's row has one more, for the button. */
+    private fun slotWidth(count: Int) = areaWidth() / (count.coerceAtLeast(1) + if (phone) 1 else 0)
     /**
      * Items share the space left of the launcher button in equal slots. On a tablet a slot is
-     * always wider than an icon; on a phone-sized screen (not a target yet) it isn't, and the
-     * icons shrink to their slots rather than overlap.
+     * always wider than an icon; on a phone it isn't, and the icons shrink to their slots
+     * rather than overlap.
      */
-    private fun itemRect(i: Int, count: Int = apps.size): RectF {
-        val slot = areaWidth() / count.coerceAtLeast(1)
+    private fun slotRect(i: Int, count: Int): RectF {
+        val slot = slotWidth(count)
         val s = minOf(luna.px(ICON.toFloat()), slot * 0.85f)
         val cx = slot * (i + 0.5f); val cy = luna.px(ICON_Y.toFloat())
         return RectF(cx - s / 2, cy - s / 2, cx + s / 2, cy + s / 2)
     }
+    private fun itemRect(i: Int, count: Int = apps.size): RectF = slotRect(i, count)
     /** The slot under x, when the dock holds count items. */
-    fun slotAt(x: Float, count: Int): Int = (x / (areaWidth() / count.coerceAtLeast(1))).toInt().coerceIn(0, maxOf(0, count - 1))
+    fun slotAt(x: Float, count: Int): Int = (x / slotWidth(count)).toInt().coerceIn(0, maxOf(0, count - 1))
 
     override fun onDraw(c: Canvas) {
         luna.tile(c, "launcher3/quicklaunch-bg.png", RectF(0f, 0f, width.toFloat(), height.toFloat()))

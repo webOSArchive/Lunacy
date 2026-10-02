@@ -55,8 +55,15 @@ enyo.kind({
 						{kind: "InfoRow", name: "screen", label: $L("Screen")},
 						{kind: "InfoRow", name: "card", label: $L("Card")},
 						{kind: "InfoRow", name: "scale", label: $L("Scale")},
-						{kind: "InfoRow", name: "orientation", label: $L("Orientation")}
+						{kind: "InfoRow", name: "orientation", label: $L("Orientation")},
+						{kind: "InfoRow", name: "layout", label: $L("Layout"), tapHighlight: true, onclick: "editLayout"}
 					]},
+					{name: "layoutNote", className: "note"},
+					// The TouchPad's Device Info lists its software as title and version rows
+					// ("Built-in applications", in More info). Each row here carries the one
+					// per-app switch Lunacy has: the fixed viewport (Docs/phone.md).
+					{kind: "RowGroup", name: "software", caption: $L("Software — Use Phone Zoom"), components: []},
+					{className: "note", content: $L("Phone Zoom lays an app out at a TouchPad's width and shrinks it to fit a phone's card, for apps that only ever fit a TouchPad. Apps made for phones size themselves and should leave it off. An app that is open shows the change after it is closed and started again.")},
 					{content: $L("Apps see the card size in TouchPad pixels, so they lay out as they did on a TouchPad whatever this screen's density is."), className: "note"},
 					{kind: "Button", className: "enyo-button", caption: $L("Android Device Info"), onclick: "openAndroid"},
 					{content: $L("Android owns the rest: its own About screen has the hardware, the build and the legal notices."), className: "note"}
@@ -83,6 +90,24 @@ enyo.kind({
 				{kind: "Button", className: "enyo-button-affirmative", caption: $L("Save"), onclick: "saveDeviceId"}
 			]}
 		]},
+		// Phone or tablet: the shell decides from the screen, and this is where to overrule
+		// it. The app layout width is the phone's app scale (Docs/phone.md).
+		{kind: "Dialog", name: "layoutDialog", lazy: false, components: [
+			{content: $L("Layout"), className: "dialog-title"},
+			{name: "layoutClues", className: "note"},
+			{kind: "RadioGroup", name: "layoutChoice", components: [
+				{caption: $L("Automatic"), value: "auto"},
+				{caption: $L("Phone"), value: "phone"},
+				{caption: $L("Tablet"), value: "tablet"}
+			]},
+			{className: "note", content: $L("Phone Zoom's width: an app with it on (Software, below) is laid out this many pixels wide and shrunk to fit the card.")},
+			{kind: "Input", name: "appWidthInput", className: "id-input", hint: $L("Phone Zoom width, px")},
+			{className: "note", content: $L("Lunacy restarts to apply a change.")},
+			{layoutKind: "HFlexLayout", pack: "center", components: [
+				{kind: "Button", caption: $L("Cancel"), onclick: "closeLayout"},
+				{kind: "Button", className: "enyo-button-affirmative", caption: $L("Save"), onclick: "saveLayout"}
+			]}
+		]},
 		{kind: "Dialog", lazy: false, components: [
 			{name: "errorText"},
 			{layoutKind: "HFlexLayout", pack: "center", components: [
@@ -98,7 +123,9 @@ enyo.kind({
 		{kind: "PalmService", service: "palm://org.webosarchive.lunacy/", components: [
 			{name: "getEnvironment", method: "system/getEnvironment", onResponse: "gotEnvironment"},
 			{name: "openSettings", method: "android/openSettings", onResponse: "openedSettings"},
-			{name: "setDeviceId", method: "system/setDeviceId", onResponse: "deviceIdSet"}
+			{name: "setDeviceId", method: "system/setDeviceId", onResponse: "deviceIdSet"},
+			{name: "setLayout", method: "system/setLayout", onResponse: "layoutSet"},
+			{name: "setFixedViewport", method: "system/setFixedViewport", onResponse: "fixedViewportSet"}
 		]}
 	],
 	create: function() {
@@ -150,7 +177,37 @@ enyo.kind({
 		this.$.card.setValue(card);
 		this.$.scale.setValue(s.scale ? s.scale + "×" : "");
 		this.$.orientation.setValue(s.orientation);
+		var y = this.layout = r.layout || {};
+		var name = { phone: $L("Phone"), tablet: $L("Tablet") };
+		this.$.layout.setValue(y.layout ? name[y.layout] + (y.setting === "auto" ? " " + $L("(from the screen)") : " " + $L("(chosen)")) : "");
+		this.$.layoutNote.setContent((y.layout === "phone"
+			? $L("The phone layout: a tighter launcher, a scrolling tab bar and a four-icon dock, and apps are told they are on a Pre3.")
+			: $L("The TouchPad's layout, and apps are told they are on a TouchPad.")) + " " + $L("Tap to change."));
+		this.software(r.software || []);
 		this.$.pane.selectViewByName("info");
+	},
+	//* One row per app: its title, its version, and the fixed-viewport switch on the right.
+	software: function(apps) {
+		var group = this.$.software;
+		// Only the rows: destroyComponents would take the group's own caption with them.
+		group.destroyControls();
+		group.setCaption($L("Software — Use Phone Zoom"));
+		for (var i = 0; i < apps.length; i++) {
+			var a = apps[i];
+			// The TouchPad's row: the title on the left, "v" and the version on the right.
+			group.createComponent({kind: "Item", tapHighlight: false, className: "enyo-item info-row software-row", layoutKind: "HFlexLayout", align: "center", components: [
+				{content: a.title, flex: 1, className: "software-title"},
+				{content: "v" + a.version, className: "software-version"},
+				{kind: "ToggleButton", state: a.on, appId: a.id, onChange: "viewportToggled"}
+			]}, {owner: this});
+		}
+		group.render();
+	},
+	viewportToggled: function(inSender, inState) {
+		this.$.setFixedViewport.call({id: inSender.appId, on: inState});
+	},
+	fixedViewportSet: function(inSender, r) {
+		if (!r || !r.returnValue) { this.showError(r && r.errorText || $L("The viewport couldn't be set.")); }
 	},
 	//* The count goes in the row; the names are too long for it, so they wrap underneath.
 	services: function(names) {
@@ -168,6 +225,25 @@ enyo.kind({
 		if (!n) { return ""; }
 		var gb = n / (1024 * 1024 * 1024);
 		return gb >= 1 ? (Math.round(gb * 10) / 10) + " GB" : Math.round(n / (1024 * 1024)) + " MB";
+	},
+	editLayout: function() {
+		var y = this.layout || {};
+		this.$.layoutClues.setContent($L("This screen reads as a") + " " + (y.detected || "?") + ": " + (y.reasons || []).join("; ") + ".");
+		this.$.layoutChoice.setValue(y.setting || "auto");
+		this.$.appWidthInput.setValue(String(y.appLayoutWidth === undefined ? 640 : y.appLayoutWidth));
+		this.$.layoutDialog.open();
+	},
+	closeLayout: function() {
+		this.$.layoutDialog.close();
+	},
+	saveLayout: function() {
+		var width = parseInt(this.$.appWidthInput.getValue(), 10);
+		this.$.setLayout.call({layout: this.$.layoutChoice.getValue(), appLayoutWidth: isNaN(width) ? 0 : width});
+	},
+	layoutSet: function(inSender, r) {
+		this.$.layoutDialog.close();
+		if (!r || !r.returnValue) { this.showError(r && r.errorText || $L("The layout couldn't be set.")); return; }
+		this.refresh();
 	},
 	editDeviceId: function() {
 		this.$.idInput.setValue(this.deviceId || "");

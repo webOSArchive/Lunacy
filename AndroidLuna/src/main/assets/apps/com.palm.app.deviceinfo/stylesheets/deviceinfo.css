@@ -94,3 +94,16 @@ body {
 	font-size: 13px;
 	font-family: monospace;
 }
+
+
+/* The Software rows: Mojo's .palm-row .title (20 px) on the left, the version in the row's
+ * grey on the right, and the fixed-viewport switch after it. */
+.software-title {
+	font-size: 20px;
+	color: #000;
+}
+.software-version {
+	font-size: 14px;
+	color: #888;
+	padding: 0 14px;
+}

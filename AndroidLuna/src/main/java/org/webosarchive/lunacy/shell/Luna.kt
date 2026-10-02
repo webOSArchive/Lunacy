@@ -15,9 +15,15 @@ import android.graphics.Typeface
  */
 class Luna(private val context: Context) {
     /**
+     * Whether the shell draws its phone layout (Docs/phone.md): tighter launcher grid, a
+     * scrolling tab bar, a four-icon dock. Decided once, by [FormFactor].
+     */
+    val phone: Boolean = org.webosarchive.lunacy.card.FormFactor.isPhone(context)
+    /**
      * Android pixels per TouchPad pixel. On tablets the screen's short side is about 768
      * TouchPad px, as on a TouchPad, so the shell keeps the TouchPad's proportions whatever the
-     * vendor's density setting. Phones use the Android density until the phone layout exists.
+     * vendor's density setting. A phone uses the Android density: a Nexus 5's 1080 x 1920 at
+     * 3 is a 360 x 640 shell, near the Pre3's own 320 x 533 at its ScaleFactor of 1.5.
      */
     val density: Float = run {
         val real = android.util.DisplayMetrics()
@@ -25,7 +31,7 @@ class Luna(private val context: Context) {
         (context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager).defaultDisplay.getRealMetrics(real)
         // Rounded to a whole number: at fractional scales the slices of nine-patch and
         // -webkit-border-image graphics land between device pixels and show faint seams.
-        if (context.resources.configuration.smallestScreenWidthDp >= 600) maxOf(1f, Math.round(minOf(real.widthPixels, real.heightPixels) / 768f).toFloat())
+        if (!phone) maxOf(1f, Math.round(minOf(real.widthPixels, real.heightPixels) / 768f).toFloat())
         else real.density
     }
     private val targetDpi = (160 * density).toInt()

@@ -237,11 +237,11 @@ enum class DeviceProfile(
 
     companion object {
         /**
-         * The webOS device this screen is most like. The same test the shell uses to decide
-         * whether it is drawing a tablet.
+         * The webOS device this screen is most like: a Pre3 on a phone, a TouchPad on a
+         * tablet. [FormFactor] decides which, and the shell's own layout follows the same
+         * decision, so apps and shell never disagree about what the machine is.
          */
-        fun forScreen(context: Context): DeviceProfile =
-            if (context.resources.configuration.smallestScreenWidthDp >= 600) TOUCHPAD else PRE3
+        fun forScreen(context: Context): DeviceProfile = if (FormFactor.isPhone(context)) PRE3 else TOUCHPAD
 
         /**
          * This device's serial, in HP's shape for this profile. Derived from the

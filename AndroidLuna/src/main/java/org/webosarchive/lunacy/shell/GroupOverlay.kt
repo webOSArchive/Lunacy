@@ -201,9 +201,11 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
 
     private fun shown() = group?.members?.take(MAX_SHOWN).orEmpty()
     private fun cell() = maxOf(luna.px(CELL), luna.px(128f + 8f))
+    /** Four columns, or as many as a phone's width holds (Docs/phone.md). */
+    private fun maxColumns() = if (width > 0) MAX_COLUMNS.coerceAtMost(maxOf(1, ((width - 2 * luna.px(PADDING)) / cell()).toInt())) else MAX_COLUMNS
     private fun panel(): RectF {
         val n = shown().size
-        val cols = n.coerceIn(1, MAX_COLUMNS); val rows = maxOf(1, (n + cols - 1) / cols)
+        val cols = n.coerceIn(1, maxColumns()); val rows = maxOf(1, (n + cols - 1) / cols)
         val w = cols * cell() + 2 * luna.px(PADDING)
         val h = rows * cell() + luna.px(TITLE_H) + 2 * luna.px(PADDING)
         val cy = height / 2f - if (editing) luna.px(EDIT_SHIFT) else 0f
@@ -211,7 +213,7 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
     }
     private fun titleRect(p: RectF) = RectF(p.left + luna.px(PADDING), p.top + luna.px(PADDING) / 2, p.right - luna.px(PADDING), p.top + luna.px(PADDING) / 2 + luna.px(TITLE_H))
     private fun cellRect(p: RectF, i: Int): RectF {
-        val cols = shown().size.coerceIn(1, MAX_COLUMNS)
+        val cols = shown().size.coerceIn(1, maxColumns())
         val left = p.left + luna.px(PADDING) + (i % cols) * cell(); val top = titleRect(p).bottom + (i / cols) * cell()
         return RectF(left, top, left + cell(), top + cell())
     }

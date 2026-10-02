@@ -39,8 +39,8 @@ of their own). A Home Screen page (codepoet) offers to make Lunacy the device's 
 from Android 10 through the system's own "set as default home" dialog (the home role), before
 that through Android's Home settings screen; it is a choice, not a permission, so it is
 offered on every Android version. Walked through on the Pixel Tablet, including the refusal
-paths; the home dialog was cancelled there, so the tablet's home app is unchanged. Not yet compared with the
-TouchPad's own First Use at the same scale, and not yet run on the HP.
+paths; the home dialog was cancelled there, so the tablet's home app is unchanged. Rule 0
+isn't applied to First Use (codepoet): it is platform-specific by nature. Not yet run on the HP.
 
 *A phone in portrait, not a phone target.* On the Nexus 5 (1080 x 1920, shell scale 3, so a
 360 x 640 px shell, near the Pre3's own 320 x 533 at its `ScaleFactor=1.5`), apps are told
@@ -682,10 +682,10 @@ corpus survey says how many apps this phase can reach, and whether it is worth d
     user agent. None of it applies at target 24.
   - On 17 the keyboard no longer comes back by itself after a rotation; check what the
     TouchPad did. Add WebView 140 to the versions the suite runs on.
-- **First Use: what is left** (the app is in, 2026-10-01). Compare it with the TouchPad's own
-  First Use at the same scale (the model is webOS Archive's webOS Account app,
-  `org.webosarchive.webosaccount` 1.1.12 in webos-doctor-ce under `AddToImage/OOBE`, which is
-  Palm's First Use put to another purpose). Pages still to come as the targets rise:
+- **First Use: what is left** (the app is in, 2026-10-01). No rule 0 pass against the
+  TouchPad's own First Use (codepoet): that app is platform-specific, and Lunacy's asks for
+  different things; Palm's look is kept, not its measurements. Pages still to come as the
+  targets rise:
   Bluetooth from a target of 31, notification access for launcher mode, the local network at
   37. A way to run it again from Device Info.
 - Launcher mode: Lunacy as the Android home screen, with Android apps shown alongside webOS

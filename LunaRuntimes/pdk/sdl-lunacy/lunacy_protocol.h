@@ -3,15 +3,16 @@
     the SDL drivers, libpdl, and PdkHost.kt, which must agree with it byte for byte.
 
     Every message: uint32 type, uint32 a, uint32 len, then len bytes, all little-endian.
-    Two connections, told apart by their first byte: 'V' carries video, input and PDL;
-    'A' carries audio. Each is a stream in both directions.
+    Connections are told apart by their first byte: 'V' carries video, input and PDL;
+    'A' carries audio; 'P' is libpdl's own, for PDL requests made before SDL has opened
+    'V' (or from an app that never does). Each is a stream in both directions.
 */
 #ifndef _lunacy_protocol_h
 #define _lunacy_protocol_h
 
 /* app -> shell, on the 'V' connection */
-#define LPDK_VIDEO_MODE   1   /* payload: int32 w, h, bpp; the framebuffer file is sized w*h*(bpp/8) */
-#define LPDK_FRAME        2   /* a = 0: the whole screen changed; payload none */
+#define LPDK_VIDEO_MODE   1   /* a = 0: 2D, payload int32 w, h, bpp, the framebuffer file sized w*h*(bpp/8); a = 1: OpenGL ES, payload w, h, 0 */
+#define LPDK_FRAME        2   /* a = 0: the whole screen changed (2D); a = 1: SDL_GL_SwapBuffers; payload none */
 #define LPDK_CAPTION      3   /* payload: the title, UTF-8 */
 #define LPDK_PDL          4   /* a = request id; payload: a JSON request (libpdl) */
 

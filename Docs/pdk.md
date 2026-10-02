@@ -178,6 +178,33 @@ its intro movie) and 5 PDL calls (`SetOrientation`, `ScreenTimeoutEnable`, `Noti
   (`glReadPixels`, `glGetError`, `glGetIntegerv`) are round trips.
 - `libSDL_cinema` as a stub that reports the movie as finished, until a player exists.
 
+**Stage one, done 2026-10-02 (evening):** Transformers runs to its render loop on the Nexus 5
+and under qemu on the desk, against a *logging* `libGLES_CM.so` generated from the PDK's
+own GLES 1.1 headers (`LunaRuntimes/pdk/libgles/gen_gles1.py`, 283 functions, queries
+answered plausibly). Getting there, in order, each found with `LD_DEBUG=bindings` or
+gdb through qemu's stub:
+
+1. `SDL_Init` refused a subsystem flag because the build had `--disable-joystick`; enabled,
+   with no devices behind it (codepoet: joystick support came late to webOS and few games
+   use it - this is only so the flag is accepted).
+2. `SDL_GL_SetAttribute(17, 1)` was refused: Palm's SDL added `SDL_GL_RETAINED_BACKING`
+   (16), `SDL_GL_CONTEXT_MAJOR_VERSION` (17), `_MINOR_VERSION` (18) and moved
+   `SDL_GL_SWAP_CONTROL` to 19; and a `SDL_OPENGLES` mode flag (0x40). Accepted now, and
+   `GetAttribute` answers a GLES 1.1 context.
+3. The binary asked for an executable stack (`PT_GNU_STACK` RWE), which Android refuses an
+   app outright: the host runs a copy beside it with the flag cleared (`.lunacy.<name>`),
+   the one change `execstack -c` makes; the package's file is untouched.
+4. `/proc/self/exe` named the loader, so the game built its data path from the wrong place
+   and aborted: `liblunacy-preload.so` (LD_PRELOAD) answers that link with the binary.
+5. SDL clears the screen surface it is handed whatever the mode, so the GL surface has
+   pixels of its own, unused by GL.
+6. A fresh runtime wasn't being extracted on the device: the stamp is now the build's id.
+
+The game is a Pre-era 320 × 480 title; on a TouchPad it ran in the emulated card. What it
+uses of GLES 1.1, from the log: fixed-point everything (`glOrthox`, `glRotatex`,
+`glColor4x`, `glTexEnvx`), one texture unit, vertex and texcoord arrays, `glDrawArrays`,
+`glBindFramebufferOES(0)`, no VBOs so far. That is the serialiser's first target.
+
 ## 6. Seen on the Nexus 5, 2026-10-02
 
 Keen installed from its package (its postinst, a game-controller jailbreak for the TouchPad,

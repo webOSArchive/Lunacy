@@ -22,7 +22,22 @@
 
 /* From the SDL video driver (SDL_lunacyvideo.c), in the same process. */
 extern int LUNACY_control_sock;
+extern int LUNACY_Connect(const char *hello);
 extern int LUNACY_Send(int sock, uint32_t type, uint32_t a, const void *payload, uint32_t len);
+
+/*
+ * The connection a request goes down: the video driver's, once SDL has a video mode, or
+ * one of libpdl's own before then - Transformers G1 asks for the screen timeout right after
+ * SDL_Init(timer) and quits if that fails. With LUNACY_PDK_NOSHELL set (desk tests under
+ * qemu, no shell to reach) every request succeeds unsent.
+ */
+static int pdl_sock = -1;
+static int shell_sock(void)
+{
+	if (LUNACY_control_sock >= 0) return LUNACY_control_sock;
+	if (pdl_sock < 0 && !getenv("LUNACY_PDK_NOSHELL")) pdl_sock = LUNACY_Connect("P");
+	return pdl_sock;
+}
 
 static char last_error[256] = "";
 static int inited = 0;
@@ -114,8 +129,12 @@ PDL_Err PDL_CheckLicense(void) { return PDL_NOERROR; }
 
 static PDL_Err tell(const char *json)
 {
-	if (LUNACY_control_sock < 0) return fail("not connected to the shell");
-	if (LUNACY_Send(LUNACY_control_sock, LPDK_PDL, 0, json, strlen(json)) < 0) return fail("the shell went away");
+	int s = shell_sock();
+	if (s < 0) {
+		if (getenv("LUNACY_PDK_NOSHELL")) { fprintf(stderr, "[pdl] (no shell) %s\n", json); return PDL_NOERROR; }
+		return fail("not connected to the shell");
+	}
+	if (LUNACY_Send(s, LPDK_PDL, 0, json, strlen(json)) < 0) { if (s == pdl_sock) { close(pdl_sock); pdl_sock = -1; } return fail("the shell went away"); }
 	return PDL_NOERROR;
 }
 

@@ -30,6 +30,7 @@
 #include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <dlfcn.h>
 
 #include "SDL_video.h"
 #include "SDL_mouse.h"
@@ -104,6 +105,11 @@ static void LUNACY_FreeHWSurface(_THIS, SDL_Surface *surface);
 static void LUNACY_UpdateRects(_THIS, int numrects, SDL_Rect *rects);
 static int LUNACY_FlipHWSurface(_THIS, SDL_Surface *surface);
 static void LUNACY_SetCaption(_THIS, const char *title, const char *icon);
+static int LUNACY_GL_LoadLibrary(_THIS, const char *path);
+static void *LUNACY_GL_GetProcAddress(_THIS, const char *proc);
+static int LUNACY_GL_GetAttribute(_THIS, SDL_GLattr attrib, int *value);
+static int LUNACY_GL_MakeCurrent(_THIS);
+static void LUNACY_GL_SwapBuffers(_THIS);
 
 static int LUNACY_Available(void)
 {
@@ -157,6 +163,14 @@ static SDL_VideoDevice *LUNACY_CreateDevice(int devindex)
 	device->InitOSKeymap = LUNACY_InitOSKeymap;
 	device->PumpEvents = LUNACY_PumpEvents;
 	device->free = LUNACY_DeleteDevice;
+	/* OpenGL ES, as a PDK game asked SDL for it (Docs/pdk.md, "Transformers G1"): the
+	   calls themselves go through libGLES_CM.so, which the game links; SDL only has to
+	   grant the mode and carry the swap. */
+	device->GL_LoadLibrary = LUNACY_GL_LoadLibrary;
+	device->GL_GetProcAddress = LUNACY_GL_GetProcAddress;
+	device->GL_GetAttribute = LUNACY_GL_GetAttribute;
+	device->GL_MakeCurrent = LUNACY_GL_MakeCurrent;
+	device->GL_SwapBuffers = LUNACY_GL_SwapBuffers;
 	return device;
 }
 
@@ -175,6 +189,9 @@ int LUNACY_VideoInit(_THIS, SDL_PixelFormat *vformat)
 	vformat->Rmask = 0x000000ff;
 	vformat->Gmask = 0x0000ff00;
 	vformat->Bmask = 0x00ff0000;
+	/* LUNACY_PDK_NOSHELL: a desk test under qemu with no shell to reach; the mode is
+	   granted, frames and events go nowhere. */
+	if (getenv("LUNACY_PDK_NOSHELL")) { this->hidden->sock = -1; return 0; }
 	this->hidden->sock = LUNACY_Connect("V");
 	if (this->hidden->sock < 0) return -1;
 	fcntl(this->hidden->sock, F_SETFL, fcntl(this->hidden->sock, F_GETFL) | O_NONBLOCK);
@@ -189,7 +206,11 @@ SDL_Rect **LUNACY_ListModes(_THIS, SDL_PixelFormat *format, Uint32 flags)
 
 static void unmap(_THIS)
 {
-	if (this->hidden->buffer) { munmap(this->hidden->buffer, this->hidden->buffer_len); this->hidden->buffer = NULL; }
+	if (this->hidden->buffer) {
+		/* A mapped framebuffer file (2D), or malloc'd pixels (GL): told apart by the fd. */
+		if (this->hidden->fb_fd >= 0) munmap(this->hidden->buffer, this->hidden->buffer_len); else SDL_free(this->hidden->buffer);
+		this->hidden->buffer = NULL;
+	}
 	if (this->hidden->fb_fd >= 0) { close(this->hidden->fb_fd); this->hidden->fb_fd = -1; }
 }
 
@@ -200,6 +221,31 @@ SDL_Surface *LUNACY_SetVideoMode(_THIS, SDL_Surface *current, int width, int hei
 	int32_t mode[3];
 	Uint32 rmask = 0, gmask = 0, bmask = 0;
 
+	/* Palm's SDL_OPENGLES (0x40), the PDK's own flag for a GLES context, is an OpenGL mode
+	   here: SDL's own checks look for SDL_OPENGL, so both flags are kept on the surface. */
+	if (flags & (SDL_OPENGL | 0x40)) {
+		flags |= SDL_OPENGL;
+		/* The GL library draws and the shell shows it; the screen surface still gets
+		   pixels of its own, because SDL clears and blits the screen surface as it sets
+		   the mode up whatever the flags, and a game may touch it too. */
+		unmap(this);
+		this->hidden->buffer = SDL_malloc((size_t)width * height * 4);
+		if (!this->hidden->buffer) { SDL_OutOfMemory(); return NULL; }
+		this->hidden->buffer_len = (size_t)width * height * 4;
+		this->hidden->fb_fd = -1;
+		SDL_memset(this->hidden->buffer, 0, this->hidden->buffer_len);
+		if (!SDL_ReallocFormat(current, 32, 0x000000ff, 0x0000ff00, 0x00ff0000, 0)) return NULL;
+		current->flags = SDL_OPENGL | (flags & (SDL_FULLSCREEN | 0x40));
+		this->hidden->w = current->w = width;
+		this->hidden->h = current->h = height;
+		this->hidden->bpp = 0;
+		current->pitch = width * 4;
+		current->pixels = this->hidden->buffer;
+		this->gl_config.driver_loaded = 1;
+		mode[0] = width; mode[1] = height; mode[2] = 0;
+		LUNACY_Send(this->hidden->sock, LPDK_VIDEO_MODE, 1, mode, sizeof mode);
+		return current;
+	}
 	if (!path || !*path) { SDL_SetError("LUNACY_PDK_FB is not set"); return NULL; }
 	if (bpp != 16 && bpp != 32) bpp = 32;
 	if (bpp == 32) { rmask = 0x000000ff; gmask = 0x0000ff00; bmask = 0x00ff0000; }
@@ -257,6 +303,40 @@ int LUNACY_SetColors(_THIS, int firstcolor, int ncolors, SDL_Color *colors)
 static void LUNACY_SetCaption(_THIS, const char *title, const char *icon)
 {
 	if (title) LUNACY_Send(this->hidden->sock, LPDK_CAPTION, 0, title, strlen(title));
+}
+
+static int LUNACY_GL_LoadLibrary(_THIS, const char *path)
+{
+	this->gl_config.driver_loaded = 1;
+	return 0;
+}
+
+static void *LUNACY_GL_GetProcAddress(_THIS, const char *proc)
+{
+	return dlsym(RTLD_DEFAULT, proc);
+}
+
+static int LUNACY_GL_GetAttribute(_THIS, SDL_GLattr attrib, int *value)
+{
+	switch (attrib) {
+	case SDL_GL_RED_SIZE: case SDL_GL_GREEN_SIZE: case SDL_GL_BLUE_SIZE: case SDL_GL_ALPHA_SIZE: *value = 8; break;
+	case SDL_GL_DEPTH_SIZE: *value = 16; break;
+	case SDL_GL_STENCIL_SIZE: *value = 8; break;
+	case SDL_GL_BUFFER_SIZE: *value = 32; break;
+	case SDL_GL_DOUBLEBUFFER: *value = 1; break;
+	case 16: *value = 0; break;   /* Palm: SDL_GL_RETAINED_BACKING */
+	case 17: *value = 1; break;   /* Palm: SDL_GL_CONTEXT_MAJOR_VERSION, a GLES 1.1 context */
+	case 18: *value = 1; break;   /* Palm: SDL_GL_CONTEXT_MINOR_VERSION */
+	default: *value = 0; break;
+	}
+	return 0;
+}
+
+static int LUNACY_GL_MakeCurrent(_THIS) { return 0; }
+
+static void LUNACY_GL_SwapBuffers(_THIS)
+{
+	LUNACY_Send(this->hidden->sock, LPDK_FRAME, 1, NULL, 0);
 }
 
 void LUNACY_VideoQuit(_THIS)

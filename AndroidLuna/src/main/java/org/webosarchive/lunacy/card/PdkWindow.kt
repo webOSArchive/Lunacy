@@ -53,7 +53,16 @@ class PdkWindow(
 
     // ---- what the host reports ----
 
-    override fun onMode(width: Int, height: Int) { frameView.invalidate() }
+    override fun onMode(width: Int, height: Int, gl: Boolean) { frameView.invalidate() }
+
+    /** The first swap says the game is drawing; the card has nothing to show for it yet. */
+    override fun onGlSwap() {
+        if (!drawn) {
+            drawn = true
+            shell.onStageReady(this)
+            shell.onPageDrawn(this)
+        }
+    }
 
     override fun onFrame(frame: Bitmap) {
         this.frame = frame

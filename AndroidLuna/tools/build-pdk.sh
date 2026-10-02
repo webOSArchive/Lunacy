@@ -53,13 +53,21 @@ cp $SRC/sdl-lunacy/SDL_lunacyvideo.c $SRC/sdl-lunacy/SDL_lunacyvideo.h $SRC/sdl-
 cp $SRC/sdl-lunacy/SDL_lunacyaudio.c $SRC/sdl-lunacy/SDL_lunacyaudio.h $S/src/audio/dummy/
 # The bootstrap tables name the drivers they link; ours replace the dummy entries.
 sed -i 's/DUMMY_bootstrap/LUNACY_bootstrap/g' $S/src/video/SDL_video.c $S/src/video/SDL_sysvideo.h
+# Palm's SDL_GLattr additions (the PDK's SDL_video.h): SDL_GL_RETAINED_BACKING 16,
+# SDL_GL_CONTEXT_MAJOR_VERSION 17, SDL_GL_CONTEXT_MINOR_VERSION 18, SDL_GL_SWAP_CONTROL 19.
+# Stock SDL refuses an attribute it doesn't know, and a game asking for a GLES 1 context
+# (Transformers G1) quits on the refusal. Accepted here; the driver answers GetAttribute.
+if ! grep -q 'Palm attributes' $S/src/video/SDL_video.c; then
+  sed -i '/^int SDL_GL_SetAttribute( SDL_GLattr attr, int value )/,/^}/ s/^\t\tdefault:/\t\tcase 17: case 18: case 19: \/* Palm attributes (16, SDL_GL_RETAINED_BACKING, is stock SDL_GL_SWAP_CONTROL here) *\/ retval = 0; break;\n\t\tdefault:/' $S/src/video/SDL_video.c
+  grep -q 'Palm attributes' $S/src/video/SDL_video.c || { echo "the SDL_GL_SetAttribute patch didn't apply"; exit 1; }
+fi
 sed -i 's/DUMMYAUD_bootstrap/LUNACYAUD_bootstrap/g' $S/src/audio/SDL_audio.c $S/src/audio/SDL_sysaudio.h
 mkdir -p sdl-build && cd sdl-build
 if [ ! -f Makefile ]; then
   $S/configure --host=arm-linux-gnueabi --prefix=$WORK/sdl-out --disable-static --enable-shared \
     --disable-video-x11 --disable-video-directfb --disable-video-fbcon --enable-video-dummy \
     --disable-oss --disable-alsa --disable-pulseaudio --disable-esd --disable-arts --disable-nas \
-    --disable-diskaudio --enable-dummyaudio --disable-joystick --disable-cdrom --disable-assembly > configure.log 2>&1
+    --disable-diskaudio --enable-dummyaudio --enable-joystick --enable-cdrom --disable-assembly > configure.log 2>&1
 fi
 make -j8 > make.log 2>&1
 make install > install.log 2>&1
@@ -93,10 +101,21 @@ cp mixer-out/lib/libSDL_mixer-1.2.so.0.12.0 "$OUT/lib/libSDL_mixer-1.2.so.0"
 for f in libogg.so.0 libvorbis.so.0 libvorbisfile.so.3; do cp "$WORK/sysroot/usr/lib/arm-linux-gnueabi/$f" "$OUT/lib/"; done
 # SDL_image and SDL_ttf: not built yet.
 
+# ---- libGLES_CM: generated from the PDK's own GLES 1.1 headers (Docs/pdk.md, "Transformers G1") ----
+# Stage one, logging: every call counted and the first few logged, queries answered.
+python3 "$SRC/libgles/gen_gles1.py" "$PDK_INC/GLES/gl.h" "$PDK_INC/GLES/glext.h" > libgles_cm.c
+$CC -O2 -shared -fPIC -Wl,-soname,libGLES_CM.so -I"$PDK_INC" libgles_cm.c -o "$OUT/lib/libGLES_CM.so"
+# liblunacy-preload: /proc/self/exe as the app's binary, not the loader's (LD_PRELOAD).
+$CC -O2 -shared -fPIC -Wl,-soname,liblunacy-preload.so "$SRC/libpreload/preload.c" -o "$OUT/lib/liblunacy-preload.so" -ldl
+# libSDL_cinema: Palm's video player for a game's movies. A stub that has no movie to play.
+$CC -O2 -shared -fPIC -Wl,-soname,libSDL_cinema.so "$SRC/libcinema/cinema.c" -o "$OUT/lib/libSDL_cinema.so"
+
 # ---- the glibc runtime ----
 L=$WORK/sysroot/lib/arm-linux-gnueabi
 for f in libc.so.6 libm.so.6 libdl.so.2 libpthread.so.0 librt.so.1 libgcc_s.so.1 libz.so.1; do cp "$L/$f" "$OUT/lib/"; done
 cp $WORK/sysroot/usr/lib/arm-linux-gnueabi/libstdc++.so.6 "$OUT/lib/"
+# A build id, so that an installed Lunacy refreshes the extracted runtime when it changes.
+date -u +%Y-%m-%dT%H:%M:%SZ > "$OUT/BUILD"
 cp $WORK/sysroot/lib/ld-linux.so.3 "$JNI/libld-linux.so"
 # The loader again, by its own name, for the emulated path: qemu loads the program and finds
 # its interpreter at /lib/ld-linux.so.3 under the runtime folder it is given as a sysroot.
@@ -167,6 +186,10 @@ The PDK runtime (Docs/pdk.md), built by tools/build-pdk.sh:
   (LunaRuntimes/pdk/sdl-lunacy, LGPL 2.1).
 - libpdl.so: Lunacy's own (LunaRuntimes/pdk/libpdl), built against Palm's PDK headers.
 - libSDL_mixer-1.2.so.0: SDL_mixer $MIX_VER (zlib licence), with Ogg Vorbis.
+- libGLES_CM.so: Lunacy's own (LunaRuntimes/pdk/libgles), generated from the PDK's Khronos
+  GLES 1.1 headers (SGI Free Software License B).
+- libSDL_cinema.so: Lunacy's own stub (LunaRuntimes/pdk/libcinema).
+- liblunacy-preload.so: Lunacy's own (LunaRuntimes/pdk/libpreload).
 - libogg, libvorbis, libvorbisfile: Xiph.Org (BSD), Debian bookworm armel.
 - libqemu-arm.so (64-bit builds only): QEMU $QEMU_VER user-mode emulator for 32-bit ARM
   (GPL 2), Termux's build for Android, with the libraries it loads in qemu-lib/ (glib

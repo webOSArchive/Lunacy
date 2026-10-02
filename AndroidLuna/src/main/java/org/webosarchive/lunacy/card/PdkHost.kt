@@ -38,8 +38,10 @@ class PdkHost(
     private val listener: Listener,
 ) {
     interface Listener {
-        /** The app set its screen size; the frame bitmap is this size from now on. */
-        fun onMode(width: Int, height: Int)
+        /** The app set its screen size; the frame bitmap is this size from now on. gl: an OpenGL ES mode, no bitmap. */
+        fun onMode(width: Int, height: Int, gl: Boolean)
+        /** The app swapped its OpenGL buffers; nothing to show yet, but it is drawing. */
+        fun onGlSwap()
         /** A new frame is in [frame]. Main thread. */
         fun onFrame(frame: Bitmap)
         fun onCaption(title: String)
@@ -77,28 +79,43 @@ class PdkHost(
         }
         fbFile.delete()
         RandomAccessFile(fbFile, "rw").use { }
-        val binary = File(app.dir.let { File(runtime.appsRoot, it) }, app.main)
+        val original = File(app.dir.let { File(runtime.appsRoot, it) }, app.main)
         // The installer keeps a package's files as they came; a PDK binary wants its
         // execute bit back (the loader runs it, qemu checks it).
-        binary.setExecutable(true, false)
+        original.setExecutable(true, false)
+        val binary = PdkRuntime.withoutExecStack(original)
         val dataDir = File(context.filesDir, "pdk/data/$appId").also { it.mkdirs() }
         // A 32-bit CPU runs the binary through the loader; a 64-bit-only one runs it under
         // qemu, which loads the program itself and finds the loader under the runtime folder.
         val command = if (loader != null) listOf(loader.path, "--library-path", lib.path, binary.path)
             else listOf(emulator!!.path, "-L", lib.parentFile!!.path, "-E", "LD_LIBRARY_PATH=/lib", binary.path)
-        val pb = ProcessBuilder(command).directory(binary.parentFile).redirectErrorStream(true)
+        // In the app's own folder, as LunaSysMgr started a native app; the binary may sit in a
+        // subfolder (Transformers: transg1/transg1.exe) and still read its data from the top.
+        val appDir = File(runtime.appsRoot, app.dir)
+        val pb = ProcessBuilder(command).directory(appDir).redirectErrorStream(true)
         // qemu's own libraries (Termux's build), beside the runtime.
         if (loader == null) runtime.qemuLibDir?.let { pb.environment()["LD_LIBRARY_PATH"] = it.path }
+        // Through the loader, /proc/self/exe would name the loader: the preload answers it
+        // with the binary, which is where a game looks for its data from (Transformers G1).
+        if (loader != null) {
+            pb.environment()["LD_PRELOAD"] = File(lib, "liblunacy-preload.so").path
+            pb.environment()["LUNACY_PDK_EXE"] = binary.path
+        }
         pb.environment().apply {
             put("SDL_VIDEODRIVER", "lunacy"); put("SDL_AUDIODRIVER", "lunacy")
             put("LUNACY_PDK_SOCKET", socketName); put("LUNACY_PDK_FB", fbFile.path)
-            put("LUNACY_PDK_APP_DIR", binary.parentFile!!.path); put("LUNACY_PDK_DATA_DIR", dataDir.path)
+            put("LUNACY_PDK_APP_DIR", appDir.path); put("LUNACY_PDK_DATA_DIR", dataDir.path)
             put("LUNACY_PDK_SCREEN_W", runtime.screenWidth.toString()); put("LUNACY_PDK_SCREEN_H", runtime.screenHeight.toString())
             put("LUNACY_PDK_DPI", runtime.dpi.toString())
             put("LUNACY_PDK_OS_VERSION", runtime.osVersion); put("LUNACY_PDK_DEVICE_NAME", runtime.deviceName)
             put("LUNACY_PDK_NDUID", runtime.nduid)
             put("LUNACY_PDK_APPINFO_id", app.id); put("LUNACY_PDK_APPINFO_title", app.title); put("LUNACY_PDK_APPINFO_version", app.version)
             put("HOME", dataDir.path); put("TMPDIR", context.cacheDir.path)
+            // Development: `files/pdk/env` holds KEY=VALUE lines added to every PDK process
+            // (LD_DEBUG=bindings is how a game's calls into the runtime are seen in order).
+            File(context.filesDir, "pdk/env").takeIf { it.isFile }?.readLines()?.forEach { l ->
+                val i = l.indexOf('='); if (i > 0 && !l.startsWith("#")) put(l.substring(0, i).trim(), l.substring(i + 1).trim())
+            }
         }
         Thread({ accept() }, "pdk-accept-$appId").start()
         process = try { pb.start() } catch (e: Exception) {
@@ -130,6 +147,7 @@ class PdkHost(
             val input = DataInputStream(c.inputStream)
             when (input.read()) {
                 'V'.code -> { control = c.outputStream; readControl(input) }
+                'P'.code -> readControl(input)   // libpdl's own: requests only, no input goes back down it
                 'A'.code -> readAudio(input)
                 else -> c.close()
             }
@@ -150,8 +168,8 @@ class PdkHost(
             val payload = ByteArray(len); input.readFully(payload)
             val p = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN)
             when (type) {
-                VIDEO_MODE -> setMode(p.int, p.int, p.int)
-                FRAME -> frame()
+                VIDEO_MODE -> if (a == 1) glMode(p.int, p.int) else setMode(p.int, p.int, p.int)
+                FRAME -> if (a == 1) main.post { listener.onGlSwap() } else frame()
                 CAPTION -> String(payload).let { t -> main.post { listener.onCaption(t) } }
                 PDL -> runCatching { JSONObject(String(payload)) }.getOrNull()?.let { r -> main.post { listener.onPdl(r) } }
             }
@@ -167,7 +185,14 @@ class PdkHost(
         val config = if (bits == 16) Bitmap.Config.RGB_565 else Bitmap.Config.ARGB_8888
         frames = arrayOf(Bitmap.createBitmap(w, h, config).also { it.setHasAlpha(false) }, Bitmap.createBitmap(w, h, config).also { it.setHasAlpha(false) })
         Log.i(AppServer.TAG, "pdk [$appId]: video mode $w x $h, $bits bpp")
-        main.post { listener.onMode(w, h) }
+        main.post { listener.onMode(w, h, false) }
+    }
+
+    private fun glMode(w: Int, h: Int) {
+        width = w; height = h; bpp = 0
+        mapped = null
+        Log.i(AppServer.TAG, "pdk [$appId]: OpenGL ES mode $w x $h")
+        main.post { listener.onMode(w, h, true) }
     }
 
     /** Copies the shared file into the bitmap the view isn't showing, then hands it over. */
@@ -265,10 +290,56 @@ class PdkRuntime(private val context: Context, val appsRoot: File, val screenWid
     /** How this build runs a PDK app, for Device Info and the log. */
     val how get() = when { loader != null -> "native"; emulator != null -> "emulated"; else -> "unavailable" }
 
+    companion object {
+        private const val PT_GNU_STACK = 0x6474e551L
+        private const val PF_X = 1
+
+        /**
+         * A 2010 toolchain left many PDK binaries asking for an executable stack
+         * (`PT_GNU_STACK` with its execute bit), usually from one assembly file without a
+         * `.note.GNU-stack` section, and Android refuses an app's process that: "cannot
+         * enable executable stack as shared object requires: Permission denied" (Transformers
+         * G1, 2026-10-02). The one mechanical fix `execstack -c` makes, applied to every PDK
+         * binary that asks: the flag cleared in a copy beside the original, named after it
+         * with a `.lunacy.` prefix, so a game that finds its data from its own path still
+         * does. The package's own file is never written to. Returns the original when it
+         * doesn't ask, or isn't an ELF the shell can read.
+         */
+        fun withoutExecStack(original: File): File {
+            try {
+                val bytes = original.readBytes()
+                if (bytes.size < 52 || bytes[0] != 0x7f.toByte() || bytes[1] != 'E'.code.toByte() || bytes[4] != 1.toByte()) return original
+                val bb = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                val phoff = bb.getInt(28); val phentsize = bb.getShort(42).toInt(); val phnum = bb.getShort(44).toInt()
+                var changed = false
+                for (i in 0 until phnum) {
+                    val ph = phoff + i * phentsize
+                    if (ph + 32 > bytes.size) break
+                    if (bb.getInt(ph).toLong() and 0xffffffffL != PT_GNU_STACK) continue
+                    val flags = bb.getInt(ph + 24)
+                    if (flags and PF_X != 0) { bb.putInt(ph + 24, flags and PF_X.inv()); changed = true }
+                }
+                if (!changed) return original
+                val copy = File(original.parentFile, ".lunacy." + original.name)
+                if (!copy.isFile || copy.length() != original.length() || copy.lastModified() < original.lastModified()) {
+                    copy.writeBytes(bytes)
+                    Log.i(AppServer.TAG, "pdk: ${original.name} asked for an executable stack; running a copy without")
+                }
+                copy.setExecutable(true, false)
+                return copy
+            } catch (e: Exception) {
+                Log.w(AppServer.TAG, "pdk: couldn't read ${original.name}'s headers: $e"); return original
+            }
+        }
+    }
+
     private fun extract(): File? {
         val dir = File(context.filesDir, "pdk/lib")
         val stamp = File(dir, ".version")
-        val notice = runCatching { context.assets.open("pdk/NOTICE").bufferedReader().readText() }.getOrNull() ?: return null
+        // The build's own id, so a new runtime replaces an extracted one (the NOTICE alone
+        // stayed the same across rebuilds and left stale libraries behind).
+        val notice = (runCatching { context.assets.open("pdk/BUILD").bufferedReader().readText() }.getOrNull() ?: "") +
+            (runCatching { context.assets.open("pdk/NOTICE").bufferedReader().readText() }.getOrNull() ?: return null)
         if (stamp.exists() && stamp.readText() == notice) return dir
         dir.mkdirs()
         val names = context.assets.list("pdk/lib").orEmpty()

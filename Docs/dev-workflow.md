@@ -17,6 +17,7 @@ out on the reference devices. Changes made to the Android device are listed sepa
 | `LunaRuntimes/enyo-1.0/` | Lunacy's changes to Enyo, as patches against upstream, with CHANGES.md as the fork's change log | yes |
 | `LunaRuntimes/mojo/` | Lunacy's changes to Palm's Mojo, likewise, with CHANGES.md explaining how Mojo is packaged | yes |
 | `LunaKeyboard/` | The companion keyboard APK, built by the same Gradle root and depending on nothing in Lunacy ([its README](../LunaKeyboard/README.md)) | yes |
+| `LunaRuntimes/pdk/` | The PDK runtime's sources: SDL 1.2's Lunacy video, event and audio drivers (`sdl-lunacy/`, LGPL like SDL) and Lunacy's libpdl (`libpdl/`); built by `AndroidLuna/tools/build-pdk.sh` into `local-assets/pdk/` and `local-jni/armeabi-v7a/libld-linux.so` ([pdk.md](pdk.md)) | yes |
 | `AndroidLuna/local-assets/` | Stock Enyo 1.0 with those patches applied, Mojo and the other frameworks, the webOS root's ROM (`rootfs/`), and settings apps not yet shipped, populated by `AndroidLuna/fetch-assets.sh` | no |
 | `AndroidLuna/local-test-apps/` | Glimpse and the Enyo samples (Sampler, HelloWorld), also from `fetch-assets.sh`; in the APK only with `./gradlew assembleDebug -PtestApps` | no |
 | `AndroidLuna/test-apps/` | Lunacy's own test apps (`org.webosarchive.lunacy.notifytest`); in the APK only with `-PtestApps` | yes |
@@ -65,6 +66,10 @@ adb shell am start -n org.webosarchive.lunacy/.shell.ShellActivity \
   `Mojo.lowMemoryNotification`, and "normal" follows once 30 s pass without another.
 - `--es layout auto|phone|tablet` sets the FormFactor preference ([phone.md](phone.md)) and
   restarts the shell; `--ez launcher true` opens the launcher, for screenshots over adb.
+- `--es sh '<command>'` runs a command through the package-script runner, in the webOS root
+  and under the app's own sandbox, with its output in the log; `--es rawsh '<command>'` the
+  same through Android's shell with no environment of Lunacy's. For telling the sandbox's
+  doing from the runner's ([pdk.md](pdk.md), 5a).
 - The activity is `singleTask`. A second `am start` with `launch` arrives through
   `onNewIntent`, which launches or relaunches the app.
 - **Lint matters.** A plain debug build does not stop calls to APIs newer than Android 5.

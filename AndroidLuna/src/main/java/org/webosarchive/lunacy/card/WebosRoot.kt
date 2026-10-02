@@ -55,7 +55,7 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
         // The folders every TouchPad has, which scripts write into without making them.
         for (d in listOf("media/internal", "tmp", "var/tmp", "var/run", "var/log", "var/palm", "var/luna/preferences", "var/luna/data", "var/preferences", "home/root", "bin", "usr/bin",
                 "sbin", "usr/sbin", "usr/lib", "usr/palm/applications", "usr/palm/services", "usr/palm/public",
-                "usr/palm/frameworks", "etc/palm", "etc/event.d")) File(root, d).mkdirs()
+                "usr/palm/frameworks", "etc/palm", "etc/event.d", "etc/udev/rules.d")) File(root, d).mkdirs()
         link(installedDir.path, File(root, "media/cryptofs/apps"))
         prepared = true
     }

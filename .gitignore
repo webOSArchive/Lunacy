@@ -16,6 +16,8 @@ Workbench/android/local.properties
 AndroidLuna/local-assets/
 AndroidLuna/local-test-apps/
 AndroidLuna/local-jni/
+# Build trees of tools/build-pdk.sh and tools/build-busybox.sh (sysroots, sources, objects)
+AndroidLuna/local-build/
 
 # Gradle build output and local configuration
 .gradle/

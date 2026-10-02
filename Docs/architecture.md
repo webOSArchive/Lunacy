@@ -890,7 +890,8 @@ no `openDatabase` at all, and Lunacy provides it in JS instead:
     older version linger.
   - **Refused.** Entries that climb out of the tree (`..`) fail the install. Symlinks and
     devices are skipped.
-  - **Native apps.** A `pdk` or `game` app installs and appears in the launcher, but
+  - **Native apps.** A `pdk` or `game` app installs and appears in the launcher; on the
+    32-bit build it runs through the PDK runtime ([pdk.md](pdk.md)). Elsewhere, as before:
     launching it shows a banner saying Lunacy can't run it yet, and a bus launch returns an
     error.
   - **Feedback.** Preware showed its own progress. Lunacy shows a banner when the install
@@ -1098,8 +1099,9 @@ Mojo isn't packaged the way Enyo is, and that shapes what Lunacy has to do:
 
 - **Mojo's multi-stage windows** map to cards, as Enyo's `window.open` windows do. Only the
   single-stage path is exercised so far.
-- **PDK native apps** need a glibc/SDL 1.2/PDL loader over Android, which is roughly
-  [apkenv](https://github.com/Android-to-webOS-Ports/apkenv) in reverse.
+- **PDK native apps** run as their own processes through the glibc loader, with SDL 1.2
+  rebuilt to reach the shell and Lunacy's own libpdl: [pdk.md](pdk.md). The first, Commander
+  Keen, ran on 2026-10-02.
   - Current SoCs are often 64-bit only and can't run 32-bit ARM code, so recompiling may be
     needed there.
   - The Android 5 test devices are 32-bit ARMv7, the same CPU class as webOS hardware, so on

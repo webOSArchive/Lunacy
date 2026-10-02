@@ -239,6 +239,11 @@ fetch_checked() { # file url sha256
     [ -f "$1" ] || curl -sfL -o "$1" "$2"
     echo "$3  $1" | sha256sum -c --quiet || { echo "fetch-assets: $1 isn't the busybox it should be" >&2; exit 1; }
 }
+# A busybox built by tools/build-busybox.sh is kept: the prebuilt ones call setuid() as they
+# start, which Android 10 and later kill a process for (the script says why).
+if [ -f local-jni/.busybox-built ]; then
+    echo "fetch-assets: keeping the busybox built by tools/build-busybox.sh"
+else
 BB32=$BBD/busybox-armv7l
 fetch_checked $BB32 https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/busybox-armv7l \
     cd04052b8b6885f75f50b2a280bfcbf849d8710c8e61d369c533acf307eda064
@@ -249,6 +254,7 @@ fetch_checked $BB64 https://dl-cdn.alpinelinux.org/alpine/v3.20/main/aarch64/bus
 tar -xzOf $BB64 bin/busybox.static > local-jni/arm64-v8a/libbusybox.so
 echo "ebd2865edcab0b590c7d0edb70d3e782cbfb541e518a390ced3a3e186509bc7f  local-jni/arm64-v8a/libbusybox.so" | sha256sum -c --quiet ||
     { echo "fetch-assets: the 64-bit busybox isn't the one it should be" >&2; exit 1; }
+fi
 cat > $L/rootfs/NOTICE.busybox <<'NOTICE'
 busybox (libbusybox.so in the APK), unmodified, GPL-2.0:
 - armeabi-v7a: 1.31.0, the static armv7l build from

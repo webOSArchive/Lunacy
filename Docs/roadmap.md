@@ -5,6 +5,18 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-10-02)
 
+**2026-10-02, evening: the first PDK app.** Commander Keen, the TouchPad's own binary, runs in
+a Lunacy card on the Nexus 5 with no emulation: Debian's armel glibc as the runtime, SDL 1.2
+rebuilt with Lunacy's video, event and audio drivers (a shared framebuffer file and a Unix
+socket to the shell), Lunacy's libpdl against Palm's headers, and `PdkWindow`/`PdkHost` in
+the shell. Title screen, touch, a game started, sound device open, the card in the card
+view. The runtime is built by `AndroidLuna/tools/build-pdk.sh`; the 64-bit flavour carries
+Termux's qemu for 32-bit ARM and runs the same binaries emulated (the Pixel Tablet). Along
+the way: the prebuilt busybox called `setuid` at every start and Android 10+ killed package
+scripts for it, so busybox is now built by `tools/build-busybox.sh`. A survey of the mirror
+counts 729 PDK apps, 151 of them 2D, 473 GLES 1.1, 122 GLES 2; SDL_mixer is built; the
+second app, Transformers G1, waits on a GLES 1.1 path. Everything in [pdk.md](pdk.md).
+
 **2026-10-02, afternoon: a phone layout.** `FormFactor` decides phone or tablet from the
 screen (short side in dp, diagonal in inches, shape as the tie-breaker) or the owner's
 setting (Device Info, `system/setLayout`, `--es layout`), and the shell and the device
@@ -663,8 +675,11 @@ per-app code.
 
 ## 7: PDK native
 
-- A glibc/SDL 1.2/PDL loader over Android (apkenv in reverse). The 32-bit ARMv7 test devices
-  can run the original binaries; recompile only for 64-bit-only SoCs.
+- ~~A glibc/SDL 1.2/PDL loader over Android (apkenv in reverse).~~ Started 2026-10-02: the
+  binaries run as they are on 32-bit ARM, through the glibc loader with SDL 1.2 rebuilt to
+  talk to the shell and Lunacy's own libpdl; Commander Keen plays on the Nexus 5
+  ([pdk.md](pdk.md)). Open: SDL_mixer/image/ttf, GLES, the bus from PDL, and an emulator
+  (possibly a companion APK, codepoet) for 64-bit-only SoCs.
 
 **Exit:** a handful of well-known PDK apps run at full speed on a current device. The
 corpus survey says how many apps this phase can reach, and whether it is worth doing.

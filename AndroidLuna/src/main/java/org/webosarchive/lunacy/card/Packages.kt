@@ -157,6 +157,9 @@ class Packages(val root: File, private val cache: File, private val webos: Webos
      * root ([WebosRoot.mapPaths]), and luna-send calling the bus as the package. Returns the exit
      * code and what it printed, which the log gets line by line.
      */
+    /** A command through the same runner as a package's scripts, for development (`--es sh`). */
+    fun shell(command: String) = Thread { run("dev", "sh", command.toByteArray(), emptyList()) }.start()
+
     private fun run(pkg: String, name: String, body: ByteArray, args: List<String>): Pair<Int, List<String>> {
         webos.prepare()
         webos.lunaSend.start()

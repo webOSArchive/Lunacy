@@ -1,0 +1,209 @@
+/*
+ * Lunacy's libpdl: Palm's PDL API (the PDK's PDL.h) for a PDK app running under Lunacy
+ * (Docs/pdk.md). The app's binary calls these exactly as it called Palm's libpdl.so; what
+ * they do here is answer from the environment the shell set up, or send a request down
+ * the control socket the SDL video driver opened (LPDK_PDL) and wait for the shell's
+ * reply. Anything not yet backed by the shell says so once on stderr and answers
+ * PDL_NOERROR, because a game that keeps running without, say, vibration beats one that
+ * stops; the honest errors are for calls whose answer the app will act on.
+ *
+ * Built against Palm's own headers, so the signatures and structs are the PDK's.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdarg.h>
+#include <unistd.h>
+#include <errno.h>
+#include <poll.h>
+
+#include "PDL.h"
+#include "lunacy_protocol.h"
+
+/* From the SDL video driver (SDL_lunacyvideo.c), in the same process. */
+extern int LUNACY_control_sock;
+extern int LUNACY_Send(int sock, uint32_t type, uint32_t a, const void *payload, uint32_t len);
+
+static char last_error[256] = "";
+static int inited = 0;
+
+static void note(const char *what) { fprintf(stderr, "[pdl] %s: not backed by the shell yet\n", what); }
+
+static PDL_Err fail(const char *msg) { snprintf(last_error, sizeof last_error, "%s", msg); return PDL_ECONNECTION; }
+
+static const char *env_or(const char *name, const char *dflt) { const char *v = getenv(name); return v && *v ? v : dflt; }
+
+static PDL_Err copy_out(char *buffer, int bufferLen, const char *value)
+{
+	if (!buffer || bufferLen <= 0) return PDL_INVALIDINPUT;
+	snprintf(buffer, bufferLen, "%s", value ? value : "");
+	return PDL_NOERROR;
+}
+
+/* ---- lifecycle ---- */
+
+PDL_Err PDL_Init(unsigned int flags) { inited = 1; return PDL_NOERROR; }
+void PDL_Quit(void) { inited = 0; }
+const char *PDL_GetError(void) { return last_error; }
+int PDL_GetPDKVersion(void) { return 300; }   /* the TouchPad's PDK, 3.0.x */
+PDL_bool PDL_IsPlugin(void) { return PDL_FALSE; }
+PDL_bool PDL_IsFullscreenPlugin(void) { return PDL_FALSE; }
+
+/* ---- the device, from what the shell put in the environment ---- */
+
+PDL_Err PDL_GetScreenMetrics(PDL_ScreenMetrics *m)
+{
+	if (!m) return PDL_INVALIDINPUT;
+	m->horizontalPixels = atoi(env_or("LUNACY_PDK_SCREEN_W", "1024"));
+	m->verticalPixels = atoi(env_or("LUNACY_PDK_SCREEN_H", "768"));
+	m->horizontalDPI = atoi(env_or("LUNACY_PDK_DPI", "132"));
+	m->verticalDPI = m->horizontalDPI;
+	m->aspectRatio = 1.0;
+	return PDL_NOERROR;
+}
+
+PDL_Err PDL_GetOSVersion(PDL_OSVersion *v)
+{
+	const char *s = env_or("LUNACY_PDK_OS_VERSION", "3.0.5");
+	if (!v) return PDL_INVALIDINPUT;
+	memset(v, 0, sizeof *v);
+	sscanf(s, "%d.%d.%d", &v->majorVersion, &v->minorVersion, &v->revision);
+	snprintf(v->versionStr, sizeof v->versionStr, "%s", s);
+	return PDL_NOERROR;
+}
+
+int PDL_GetHardwareID(void) { return atoi(env_or("LUNACY_PDK_HARDWARE_ID", "101")); }   /* HARDWARE_TOUCHPAD */
+const char *PDL_GetHardware(void) { return env_or("LUNACY_PDK_HARDWARE", "TouchPad"); }
+PDL_Err PDL_GetDeviceName(char *buffer, int bufferLen) { return copy_out(buffer, bufferLen, env_or("LUNACY_PDK_DEVICE_NAME", "TouchPad")); }
+PDL_Err PDL_GetUniqueID(char *buffer, int bufferLen) { return copy_out(buffer, bufferLen, env_or("LUNACY_PDK_NDUID", "")); }
+PDL_Err PDL_GetLanguage(char *buffer, int bufferLen) { return copy_out(buffer, bufferLen, env_or("LUNACY_PDK_LANGUAGE", "en_US")); }
+PDL_Err PDL_GetRegionCountryCode(char *buffer, int bufferLen) { return copy_out(buffer, bufferLen, env_or("LUNACY_PDK_COUNTRY", "US")); }
+PDL_Err PDL_GetRegionCountryName(char *buffer, int bufferLen) { return copy_out(buffer, bufferLen, env_or("LUNACY_PDK_COUNTRY_NAME", "United States")); }
+
+/* The app's own folder: webOS gave /media/cryptofs/apps/usr/palm/applications/<id>, which
+   is where the shell starts the process, so the calling path is the working directory. */
+PDL_Err PDL_GetCallingPath(char *buffer, int bufferLen)
+{
+	const char *p = getenv("LUNACY_PDK_APP_DIR");
+	char cwd[1024];
+	if (!p) p = getcwd(cwd, sizeof cwd);
+	return copy_out(buffer, bufferLen, p);
+}
+
+/* Where an app keeps its data: webOS's /media/internal/.app-storage/<id>/, or whatever the
+   shell names; created by the shell before launch. */
+PDL_Err PDL_GetDataFilePath(const char *dataFileName, char *buffer, int bufferLen)
+{
+	const char *dir = env_or("LUNACY_PDK_DATA_DIR", ".");
+	if (!buffer || bufferLen <= 0) return PDL_INVALIDINPUT;
+	snprintf(buffer, bufferLen, "%s/%s", dir, dataFileName ? dataFileName : "");
+	return PDL_NOERROR;
+}
+
+PDL_Err PDL_GetAppinfoValue(const char *name, char *buffer, int bufferLen)
+{
+	/* appinfo.json lives beside the binary; the common keys are in the environment. */
+	char key[128];
+	snprintf(key, sizeof key, "LUNACY_PDK_APPINFO_%s", name ? name : "");
+	return copy_out(buffer, bufferLen, env_or(key, ""));
+}
+
+PDL_Err PDL_CheckLicense(void) { return PDL_NOERROR; }
+
+/* ---- input and the window: told to the shell, which does what the TouchPad did ---- */
+
+static PDL_Err tell(const char *json)
+{
+	if (LUNACY_control_sock < 0) return fail("not connected to the shell");
+	if (LUNACY_Send(LUNACY_control_sock, LPDK_PDL, 0, json, strlen(json)) < 0) return fail("the shell went away");
+	return PDL_NOERROR;
+}
+
+static PDL_Err tell_f(const char *fmt, ...)
+{
+	char buf[512];
+	va_list ap;
+	va_start(ap, fmt);
+	vsnprintf(buf, sizeof buf, fmt, ap);
+	va_end(ap);
+	return tell(buf);
+}
+
+PDL_Err PDL_GesturesEnable(PDL_bool Enable) { return tell_f("{\"call\":\"gestures\",\"on\":%s}", Enable ? "true" : "false"); }
+PDL_Err PDL_SetTouchAggression(PDL_TouchAggression a) { return tell_f("{\"call\":\"touchAggression\",\"value\":%d}", (int)a); }
+PDL_Err PDL_SetOrientation(PDL_Orientation o) { return tell_f("{\"call\":\"orientation\",\"value\":%d}", (int)o); }
+PDL_Err PDL_ScreenTimeoutEnable(PDL_bool Enable) { return tell_f("{\"call\":\"screenTimeout\",\"on\":%s}", Enable ? "true" : "false"); }
+PDL_Err PDL_SetKeyboardState(PDL_bool visible) { return tell_f("{\"call\":\"keyboard\",\"on\":%s}", visible ? "true" : "false"); }
+PDL_Err PDL_Vibrate(int periodMS, int durationMS) { return tell_f("{\"call\":\"vibrate\",\"period\":%d,\"duration\":%d}", periodMS, durationMS); }
+PDL_Err PDL_Minimize(void) { return tell("{\"call\":\"minimize\"}"); }
+PDL_Err PDL_LaunchBrowser(const char *url) { return tell_f("{\"call\":\"browser\",\"url\":\"%s\"}", url ? url : ""); }
+PDL_Err PDL_LaunchEmail(const char *subject, const char *body) { return tell_f("{\"call\":\"email\",\"subject\":\"%s\"}", subject ? subject : ""); }
+PDL_Err PDL_LaunchEmailTo(const char *subject, const char *body, int numRecipients, const char **recipients) { return PDL_LaunchEmail(subject, body); }
+PDL_Err PDL_BannerMessagesEnable(PDL_bool Enable) { return PDL_NOERROR; }
+PDL_Err PDL_CustomPauseUiEnable(PDL_bool Enable) { return PDL_NOERROR; }
+PDL_Err PDL_NotifyMusicPlaying(PDL_bool MusicPlaying) { return PDL_NOERROR; }
+PDL_Err PDL_SetAutomaticSoundPausing(PDL_bool AutomaticallyPause) { return PDL_NOERROR; }
+PDL_Err PDL_EnableCompass(PDL_bool activate) { note("PDL_EnableCompass"); return PDL_NOERROR; }
+PDL_Err PDL_EnableLocationTracking(PDL_bool activate) { note("PDL_EnableLocationTracking"); return PDL_NOERROR; }
+PDL_Err PDL_GetLocation(PDL_Location *loc) { if (loc) memset(loc, 0, sizeof *loc); return PDL_NOTALLOWED; }
+PDL_Err PDL_GetCompass(PDL_Compass *c) { if (c) memset(c, 0, sizeof *c); return PDL_NOTALLOWED; }
+const char *PDL_GetKeyName(PDL_key Key) { return SDL_GetKeyName((SDLKey)Key); }
+
+void PDL_Log(const char *format, ...)
+{
+	va_list ap;
+	fputs("[pdl] ", stderr);
+	va_start(ap, format);
+	vfprintf(stderr, format, ap);
+	va_end(ap);
+	fputc('\n', stderr);
+}
+
+/* ---- the bus: not yet carried to the shell ---- */
+
+PDL_Err PDL_ServiceCall(const char *uri, const char *payload) { note("PDL_ServiceCall"); return PDL_NOTALLOWED; }
+PDL_Err PDL_ServiceCallWithCallback(const char *uri, const char *payload, PDL_ServiceCallbackFunc callback, void *user, PDL_bool removeAfterResponse) { note("PDL_ServiceCallWithCallback"); return PDL_NOTALLOWED; }
+PDL_Err PDL_UnregisterServiceCallback(PDL_ServiceCallbackFunc callback) { return PDL_NOERROR; }
+PDL_bool PDL_ParamExists(PDL_ServiceParameters *parms, const char *name) { return PDL_FALSE; }
+void PDL_GetParamString(PDL_ServiceParameters *parms, const char *name, char *buffer, int bufferLen) { if (buffer && bufferLen > 0) buffer[0] = 0; }
+int PDL_GetParamInt(PDL_ServiceParameters *parms, const char *name) { return 0; }
+double PDL_GetParamDouble(PDL_ServiceParameters *parms, const char *name) { return 0; }
+PDL_bool PDL_GetParamBool(PDL_ServiceParameters *parms, const char *name) { return PDL_FALSE; }
+const char *PDL_GetParamJson(PDL_ServiceParameters *parms) { return "{}"; }
+
+/* ---- sensors: none yet ---- */
+
+PDL_bool PDL_SensorExists(PDL_SensorType sensor) { return PDL_FALSE; }
+PDL_Err PDL_EnableSensor(PDL_SensorType sensor, PDL_bool bEnable) { return PDL_NOTALLOWED; }
+PDL_Err PDL_PollSensor(PDL_SensorType sensor, PDL_SensorEvent *event) { return PDL_NOTALLOWED; }
+PDL_Err PDL_PollActiveSensors(PDL_SensorEvent *event) { return PDL_NOTALLOWED; }
+
+/* ---- the JS side of a hybrid app: none here, these are plain PDK apps ---- */
+
+PDL_Err PDL_RegisterJSHandler(const char *functionName, PDL_JSHandlerFunc function) { return PDL_NOTALLOWED; }
+PDL_Err PDL_RegisterPollingJSHandler(const char *functionName, PDL_JSHandlerFunc function) { return PDL_NOTALLOWED; }
+PDL_Err PDL_JSRegistrationComplete(void) { return PDL_NOERROR; }
+int PDL_HandleJSCalls(void) { return 0; }
+const char *PDL_GetJSFunctionName(PDL_JSParameters *parms) { return ""; }
+PDL_bool PDL_IsPoller(PDL_JSParameters *parms) { return PDL_FALSE; }
+int PDL_GetNumJSParams(PDL_JSParameters *parms) { return 0; }
+const char *PDL_GetJSParamString(PDL_JSParameters *parms, int paramNum) { return ""; }
+int PDL_GetJSParamInt(PDL_JSParameters *parms, int paramNum) { return 0; }
+double PDL_GetJSParamDouble(PDL_JSParameters *parms, int paramNum) { return 0; }
+PDL_Err PDL_JSReply(PDL_JSParameters *parms, const char *reply) { return PDL_NOTALLOWED; }
+PDL_Err PDL_JSException(PDL_JSParameters *parms, const char *reply) { return PDL_NOTALLOWED; }
+PDL_Err PDL_CallJS(const char *functionName, const char **params, int numParams) { return PDL_NOTALLOWED; }
+PDL_Err PDL_DismissFullscreen(void) { return PDL_NOERROR; }
+
+/* ---- purchases: the catalog is gone ---- */
+
+PDL_ItemCollection *PDL_GetAvailableItems(void) { fail("the App Catalog's store is gone"); return NULL; }
+PDL_ItemInfo *PDL_GetItemInfo(const char *itemID) { fail("the App Catalog's store is gone"); return NULL; }
+PDL_ItemReceipt *PDL_PurchaseItem(const char *itemID, int qty, const char *usr) { fail("the App Catalog's store is gone"); return NULL; }
+PDL_ItemReceipt *PDL_GetPendingPurchaseInfo(const char *orderNo) { fail("the App Catalog's store is gone"); return NULL; }
+const char *PDL_GetItemJSON(PDL_ItemInfo *itemInfo) { return "{}"; }
+const char *PDL_GetItemReceiptJSON(PDL_ItemReceipt *receipt) { return "{}"; }
+const char *PDL_GetItemCollectionJSON(PDL_ItemCollection *c) { return "[]"; }
+void PDL_FreeItemInfo(PDL_ItemInfo *itemInfo) { }
+void PDL_FreeItemReceipt(PDL_ItemReceipt *itemInfo) { }
+void PDL_FreeItemCollection(PDL_ItemCollection *c) { }

@@ -23,6 +23,8 @@ optional companion keyboard. Neither depends on the other.
 | `AndroidLuna/` | The shell: Kotlin and Android Views, `minSdk 21`. Its `src/main/assets/` carries the bundled apps, the Luna artwork and the injected page scripts. |
 | `LunaKeyboard/` | The keyboard, an `InputMethodService`. Self-contained; see [its README](LunaKeyboard/README.md). |
 | `LunaRuntimes/` | Lunacy's changes to the frameworks apps load from the OS - `enyo-1.0/` and `mojo/` - as patch series with a CHANGES.md against upstream. Not compiled: `fetch-assets.sh` applies them to a stock tree. |
+| `AndroidLuna/tools/build-busybox.sh` | Builds busybox for both ABIs without `FEATURE_SUID`: the prebuilt ones call `setuid()` as every applet starts, and Android 10 and later kill an app's process for that (package scripts died with exit 159). Run it after `build-pdk.sh` (it borrows that script's armel sysroot); `fetch-assets.sh` then keeps the built one. |
+| `LunaRuntimes/pdk/` | The PDK runtime's sources (Docs/pdk.md). `AndroidLuna/tools/build-pdk.sh` builds it with the NDK's clang against a Debian armel sysroot it downloads, into `local-assets/pdk/` and `local-jni/armeabi-v7a/`; run it once before building the 32-bit flavour, or PDK apps get the "can't run" banner. |
 | `Docs/` | Architecture, roadmap, the shell reference, and the device notes. |
 | `Workbench/` | Probes, device helper scripts and local clones. Not part of either APK. |
 | `Meta/` | Artwork, including the launcher icon the mipmaps are made from. |

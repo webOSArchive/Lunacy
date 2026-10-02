@@ -45,6 +45,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var files: AppFiles
     /** The webOS device Lunacy answers as, for every app-visible surface. */
     private val profile by lazy { org.webosarchive.lunacy.card.DeviceProfile.forScreen(this) }
+    /** The PDK runtime (Docs/pdk.md): present in the 32-bit build, absent in the 64-bit one. */
+    private val pdkRuntime by lazy {
+        val d = profile
+        val size = JSONObject(screenSize(false))
+        org.webosarchive.lunacy.card.PdkRuntime(this, java.io.File(filesDir, "cryptofs/apps/usr/palm/applications"),
+            size.optInt("width", 1024), size.optInt("height", 768), 132, d.platformVersion, d.modelNameAscii, org.webosarchive.lunacy.card.DeviceProfile.nduid(this))
+    }
     /** Proof of concept: Android's own apps in the launcher, for Lunacy as the home screen. */
     private val androidApps by lazy { AndroidApps(this, files, luna.px(Launcher.Params.ICON.toInt())) }
     private var androidById: Map<String, AppInfo> = emptyMap()
@@ -367,6 +374,21 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             else Log.w(AppServer.TAG, "layout: $v is not auto, phone or tablet")
         }
         if (intent.hasExtra("launcher")) { intent.removeExtra("launcher"); if (started && !launcherOpen) openLauncher() }
+        // `--es sh '<command>'`: runs it in the webOS root from this process, with its output
+        // in the log, for seeing what a package's script sees under the app's own sandbox.
+        intent.getStringExtra("sh")?.let { cmd -> intent.removeExtra("sh"); packages.shell(cmd) }
+        // `--es rawsh '<command>'`: the same through Android's own shell with no environment
+        // of Lunacy's, to tell the sandbox's doing from the runner's.
+        intent.getStringExtra("rawsh")?.let { cmd ->
+            intent.removeExtra("rawsh")
+            Thread {
+                try {
+                    val p = ProcessBuilder("/system/bin/sh", "-c", cmd).redirectErrorStream(true).start()
+                    p.inputStream.bufferedReader().forEachLine { Log.i(AppServer.TAG, "rawsh: $it") }
+                    Log.i(AppServer.TAG, "rawsh: exit ${p.waitFor()}")
+                } catch (e: Exception) { Log.w(AppServer.TAG, "rawsh: $e") }
+            }.start()
+        }
         // Say so and launch without them rather than throwing: the activity is singleTask, so
         // a bad `params` would otherwise be replayed on every restart and the shell could
         // never start again. Quoting one of these on a command line is easy to get wrong.
@@ -462,11 +484,20 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             }
             return
         }
+        val windows = running[appId]
         if (!app.isWeb) {
-            systemBanner(appId, "${app.title} is a native app; Lunacy can't run those yet")
+            // A PDK app: its own process, in a card of its own kind (Docs/pdk.md).
+            if (windows != null) { cards.cards.firstOrNull { it.window.appId == appId }?.let { cards.maximize(it) }; return }
+            if (!pdkRuntime.available) {
+                systemBanner(appId, "${app.title} is a native app; it needs Lunacy's 32-bit build on a 32-bit ARM device")
+                return
+            }
+            val w = org.webosarchive.lunacy.card.PdkWindow(this, appId, this, app, pdkRuntime)
+            running[appId] = mutableListOf(w)
+            showAsCard(w)
+            if (!w.start()) { systemBanner(appId, "Couldn't start ${app.title}"); onWindowClosed(w) }
             return
         }
-        val windows = running[appId]
         if (windows != null) {
             // Relaunch: webOS doesn't reload a running app. Unless the app handles the relaunch
             // itself, LunaSysMgr brings its first card forward.

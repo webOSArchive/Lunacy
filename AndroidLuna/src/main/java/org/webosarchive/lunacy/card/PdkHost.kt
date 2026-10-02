@@ -1,0 +1,286 @@
+package org.webosarchive.lunacy.card
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.media.AudioFormat
+import android.media.AudioManager
+import android.media.AudioTrack
+import android.net.LocalServerSocket
+import android.net.LocalSocket
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
+import org.json.JSONObject
+import java.io.DataInputStream
+import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
+import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.channels.FileChannel
+
+/**
+ * Runs a PDK app's binary as its own process and carries its screen, sound and input
+ * (Docs/pdk.md). The binary is a 32-bit ARM glibc executable exactly as it shipped; it is
+ * started through the glibc dynamic loader from [PdkRuntime], with SDL rebuilt to talk to
+ * this class: the screen surface is a file both sides mmap, and one abstract Unix socket
+ * carries frames, touches, keys, audio and PDL requests (LunaRuntimes/pdk, lunacy_protocol.h).
+ *
+ * Threads: an accept thread, a reader per connection, and a thread copying the binary's
+ * stderr to the log. Everything that reaches the window is posted to the main thread.
+ */
+class PdkHost(
+    private val context: Context,
+    val appId: String,
+    private val app: AppInfo,
+    private val runtime: PdkRuntime,
+    private val listener: Listener,
+) {
+    interface Listener {
+        /** The app set its screen size; the frame bitmap is this size from now on. */
+        fun onMode(width: Int, height: Int)
+        /** A new frame is in [frame]. Main thread. */
+        fun onFrame(frame: Bitmap)
+        fun onCaption(title: String)
+        /** A PDL call the shell answers for: orientation, fullscreen, vibrate… */
+        fun onPdl(request: JSONObject)
+        /** The process ended. */
+        fun onExit(code: Int)
+    }
+
+    private val main = Handler(Looper.getMainLooper())
+    private val socketName = "lunacy-pdk-$appId-${System.nanoTime()}"
+    private val fbFile = File(context.filesDir, "pdk/fb/$appId").also { it.parentFile?.mkdirs() }
+    private var server: LocalServerSocket? = null
+    private var process: Process? = null
+    private var control: OutputStream? = null
+    private var track: AudioTrack? = null
+    @Volatile private var stopped = false
+    /** The screen the app asked for, in its px. */
+    @Volatile var width = 0; private set
+    @Volatile var height = 0; private set
+    private var bpp = 32
+    private var mapped: ByteBuffer? = null
+    private var frames = arrayOfNulls<Bitmap>(2)
+    private var frameIndex = 0
+
+    fun start(): Boolean {
+        val lib = runtime.libDir ?: return false
+        val loader = runtime.loader
+        val emulator = runtime.emulator
+        if (loader == null && emulator == null) return false
+        try {
+            server = LocalServerSocket(socketName)
+        } catch (e: Exception) {
+            Log.w(AppServer.TAG, "pdk [$appId]: can't listen on $socketName: $e"); return false
+        }
+        fbFile.delete()
+        RandomAccessFile(fbFile, "rw").use { }
+        val binary = File(app.dir.let { File(runtime.appsRoot, it) }, app.main)
+        // The installer keeps a package's files as they came; a PDK binary wants its
+        // execute bit back (the loader runs it, qemu checks it).
+        binary.setExecutable(true, false)
+        val dataDir = File(context.filesDir, "pdk/data/$appId").also { it.mkdirs() }
+        // A 32-bit CPU runs the binary through the loader; a 64-bit-only one runs it under
+        // qemu, which loads the program itself and finds the loader under the runtime folder.
+        val command = if (loader != null) listOf(loader.path, "--library-path", lib.path, binary.path)
+            else listOf(emulator!!.path, "-L", lib.parentFile!!.path, "-E", "LD_LIBRARY_PATH=/lib", binary.path)
+        val pb = ProcessBuilder(command).directory(binary.parentFile).redirectErrorStream(true)
+        // qemu's own libraries (Termux's build), beside the runtime.
+        if (loader == null) runtime.qemuLibDir?.let { pb.environment()["LD_LIBRARY_PATH"] = it.path }
+        pb.environment().apply {
+            put("SDL_VIDEODRIVER", "lunacy"); put("SDL_AUDIODRIVER", "lunacy")
+            put("LUNACY_PDK_SOCKET", socketName); put("LUNACY_PDK_FB", fbFile.path)
+            put("LUNACY_PDK_APP_DIR", binary.parentFile!!.path); put("LUNACY_PDK_DATA_DIR", dataDir.path)
+            put("LUNACY_PDK_SCREEN_W", runtime.screenWidth.toString()); put("LUNACY_PDK_SCREEN_H", runtime.screenHeight.toString())
+            put("LUNACY_PDK_DPI", runtime.dpi.toString())
+            put("LUNACY_PDK_OS_VERSION", runtime.osVersion); put("LUNACY_PDK_DEVICE_NAME", runtime.deviceName)
+            put("LUNACY_PDK_NDUID", runtime.nduid)
+            put("LUNACY_PDK_APPINFO_id", app.id); put("LUNACY_PDK_APPINFO_title", app.title); put("LUNACY_PDK_APPINFO_version", app.version)
+            put("HOME", dataDir.path); put("TMPDIR", context.cacheDir.path)
+        }
+        Thread({ accept() }, "pdk-accept-$appId").start()
+        process = try { pb.start() } catch (e: Exception) {
+            Log.w(AppServer.TAG, "pdk [$appId]: can't start ${binary.path}: $e"); stop(); return false
+        }
+        Log.i(AppServer.TAG, "pdk [$appId]: started ${binary.name} through ${(loader ?: emulator)!!.name}")
+        Thread({
+            try {
+                process!!.inputStream.bufferedReader().forEachLine { Log.i(AppServer.TAG, "pdk [$appId] $it") }
+            } catch (e: Exception) { }
+            val code = try { process!!.waitFor() } catch (e: Exception) { -1 }
+            Log.i(AppServer.TAG, "pdk [$appId]: exited $code")
+            if (!stopped) main.post { listener.onExit(code) }
+            stop()
+        }, "pdk-log-$appId").start()
+        return true
+    }
+
+    private fun accept() {
+        val s = server ?: return
+        while (!stopped) {
+            val c = try { s.accept() } catch (e: Exception) { break }
+            Thread({ serve(c) }, "pdk-conn-$appId").start()
+        }
+    }
+
+    private fun serve(c: LocalSocket) {
+        try {
+            val input = DataInputStream(c.inputStream)
+            when (input.read()) {
+                'V'.code -> { control = c.outputStream; readControl(input) }
+                'A'.code -> readAudio(input)
+                else -> c.close()
+            }
+        } catch (e: Exception) {
+            if (!stopped) Log.i(AppServer.TAG, "pdk [$appId]: connection ended: $e")
+        }
+    }
+
+    private fun readHeader(input: DataInputStream): IntArray {
+        val b = ByteArray(12); input.readFully(b)
+        val bb = ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN)
+        return intArrayOf(bb.int, bb.int, bb.int)
+    }
+
+    private fun readControl(input: DataInputStream) {
+        while (!stopped) {
+            val (type, a, len) = readHeader(input)
+            val payload = ByteArray(len); input.readFully(payload)
+            val p = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN)
+            when (type) {
+                VIDEO_MODE -> setMode(p.int, p.int, p.int)
+                FRAME -> frame()
+                CAPTION -> String(payload).let { t -> main.post { listener.onCaption(t) } }
+                PDL -> runCatching { JSONObject(String(payload)) }.getOrNull()?.let { r -> main.post { listener.onPdl(r) } }
+            }
+        }
+    }
+
+    private fun setMode(w: Int, h: Int, bits: Int) {
+        width = w; height = h; bpp = bits
+        val size = w.toLong() * h * (bits / 8)
+        val channel = RandomAccessFile(fbFile, "r").channel
+        mapped = channel.map(FileChannel.MapMode.READ_ONLY, 0, size)
+        channel.close()
+        val config = if (bits == 16) Bitmap.Config.RGB_565 else Bitmap.Config.ARGB_8888
+        frames = arrayOf(Bitmap.createBitmap(w, h, config).also { it.setHasAlpha(false) }, Bitmap.createBitmap(w, h, config).also { it.setHasAlpha(false) })
+        Log.i(AppServer.TAG, "pdk [$appId]: video mode $w x $h, $bits bpp")
+        main.post { listener.onMode(w, h) }
+    }
+
+    /** Copies the shared file into the bitmap the view isn't showing, then hands it over. */
+    private fun frame() {
+        val buf = mapped ?: return
+        val bmp = frames[frameIndex] ?: return
+        buf.rewind()
+        bmp.copyPixelsFromBuffer(buf)
+        frameIndex = 1 - frameIndex
+        main.post { listener.onFrame(bmp) }
+    }
+
+    private fun readAudio(input: DataInputStream) {
+        while (!stopped) {
+            val (type, _, len) = readHeader(input)
+            val payload = ByteArray(len); input.readFully(payload)
+            when (type) {
+                AUDIO_OPEN -> {
+                    val p = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN)
+                    val freq = p.int; p.int; val channels = p.int; val samples = p.int
+                    val ch = if (channels >= 2) AudioFormat.CHANNEL_OUT_STEREO else AudioFormat.CHANNEL_OUT_MONO
+                    val frameBytes = samples * channels * 2
+                    val min = AudioTrack.getMinBufferSize(freq, ch, AudioFormat.ENCODING_PCM_16BIT)
+                    track?.release()
+                    @Suppress("DEPRECATION")
+                    track = AudioTrack(AudioManager.STREAM_MUSIC, freq, ch, AudioFormat.ENCODING_PCM_16BIT, maxOf(min, frameBytes * 4), AudioTrack.MODE_STREAM).also { it.play() }
+                    Log.i(AppServer.TAG, "pdk [$appId]: audio $freq Hz, $channels ch, $samples samples")
+                }
+                AUDIO_DATA -> track?.write(payload, 0, payload.size)
+                AUDIO_CLOSE -> { track?.stop(); track?.release(); track = null }
+            }
+        }
+    }
+
+    // ---- to the app ----
+
+    private fun send(type: Int, a: Int, payload: ByteArray = ByteArray(0)) {
+        val out = control ?: return
+        val b = ByteBuffer.allocate(12 + payload.size).order(ByteOrder.LITTLE_ENDIAN)
+        b.putInt(type).putInt(a).putInt(payload.size).put(payload)
+        try { synchronized(out) { out.write(b.array()); out.flush() } } catch (e: Exception) { }
+    }
+
+    private fun ints(vararg v: Int): ByteArray {
+        val b = ByteBuffer.allocate(4 * v.size).order(ByteOrder.LITTLE_ENDIAN); v.forEach { b.putInt(it) }; return b.array()
+    }
+
+    /** A finger, in the app's screen px: action 0 down, 1 move, 2 up. */
+    fun touch(finger: Int, action: Int, x: Int, y: Int) = send(TOUCH, finger, ints(action, x, y))
+    /** An SDL keysym (SDLK_*), with its unicode if it has one. */
+    fun key(down: Boolean, sym: Int, unicode: Int = 0) = send(KEY, if (down) 1 else 0, ints(sym, unicode))
+    fun active(gained: Boolean) = send(ACTIVE, if (gained) 1 else 0)
+    fun quit() = send(QUIT, 0)
+    fun pdlReply(id: Int, json: String) = send(PDL_REPLY, id, json.toByteArray())
+
+    /** Asks the app to quit, and ends the process if it hasn't within a moment. */
+    fun stop() {
+        if (stopped) return
+        stopped = true
+        quit()
+        Thread {
+            try { Thread.sleep(500) } catch (e: Exception) { }
+            runCatching { process?.destroy() }
+            runCatching { server?.close() }
+            runCatching { track?.release() }
+            fbFile.delete()
+        }.start()
+    }
+
+    companion object {
+        const val VIDEO_MODE = 1; const val FRAME = 2; const val CAPTION = 3; const val PDL = 4
+        const val AUDIO_OPEN = 10; const val AUDIO_DATA = 11; const val AUDIO_CLOSE = 12
+        const val TOUCH = 20; const val KEY = 21; const val QUIT = 22; const val ACTIVE = 23; const val PDL_REPLY = 24
+        /** SDL 1.2 keysyms the shell sends. */
+        const val SDLK_ESCAPE = 27
+    }
+}
+
+/**
+ * The PDK runtime shipped in the APK (tools/build-pdk.sh): the glibc dynamic loader (the
+ * 32-bit build) or a static qemu for 32-bit ARM (the 64-bit build), either of which lives
+ * with the native libraries because it has to be exec'd, and the libraries, extracted from
+ * the assets to the app's files the first time they are needed. The libraries folder is
+ * laid out as a sysroot's /lib, with the loader in it by its own name, which is how qemu
+ * finds an executable's interpreter (`-L`).
+ */
+class PdkRuntime(private val context: Context, val appsRoot: File, val screenWidth: Int, val screenHeight: Int, val dpi: Int,
+                 val osVersion: String, val deviceName: String, val nduid: String) {
+    val loader: File? = File(context.applicationInfo.nativeLibraryDir, "libld-linux.so").takeIf { it.canExecute() }
+    val emulator: File? = File(context.applicationInfo.nativeLibraryDir, "libqemu-arm.so").takeIf { it.canExecute() }
+    val libDir: File? by lazy { extract() }
+    /** The emulator's own libraries, extracted beside the runtime (64-bit build). */
+    val qemuLibDir: File? by lazy { libDir?.let { File(it.parentFile, "qemu-lib").takeIf { d -> d.isDirectory } } }
+    val available get() = loader != null || emulator != null
+    /** How this build runs a PDK app, for Device Info and the log. */
+    val how get() = when { loader != null -> "native"; emulator != null -> "emulated"; else -> "unavailable" }
+
+    private fun extract(): File? {
+        val dir = File(context.filesDir, "pdk/lib")
+        val stamp = File(dir, ".version")
+        val notice = runCatching { context.assets.open("pdk/NOTICE").bufferedReader().readText() }.getOrNull() ?: return null
+        if (stamp.exists() && stamp.readText() == notice) return dir
+        dir.mkdirs()
+        val names = context.assets.list("pdk/lib").orEmpty()
+        if (names.isEmpty()) return null
+        for (n in names) context.assets.open("pdk/lib/$n").use { s -> File(dir, n).outputStream().use { s.copyTo(it) } }
+        val qemuLibs = context.assets.list("pdk/qemu-lib").orEmpty()
+        if (qemuLibs.isNotEmpty()) {
+            val q = File(dir.parentFile, "qemu-lib").also { it.mkdirs() }
+            for (n in qemuLibs) context.assets.open("pdk/qemu-lib/$n").use { s -> File(q, n).outputStream().use { s.copyTo(it) } }
+        }
+        stamp.writeText(notice)
+        Log.i(AppServer.TAG, "pdk: runtime extracted, ${names.size} libraries")
+        return dir
+    }
+}

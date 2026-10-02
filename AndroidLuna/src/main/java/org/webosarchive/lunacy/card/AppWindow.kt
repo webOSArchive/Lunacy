@@ -90,7 +90,7 @@ interface WindowHost {
  * A card shows one window; an app can own several. See Docs/architecture.md, "App lifecycle".
  */
 @SuppressLint("ViewConstructor", "SetJavaScriptEnabled", "AddJavascriptInterface")
-class AppWindow(
+open class AppWindow(
     context: Context,
     val appId: String,
     private val host: WindowHost,
@@ -268,7 +268,7 @@ class AppWindow(
      * then Mojo.relaunch() runs. done gets whether the app handled it; if not, the shell
      * brings the app's first card forward.
      */
-    fun relaunch(params: String, done: (Boolean) -> Unit) = evaluateJavascript(
+    open fun relaunch(params: String, done: (Boolean) -> Unit) = evaluateJavascript(
         "(function(){try{return window.__lunacyRelaunch?__lunacyRelaunch(${JSONObject.quote(params)}):false}catch(e){console.error('relaunch: '+e);return false}})()"
     ) { done(it == "true") }
 
@@ -276,7 +276,7 @@ class AppWindow(
      * Focus, as LunaSysMgr gave it: PalmSystem.isActivated, which Enyo reads to find the active
      * window (for the app menu, among others), then Mojo.stageActivated or stageDeactivated.
      */
-    fun setStageActive(active: Boolean) {
+    open fun setStageActive(active: Boolean) {
         this.active = active
         if (pageReady) deliverActive()
     }
@@ -318,7 +318,7 @@ class AppWindow(
     }
 
     /** The webOS back gesture: an ESC key event, which Enyo and Mojo turn into "back". */
-    fun sendBack() = evaluateJavascript(
+    open fun sendBack() = evaluateJavascript(
         "(function(){function k(t){var e=document.createEvent('Events');e.initEvent(t,true,true);e.keyCode=27;e.which=27;(document.activeElement||document).dispatchEvent(e);}k('keydown');k('keyup');})()", null)
 
     /**

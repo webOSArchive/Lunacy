@@ -51,6 +51,8 @@ rm -f $S/src/video/dummy/*.c $S/src/video/dummy/*.h $S/src/audio/dummy/*.c $S/sr
 cp $SRC/sdl-lunacy/SDL_lunacyvideo.c $SRC/sdl-lunacy/SDL_lunacyvideo.h $SRC/sdl-lunacy/SDL_lunacyevents.c \
    $SRC/sdl-lunacy/SDL_lunacyevents_c.h $SRC/sdl-lunacy/lunacy_protocol.h $S/src/video/dummy/
 cp $SRC/sdl-lunacy/SDL_lunacyaudio.c $SRC/sdl-lunacy/SDL_lunacyaudio.h $S/src/audio/dummy/
+# The accelerometer as joystick 0, as webOS had it, in place of the Linux driver.
+cp $SRC/sdl-lunacy/SDL_lunacyjoystick.c $S/src/joystick/linux/SDL_sysjoystick.c
 # The bootstrap tables name the drivers they link; ours replace the dummy entries.
 sed -i 's/DUMMY_bootstrap/LUNACY_bootstrap/g' $S/src/video/SDL_video.c $S/src/video/SDL_sysvideo.h
 # Palm's SDL_GLattr additions (the PDK's SDL_video.h): SDL_GL_RETAINED_BACKING 16,
@@ -182,6 +184,62 @@ cp addon-out/lib/libSDL_ttf-2.0.so.0.10.1 "$OUT/lib/libSDL_ttf-2.0.so.0"
 cp addon-out/lib/libSDL_net-1.2.so.0.8.0 "$OUT/lib/libSDL_net-1.2.so.0"
 cp -L $DEPS/lib/libpng12.so.0 $DEPS/lib/libpng.so.3 $DEPS/lib/libfreetype.so.6 "$OUT/lib/"
 cp -L $SYSLIB/libjpeg.so.62 "$OUT/lib/"
+# ---- the TouchPad's other system fonts ----
+# Besides Prelude, /usr/share/fonts on the TouchPad holds Microsoft's core web fonts (arial,
+# cour, georgia, times, verdana, lucon), which apps open by name with SDL_ttf (Plasma Clock
+# quits without arial.ttf). Those can't be shipped; the metric-compatible Liberation fonts
+# (SIL OFL) stand in under the TouchPad's file names, so text keeps its widths, and DejaVu
+# Sans for Verdana. The CJK fonts aren't stood in for.
+mkdir -p fonts-x "$OUT/fonts"
+for p in fonts-liberation2 fonts-dejavu-core fonts-dejavu-extra; do
+  f=$(awk -v p="$p" '$1=="Package:"{cur=$2} $1=="Filename:" && cur==p {print $2; exit}' deb/Packages)
+  b=$(basename "$f")
+  if [ ! -f "deb/$b" ]; then echo "fetching $b"; curl -sL "$DEBIAN/$f" -o "deb/$b"; fi
+  dpkg-deb -x "deb/$b" fonts-x
+done
+LIB=fonts-x/usr/share/fonts/truetype/liberation2; DJ=fonts-x/usr/share/fonts/truetype/dejavu
+# Each source once; a TouchPad name whose source is already there becomes an alias,
+# made as a link at extraction (fonts/aliases).
+rm -f "$OUT/fonts/"*; : > "$OUT/fonts/aliases"
+while read tp src; do
+  first=$(grep -l "^$src\$" "$OUT/fonts/".src-* 2>/dev/null | head -1)
+  if [ -n "$first" ]; then echo "$tp ${first##*/.src-}" >> "$OUT/fonts/aliases"
+  else cp "$src" "$OUT/fonts/$tp"; echo "$src" > "$OUT/fonts/.src-$tp"; fi
+done <<EOF2
+arial.ttf $LIB/LiberationSans-Regular.ttf
+arialbd.ttf $LIB/LiberationSans-Bold.ttf
+ariali.ttf $LIB/LiberationSans-Italic.ttf
+arialbi.ttf $LIB/LiberationSans-BoldItalic.ttf
+cour.ttf $LIB/LiberationMono-Regular.ttf
+courbd.ttf $LIB/LiberationMono-Bold.ttf
+couri.ttf $LIB/LiberationMono-Italic.ttf
+courbi.ttf $LIB/LiberationMono-BoldItalic.ttf
+times.ttf $LIB/LiberationSerif-Regular.ttf
+timesbd.ttf $LIB/LiberationSerif-Bold.ttf
+timesi.ttf $LIB/LiberationSerif-Italic.ttf
+timesbi.ttf $LIB/LiberationSerif-BoldItalic.ttf
+georgia.ttf $LIB/LiberationSerif-Regular.ttf
+georgiab.ttf $LIB/LiberationSerif-Bold.ttf
+georgiai.ttf $LIB/LiberationSerif-Italic.ttf
+georgiaz.ttf $LIB/LiberationSerif-BoldItalic.ttf
+verdana.ttf $DJ/DejaVuSans.ttf
+verdanab.ttf $DJ/DejaVuSans-Bold.ttf
+verdanai.ttf $DJ/DejaVuSans-Oblique.ttf
+verdanabi.ttf $DJ/DejaVuSans-BoldOblique.ttf
+lucon.ttf $LIB/LiberationMono-Regular.ttf
+EOF2
+rm -f "$OUT/fonts/".src-*
+cat > "$OUT/fonts/NOTICE" <<'EOF2'
+Stand-ins for the Microsoft core fonts the HP TouchPad carries in /usr/share/fonts, which
+can't be redistributed here. Each file has the TouchPad's name and holds a free font of the
+same metrics (except Verdana and Georgia, which have none):
+  arial*, cour*, lucon, times*, georgia*: Liberation Sans, Mono and Serif 2.1.5, SIL Open
+    Font License 1.1 (Debian bookworm fonts-liberation2).
+  verdana*: DejaVu Sans 2.37, Bitstream Vera / DejaVu licence (Debian bookworm
+    fonts-dejavu-core and fonts-dejavu-extra).
+Sources: https://github.com/liberationfonts/liberation-fonts and https://dejavu-fonts.github.io/
+EOF2
+
 # Names apps link by that are another library's: made as symlinks when the runtime is
 # extracted (PdkRuntime), since assets can't hold links.
 cat > "$OUT/aliases" <<EOA
@@ -199,6 +257,7 @@ libjpeg.so libjpeg.so.62
 libfreetype.so libfreetype.so.6
 libz.so libz.so.1
 libGLES_CM.so.1 libGLES_CM.so
+libGLESv2.so.2 libGLESv2.so
 EOA
 
 # ---- libGLES_CM: generated from the PDK's own GLES 1.1 headers (Docs/pdk.md, "Transformers G1") ----
@@ -206,12 +265,18 @@ EOA
 # liblunacygl.so, replays it on a GLES 1.1 context of its own. Both are generated from the
 # same headers so the opcodes agree. gen_gles1_log.py is the stage-one logging library.
 python3 "$SRC/libgles/gen_gles1.py" client "$PDK_INC/GLES/gl.h" "$PDK_INC/GLES/glext.h" > libgles_cm.c
-$CC -O2 -shared -fPIC -Wl,-soname,libGLES_CM.so -I"$PDK_INC" libgles_cm.c -o "$OUT/lib/libGLES_CM.so"
+$CC -O2 -shared -fPIC -Wl,-soname,libGLES_CM.so -I"$PDK_INC" -I"$SRC/libgles" libgles_cm.c -o "$OUT/lib/libGLES_CM.so"
 python3 "$SRC/libgles/gen_gles1.py" server "$PDK_INC/GLES/gl.h" "$PDK_INC/GLES/glext.h" > gles_replay.inc
+# GLES 2 the same way (gen_gles2.py): libGLESv2.so for the app, liblunacygl2.so for the shell.
+python3 "$SRC/libgles/gen_gles2.py" client "$PDK_INC/GLES2/gl2.h" "$PDK_INC/GLES2/gl2ext.h" > libglesv2.c
+$CC -O2 -shared -fPIC -Wl,-soname,libGLESv2.so -I"$PDK_INC" -I"$SRC/libgles" libglesv2.c -o "$OUT/lib/libGLESv2.so"
+python3 "$SRC/libgles/gen_gles2.py" server "$PDK_INC/GLES2/gl2.h" "$PDK_INC/GLES2/gl2ext.h" > gles2_replay.inc
 for abi in armeabi-v7a:armv7a-linux-androideabi21 arm64-v8a:aarch64-linux-android21; do
   mkdir -p "$HERE/local-jni/${abi%%:*}"
-  "$BIN/clang" --target="${abi##*:}" -O2 -g -shared -fPIC -Wl,-soname,liblunacygl.so -I. "$SRC/libgles/gl_server.c" \
-    -lEGL -lGLESv1_CM -landroid -llog -o "$HERE/local-jni/${abi%%:*}/liblunacygl.so"
+  "$BIN/clang" --target="${abi##*:}" -O2 -g -shared -fPIC -Wl,-soname,liblunacygl.so -I. -I"$SRC/libgles" "$SRC/libgles/gl_server.c" \
+    -lEGL -lGLESv1_CM -landroid -llog -lm -o "$HERE/local-jni/${abi%%:*}/liblunacygl.so"
+  "$BIN/clang" --target="${abi##*:}" -O2 -g -shared -fPIC -DGLES_VERSION=2 -Wl,-soname,liblunacygl2.so -I. -I"$SRC/libgles" "$SRC/libgles/gl_server.c" \
+    -lEGL -lGLESv2 -landroid -llog -lm -o "$HERE/local-jni/${abi%%:*}/liblunacygl2.so"
 done
 # liblunacy-preload: /proc/self/exe as the app's binary, not the loader's (LD_PRELOAD).
 $CC -O2 -shared -fPIC -Wl,-soname,liblunacy-preload.so "$SRC/libpreload/preload.c" -o "$OUT/lib/liblunacy-preload.so" -ldl
@@ -296,7 +361,7 @@ The PDK runtime (Docs/pdk.md), built by tools/build-pdk.sh:
 - libSDL_mixer-1.2.so.0: SDL_mixer $MIX_VER (zlib licence), with Ogg Vorbis.
 - libGLES_CM.so: Lunacy's own (LunaRuntimes/pdk/libgles), generated from the PDK's Khronos
   GLES 1.1 headers (SGI Free Software License B); its shell-side half is liblunacygl.so in
-  the APK's own libraries.
+  the APK's own libraries. libGLESv2.so likewise from the GLES 2 headers (liblunacygl2.so).
 - libSDL_cinema.so: Lunacy's own stub (LunaRuntimes/pdk/libcinema).
 - liblunacy-preload.so: Lunacy's own (LunaRuntimes/pdk/libpreload).
 - libogg, libvorbis, libvorbisfile: Xiph.Org (BSD), Debian bookworm armel.

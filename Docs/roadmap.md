@@ -20,7 +20,9 @@ replayed into a framebuffer of the app's own size, shown in the card full screen
 turned as the TouchPad turns a buffer of the other shape (measured on it), natively on
 the Nexus 5 and under qemu on the Pixel Tablet. SDL_image, SDL_ttf, SDL_net and the
 image and font libraries apps link by name are built, and webOS's paths resolve in the
-webOS root. Next: a GLES 2 stream, hybrid apps. All in [pdk.md](pdk.md).
+webOS root. A GLES 2 stream runs the shader apps (Dice, ThermalPad), and the accelerometer
+is SDL joystick 0 as on webOS (measured on the TouchPad). Next: hybrid apps (web apps with a
+PDK plugin), OpenSSL 0.9.8 and curl. All in [pdk.md](pdk.md).
 
 **2026-10-02, afternoon: a phone layout.** `FormFactor` decides phone or tablet from the
 screen (short side in dp, diagonal in inches, shape as the tie-breaker) or the owner's

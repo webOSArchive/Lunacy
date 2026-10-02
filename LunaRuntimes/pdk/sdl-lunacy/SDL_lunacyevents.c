@@ -100,6 +100,13 @@ static void handle(_THIS, uint32_t type, uint32_t a, const unsigned char *p, uin
 	case LPDK_ACTIVE:
 		SDL_PrivateAppActive(a != 0, SDL_APPACTIVE | SDL_APPINPUTFOCUS);
 		break;
+	case LPDK_ACCEL: {
+		extern int LUNACY_accel[3];   /* SDL_lunacyjoystick.c */
+		if (len < 12) return;
+		memcpy(v, p, 12);
+		LUNACY_accel[0] = v[0]; LUNACY_accel[1] = v[1]; LUNACY_accel[2] = v[2];
+		break;
+	}
 	default:
 		break;  /* a PDL reply is read by libpdl, which drains its own messages */
 	}

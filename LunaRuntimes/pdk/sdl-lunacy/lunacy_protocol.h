@@ -30,6 +30,7 @@
 #define LPDK_KEY          21  /* a = 1 down, 0 up; payload: int32 sdl keysym, unicode */
 #define LPDK_QUIT         22  /* SDL_QUIT */
 #define LPDK_ACTIVE       23  /* a = 1 gained, 0 lost (SDL_ACTIVEEVENT, app + input focus) */
+#define LPDK_ACCEL        25  /* payload: int32 x, y, z, the accelerometer as webOS's joystick axes (1 g = 32768, the device's frame) */
 #define LPDK_PDL_REPLY    24  /* a = request id; payload: JSON */
 
 #define LPDK_HEADER 12

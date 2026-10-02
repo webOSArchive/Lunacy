@@ -40,8 +40,8 @@ class PdkHost(
     interface Listener {
         /** The app set its screen size; the frame bitmap is this size from now on. gl: an OpenGL ES mode, no bitmap. */
         fun onMode(width: Int, height: Int, gl: Boolean)
-        /** A batch of GL commands from the app's libGLES_CM.so, its swaps among them. Reader thread. */
-        fun onGl(batch: ByteArray)
+        /** A batch of GL commands from the app's libGLES_CM.so (version 1) or libGLESv2.so (2), its swaps among them. Reader thread. */
+        fun onGl(batch: ByteArray, version: Int)
         /** A new frame is in [frame]. Main thread. */
         fun onFrame(frame: Bitmap)
         fun onCaption(title: String)
@@ -162,16 +162,16 @@ class PdkHost(
 
     private fun readGl(input: DataInputStream) {
         while (!stopped) {
-            val (type, _, len) = readHeader(input)
+            val (type, version, len) = readHeader(input)
             val payload = ByteArray(len); input.readFully(payload)
-            if (type == GL) listener.onGl(payload)
+            if (type == GL) listener.onGl(payload, if (version == 2) 2 else 1)
         }
     }
 
     /** Answers for the app's GL library (swap acknowledgements, read pixels), already framed. */
     fun glAnswer(bytes: ByteArray) {
         val out = glOut ?: return
-        try { synchronized(out) { out.write(bytes); out.flush() } } catch (e: Exception) { }
+        try { synchronized(out) { out.write(bytes) } } catch (e: Exception) { }
     }
 
     private fun readHeader(input: DataInputStream): IntArray {
@@ -188,7 +188,6 @@ class PdkHost(
             when (type) {
                 VIDEO_MODE -> if (a == 1) glMode(p.int, p.int) else setMode(p.int, p.int, p.int)
                 FRAME -> if (a == 0) frame()   // a = 1: a swap from a GL library that isn't Lunacy's; nothing to show
-                GL -> listener.onGl(payload)
                 CAPTION -> String(payload).let { t -> main.post { listener.onCaption(t) } }
                 PDL -> runCatching { JSONObject(String(payload)) }.getOrNull()?.let { r -> main.post { listener.onPdl(r) } }
             }
@@ -257,12 +256,27 @@ class PdkHost(
 
     // ---- to the app ----
 
+    /*
+     * Everything to the app goes out from a thread of its own: a LocalSocket's flush waits
+     * until the other end has read every byte, and the app reads its events only when it
+     * polls, so a write from the main thread (a touch, the accelerometer) could hold it until
+     * Android called the shell unresponsive. No flush: the stream isn't buffered.
+     */
+    private val sender = android.os.HandlerThread("pdk-send $appId").apply { start() }
+    private val sendHandler = android.os.Handler(sender.looper)
+
     private fun send(type: Int, a: Int, payload: ByteArray = ByteArray(0)) {
-        val out = control ?: return
         val b = ByteBuffer.allocate(12 + payload.size).order(ByteOrder.LITTLE_ENDIAN)
         b.putInt(type).putInt(a).putInt(payload.size).put(payload)
-        try { synchronized(out) { out.write(b.array()); out.flush() } } catch (e: Exception) { }
+        val bytes = b.array()
+        sendHandler.post {
+            val out = control ?: return@post
+            try { synchronized(out) { out.write(bytes) } } catch (e: Exception) { }
+        }
     }
+
+    /** The latest accelerometer reading not yet sent; readings in between are dropped. */
+    private val accelLatest = java.util.concurrent.atomic.AtomicReference<IntArray?>(null)
 
     private fun ints(vararg v: Int): ByteArray {
         val b = ByteBuffer.allocate(4 * v.size).order(ByteOrder.LITTLE_ENDIAN); v.forEach { b.putInt(it) }; return b.array()
@@ -273,6 +287,15 @@ class PdkHost(
     /** An SDL keysym (SDLK_*), with its unicode if it has one. */
     fun key(down: Boolean, sym: Int, unicode: Int = 0) = send(KEY, if (down) 1 else 0, ints(sym, unicode))
     fun active(gained: Boolean) = send(ACTIVE, if (gained) 1 else 0)
+    /** The accelerometer, already as webOS's joystick axes (PdkWindow). */
+    fun accel(x: Int, y: Int, z: Int) {
+        if (accelLatest.getAndSet(intArrayOf(x, y, z)) != null) return   // one already waiting: it'll carry this
+        sendHandler.post { accelLatest.getAndSet(null)?.let { v ->
+            val out = control ?: return@post
+            val b = ByteBuffer.allocate(24).order(ByteOrder.LITTLE_ENDIAN).putInt(ACCEL).putInt(0).putInt(12).putInt(v[0]).putInt(v[1]).putInt(v[2])
+            try { synchronized(out) { out.write(b.array()) } } catch (e: Exception) { }
+        } }
+    }
     fun quit() = send(QUIT, 0)
     fun pdlReply(id: Int, json: String) = send(PDL_REPLY, id, json.toByteArray())
 
@@ -281,6 +304,7 @@ class PdkHost(
         if (stopped) return
         stopped = true
         quit()
+        sendHandler.postDelayed({ sender.quitSafely() }, 1000)
         Thread {
             try { Thread.sleep(500) } catch (e: Exception) { }
             runCatching { process?.destroy() }
@@ -293,7 +317,7 @@ class PdkHost(
     companion object {
         const val VIDEO_MODE = 1; const val FRAME = 2; const val CAPTION = 3; const val PDL = 4; const val GL = 6
         const val AUDIO_OPEN = 10; const val AUDIO_DATA = 11; const val AUDIO_CLOSE = 12
-        const val TOUCH = 20; const val KEY = 21; const val QUIT = 22; const val ACTIVE = 23; const val PDL_REPLY = 24
+        const val TOUCH = 20; const val KEY = 21; const val QUIT = 22; const val ACTIVE = 23; const val PDL_REPLY = 24; const val ACCEL = 25
         /** SDL 1.2 keysyms the shell sends. */
         const val SDLK_ESCAPE = 27
     }
@@ -361,6 +385,17 @@ class PdkRuntime(private val context: Context, val appsRoot: File, val screenWid
         }
     }
 
+    /** The "alias target" lines of an asset, as symlinks in dir. */
+    private fun links(dir: File, asset: String) {
+        runCatching { context.assets.open(asset).bufferedReader().readLines() }.getOrNull()?.forEach { line ->
+            val (alias, target) = line.trim().split(Regex("\\s+")).takeIf { it.size == 2 } ?: return@forEach
+            val f = File(dir, alias)
+            f.delete()
+            runCatching { android.system.Os.symlink(target, f.path) }
+                .onFailure { Log.w(AppServer.TAG, "pdk: no alias $alias -> $target: ${it.message}") }
+        }
+    }
+
     private fun extract(): File? {
         val dir = File(context.filesDir, "pdk/lib")
         val stamp = File(dir, ".version")
@@ -374,18 +409,18 @@ class PdkRuntime(private val context: Context, val appsRoot: File, val screenWid
         if (names.isEmpty()) return null
         for (n in names) context.assets.open("pdk/lib/$n").use { s -> File(dir, n).outputStream().use { s.copyTo(it) } }
         // Other names apps link the same libraries by (libSDL.so, libdl.so...): symlinks.
-        runCatching { context.assets.open("pdk/aliases").bufferedReader().readLines() }.getOrNull()?.forEach { line ->
-            val (alias, target) = line.trim().split(Regex("\\s+")).takeIf { it.size == 2 } ?: return@forEach
-            val f = File(dir, alias)
-            f.delete()
-            runCatching { android.system.Os.symlink(target, f.path) }
-                .onFailure { Log.w(AppServer.TAG, "pdk: no alias $alias -> $target: ${it.message}") }
-        }
+        links(dir, "pdk/aliases")
         // The system fonts, where webOS kept them: apps open them by path with SDL_ttf
         // (/usr/share/fonts/PreludeCondensed-Medium.ttf). Laid down once per runtime.
         val fonts = File(context.filesDir, "webos/usr/share/fonts").also { it.mkdirs() }
         for (n in context.assets.list("luna/fonts").orEmpty()) if (n.endsWith(".ttf"))
             context.assets.open("luna/fonts/$n").use { s -> File(fonts, n).outputStream().use { s.copyTo(it) } }
+        // The TouchPad's other fonts, by its names (arial.ttf...): free stand-ins (pdk/fonts/NOTICE).
+        for (n in context.assets.list("pdk/fonts").orEmpty()) {
+            if (n == "aliases") continue
+            context.assets.open("pdk/fonts/$n").use { s -> File(fonts, if (n == "NOTICE") "NOTICE.stand-ins" else n).outputStream().use { s.copyTo(it) } }
+        }
+        links(fonts, "pdk/fonts/aliases")
         val qemuLibs = context.assets.list("pdk/qemu-lib").orEmpty()
         if (qemuLibs.isNotEmpty()) {
             val q = File(dir.parentFile, "qemu-lib").also { it.mkdirs() }

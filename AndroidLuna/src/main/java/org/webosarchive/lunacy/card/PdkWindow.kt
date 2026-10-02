@@ -107,41 +107,58 @@ class PdkWindow(
 
     override fun onMode(width: Int, height: Int, gl: Boolean) {
         shell.fullScreen(this)   // the card exists by now
-        if (gl && this.gl == null && PdkGl.available) {
-            // An OpenGL ES app: its commands are replayed on a texture the size of the window,
-            // letterboxed and turned by the native side (PdkGl); the frame view stays on top
-            // for the touches.
-            val stream = PdkGl(appId, width, height, host::glAnswer) {
-                post { if (!drawn) { drawn = true; shell.onStageReady(this); shell.onPageDrawn(this) } }
-            }
-            synchronized(earlyBatches) {
-                for (b in earlyBatches) stream.replay(b)
-                if (earlyBatches.isNotEmpty()) Log.i(AppServer.TAG, "pdk [$appId]: ${earlyBatches.size} GL batches from before the mode")
-                earlyBatches.clear()
-                this.gl = stream
-            }
-            val view = TextureView(context)
-            view.isOpaque = true
-            view.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                override fun onSurfaceTextureAvailable(t: SurfaceTexture, w: Int, h: Int) { stream.attach(t) }
-                override fun onSurfaceTextureSizeChanged(t: SurfaceTexture, w: Int, h: Int) {}
-                override fun onSurfaceTextureDestroyed(t: SurfaceTexture): Boolean = false
-                override fun onSurfaceTextureUpdated(t: SurfaceTexture) {}
-            }
-            glView = view
-            @Suppress("DEPRECATION")
-            addView(view, AbsoluteLayout.LayoutParams(AbsoluteLayout.LayoutParams.MATCH_PARENT, AbsoluteLayout.LayoutParams.MATCH_PARENT, 0, 0))
-            frameView.bringToFront()
-        }
+        if (gl) { glMode = width to height; startGl() }
         orient()
     }
 
-    override fun onGl(batch: ByteArray) {
-        val stream = gl
-        if (stream != null) { stream.replay(batch); return }
-        synchronized(earlyBatches) { if (gl == null) earlyBatches.add(batch) else gl?.replay(batch) }
+    /** The GL mode, once the app has set one; with the version of the first batch, the stream can start. */
+    private var glMode: Pair<Int, Int>? = null
+    @Volatile private var glVersion = 0
+
+    /**
+     * An OpenGL ES app: its commands are replayed into a framebuffer of its own size and shown
+     * on a texture over the card, letterboxed and turned by the native side (PdkGl); the frame
+     * view stays on top for the touches. Starts when both the mode (main thread) and the first
+     * batch (which says GLES 1.1 or 2; reader thread) have come, in whichever order.
+     */
+    private fun startGl() {
+        val (width, height) = glMode ?: return
+        val version = glVersion
+        if (gl != null || version == 0 || !PdkGl.available) return
+        val stream = PdkGl(appId, width, height, version, host::glAnswer) {
+            post { if (!drawn) { drawn = true; shell.onStageReady(this); shell.onPageDrawn(this) } }
+        }
+        synchronized(earlyBatches) {
+            for (b in earlyBatches) stream.replay(b)
+            if (earlyBatches.isNotEmpty()) Log.i(AppServer.TAG, "pdk [$appId]: ${earlyBatches.size} GLES $version batches from before the stream")
+            earlyBatches.clear()
+            this.gl = stream
+        }
+        val view = TextureView(context)
+        view.isOpaque = true
+        view.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(t: SurfaceTexture, w: Int, h: Int) { stream.attach(t) }
+            override fun onSurfaceTextureSizeChanged(t: SurfaceTexture, w: Int, h: Int) {}
+            override fun onSurfaceTextureDestroyed(t: SurfaceTexture): Boolean = false
+            override fun onSurfaceTextureUpdated(t: SurfaceTexture) {}
+        }
+        glView = view
+        @Suppress("DEPRECATION")
+        addView(view, AbsoluteLayout.LayoutParams(AbsoluteLayout.LayoutParams.MATCH_PARENT, AbsoluteLayout.LayoutParams.MATCH_PARENT, 0, 0))
+        frameView.bringToFront()
+        orient()
     }
 
+    override fun onGl(batch: ByteArray, version: Int) {
+        val stream = gl
+        if (stream != null) { stream.replay(batch); return }
+        synchronized(earlyBatches) {
+            val g = gl
+            if (g != null) { g.replay(batch); return }
+            earlyBatches.add(batch)
+            if (glVersion == 0) { glVersion = version; post { startGl() } }
+        }
+    }
 
     override fun onFrame(frame: Bitmap) {
         this.frame = frame
@@ -175,9 +192,51 @@ class PdkWindow(
     /** The back gesture: Palm's SDL gave a PDK app the gesture as an Escape key. */
     override fun sendBack() { host.key(true, PdkHost.SDLK_ESCAPE); host.key(false, PdkHost.SDLK_ESCAPE) }
 
-    override fun setStageActive(active: Boolean) { host.active(active) }
+    override fun setStageActive(active: Boolean) {
+        host.active(active)
+        if (active) startAccel() else stopAccel()
+    }
+
+    // ---- the accelerometer, as webOS's SDL joystick 0 (sdl-lunacy/SDL_lunacyjoystick.c) ----
+
+    private val sensors get() = context.getSystemService(Context.SENSOR_SERVICE) as? android.hardware.SensorManager
+    private var accelListener: android.hardware.SensorEventListener? = null
+
+    /**
+     * Readings in the device's frame - the screen as the card holds it, x right, y up - and
+     * webOS's units, measured on the TouchPad: 1 g = 32768, y positive toward the top of the
+     * screen, z into it (the opposite of Android's z).
+     */
+    private fun startAccel() {
+        if (accelListener != null) return
+        val sm = sensors ?: return
+        val sensor = sm.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER) ?: return
+        val l = object : android.hardware.SensorEventListener {
+            override fun onSensorChanged(e: android.hardware.SensorEvent) {
+                val x = e.values[0]; val y = e.values[1]; val z = e.values[2]
+                val rotation = display?.rotation ?: android.view.Surface.ROTATION_0
+                val (sx, sy) = when (rotation) {
+                    android.view.Surface.ROTATION_90 -> -y to x
+                    android.view.Surface.ROTATION_180 -> -x to -y
+                    android.view.Surface.ROTATION_270 -> y to -x
+                    else -> x to y
+                }
+                val k = 32768f / android.hardware.SensorManager.GRAVITY_EARTH
+                host.accel((sx * k).toInt(), (sy * k).toInt(), (-z * k).toInt())
+            }
+            override fun onAccuracyChanged(s: android.hardware.Sensor, a: Int) {}
+        }
+        accelListener = l
+        sm.registerListener(l, sensor, android.hardware.SensorManager.SENSOR_DELAY_GAME)
+    }
+
+    private fun stopAccel() {
+        accelListener?.let { sensors?.unregisterListener(it) }
+        accelListener = null
+    }
 
     override fun destroy() {
+        stopAccel()
         gl?.destroy(); gl = null
         host.stop()
         super.destroy()

@@ -105,7 +105,8 @@ In `LunaRuntimes/pdk/sdl-lunacy/lunacy_protocol.h`, mirrored in `PdkHost`. Every
 three little-endian uint32s, type, a, length, then the payload. Connections on one
 abstract Unix socket, told apart by a first byte: `V` for video, input and PDL, `A` for
 audio, `P` for libpdl's own requests, `G` for the GL stream (blocking, with the shell's
-answers coming back on it: swap acknowledgements and read pixels).
+answers coming back on it: swap acknowledgements, read pixels, GLES 2 query results). The
+shell writes to the app from a sender thread, never the main thread.
 
 ## 5. Approaches for the rest, none ruled out
 
@@ -304,8 +305,62 @@ side; `touch files/pdk/gldump` (as the app, `run-as`) logs one frame's commands 
 their first arguments from the shell's side; the first 20 GL errors are logged with the
 command that made them. `gen_gles1_log.py` is the stage-one logging library.
 
-Open: a GLES 2 stream (160 apps); hybrid apps, web apps that embed a PDK plugin (the chess
-app tried here is one); OpenSSL 0.9.8 and curl (about 50 apps).
+**GLES 2, the same night.** `gen_gles2.py` does for the PDK's GLES 2 headers what
+`gen_gles1.py` does for GLES 1.1: `libGLESv2.so` for the app (`client2_prelude.c`), and a second
+build of `gl_server.c` (`-DGLES_VERSION=2`, `liblunacygl2.so`) for the shell, with the same
+offscreen framebuffer and a shader blit to the card. Both client libraries share
+`client_transport.h`; each batch carries its GLES version, and the card starts the stream
+when it has both the mode and the first batch. What GLES 2 adds:
+
+- *Queries are round trips.* Any call with an output (shader and program status, info
+  logs, uniform and attribute locations, `glGet*v`) is sent and answered: the shell calls the
+  real function and replies with the return value and each output, sized by the spec's
+  tables. A failed compile or link is logged with the driver's message and the source.
+- *Shaders and programs* are named by the client and mapped to the driver's, as framebuffers
+  and renderbuffers are; creating one needs no round trip.
+- *Vertex attribute arrays* in the app's memory travel with each draw, like GLES 1.1's.
+- Extensions answer in the app's process: only Android ports linking the whole header
+  (apkenv) import them.
+
+Of the 160 apps that link `libGLESv2.so`, about 90 use shaders; the rest are 2D apps whose
+template linked it (Plasma Clock, Fireworks). Dice (Karge Software) and ThermalPad (TouchPad
+edition) render on the Nexus 5, and Dice under qemu on the Pixel Tablet at 57 frames/s.
+
+Two bugs found on the way, both general: the client sent no flag for an output buffer, so
+every query answered zeros (a compile status of 0 made apps delete good shaders); and the
+array, index and attribute commands declared their blobs unpadded while writing them padded
+to 4, so an odd index count shifted the rest of the batch two bytes and the draws after it
+were lost (Dice drew nothing). Both fixed; the shell logs a batch that doesn't parse.
+
+**The accelerometer**, as webOS gave it to PDK apps: SDL joystick 0. Measured on the
+TouchPad with a probe: one joystick named "webOS accelerometer", three axes, no buttons; at
+rest a magnitude of about 32768 (1 g); axis 1 positive toward the top of the screen, axis 2
+negative with the screen tilted back. Axis 0's sign wasn't measurable in the pose the
+TouchPad was in and is assumed positive to the right: a tilt test on the TouchPad settles it.
+The card reads Android's accelerometer while it is the active card, turns it into the
+device's frame and those units, and sends it (`LPDK_ACCEL`); `SDL_lunacyjoystick.c` replaces
+SDL's Linux joystick driver. Readings are coalesced, latest wins.
+
+Everything the shell sends the app now goes from a thread of its own: Android's
+`LocalSocket.flush()` waits until the other end has read every byte, and a game reads its
+events only when it polls, so the accelerometer's 50 writes a second from the main thread
+made Android call the shell unresponsive. Touches had the same latent risk.
+
+**The TouchPad's other fonts.** Besides Prelude, its `/usr/share/fonts` holds Microsoft's
+core web fonts, which apps open by name (Plasma Clock quits without `arial.ttf`). They can't
+be shipped; the runtime lays down metric-compatible free stand-ins under the TouchPad's file
+names: Liberation Sans, Serif and Mono (for Arial, Times New Roman and Georgia, Courier New
+and Lucida Console) and DejaVu Sans (for Verdana), with a NOTICE (`pdk/fonts`). The CJK fonts
+aren't stood in for.
+
+Measured against the TouchPad, running the app's unpacked folder from `/tmp` over novacom
+(no install): Mandelbrot shows a black screen there too; Fireworks shows its title only as a
+splash between about 3 and 8 seconds, then waits for taps on a black sky. Neither is a
+Lunacy fault. On the phone profile, a TouchPad-only app sees a Pre3's screen, as it would have
+on a Pre3.
+
+Open: hybrid apps, web apps that embed a PDK plugin (the chess app tried here is one);
+OpenSSL 0.9.8 and curl (about 50 apps); the accelerometer's x sign; PDL_ServiceCall to the bus.
 
 ## 6. Seen on the Nexus 5, 2026-10-02
 

@@ -40,7 +40,9 @@ class PdkHost(
     interface Listener {
         /** The app set its screen size; the frame bitmap is this size from now on. gl: an OpenGL ES mode, no bitmap. */
         fun onMode(width: Int, height: Int, gl: Boolean)
-        /** The app swapped its OpenGL buffers; nothing to show yet, but it is drawing. */
+        /** A batch of GL commands to replay before the next swap. Reader thread. */
+        fun onGl(batch: ByteArray)
+        /** The app swapped its OpenGL buffers: the replayed frame is complete. Reader thread. */
         fun onGlSwap()
         /** A new frame is in [frame]. Main thread. */
         fun onFrame(frame: Bitmap)
@@ -169,7 +171,8 @@ class PdkHost(
             val p = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN)
             when (type) {
                 VIDEO_MODE -> if (a == 1) glMode(p.int, p.int) else setMode(p.int, p.int, p.int)
-                FRAME -> if (a == 1) main.post { listener.onGlSwap() } else frame()
+                FRAME -> if (a == 1) listener.onGlSwap() else frame()
+                GL -> listener.onGl(payload)
                 CAPTION -> String(payload).let { t -> main.post { listener.onCaption(t) } }
                 PDL -> runCatching { JSONObject(String(payload)) }.getOrNull()?.let { r -> main.post { listener.onPdl(r) } }
             }
@@ -263,7 +266,7 @@ class PdkHost(
     }
 
     companion object {
-        const val VIDEO_MODE = 1; const val FRAME = 2; const val CAPTION = 3; const val PDL = 4
+        const val VIDEO_MODE = 1; const val FRAME = 2; const val CAPTION = 3; const val PDL = 4; const val GL = 6
         const val AUDIO_OPEN = 10; const val AUDIO_DATA = 11; const val AUDIO_CLOSE = 12
         const val TOUCH = 20; const val KEY = 21; const val QUIT = 22; const val ACTIVE = 23; const val PDL_REPLY = 24
         /** SDL 1.2 keysyms the shell sends. */

@@ -102,9 +102,17 @@ for f in libogg.so.0 libvorbis.so.0 libvorbisfile.so.3; do cp "$WORK/sysroot/usr
 # SDL_image and SDL_ttf: not built yet.
 
 # ---- libGLES_CM: generated from the PDK's own GLES 1.1 headers (Docs/pdk.md, "Transformers G1") ----
-# Stage one, logging: every call counted and the first few logged, queries answered.
-python3 "$SRC/libgles/gen_gles1.py" "$PDK_INC/GLES/gl.h" "$PDK_INC/GLES/glext.h" > libgles_cm.c
+# The app's end serialises every call into a batch for the shell (LPDK_GL); the shell's end,
+# liblunacygl.so, replays it on a GLES 1.1 context of its own. Both are generated from the
+# same headers so the opcodes agree. gen_gles1_log.py is the stage-one logging library.
+python3 "$SRC/libgles/gen_gles1.py" client "$PDK_INC/GLES/gl.h" "$PDK_INC/GLES/glext.h" > libgles_cm.c
 $CC -O2 -shared -fPIC -Wl,-soname,libGLES_CM.so -I"$PDK_INC" libgles_cm.c -o "$OUT/lib/libGLES_CM.so"
+python3 "$SRC/libgles/gen_gles1.py" server "$PDK_INC/GLES/gl.h" "$PDK_INC/GLES/glext.h" > gles_replay.inc
+for abi in armeabi-v7a:armv7a-linux-androideabi21 arm64-v8a:aarch64-linux-android21; do
+  mkdir -p "$HERE/local-jni/${abi%%:*}"
+  "$BIN/clang" --target="${abi##*:}" -O2 -g -shared -fPIC -Wl,-soname,liblunacygl.so -I. "$SRC/libgles/gl_server.c" \
+    -lEGL -lGLESv1_CM -landroid -llog -o "$HERE/local-jni/${abi%%:*}/liblunacygl.so"
+done
 # liblunacy-preload: /proc/self/exe as the app's binary, not the loader's (LD_PRELOAD).
 $CC -O2 -shared -fPIC -Wl,-soname,liblunacy-preload.so "$SRC/libpreload/preload.c" -o "$OUT/lib/liblunacy-preload.so" -ldl
 # libSDL_cinema: Palm's video player for a game's movies. A stub that has no movie to play.
@@ -187,7 +195,8 @@ The PDK runtime (Docs/pdk.md), built by tools/build-pdk.sh:
 - libpdl.so: Lunacy's own (LunaRuntimes/pdk/libpdl), built against Palm's PDK headers.
 - libSDL_mixer-1.2.so.0: SDL_mixer $MIX_VER (zlib licence), with Ogg Vorbis.
 - libGLES_CM.so: Lunacy's own (LunaRuntimes/pdk/libgles), generated from the PDK's Khronos
-  GLES 1.1 headers (SGI Free Software License B).
+  GLES 1.1 headers (SGI Free Software License B); its shell-side half is liblunacygl.so in
+  the APK's own libraries.
 - libSDL_cinema.so: Lunacy's own stub (LunaRuntimes/pdk/libcinema).
 - liblunacy-preload.so: Lunacy's own (LunaRuntimes/pdk/libpreload).
 - libogg, libvorbis, libvorbisfile: Xiph.Org (BSD), Debian bookworm armel.

@@ -203,7 +203,68 @@ gdb through qemu's stub:
 The game is a Pre-era 320 × 480 title; on a TouchPad it ran in the emulated card. What it
 uses of GLES 1.1, from the log: fixed-point everything (`glOrthox`, `glRotatex`,
 `glColor4x`, `glTexEnvx`), one texture unit, vertex and texcoord arrays, `glDrawArrays`,
-`glBindFramebufferOES(0)`, no VBOs so far. That is the serialiser's first target.
+`glBindFramebufferOES(0)`, no VBOs so far.
+
+**Stage two, done 2026-10-02 (night): the GL stream.** Transformers plays, on the Nexus 5
+natively (39 frames/s on its menus, 24 in the level) and on the Pixel Tablet under qemu
+(26 down to 20). Both halves are generated from the PDK's own GLES 1.1 headers by
+`LunaRuntimes/pdk/libgles/gen_gles1.py`, so the opcodes agree by construction:
+
+- *The app's end*, `libGLES_CM.so` (`gen_gles1.py client` + `client_prelude.c`): every
+  `glXxx` the headers declare writes its call into a batch - scalars as 4-byte units, a
+  copied pointer argument as a length and its bytes, padded to 4 - and the batch goes down
+  the SDL driver's control socket as an `LPDK_GL` message when it is full (512 KB), at
+  `glFlush`/`glFinish`, and at `SDL_GL_SwapBuffers`. Client-side vertex arrays are not
+  copied when set but when drawn: a draw is preceded by one `ARRAY` command per enabled
+  array with exactly the elements it covers (from the index range, read from the app's
+  indices or from the copy kept of an element VBO). Queries never cross the socket:
+  `glGetString`, `glGetIntegerv`, `glGetError`, `glGen*` and `glIs*` are answered in the
+  app's process from state the library keeps (names are a counter; the viewport and
+  scissor are remembered; the limits are a TouchPad's).
+- *The shell's end*, `liblunacygl.so` (`gl_server.c` + `gen_gles1.py server`, built with
+  the NDK for both ABIs): a GLES 1.1 context on a `TextureView` the size of the card
+  (`PdkGl.kt`), with a thread per app replaying the batches and swapping on the app's
+  swap. Extension functions are fetched by name through EGL the first time and skipped
+  when the device hasn't them. Blobs are handed to the driver in place, which is why the
+  client pads them: an unaligned matrix made the Adreno driver fault with SIGBUS.
+
+What the replay adds of its own, all general:
+
+- *Letterboxing.* The app drew for its screen; the view is the card's. Every viewport and
+  scissor rect the app sets is scaled and centred into the view, the scissor test is kept
+  on (clipped to the app's picture, intersected with its own rect) so a draw-texture call
+  or an oversized quad can't spill, and the whole surface is cleared black after each
+  swap for the bars, with the colour mask forced on, since a game leaves it however it
+  likes.
+- *The turn.* PDK games start from landscape (codepoet). A TouchPad game's buffer is
+  landscape as it is; a phone game drew for a 320 × 480 screen held sideways, so its
+  picture is turned inside its buffer, and the card turns it back. `PDL_SetOrientation`
+  counts from "the action button below the screen" - the TouchPad's landscape, the Pre's
+  portrait - so its value says which way the buffer's bottom edge faces: 0 as is, 90
+  clockwise, 180, 270 counter-clockwise; a portrait buffer with no request is shown
+  counter-clockwise. The turn goes into the projection matrix each time the app loads
+  one (`glLoadIdentity`, `glLoadMatrix*` in `GL_PROJECTION` mode start from it; the app's
+  own ortho and rotate multiply onto it, which is how Transformers ends upright), and
+  into the viewport and scissor mapping. The card's own orientation (`fixedOrientation`)
+  follows the shape of the turned picture, so the shell turns the screen as it does for
+  any card. Touches map back through the same placement. The 2D path turns its bitmap
+  the same way on the canvas.
+- *Order.* The host posts the video mode to the main thread but delivers GL batches on
+  its reader thread, and the first batch - the game's whole texture set - beat the mode.
+  The card queues batches until the stream exists, and the stream queues them until the
+  surface exists (a dozing tablet has none; capped at 64 MB).
+- *Pacing.* None yet: the app runs ahead of the replay with nothing in the socket to
+  stop it beyond its buffer. The frame rates above are what the pipeline gives.
+
+Dev tools: `LUNACY_GL_TRACE=1` in `files/pdk/env` logs every call's name from the app's
+side; `touch files/pdk/gldump` (as the app, `run-as`) logs one frame's commands with
+their first arguments from the shell's side; the first 20 GL errors are logged with the
+command that made them. `gen_gles1_log.py` is the stage-one logging library.
+
+Open: SDL_image and SDL_ttf; `glDrawTex*OES` (window coordinates: needs the same
+mapping as the viewport); a pause when the surface is gone instead of a queue; the
+thumbnail of a GL card (the `TextureView` is not in the card's bitmap yet); a GLES 2
+stream for the 122 apps that need one.
 
 ## 6. Seen on the Nexus 5, 2026-10-02
 

@@ -336,6 +336,10 @@ static int LUNACY_GL_MakeCurrent(_THIS) { return 0; }
 
 static void LUNACY_GL_SwapBuffers(_THIS)
 {
+	/* The commands since the last swap are batched in libGLES_CM.so; out they go first. */
+	static void (*flush)(void); static int looked;
+	if (!looked) { flush = (void (*)(void))dlsym(RTLD_DEFAULT, "lunacy_gl_flush"); looked = 1; }
+	if (flush) flush();
 	LUNACY_Send(this->hidden->sock, LPDK_FRAME, 1, NULL, 0);
 }
 

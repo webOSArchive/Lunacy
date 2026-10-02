@@ -28,7 +28,7 @@ cd "$WORK"
 if [ ! -f deb/Packages ]; then
   curl -sL $DEBIAN/dists/bookworm/main/binary-armel/Packages.gz | zcat > deb/Packages
 fi
-for p in libc6 libc6-dev linux-libc-dev libgcc-s1 libgcc-12-dev libstdc++6 zlib1g zlib1g-dev libogg0 libogg-dev libvorbis0a libvorbisfile3 libvorbis-dev; do
+for p in libc6 libc6-dev linux-libc-dev libgcc-s1 libgcc-12-dev libstdc++6 zlib1g zlib1g-dev libogg0 libogg-dev libvorbis0a libvorbisfile3 libvorbis-dev libjpeg62-turbo libjpeg62-turbo-dev; do
   f=$(awk -v p="$p" '$1=="Package:"{cur=$2} $1=="Filename:" && cur==p {print $2; exit}' deb/Packages)
   b=$(basename "$f")
   if [ ! -f "deb/$b" ]; then echo "fetching $b"; curl -sL "$DEBIAN/$f" -o "deb/$b"; dpkg-deb -x "deb/$b" sysroot; fi
@@ -62,6 +62,11 @@ if ! grep -q 'Palm attributes' $S/src/video/SDL_video.c; then
   grep -q 'Palm attributes' $S/src/video/SDL_video.c || { echo "the SDL_GL_SetAttribute patch didn't apply"; exit 1; }
 fi
 sed -i 's/DUMMYAUD_bootstrap/LUNACYAUD_bootstrap/g' $S/src/audio/SDL_audio.c $S/src/audio/SDL_sysaudio.h
+# No pointer: webOS's SDL drew none, and stock SDL paints a software arrow into a 2D app's
+# screen until the app hides it (Drum Machine never does). Hidden from the start; an app
+# that calls SDL_ShowCursor(SDL_ENABLE) still gets it.
+sed -i 's/^volatile int SDL_cursorstate = CURSOR_VISIBLE;/volatile int SDL_cursorstate = 0;   \/* Lunacy: hidden, as on webOS *\//; s/^\tSDL_cursorstate = CURSOR_VISIBLE;$/\tSDL_cursorstate = 0;   \/* Lunacy: hidden, as on webOS *\//' $S/src/video/SDL_cursor.c
+grep -q 'Lunacy: hidden' $S/src/video/SDL_cursor.c || { echo "the SDL cursor patch didn't apply"; exit 1; }
 mkdir -p sdl-build && cd sdl-build
 if [ ! -f Makefile ]; then
   $S/configure --host=arm-linux-gnueabi --prefix=$WORK/sdl-out --disable-static --enable-shared \
@@ -99,7 +104,102 @@ make install-lib install-hdrs > install.log 2>&1
 cd "$WORK"
 cp mixer-out/lib/libSDL_mixer-1.2.so.0.12.0 "$OUT/lib/libSDL_mixer-1.2.so.0"
 for f in libogg.so.0 libvorbis.so.0 libvorbisfile.so.3; do cp "$WORK/sysroot/usr/lib/arm-linux-gnueabi/$f" "$OUT/lib/"; done
-# SDL_image and SDL_ttf: not built yet.
+
+# ---- the image and font libraries apps link by name (survey of the mirror: libpng12.so.0,
+# libpng.so.3, libjpeg.so.62, libfreetype.so.6), and SDL_image, SDL_ttf and SDL_net ----
+SYSLIB=$WORK/sysroot/usr/lib/arm-linux-gnueabi
+DEPS=$WORK/deps-out
+mkdir -p $DEPS
+fetch() { [ -f "$2" ] || curl -sL "$1" -o "$2"; [ -d "${2%.tar.*}" ] || tar xf "$2"; }
+# libpng 1.2, the series webOS shipped: libpng12.so.0, and libpng.so.3 for the older name.
+PNG_VER=1.2.59
+fetch https://download.sourceforge.net/libpng/libpng-$PNG_VER.tar.gz libpng-$PNG_VER.tar.gz
+if [ ! -f $DEPS/lib/libpng12.so.0 ]; then
+  mkdir -p png-build && cd png-build
+  CPPFLAGS="-I$WORK/sysroot/usr/include" LDFLAGS="-L$SYSLIB" $WORK/libpng-$PNG_VER/configure --host=arm-linux-gnueabi \
+    --prefix=$DEPS --enable-shared --disable-static > configure.log 2>&1
+  make -j8 > make.log 2>&1 && make install > install.log 2>&1
+  cd "$WORK"
+fi
+# FreeType 2, plain: its soname has been libfreetype.so.6 since 2.0. No PNG, bzip2, brotli
+# or HarfBuzz, so it needs nothing beyond zlib and libc.
+FT_VER=2.13.2
+fetch https://download.savannah.gnu.org/releases/freetype/freetype-$FT_VER.tar.gz freetype-$FT_VER.tar.gz
+if [ ! -f $DEPS/lib/libfreetype.so.6 ]; then
+  mkdir -p ft-build && cd ft-build
+  CPPFLAGS="-I$WORK/sysroot/usr/include" LDFLAGS="-L$SYSLIB" $WORK/freetype-$FT_VER/configure --host=arm-linux-gnueabi \
+    --prefix=$DEPS --enable-shared --disable-static --with-zlib=yes --with-png=no --with-bzip2=no \
+    --with-brotli=no --with-harfbuzz=no > configure.log 2>&1
+  make -j8 > make.log 2>&1 && make install > install.log 2>&1
+  cd "$WORK"
+fi
+ADDON_ENV="CPPFLAGS=-I$DEPS/include -I$DEPS/include/freetype2 -I$WORK/sysroot/usr/include LDFLAGS=-L$DEPS/lib -L$SYSLIB"
+# SDL_image 1.2: PNG and JPEG linked, not dlopen'd, so the loader finds them by soname.
+IMG_VER=1.2.12
+fetch https://www.libsdl.org/projects/SDL_image/release/SDL_image-$IMG_VER.tar.gz SDL_image-$IMG_VER.tar.gz
+mkdir -p image-build && cd image-build
+if [ ! -f Makefile ]; then
+  env "CPPFLAGS=-I$DEPS/include -I$WORK/sysroot/usr/include" "LDFLAGS=-L$DEPS/lib -L$SYSLIB" LIBPNG_CFLAGS=-I$DEPS/include LIBPNG_LIBS="-L$DEPS/lib -lpng12" \
+    $WORK/SDL_image-$IMG_VER/configure --host=arm-linux-gnueabi --prefix=$WORK/addon-out --disable-static --enable-shared \
+    --with-sdl-prefix=$WORK/sdl-out --enable-png --disable-png-shared --enable-jpg --disable-jpg-shared \
+    --disable-tif --disable-webp --disable-sdltest > configure.log 2>&1
+fi
+make -j8 -k > make.log 2>&1 || true
+[ -f .libs/libSDL_image-1.2.so.0.8.4 ] || { echo "SDL_image failed; see $WORK/image-build/make.log"; exit 1; }
+make install-libLTLIBRARIES install-libSDL_imageincludeHEADERS > install.log 2>&1
+cd "$WORK"
+# SDL_ttf 2.0, against the FreeType above.
+TTF_VER=2.0.11
+fetch https://www.libsdl.org/projects/SDL_ttf/release/SDL_ttf-$TTF_VER.tar.gz SDL_ttf-$TTF_VER.tar.gz
+mkdir -p ttf-build && cd ttf-build
+if [ ! -f Makefile ]; then
+  # LIBS: configure found FreeType's headers but left its link line empty: every FT_ symbol
+  # came out unresolved and libfreetype.so.6 unnamed.
+  env "CPPFLAGS=-I$DEPS/include -I$DEPS/include/freetype2" "LDFLAGS=-L$DEPS/lib -L$SYSLIB" LIBS=-lfreetype FT2_CONFIG=$DEPS/bin/freetype-config \
+    FREETYPE_CFLAGS="-I$DEPS/include/freetype2" FREETYPE_LIBS="-L$DEPS/lib -lfreetype" \
+    $WORK/SDL_ttf-$TTF_VER/configure --host=arm-linux-gnueabi --prefix=$WORK/addon-out --disable-static --enable-shared \
+    --with-sdl-prefix=$WORK/sdl-out --with-freetype-prefix=$DEPS --without-x --disable-sdltest > configure.log 2>&1
+fi
+make -j8 -k > make.log 2>&1 || true
+[ -f .libs/libSDL_ttf-2.0.so.0.10.1 ] || { echo "SDL_ttf failed; see $WORK/ttf-build/make.log"; exit 1; }
+readelf -d .libs/libSDL_ttf-2.0.so.0.10.1 | grep -q libfreetype.so.6 || { echo "SDL_ttf does not name libfreetype.so.6"; exit 1; }
+make install-libLTLIBRARIES > install.log 2>&1
+cd "$WORK"
+# SDL_net 1.2.
+NET_VER=1.2.8
+fetch https://www.libsdl.org/projects/SDL_net/release/SDL_net-$NET_VER.tar.gz SDL_net-$NET_VER.tar.gz
+mkdir -p net-build && cd net-build
+if [ ! -f Makefile ]; then
+  $WORK/SDL_net-$NET_VER/configure --host=arm-linux-gnueabi --prefix=$WORK/addon-out --disable-static --enable-shared \
+    --with-sdl-prefix=$WORK/sdl-out --disable-gui --disable-sdltest > configure.log 2>&1
+fi
+make -j8 -k > make.log 2>&1 || true
+[ -f .libs/libSDL_net-1.2.so.0.8.0 ] || { echo "SDL_net failed; see $WORK/net-build/make.log"; exit 1; }
+make install-libLTLIBRARIES > install.log 2>&1
+cd "$WORK"
+cp addon-out/lib/libSDL_image-1.2.so.0.8.4 "$OUT/lib/libSDL_image-1.2.so.0"
+cp addon-out/lib/libSDL_ttf-2.0.so.0.10.1 "$OUT/lib/libSDL_ttf-2.0.so.0"
+cp addon-out/lib/libSDL_net-1.2.so.0.8.0 "$OUT/lib/libSDL_net-1.2.so.0"
+cp -L $DEPS/lib/libpng12.so.0 $DEPS/lib/libpng.so.3 $DEPS/lib/libfreetype.so.6 "$OUT/lib/"
+cp -L $SYSLIB/libjpeg.so.62 "$OUT/lib/"
+# Names apps link by that are another library's: made as symlinks when the runtime is
+# extracted (PdkRuntime), since assets can't hold links.
+cat > "$OUT/aliases" <<EOA
+libSDL.so libSDL-1.2.so.0
+libSDL-1.2.so libSDL-1.2.so.0
+libSDL_mixer.so libSDL_mixer-1.2.so.0
+libSDL_image.so libSDL_image-1.2.so.0
+libSDL_ttf.so libSDL_ttf-2.0.so.0
+libSDL_net.so libSDL_net-1.2.so.0
+libdl.so libdl.so.2
+libgcc_s.so libgcc_s.so.1
+libstdc++.so libstdc++.so.6
+libpng12.so libpng12.so.0
+libjpeg.so libjpeg.so.62
+libfreetype.so libfreetype.so.6
+libz.so libz.so.1
+libGLES_CM.so.1 libGLES_CM.so
+EOA
 
 # ---- libGLES_CM: generated from the PDK's own GLES 1.1 headers (Docs/pdk.md, "Transformers G1") ----
 # The app's end serialises every call into a batch for the shell (LPDK_GL); the shell's end,
@@ -200,6 +300,11 @@ The PDK runtime (Docs/pdk.md), built by tools/build-pdk.sh:
 - libSDL_cinema.so: Lunacy's own stub (LunaRuntimes/pdk/libcinema).
 - liblunacy-preload.so: Lunacy's own (LunaRuntimes/pdk/libpreload).
 - libogg, libvorbis, libvorbisfile: Xiph.Org (BSD), Debian bookworm armel.
+- libSDL_image-1.2.so.0: SDL_image $IMG_VER (zlib licence); libSDL_ttf-2.0.so.0: SDL_ttf $TTF_VER
+  (zlib licence); libSDL_net-1.2.so.0: SDL_net $NET_VER (zlib licence). From libsdl.org.
+- libpng12.so.0, libpng.so.3: libpng $PNG_VER (libpng licence), from libpng.org.
+- libfreetype.so.6: FreeType $FT_VER (FreeType Project License), from savannah.gnu.org.
+- libjpeg.so.62: libjpeg-turbo (IJG and BSD licences), Debian bookworm armel libjpeg62-turbo.
 - libqemu-arm.so (64-bit builds only): QEMU $QEMU_VER user-mode emulator for 32-bit ARM
   (GPL 2), Termux's build for Android, with the libraries it loads in qemu-lib/ (glib
   LGPL 2.1, pixman MIT, gnutls LGPL 2.1, nettle LGPL, gmp LGPL, libffi MIT, pcre2 BSD,

@@ -15,7 +15,10 @@
 #define LPDK_FRAME        2   /* a = 0: the whole screen changed (2D); a = 1: SDL_GL_SwapBuffers; payload none */
 #define LPDK_CAPTION      3   /* payload: the title, UTF-8 */
 #define LPDK_PDL          4   /* a = request id; payload: a JSON request (libpdl) */
-#define LPDK_GL           6   /* payload: a batch of GLES 1.1 commands (libGLES_CM, gen_gles1.py) for the shell to replay before the next FRAME */
+/* On the GL connection (greeting 'G', libGLES_CM.so's own): */
+#define LPDK_GL           6   /* to the shell: a batch of GLES 1.1 commands (gen_gles1.py), the swap among them */
+#define LPDK_GL_PIXELS    7   /* to the app: a glReadPixels' bytes */
+#define LPDK_GL_ACK       8   /* to the app: a swap was shown */
 
 /* app -> shell, on the 'A' connection */
 #define LPDK_AUDIO_OPEN   10  /* payload: int32 freq, format (SDL AUDIO_*), channels, samples */

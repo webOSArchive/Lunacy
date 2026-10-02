@@ -1,15 +1,19 @@
 /*
- * liblunacygl: the shell's end of a PDK app's GL stream (Docs/pdk.md, "Transformers G1").
- * Built with the NDK for Android, loaded by PdkGl.kt. Owns an OpenGL ES 1.1 context on
- * the card's TextureView and replays the batches the app's libGLES_CM.so sends: each
- * command's opcode is its index in the PDK's GLES headers, the same numbering the client
- * was generated with (gles_replay.inc, from gen_gles1.py server).
+ * liblunacygl: the shell's end of a PDK app's GL stream (Docs/pdk.md, "The GL stream").
+ * Built with the NDK for Android, loaded by PdkGl.kt. Replays the batches the app's
+ * libGLES_CM.so sends: each command's opcode is its index in the PDK's GLES headers, the
+ * same numbering the client was generated with (gles_replay.inc, from gen_gles1.py server).
  *
- * The app drew for a screen of its own size (320 x 480 for Transformers); the view is the
- * card's. Every viewport and scissor the app sets is scaled and centred into the view,
- * keeping the aspect, so the picture is letterboxed as the card itself is. A phone-era
- * game drew for a portrait screen held sideways; the card asks for a quarter turn, which
- * is put into the projection matrix each time the app loads one, and into the viewport.
+ * The app gets what it had on a device: a framebuffer of its own screen's size (320 x 480
+ * for a Pre game, 1024 x 768 for a TouchPad one), here an offscreen framebuffer object in
+ * the app's context, which is current on a 1 x 1 pbuffer and never on a window. Every call
+ * passes through untouched - viewports, scissors, draw-texture, copies and reads all mean
+ * what they meant - and binding framebuffer 0 binds this one. At each swap a second context,
+ * sharing the colour texture, draws it to the card's TextureView, letterboxed and turned,
+ * as the TouchPad's compositor put an app's buffer on its screen; then the swap is
+ * acknowledged, which paces the app. Without a window (the card not laid out yet, a dozing
+ * screen) the app keeps drawing into its framebuffer and the swap is acknowledged after a
+ * frame's time.
  */
 #include <jni.h>
 #include <android/log.h>
@@ -19,6 +23,7 @@
 #include <GLES/gl.h>
 #include <GLES/glext.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -32,18 +37,19 @@
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, TAG, __VA_ARGS__)
 
 struct ctx {
-	ANativeWindow *window;
 	EGLDisplay display;
-	EGLSurface surface;
-	EGLContext context;
-	int view_w, view_h;     /* the view, in px */
-	int game_w, game_h;     /* the app's screen */
-	int turn;               /* 0, 90, 180 or -90: how the picture is turned, Android's sense (clockwise) */
-	GLint app_scissor[4];   /* the app's scissor rect, mapped */
-	int errors;             /* GL errors logged */
-	int dump;               /* this frame's commands go to the log (the dump file was seen) */
-	double t_mark;          /* for the frame rate */
-	float scale; int ox, oy;
+	EGLConfig config;
+	EGLContext context;         /* the app's: current on the pbuffer, drawing into app_fb */
+	EGLContext blit;            /* the card's: shares APP_TEX, current on the window to show it */
+	EGLSurface pbuffer;
+	EGLSurface window_surface;  /* EGL_NO_SURFACE until the card's TextureView has one */
+	ANativeWindow *window;
+	int view_w, view_h;         /* the card, in px */
+	int game_w, game_h;         /* the app's screen */
+	int turn;                   /* 0, 90, 180 or -90: how the picture is turned, clockwise */
+	int errors;                 /* GL errors logged */
+	int dump;                   /* this frame's commands go to the log (the dump file was seen) */
+	double t_mark, last_swap;   /* for the frame rate, and the pace without a window */
 	int frames;
 };
 
@@ -56,9 +62,11 @@ struct reader { const uint8_t *p, *end; };
 static uint32_t get_u32(struct reader *r) { uint32_t v = 0; if (r->p + 4 <= r->end) { memcpy(&v, r->p, 4); r->p += 4; } return v; }
 static float get_f32(struct reader *r) { float v = 0; if (r->p + 4 <= r->end) { memcpy(&v, r->p, 4); r->p += 4; } return v; }
 /* A copied pointer argument: [u32 len][bytes]; NULL when the app passed NULL. */
+static uint32_t blob_len;   /* the last blob's length, for the checks before an upload */
 static const void *get_blob(struct reader *r, uint32_t present)
 {
 	uint32_t len = get_u32(r), padded = (len + 3) & ~3u;   /* the client pads blobs to 4 */
+	blob_len = len;
 	const void *p = r->p;
 	if (r->p + padded > r->end) { r->p = r->end; return NULL; }
 	r->p += padded;
@@ -140,80 +148,214 @@ static void apply_arrays(void)
 	}
 }
 
-/* ---- the app's screen in the view ---- */
-static void fit(struct ctx *c)
+/* ---- uploads ---- */
+static GLint unpack_alignment = 4;
+static int has_bgra = -1;
+static size_t upload_bytes(GLsizei w, GLsizei h, GLenum format, GLenum type)
 {
-	int quarter = c->turn == 90 || c->turn == -90;
-	int sw = quarter ? c->game_h : c->game_w, sh = quarter ? c->game_w : c->game_h;   /* as shown */
-	if (sw <= 0 || sh <= 0 || c->view_w <= 0 || c->view_h <= 0) { c->scale = 1; c->ox = c->oy = 0; return; }
-	float sx = (float)c->view_w / sw, sy = (float)c->view_h / sh;
-	c->scale = sx < sy ? sx : sy;
-	c->ox = (int)((c->view_w - sw * c->scale) / 2);
-	c->oy = (int)((c->view_h - sh * c->scale) / 2);
-}
-/* A rect in the app's window coordinates (origin bottom left) to the view's. */
-static void map_rect(struct ctx *c, GLint x, GLint y, GLsizei w, GLsizei h, GLint out[4])
-{
-	GLint rx = x, ry = y, rw = w, rh = h;
-	if (c->turn == -90) { rx = c->game_h - (y + h); ry = x; rw = h; rh = w; }        /* counter-clockwise */
-	else if (c->turn == 90) { rx = y; ry = c->game_w - (x + w); rw = h; rh = w; }   /* clockwise */
-	else if (c->turn == 180) { rx = c->game_w - (x + w); ry = c->game_h - (y + h); }
-	out[0] = c->ox + (GLint)(rx * c->scale); out[1] = c->oy + (GLint)(ry * c->scale);
-	out[2] = (GLint)(rw * c->scale); out[3] = (GLint)(rh * c->scale);
-}
-static void gl_viewport(GLint x, GLint y, GLsizei w, GLsizei h)
-{
-	GLint r[4]; map_rect(cur, x, y, w, h, r); glViewport(r[0], r[1], r[2], r[3]);
+	size_t bpp;
+	switch (type) {
+	case GL_UNSIGNED_SHORT_5_6_5: case GL_UNSIGNED_SHORT_4_4_4_4: case GL_UNSIGNED_SHORT_5_5_5_1: bpp = 2; break;
+	default:
+		switch (format) {
+		case GL_RGBA: case 0x80E1: bpp = 4; break; case GL_RGB: bpp = 3; break;
+		case GL_LUMINANCE_ALPHA: bpp = 2; break; default: bpp = 1; break;
+		}
+	}
+	size_t a = unpack_alignment > 0 ? (size_t)unpack_alignment : 1;
+	return ((size_t)w * bpp + a - 1) / a * a * (size_t)h;
 }
 /*
- * The scissor test is always on: the app draws inside its picture and nowhere else, since
- * GL clips to the frustum, not the viewport, and a draw-texture call or an oversized quad
- * would otherwise spill into the bars. The app's own scissor rect is intersected with it.
+ * Before glTexImage2D / glTexSubImage2D: the driver reads as many bytes as the size says,
+ * so an upload shorter than that is skipped rather than read past (logged once). BGRA
+ * (GL_EXT_texture_format_BGRA8888, which the TouchPad's GPU had) is swizzled to RGBA on a
+ * device whose GLES 1.1 hasn't it. Returns the pixels to use, or NULL to skip.
  */
-static int scissor_on;
-static void apply_scissor(void)
+static uint8_t *swizzled; static size_t swizzled_cap;
+static const void *upload(const char *name, GLsizei w, GLsizei h, GLint *internalformat, GLenum *format, GLenum type, const void *pixels)
 {
-	struct ctx *c = cur;
-	GLint p[4]; map_rect(c, 0, 0, c->game_w, c->game_h, p);
-	if (scissor_on) {
-		GLint *a = c->app_scissor;
-		GLint x0 = a[0] > p[0] ? a[0] : p[0], y0 = a[1] > p[1] ? a[1] : p[1];
-		GLint x1 = a[0] + a[2] < p[0] + p[2] ? a[0] + a[2] : p[0] + p[2], y1 = a[1] + a[3] < p[1] + p[3] ? a[1] + a[3] : p[1] + p[3];
-		glScissor(x0, y0, x1 > x0 ? x1 - x0 : 0, y1 > y0 ? y1 - y0 : 0);
-	} else glScissor(p[0], p[1], p[2], p[3]);
-	glEnable(GL_SCISSOR_TEST);
+	if (!pixels) return NULL;
+	size_t need = upload_bytes(w, h, *format, type);
+	if (blob_len < need) {
+		static int told;
+		if (told++ < 5) LOGW("pdk gl: %s %d x %d format 0x%x type 0x%x needs %zu bytes, got %u; skipped", name, w, h, *format, type, need, blob_len);
+		return (const void *)-1;
+	}
+	if (*format != 0x80E1) return pixels;
+	if (has_bgra < 0) { const char *e = (const char *)glGetString(GL_EXTENSIONS); has_bgra = e && strstr(e, "GL_EXT_texture_format_BGRA8888") != NULL; }
+	if (has_bgra) return pixels;
+	if (need > swizzled_cap) { swizzled = realloc(swizzled, need); swizzled_cap = need; }
+	const uint8_t *s = pixels;
+	for (size_t i = 0; i + 3 < need; i += 4) { swizzled[i] = s[i + 2]; swizzled[i + 1] = s[i + 1]; swizzled[i + 2] = s[i]; swizzled[i + 3] = s[i + 3]; }
+	*format = GL_RGBA; if (internalformat && *internalformat == 0x80E1) *internalformat = GL_RGBA;
+	return swizzled;
 }
-static void gl_scissor(GLint x, GLint y, GLsizei w, GLsizei h)
+
+/* ---- the app's framebuffer and the card ---- */
+/* The colour texture's name is one the app can't reach (its own come from a counter starting
+   at 1, libGLES_CM); textures may be named without glGenTextures in GLES 1.1. Framebuffers
+   and renderbuffers may not, on Adreno at least: those are generated, and mapped below. */
+#define APP_TEX   0x7FFFFF02u
+#define LPDK_GL_PIXELS 7
+#define LPDK_GL_ACK    8
+
+static PFNGLBINDFRAMEBUFFEROESPROC bind_fb;
+static PFNGLFRAMEBUFFERTEXTURE2DOESPROC fb_texture;
+static PFNGLBINDRENDERBUFFEROESPROC bind_rb;
+static PFNGLRENDERBUFFERSTORAGEOESPROC rb_storage;
+static PFNGLFRAMEBUFFERRENDERBUFFEROESPROC fb_renderbuffer;
+static PFNGLCHECKFRAMEBUFFERSTATUSOESPROC fb_status;
+static PFNGLGENFRAMEBUFFERSOESPROC gen_fb;
+static PFNGLGENRENDERBUFFERSOESPROC gen_rb;
+static GLuint app_fb, app_depth;   /* the app's framebuffer 0, and its depth buffer */
+
+/* The app's framebuffer and renderbuffer names to the driver's. */
+struct names { GLuint *app, *real; int n, cap; int fb; };
+static struct names fb_names = { .fb = 1 }, rb_names = { .fb = 0 };
+static GLuint map_name(struct names *t, GLuint name, int make)
 {
-	map_rect(cur, x, y, w, h, cur->app_scissor); apply_scissor();
+	if (!name) return t->fb ? app_fb : 0;
+	for (int i = 0; i < t->n; i++) if (t->app[i] == name) return t->real[i];
+	if (!make) return 0;
+	GLuint real = 0;
+	if (t->fb) { if (gen_fb) gen_fb(1, &real); } else { if (gen_rb) gen_rb(1, &real); }
+	if (!real) return 0;
+	if (t->n == t->cap) { t->cap = t->cap ? t->cap * 2 : 16; t->app = realloc(t->app, t->cap * sizeof *t->app); t->real = realloc(t->real, t->cap * sizeof *t->real); }
+	t->app[t->n] = name; t->real[t->n] = real; t->n++;
+	return real;
 }
-/* The whole surface black, for the bars: after every swap, before the app's next frame. */
-static void black(struct ctx *c)
+static void delete_names(struct names *t, GLsizei n, const GLuint *names, void (*del)(GLsizei, const GLuint *))
 {
-	GLfloat col[4]; GLboolean mask[4];
-	glGetFloatv(GL_COLOR_CLEAR_VALUE, col); glGetBooleanv(GL_COLOR_WRITEMASK, mask);
-	glDisable(GL_SCISSOR_TEST); glColorMask(1, 1, 1, 1); glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
-	glClearColor(col[0], col[1], col[2], col[3]); glColorMask(mask[0], mask[1], mask[2], mask[3]);
-	cur = c; apply_scissor();
+	for (GLsizei k = 0; names && k < n; k++) {
+		for (int i = 0; i < t->n; i++) if (t->app[i] == names[k]) {
+			GLuint real = t->real[i];
+			if (real != app_fb && del) del(1, &real);
+			t->app[i] = t->app[t->n - 1]; t->real[i] = t->real[t->n - 1]; t->n--;
+			break;
+		}
+	}
 }
-/* The projection starts from the turn, so everything the app draws comes out turned. */
-static GLenum matrix_mode = GL_MODELVIEW;
-static void load_identity(void)
+
+static int make_app_framebuffer(struct ctx *c)
 {
-	glLoadIdentity();
-	if (matrix_mode == GL_PROJECTION && cur && cur->turn) glRotatef(cur->turn == 180 ? 180.0f : (cur->turn == -90 ? 90.0f : -90.0f), 0, 0, 1);
+	bind_fb = (PFNGLBINDFRAMEBUFFEROESPROC)eglGetProcAddress("glBindFramebufferOES");
+	fb_texture = (PFNGLFRAMEBUFFERTEXTURE2DOESPROC)eglGetProcAddress("glFramebufferTexture2DOES");
+	bind_rb = (PFNGLBINDRENDERBUFFEROESPROC)eglGetProcAddress("glBindRenderbufferOES");
+	rb_storage = (PFNGLRENDERBUFFERSTORAGEOESPROC)eglGetProcAddress("glRenderbufferStorageOES");
+	fb_renderbuffer = (PFNGLFRAMEBUFFERRENDERBUFFEROESPROC)eglGetProcAddress("glFramebufferRenderbufferOES");
+	fb_status = (PFNGLCHECKFRAMEBUFFERSTATUSOESPROC)eglGetProcAddress("glCheckFramebufferStatusOES");
+	gen_fb = (PFNGLGENFRAMEBUFFERSOESPROC)eglGetProcAddress("glGenFramebuffersOES");
+	gen_rb = (PFNGLGENRENDERBUFFERSOESPROC)eglGetProcAddress("glGenRenderbuffersOES");
+	if (!bind_fb || !fb_texture || !bind_rb || !rb_storage || !fb_renderbuffer || !fb_status || !gen_fb || !gen_rb) { LOGW("pdk gl: no GL_OES_framebuffer_object"); return 0; }
+	gen_fb(1, &app_fb); gen_rb(1, &app_depth);
+	glBindTexture(GL_TEXTURE_2D, APP_TEX);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, c->game_w, c->game_h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	bind_fb(GL_FRAMEBUFFER_OES, app_fb);
+	fb_texture(GL_FRAMEBUFFER_OES, GL_COLOR_ATTACHMENT0_OES, GL_TEXTURE_2D, APP_TEX, 0);
+	const char *ext = (const char *)glGetString(GL_EXTENSIONS);
+	bind_rb(GL_RENDERBUFFER_OES, app_depth);
+	if (ext && strstr(ext, "GL_OES_packed_depth_stencil")) {
+		rb_storage(GL_RENDERBUFFER_OES, GL_DEPTH24_STENCIL8_OES, c->game_w, c->game_h);
+		fb_renderbuffer(GL_FRAMEBUFFER_OES, GL_DEPTH_ATTACHMENT_OES, GL_RENDERBUFFER_OES, app_depth);
+		fb_renderbuffer(GL_FRAMEBUFFER_OES, GL_STENCIL_ATTACHMENT_OES, GL_RENDERBUFFER_OES, app_depth);
+	} else {
+		rb_storage(GL_RENDERBUFFER_OES, GL_DEPTH_COMPONENT16_OES, c->game_w, c->game_h);
+		fb_renderbuffer(GL_FRAMEBUFFER_OES, GL_DEPTH_ATTACHMENT_OES, GL_RENDERBUFFER_OES, app_depth);
+	}
+	bind_rb(GL_RENDERBUFFER_OES, 0);
+	GLenum st = fb_status(GL_FRAMEBUFFER_OES); GLint bound = 0; glGetIntegerv(GL_FRAMEBUFFER_BINDING_OES, &bound);
+	if (st != GL_FRAMEBUFFER_COMPLETE_OES || (GLuint)bound != app_fb) { LOGW("pdk gl: the app's framebuffer is incomplete (0x%x, bound %d)", st, bound); return 0; }
+	/* GL's defaults for a fresh window: the whole screen, cleared black. */
+	glViewport(0, 0, c->game_w, c->game_h);
+	glScissor(0, 0, c->game_w, c->game_h);
+	glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+	glClearColor(0, 0, 0, 0);
+	return 1;
 }
-/* The surface's size follows the view's a frame late; checked after every swap. */
-static void refit(struct ctx *c)
+
+/* The card: the app's picture drawn into the view, scaled to fit and turned. Blit context. */
+static void show(struct ctx *c)
 {
-	EGLint w = 0, h = 0;
-	eglQuerySurface(c->display, c->surface, EGL_WIDTH, &w);
-	eglQuerySurface(c->display, c->surface, EGL_HEIGHT, &h);
-	if (w == c->view_w && h == c->view_h) return;
-	c->view_w = w; c->view_h = h;
-	fit(c);
-	black(c);
-	LOGI("pdk gl: view now %d x %d, the app's %d x %d turned %d at x%.2f", w, h, c->game_w, c->game_h, c->turn, c->scale);
+	EGLint vw = 0, vh = 0;
+	eglQuerySurface(c->display, c->window_surface, EGL_WIDTH, &vw);
+	eglQuerySurface(c->display, c->window_surface, EGL_HEIGHT, &vh);
+	if (vw != c->view_w || vh != c->view_h) {
+		c->view_w = vw; c->view_h = vh;
+		LOGI("pdk gl: card %d x %d, the app's %d x %d turned %d", vw, vh, c->game_w, c->game_h, c->turn);
+	}
+	int quarter = c->turn == 90 || c->turn == -90;
+	float sw = quarter ? c->game_h : c->game_w, sh = quarter ? c->game_w : c->game_h;
+	float k = vw / sw < vh / sh ? vw / sw : vh / sh;
+	float hw = c->game_w * k / 2, hh = c->game_h * k / 2;
+	const GLfloat quad[] = { -hw, -hh,  hw, -hh,  -hw, hh,  hw, hh };
+	static const GLfloat uv[] = { 0, 0,  1, 0,  0, 1,  1, 1 };
+	glViewport(0, 0, vw, vh);
+	glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
+	glMatrixMode(GL_PROJECTION); glLoadIdentity(); glOrthof(0, (GLfloat)vw, 0, (GLfloat)vh, -1, 1);
+	glMatrixMode(GL_MODELVIEW); glLoadIdentity();
+	glTranslatef(vw / 2.0f, vh / 2.0f, 0);
+	glRotatef((GLfloat)-c->turn, 0, 0, 1);   /* clockwise on the screen is negative with y up */
+	glEnable(GL_TEXTURE_2D); glBindTexture(GL_TEXTURE_2D, APP_TEX);
+	glTexEnvx(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+	glEnableClientState(GL_VERTEX_ARRAY); glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+	glVertexPointer(2, GL_FLOAT, 0, quad); glTexCoordPointer(2, GL_FLOAT, 0, uv);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+
+static uint8_t *replies; static size_t replies_len, replies_cap;
+static void reply(uint32_t type, const void *payload, uint32_t len)
+{
+	if (replies_len + 12 + len > replies_cap) { replies_cap = (replies_len + 12 + len) * 2; replies = realloc(replies, replies_cap); }
+	uint32_t h[3] = { type, 0, len };
+	memcpy(replies + replies_len, h, 12); replies_len += 12;
+	if (len) { memcpy(replies + replies_len, payload, len); replies_len += len; }
+}
+
+static double now(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_sec + ts.tv_nsec / 1e9; }
+
+/* The app's swap: its frame goes to the card, and is acknowledged. */
+static void app_swap(struct ctx *c)
+{
+	if (c->window_surface != EGL_NO_SURFACE) {
+		glFlush();
+		if (eglMakeCurrent(c->display, c->window_surface, c->window_surface, c->blit)) {
+			show(c);
+			eglSwapBuffers(c->display, c->window_surface);
+		}
+		eglMakeCurrent(c->display, c->pbuffer, c->pbuffer, c->context);
+	} else {
+		/* Nowhere to show it: a frame's time, so a hidden game doesn't spin. */
+		double wait = c->last_swap + 1.0 / 60 - now();
+		if (wait > 0) usleep((useconds_t)(wait * 1e6));
+	}
+	c->last_swap = now();
+	c->frames++;
+	reply(LPDK_GL_ACK, NULL, 0);
+	/* A dev tool: touching files/pdk/gldump logs one frame's commands (Docs/pdk.md). */
+	if (c->dump) { LOGI("pdk gl dump: end of frame %d", c->frames); c->dump = 0; }
+	else if (c->frames % 30 == 0 && access("/data/data/org.webosarchive.lunacy/files/pdk/gldump", F_OK) == 0) { unlink("/data/data/org.webosarchive.lunacy/files/pdk/gldump"); c->dump = 1; LOGI("pdk gl dump: frame %d", c->frames + 1); }
+	if (c->frames % 600 == 0) {
+		double t = now();
+		if (c->t_mark > 0) LOGI("pdk gl: %.1f frames/s", 600 / (t - c->t_mark));
+		c->t_mark = t;
+	}
+}
+
+/* glReadPixels from the app's framebuffer (whichever the app has bound). */
+static void app_read(struct reader *r)
+{
+	GLint x = (GLint)get_u32(r), y = (GLint)get_u32(r); GLsizei w = (GLsizei)get_u32(r), h = (GLsizei)get_u32(r);
+	GLenum format = get_u32(r), type = get_u32(r); uint32_t n = get_u32(r);
+	if (n > 64u << 20) n = 0;
+	uint8_t *p = n ? calloc(1, n) : NULL;
+	if (p) glReadPixels(x, y, w, h, format, type, p);
+	reply(LPDK_GL_PIXELS, p, p ? n : 0);
+	free(p);
 }
 
 /* ---- the replay ---- */
@@ -227,8 +369,10 @@ static void replay(struct ctx *c, const uint8_t *data, size_t len)
 		struct reader body = { r.p, r.p + payload };
 		r.p += payload;
 		if (op == 0xFFFFu) { take_array(&body); continue; }
+		if (op == 0xFFFEu) { app_read(&body); continue; }
+		if (op == 0xFFFDu) { app_swap(c); continue; }
 		if (c->dump) {
-			char line[200]; int n = snprintf(line, sizeof line, "%s", op == 0xFFFFu ? "ARRAY" : (op < sizeof op_names / sizeof *op_names ? op_names[op] : "?"));
+			char line[200]; int n = snprintf(line, sizeof line, "%s", op < sizeof op_names / sizeof *op_names ? op_names[op] : "?");
 			struct reader a = body;
 			for (int i = 0; i < 8 && a.p + 4 <= a.end && n < (int)sizeof line - 12; i++) n += snprintf(line + n, sizeof line - n, " %x", get_u32(&a));
 			LOGI("pdk gl dump: %s", line);
@@ -249,74 +393,70 @@ static void replay(struct ctx *c, const uint8_t *data, size_t len)
 }
 
 /* ---- EGL ---- */
-static int create_context(struct ctx *c)
+static int create_contexts(struct ctx *c)
 {
 	c->display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
 	if (c->display == EGL_NO_DISPLAY || !eglInitialize(c->display, NULL, NULL)) { LOGW("pdk gl: no EGL display"); return 0; }
-	const EGLint attribs[] = { EGL_RENDERABLE_TYPE, EGL_OPENGL_ES_BIT, EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-		EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_DEPTH_SIZE, 16, EGL_STENCIL_SIZE, 8, EGL_NONE };
-	EGLConfig config; EGLint n = 0;
-	if (!eglChooseConfig(c->display, attribs, &config, 1, &n) || n < 1) {
-		const EGLint loose[] = { EGL_RENDERABLE_TYPE, EGL_OPENGL_ES_BIT, EGL_SURFACE_TYPE, EGL_WINDOW_BIT, EGL_DEPTH_SIZE, 16, EGL_NONE };
-		if (!eglChooseConfig(c->display, loose, &config, 1, &n) || n < 1) { LOGW("pdk gl: no EGL config"); return 0; }
-	}
-	EGLint format; eglGetConfigAttrib(c->display, config, EGL_NATIVE_VISUAL_ID, &format);
-	ANativeWindow_setBuffersGeometry(c->window, 0, 0, format);
-	c->surface = eglCreateWindowSurface(c->display, config, c->window, NULL);
+	const EGLint attribs[] = { EGL_RENDERABLE_TYPE, EGL_OPENGL_ES_BIT, EGL_SURFACE_TYPE, EGL_WINDOW_BIT | EGL_PBUFFER_BIT,
+		EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_NONE };
+	EGLint n = 0;
+	if (!eglChooseConfig(c->display, attribs, &c->config, 1, &n) || n < 1) { LOGW("pdk gl: no EGL config"); return 0; }
+	const EGLint pb_attribs[] = { EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE };
+	c->pbuffer = eglCreatePbufferSurface(c->display, c->config, pb_attribs);
 	const EGLint ctx_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 1, EGL_NONE };
-	c->context = eglCreateContext(c->display, config, EGL_NO_CONTEXT, ctx_attribs);
-	if (c->surface == EGL_NO_SURFACE || c->context == EGL_NO_CONTEXT) { LOGW("pdk gl: no surface or context (0x%x)", eglGetError()); return 0; }
-	if (!eglMakeCurrent(c->display, c->surface, c->surface, c->context)) { LOGW("pdk gl: make current failed (0x%x)", eglGetError()); return 0; }
-	eglQuerySurface(c->display, c->surface, EGL_WIDTH, &c->view_w);
-	eglQuerySurface(c->display, c->surface, EGL_HEIGHT, &c->view_h);
-	fit(c);
-	glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
-	eglSwapBuffers(c->display, c->surface);
-	LOGI("pdk gl: %s on %d x %d for an app screen of %d x %d", glGetString(GL_RENDERER), c->view_w, c->view_h, c->game_w, c->game_h);
+	c->context = eglCreateContext(c->display, c->config, EGL_NO_CONTEXT, ctx_attribs);
+	c->blit = eglCreateContext(c->display, c->config, c->context, ctx_attribs);
+	c->window_surface = EGL_NO_SURFACE;
+	if (c->pbuffer == EGL_NO_SURFACE || c->context == EGL_NO_CONTEXT || c->blit == EGL_NO_CONTEXT) { LOGW("pdk gl: no pbuffer or context (0x%x)", eglGetError()); return 0; }
+	if (!eglMakeCurrent(c->display, c->pbuffer, c->pbuffer, c->context)) { LOGW("pdk gl: make current failed (0x%x)", eglGetError()); return 0; }
+	if (!make_app_framebuffer(c)) return 0;
+	LOGI("pdk gl: %s, the app's framebuffer %d x %d", glGetString(GL_RENDERER), c->game_w, c->game_h);
 	return 1;
 }
 
 /* ---- JNI: org.webosarchive.lunacy.card.PdkGl ---- */
-JNIEXPORT jlong JNICALL Java_org_webosarchive_lunacy_card_PdkGl_create(JNIEnv *env, jclass cls, jobject surface, jint game_w, jint game_h)
+JNIEXPORT jlong JNICALL Java_org_webosarchive_lunacy_card_PdkGl_create(JNIEnv *env, jclass cls, jint game_w, jint game_h)
 {
 	struct ctx *c = calloc(1, sizeof *c);
 	c->game_w = game_w; c->game_h = game_h;
-	c->window = ANativeWindow_fromSurface(env, surface);
-	if (!c->window || !create_context(c)) { free(c); return 0; }
-	memset(arrays, 0, sizeof arrays); element_bound = array_bound = 0; client_unit = 0; matrix_mode = GL_MODELVIEW; scissor_on = 0;
+	if (!create_contexts(c)) { free(c); return 0; }
+	memset(arrays, 0, sizeof arrays); element_bound = array_bound = 0; client_unit = 0;
+	fb_names.n = rb_names.n = 0;
 	return (jlong)(intptr_t)c;
 }
 
-JNIEXPORT void JNICALL Java_org_webosarchive_lunacy_card_PdkGl_replay(JNIEnv *env, jclass cls, jlong handle, jbyteArray data, jint len)
+/* The card's TextureView has a surface. */
+JNIEXPORT void JNICALL Java_org_webosarchive_lunacy_card_PdkGl_attach(JNIEnv *env, jclass cls, jlong handle, jobject surface)
 {
 	struct ctx *c = (struct ctx *)(intptr_t)handle;
-	if (!c) return;
-	jbyte *p = (*env)->GetByteArrayElements(env, data, NULL);
-	if (!p) return;
-	replay(c, (const uint8_t *)p, (size_t)len);
-	(*env)->ReleaseByteArrayElements(env, data, p, JNI_ABORT);
+	if (!c || c->window_surface != EGL_NO_SURFACE) return;
+	c->window = ANativeWindow_fromSurface(env, surface);
+	if (!c->window) return;
+	EGLint format; eglGetConfigAttrib(c->display, c->config, EGL_NATIVE_VISUAL_ID, &format);
+	ANativeWindow_setBuffersGeometry(c->window, 0, 0, format);
+	c->window_surface = eglCreateWindowSurface(c->display, c->config, c->window, NULL);
+	if (c->window_surface == EGL_NO_SURFACE) { LOGW("pdk gl: no window surface (0x%x)", eglGetError()); return; }
+	/* The card shows black until the app's first swap. */
+	if (eglMakeCurrent(c->display, c->window_surface, c->window_surface, c->blit)) {
+		glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT); eglSwapBuffers(c->display, c->window_surface);
+	}
+	eglMakeCurrent(c->display, c->pbuffer, c->pbuffer, c->context);
 }
 
-JNIEXPORT void JNICALL Java_org_webosarchive_lunacy_card_PdkGl_swap(JNIEnv *env, jclass cls, jlong handle)
+/* Replays a batch; returns the answers for the app (acknowledgements, pixels), or null. */
+JNIEXPORT jbyteArray JNICALL Java_org_webosarchive_lunacy_card_PdkGl_replay(JNIEnv *env, jclass cls, jlong handle, jbyteArray data, jint len)
 {
 	struct ctx *c = (struct ctx *)(intptr_t)handle;
-	if (!c) return;
-	eglSwapBuffers(c->display, c->surface);
-	c->frames++;
-	refit(c);
-	black(c);
-	/* A dev tool: touching files/pdk/gldump logs one frame's commands (Docs/pdk.md). */
-	if (c->dump) { LOGI("pdk gl dump: end of frame %d", c->frames); c->dump = 0; }
-	else if (c->frames % 30 == 0 && access("/data/data/org.webosarchive.lunacy/files/pdk/gldump", F_OK) == 0) { unlink("/data/data/org.webosarchive.lunacy/files/pdk/gldump"); c->dump = 1; LOGI("pdk gl dump: frame %d", c->frames + 1); }
-	if (c->frames % 600 == 0) {
-		struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); double t = ts.tv_sec + ts.tv_nsec / 1e9;
-		if (c->t_mark > 0) LOGI("pdk gl: %.1f frames/s", 600 / (t - c->t_mark));
-		c->t_mark = t;
-	}
-	if (c->frames == 1 || c->frames % 1000 == 0) {
-		GLint vp[4]; glGetIntegerv(GL_VIEWPORT, vp);
-		LOGI("pdk gl: frame %d, view %d x %d, viewport %d %d %d %d, error 0x%x", c->frames, c->view_w, c->view_h, vp[0], vp[1], vp[2], vp[3], glGetError());
-	}
+	if (!c) return NULL;
+	jbyte *p = (*env)->GetByteArrayElements(env, data, NULL);
+	if (!p) return NULL;
+	replies_len = 0;
+	replay(c, (const uint8_t *)p, (size_t)len);
+	(*env)->ReleaseByteArrayElements(env, data, p, JNI_ABORT);
+	if (!replies_len) return NULL;
+	jbyteArray out = (*env)->NewByteArray(env, (jsize)replies_len);
+	if (out) (*env)->SetByteArrayRegion(env, out, 0, (jsize)replies_len, (const jbyte *)replies);
+	return out;
 }
 
 JNIEXPORT jint JNICALL Java_org_webosarchive_lunacy_card_PdkGl_frames(JNIEnv *env, jclass cls, jlong handle)
@@ -328,10 +468,7 @@ JNIEXPORT jint JNICALL Java_org_webosarchive_lunacy_card_PdkGl_frames(JNIEnv *en
 JNIEXPORT void JNICALL Java_org_webosarchive_lunacy_card_PdkGl_turn(JNIEnv *env, jclass cls, jlong handle, jint turn)
 {
 	struct ctx *c = (struct ctx *)(intptr_t)handle;
-	if (!c || c->turn == turn) return;
-	c->turn = turn;
-	fit(c);
-	black(c);
+	if (c) c->turn = turn;
 }
 
 JNIEXPORT void JNICALL Java_org_webosarchive_lunacy_card_PdkGl_destroy(JNIEnv *env, jclass cls, jlong handle)
@@ -339,8 +476,10 @@ JNIEXPORT void JNICALL Java_org_webosarchive_lunacy_card_PdkGl_destroy(JNIEnv *e
 	struct ctx *c = (struct ctx *)(intptr_t)handle;
 	if (!c) return;
 	eglMakeCurrent(c->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+	if (c->blit != EGL_NO_CONTEXT) eglDestroyContext(c->display, c->blit);
 	if (c->context != EGL_NO_CONTEXT) eglDestroyContext(c->display, c->context);
-	if (c->surface != EGL_NO_SURFACE) eglDestroySurface(c->display, c->surface);
+	if (c->window_surface != EGL_NO_SURFACE) eglDestroySurface(c->display, c->window_surface);
+	if (c->pbuffer != EGL_NO_SURFACE) eglDestroySurface(c->display, c->pbuffer);
 	if (c->window) ANativeWindow_release(c->window);
 	if (cur == c) cur = NULL;
 	free(c);

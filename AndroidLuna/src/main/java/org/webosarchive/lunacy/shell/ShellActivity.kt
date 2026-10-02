@@ -48,9 +48,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     /** The PDK runtime (Docs/pdk.md): present in the 32-bit build, absent in the 64-bit one. */
     private val pdkRuntime by lazy {
         val d = profile
-        val size = JSONObject(screenSize(false))
+        // A PDK app saw its device's own screen, whatever way it was held: the TouchPad's
+        // 1024 x 768 landscape panel, the Pre3's 480 x 800 portrait one. The card scales it.
+        val (w, h, dpi) = if (d == org.webosarchive.lunacy.card.DeviceProfile.PRE3) Triple(480, 800, 260) else Triple(1024, 768, 132)
         org.webosarchive.lunacy.card.PdkRuntime(this, java.io.File(filesDir, "cryptofs/apps/usr/palm/applications"),
-            size.optInt("width", 1024), size.optInt("height", 768), 132, d.platformVersion, d.modelNameAscii, org.webosarchive.lunacy.card.DeviceProfile.nduid(this))
+            w, h, dpi, d.platformVersion, d.modelNameAscii, org.webosarchive.lunacy.card.DeviceProfile.nduid(this))
     }
     /** Proof of concept: Android's own apps in the launcher, for Lunacy as the home screen. */
     private val androidApps by lazy { AndroidApps(this, files, luna.px(Launcher.Params.ICON.toInt())) }

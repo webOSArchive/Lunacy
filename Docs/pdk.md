@@ -39,8 +39,8 @@ Every package in the mirror of appcatalog.webosarchive.org (4,318 ipks, scanned 
 | no SDL at all | 101 (plugins and odd ones) |
 | C++ runtime | 574 |
 
-So the 2D path built today reaches about a fifth of the catalogue outright once SDL_image and
-SDL_ttf are built, and a GLES 1.1 path would reach two thirds more. GLES 2 is the last fifth.
+So the 2D path reaches about a fifth of the catalogue, and the GLES 1.1 stream two thirds more
+(SDL_image, SDL_ttf and SDL_net are built since, section 5b). GLES 2 is the last fifth.
 
 ## 2. What runs where
 
@@ -102,9 +102,10 @@ loading card goes at the first frame. The process ending closes the card.
 ## 4. The wire protocol
 
 In `LunaRuntimes/pdk/sdl-lunacy/lunacy_protocol.h`, mirrored in `PdkHost`. Every message is
-three little-endian uint32s, type, a, length, then the payload. Two connections on one
+three little-endian uint32s, type, a, length, then the payload. Connections on one
 abstract Unix socket, told apart by a first byte: `V` for video, input and PDL, `A` for
-audio.
+audio, `P` for libpdl's own requests, `G` for the GL stream (blocking, with the shell's
+answers coming back on it: swap acknowledgements and read pixels).
 
 ## 5. Approaches for the rest, none ruled out
 
@@ -206,65 +207,105 @@ uses of GLES 1.1, from the log: fixed-point everything (`glOrthox`, `glRotatex`,
 `glBindFramebufferOES(0)`, no VBOs so far.
 
 **Stage two, done 2026-10-02 (night): the GL stream.** Transformers plays, on the Nexus 5
-natively (39 frames/s on its menus, 24 in the level) and on the Pixel Tablet under qemu
-(26 down to 20). Both halves are generated from the PDK's own GLES 1.1 headers by
-`LunaRuntimes/pdk/libgles/gen_gles1.py`, so the opcodes agree by construction:
+natively and on the Pixel Tablet under qemu. Both halves are generated from the PDK's own
+GLES 1.1 headers by `LunaRuntimes/pdk/libgles/gen_gles1.py`, so the opcodes agree by
+construction:
 
 - *The app's end*, `libGLES_CM.so` (`gen_gles1.py client` + `client_prelude.c`): every
   `glXxx` the headers declare writes its call into a batch - scalars as 4-byte units, a
-  copied pointer argument as a length and its bytes, padded to 4 - and the batch goes down
-  the SDL driver's control socket as an `LPDK_GL` message when it is full (512 KB), at
-  `glFlush`/`glFinish`, and at `SDL_GL_SwapBuffers`. Client-side vertex arrays are not
-  copied when set but when drawn: a draw is preceded by one `ARRAY` command per enabled
+  copied pointer argument as a length and its bytes, padded to 4 - sent on a connection of
+  the library's own (greeting `G`) when it is full (512 KB), at `glFlush`/`glFinish`, and at
+  the swap, which goes in the stream after the frame's commands. Client-side vertex arrays
+  are copied when drawn, not when set: a draw is preceded by one `ARRAY` command per enabled
   array with exactly the elements it covers (from the index range, read from the app's
-  indices or from the copy kept of an element VBO). Queries never cross the socket:
-  `glGetString`, `glGetIntegerv`, `glGetError`, `glGen*` and `glIs*` are answered in the
-  app's process from state the library keeps (names are a counter; the viewport and
-  scissor are remembered; the limits are a TouchPad's).
-- *The shell's end*, `liblunacygl.so` (`gl_server.c` + `gen_gles1.py server`, built with
-  the NDK for both ABIs): a GLES 1.1 context on a `TextureView` the size of the card
-  (`PdkGl.kt`), with a thread per app replaying the batches and swapping on the app's
-  swap. Extension functions are fetched by name through EGL the first time and skipped
-  when the device hasn't them. Blobs are handed to the driver in place, which is why the
-  client pads them: an unaligned matrix made the Adreno driver fault with SIGBUS.
+  indices or from the copy kept of an element VBO). Most queries are answered in the app's
+  process from state the library keeps: `glGetString`, `glGetIntegerv`, `glGetError`,
+  `glGen*` (a counter), `glIs*`, with a TouchPad's limits. `glReadPixels` (199 apps) is a
+  round trip: the shell reads and sends the bytes back.
+- *The shell's end*, `liblunacygl.so` (`gl_server.c` + `gen_gles1.py server`, NDK, both
+  ABIs, driven by `PdkGl.kt` on a thread per app).
 
-What the replay adds of its own, all general:
+**Stage three, the same night: the app's own framebuffer.** The first replay scaled and
+turned every viewport into the card, which is wrong for anything that addresses the
+framebuffer in its own pixels: framebuffer objects (134 apps), `glCopyTexSubImage2D` (113),
+`glReadPixels` (199), draw-texture (12). Now the app gets what it had on a device:
 
-- *Letterboxing.* The app drew for its screen; the view is the card's. Every viewport and
-  scissor rect the app sets is scaled and centred into the view, the scissor test is kept
-  on (clipped to the app's picture, intersected with its own rect) so a draw-texture call
-  or an oversized quad can't spill, and the whole surface is cleared black after each
-  swap for the bars, with the colour mask forced on, since a game leaves it however it
-  likes.
-- *The turn.* PDK games start from landscape (codepoet). A TouchPad game's buffer is
-  landscape as it is; a phone game drew for a 320 × 480 screen held sideways, so its
-  picture is turned inside its buffer, and the card turns it back. `PDL_SetOrientation`
-  counts from "the action button below the screen" - the TouchPad's landscape, the Pre's
-  portrait - so its value says which way the buffer's bottom edge faces: 0 as is, 90
-  clockwise, 180, 270 counter-clockwise; a portrait buffer with no request is shown
-  counter-clockwise. The turn goes into the projection matrix each time the app loads
-  one (`glLoadIdentity`, `glLoadMatrix*` in `GL_PROJECTION` mode start from it; the app's
-  own ortho and rotate multiply onto it, which is how Transformers ends upright), and
-  into the viewport and scissor mapping. The card's own orientation (`fixedOrientation`)
-  follows the shape of the turned picture, so the shell turns the screen as it does for
-  any card. Touches map back through the same placement. The 2D path turns its bitmap
-  the same way on the canvas.
-- *Order.* The host posts the video mode to the main thread but delivers GL batches on
-  its reader thread, and the first batch - the game's whole texture set - beat the mode.
-  The card queues batches until the stream exists, and the stream queues them until the
-  surface exists (a dozing tablet has none; capped at 64 MB).
-- *Pacing.* None yet: the app runs ahead of the replay with nothing in the socket to
-  stop it beyond its buffer. The frame rates above are what the pipeline gives.
+- A framebuffer of its own screen's size (320 x 480 for a Pre game), an offscreen
+  framebuffer object in the app's GLES context, which is current on a 1 x 1 pbuffer and
+  never on a window. Every call passes through untouched; binding framebuffer 0 binds this
+  one. So viewports, scissors, copies, reads and draw-texture mean what they meant.
+- At each swap a second context, sharing the colour texture, draws it into the card's
+  `TextureView`, scaled to fit with black bars and turned (below), as the TouchPad's
+  compositor put an app's buffer on its screen; then the swap is acknowledged.
+- Pacing: the app waits at a swap while two are unacknowledged, so it runs one frame ahead
+  of the screen and no further. Without a window (the card not laid out, a dozing tablet)
+  the app keeps drawing into its framebuffer and each swap is acknowledged after a frame's
+  time, so a hidden game doesn't spin and nothing queues.
+- Names: the client makes up framebuffer and renderbuffer names, and Adreno refuses to
+  bind a name it didn't generate (the app's draws went into the pbuffer). The shell maps
+  each app name to one it generated; textures may be bound by any name in GLES 1.1 and
+  pass through.
+- Uploads are checked against the bytes that arrived before the driver reads them, and
+  BGRA (`GL_EXT_texture_format_BGRA8888`, Mandelbrot) is swizzled to RGBA where the
+  device's GLES 1.1 hasn't it.
+- The GL card shows in the card view as any card does: a `TextureView` is part of the
+  view tree, so it scales with the card; there is no separate thumbnail to make.
+
+Two generator lessons: an extension function is called through a pointer fetched with
+`eglGetProcAddress`, and the generator must keep the function's own name for its hooks
+(it renamed it, and every extension hook silently never matched); a parameter named `w`
+clashed with the writer, now `wr_`.
+
+**How a PDK app is shown, measured on the TouchPad.** A probe built with the PDK's own
+toolchain (`/opt/PalmPDK/arm-gcc`), run from `/tmp` over novacom, reported and held:
+
+| | the TouchPad |
+|---|---|
+| `PDL_GetScreenMetrics` | 1024 x 768, 132 dpi |
+| `SDL_GetVideoInfo` current mode | 1024 x 768 |
+| `SDL_SetVideoMode(0, 0)` | 1024 x 768 |
+| a 1024 x 768 buffer | shown as it is |
+| a 768 x 1024 buffer | turned a quarter counter-clockwise, filling the screen |
+| a 320 x 480 buffer | turned counter-clockwise, scaled to fit, black above and below |
+| `PDL_SetOrientation(3)` (Mandelbrot) | turns the system's banners; the app's picture doesn't move |
+
+So the screen stays the device's way up and a buffer of the other shape is turned; a game
+that wants to be held otherwise draws itself turned (codepoet: PDK games start from
+landscape and turn themselves). Lunacy does the same: the app is told its device's screen
+(1024 x 768 on the TouchPad profile; the Pre3's 480 x 800 on the phone one), the card holds
+the screen the device's way up while it is maximized, and a buffer of the other shape is
+turned counter-clockwise, in the card's blit (GL) or on the canvas (2D), with touches
+mapped back. The Pre3's portrait screen is assumed to turn the same way; there is no Pre3
+to measure. PDL orientation requests are noted and nothing more. A PDK card is full screen
+from the start, no status bar, as on webOS (codepoet).
+
+**The libraries apps link by name.** A scan of every ARM binary in the mirror (871 apps
+carry one) for libraries the runtime didn't provide: `libSDL_image-1.2.so.0` 310,
+`libGLESv2.so` 160, `libSDL_ttf-2.0.so.0` 137, `libSDL_net-1.2.so.0` 115, unversioned names
+(`libSDL.so` 65, `libSDL_mixer.so` 41, `libdl.so` 12, ...), `libcrypto.so.0.9.8` 50,
+`libcurl.so.4` 39, `libjpeg.so.62` 33, `libpng12.so.0` 27, `libfreetype.so.6` 26. Built now:
+SDL_image 1.2.12 (PNG and JPEG linked in), SDL_ttf 2.0.11, SDL_net 1.2.8, libpng 1.2.59
+(`libpng12.so.0`, `libpng.so.3`), FreeType 2.13.2 (`libfreetype.so.6`), libjpeg62-turbo from
+Debian armel; the unversioned names are symlinks made at extraction from `pdk/aliases`.
+Checked on the Nexus 5 with Drum Machine (2D, SDL_ttf), Mandelbrot (GLES 1.1, SDL_ttf) and
+Falling Sand (GLES 1.1, SDL_image, SDL_ttf, SDL_net).
+
+**webOS's paths.** Apps open the system fonts by path
+(`/usr/share/fonts/PreludeCondensed-Medium.ttf`) and save into `/media/internal`. The
+preload library (`LunaRuntimes/pdk/libpreload`, now loaded under qemu too) looks up any
+path under `/usr`, `/media`, `/var`, `/etc/palm` or `/home/root`, none of which Android has,
+in Lunacy's webOS root, for open, stat (and the `__xstat` forms 2010 binaries call),
+access, opendir, mkdir, unlink, rename and the rest. The runtime extraction lays the Prelude
+fonts into the root's `usr/share/fonts`. Stock SDL's software pointer is hidden from the
+start, as webOS's SDL drew none.
 
 Dev tools: `LUNACY_GL_TRACE=1` in `files/pdk/env` logs every call's name from the app's
 side; `touch files/pdk/gldump` (as the app, `run-as`) logs one frame's commands with
 their first arguments from the shell's side; the first 20 GL errors are logged with the
 command that made them. `gen_gles1_log.py` is the stage-one logging library.
 
-Open: SDL_image and SDL_ttf; `glDrawTex*OES` (window coordinates: needs the same
-mapping as the viewport); a pause when the surface is gone instead of a queue; the
-thumbnail of a GL card (the `TextureView` is not in the card's bitmap yet); a GLES 2
-stream for the 122 apps that need one.
+Open: a GLES 2 stream (160 apps); hybrid apps, web apps that embed a PDK plugin (the chess
+app tried here is one); OpenSSL 0.9.8 and curl (about 50 apps).
 
 ## 6. Seen on the Nexus 5, 2026-10-02
 
@@ -278,11 +319,9 @@ and the card view showed the live game in its card. Not yet checked by ear: the 
 
 ## 7. Still to do on the first path
 
-- `SDL_mixer`, `SDL_image`, `SDL_ttf` real builds (their sources are LGPL/zlib).
 - The bus for `PDL_ServiceCall` through the host, as JS services have it.
 - A keyboard for apps that want one (`PDL_SetKeyboardState`).
 - The launcher's icon for a `pdk` app shows it as runnable only where the runtime is
   present; the banner says so where it isn't.
-- Record the TouchPad's SDL behaviours a game may depend on (which events `which` carried,
-  what `SDL_GetVideoInfo` said) with a probe app built with the PDK's own toolchain, which
-  is on this machine.
+- More of the TouchPad's SDL behaviours a game may depend on (which events `which`
+  carried), with the probe approach above (`/tmp`, no install).

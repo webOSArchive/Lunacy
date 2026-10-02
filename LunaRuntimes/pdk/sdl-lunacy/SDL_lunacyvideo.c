@@ -189,6 +189,9 @@ int LUNACY_VideoInit(_THIS, SDL_PixelFormat *vformat)
 	vformat->Rmask = 0x000000ff;
 	vformat->Gmask = 0x0000ff00;
 	vformat->Bmask = 0x00ff0000;
+	/* The current mode is the device's screen (SDL_GetVideoInfo, and SetVideoMode(0, 0)). */
+	this->info.current_w = getenv("LUNACY_PDK_SCREEN_W") ? atoi(getenv("LUNACY_PDK_SCREEN_W")) : 1024;
+	this->info.current_h = getenv("LUNACY_PDK_SCREEN_H") ? atoi(getenv("LUNACY_PDK_SCREEN_H")) : 768;
 	/* LUNACY_PDK_NOSHELL: a desk test under qemu with no shell to reach; the mode is
 	   granted, frames and events go nowhere. */
 	if (getenv("LUNACY_PDK_NOSHELL")) { this->hidden->sock = -1; return 0; }
@@ -244,6 +247,8 @@ SDL_Surface *LUNACY_SetVideoMode(_THIS, SDL_Surface *current, int width, int hei
 		this->gl_config.driver_loaded = 1;
 		mode[0] = width; mode[1] = height; mode[2] = 0;
 		LUNACY_Send(this->hidden->sock, LPDK_VIDEO_MODE, 1, mode, sizeof mode);
+		/* libGLES_CM's default viewport and scissor are the screen, as on a device. */
+		{ void (*gl_mode)(int, int) = (void (*)(int, int))dlsym(RTLD_DEFAULT, "lunacy_gl_mode"); if (gl_mode) gl_mode(width, height); }
 		return current;
 	}
 	if (!path || !*path) { SDL_SetError("LUNACY_PDK_FB is not set"); return NULL; }
@@ -336,10 +341,11 @@ static int LUNACY_GL_MakeCurrent(_THIS) { return 0; }
 
 static void LUNACY_GL_SwapBuffers(_THIS)
 {
-	/* The commands since the last swap are batched in libGLES_CM.so; out they go first. */
-	static void (*flush)(void); static int looked;
-	if (!looked) { flush = (void (*)(void))dlsym(RTLD_DEFAULT, "lunacy_gl_flush"); looked = 1; }
-	if (flush) flush();
+	/* Lunacy's libGLES_CM.so puts the swap in its stream, after the frame's commands, and
+	   waits there for the shell to keep up. Another GL library: tell the shell directly. */
+	static int (*gl_swap)(void); static int looked;
+	if (!looked) { gl_swap = (int (*)(void))dlsym(RTLD_DEFAULT, "lunacy_gl_swap"); looked = 1; }
+	if (gl_swap && gl_swap()) return;
 	LUNACY_Send(this->hidden->sock, LPDK_FRAME, 1, NULL, 0);
 }
 

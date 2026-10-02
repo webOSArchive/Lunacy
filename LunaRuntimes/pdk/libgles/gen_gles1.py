@@ -191,7 +191,7 @@ def gen_client(protos):
         if name == 'glBufferSubData':
             print('    remember_buffer_sub(target, (size_t)offset, (size_t)size, data);')
         if name == 'glPixelStorei':
-            print('    if (pname == 0x0CF5) unpack_alignment = param;')
+            print('    if (pname == 0x0CF5) unpack_alignment = param; if (pname == 0x0D05) pack_alignment = param;')
         if name == 'glViewport':
             print('    viewport[0] = x; viewport[1] = y; viewport[2] = width; viewport[3] = height;')
         if name == 'glScissor':
@@ -238,7 +238,7 @@ def local_body(name, ret, ps):
                 'case GL_STENCIL_BITS: *params = 8; break; case GL_RED_BITS: case GL_GREEN_BITS: case GL_BLUE_BITS: case GL_ALPHA_BITS: *params = 8; break; case GL_MAX_LIGHTS: *params = 8; break; '
                 'case GL_NUM_COMPRESSED_TEXTURE_FORMATS: *params = 1; break; case GL_COMPRESSED_TEXTURE_FORMATS: *params = 0x8D64; break; case GL_ARRAY_BUFFER_BINDING: *params = (GLint)array_buffer; break; '
                 'case GL_ELEMENT_ARRAY_BUFFER_BINDING: *params = (GLint)element_buffer; break; case GL_UNPACK_ALIGNMENT: *params = unpack_alignment; break; case GL_MAX_MODELVIEW_STACK_DEPTH: *params = 16; break; '
-                'case GL_MAX_PROJECTION_STACK_DEPTH: *params = 2; break; case GL_MAX_TEXTURE_STACK_DEPTH: *params = 2; break; case GL_MAX_CLIP_PLANES: *params = 6; break; default: *params = 0; }')
+                'case GL_PACK_ALIGNMENT: *params = pack_alignment; break; case 0x8B9A: *params = GL_UNSIGNED_BYTE; break; case 0x8B9B: *params = GL_RGBA; break; case GL_MAX_PROJECTION_STACK_DEPTH: *params = 2; break; case GL_MAX_TEXTURE_STACK_DEPTH: *params = 2; break; case GL_MAX_CLIP_PLANES: *params = 6; break; default: *params = 0; }')
     if name in ('glGetFloatv', 'glGetFixedv', 'glGetFixedvOES'):
         one = '65536' if 'Fixed' in name else '1.0f'
         sixty = '(64 << 16)' if 'Fixed' in name else '64.0f'
@@ -258,7 +258,7 @@ def local_body(name, ret, ps):
     if name == 'glUnmapBufferOES':
         return '    return GL_FALSE;'
     if name == 'glReadPixels':
-        return '    if (pixels) memset(pixels, 0, image_bytes(width, height, format, type));'
+        return '    read_pixels(x, y, width, height, format, type, pixels);'
     if name == 'glQueryMatrixxOES':
         return '    return 0;'
     out = []
@@ -284,6 +284,7 @@ def gen_server(protos):
         if name in LOCAL or any(k == 'unsupported' for _, k, _ in kinds):
             continue
         print(f'case {op}: {{ /* {name} */')
+        call_name = name
         if ext:
             # An extension: Android's GLES 1.1 library exports few of them by name; asked for
             # through EGL the first time, and skipped when the driver hasn't got it.
@@ -291,7 +292,7 @@ def gen_server(protos):
             print(f'    static {ret} (*fn_)({sig}); static int looked_;')
             print(f'    if (!looked_) {{ fn_ = ({ret} (*)({sig}))eglGetProcAddress("{name}"); looked_ = 1; if (!fn_) missing("{name}"); }}')
             print('    if (!fn_) break;')
-            name = 'fn_'
+            call_name = 'fn_'
         args = []
         for t, n in ps:
             if is_ptr(t):
@@ -323,21 +324,17 @@ def gen_server(protos):
             print('    client_unit = (int)texture - 0x84C0; if (client_unit < 0 || client_unit > 3) client_unit = 0;')
         if name == 'glBindBuffer':
             print('    if (target == 0x8893) element_bound = buffer; if (target == 0x8892) array_bound = buffer;')
-        # The scissor test is always on, keeping the app to its picture; the app's own is
-        # intersected with it (apply_scissor).
-        if name == 'glEnable':
-            print('    if (cap == 0x0C11) { scissor_on = 1; apply_scissor(); break; }')
-        if name == 'glDisable':
-            print('    if (cap == 0x0C11) { scissor_on = 0; apply_scissor(); break; }')
-        # The picture's turn lives in the projection: every load of that matrix starts from it.
-        if name == 'glMatrixMode':
-            print('    matrix_mode = mode;')
-        if name == 'glLoadIdentity':
-            print('    load_identity(); break;\n}')
-            continue
-        if name in ('glLoadMatrixf', 'glLoadMatrixx', 'glLoadMatrixxOES'):
-            mult = {'glLoadMatrixf': 'glMultMatrixf', 'glLoadMatrixx': 'glMultMatrixx', 'glLoadMatrixxOES': 'glMultMatrixx'}[name]
-            print(f'    load_identity(); if (m_p) {mult}(m_p); break;\n}}')
+        # Framebuffer and renderbuffer names: the client makes them up, drivers refuse a name
+        # they didn't generate, so the shell maps each to one of its own; the app's
+        # framebuffer 0 is the shell's offscreen one, its own size (gl_server.c).
+        if name == 'glBindFramebufferOES':
+            print('    framebuffer = map_name(&fb_names, framebuffer, 1);')
+        if name in ('glBindRenderbufferOES', 'glFramebufferRenderbufferOES'):
+            print('    renderbuffer = map_name(&rb_names, renderbuffer, 1);')
+        if name in ('glDeleteFramebuffersOES', 'glDeleteRenderbuffersOES'):
+            table = '&fb_names' if 'Frame' in name else '&rb_names'
+            arr = [n for t, n in ps][1]
+            print(f'    delete_names({table}, n, (const GLuint *){arr}_p, fn_); break;\n}}')
             continue
         if name == 'glEnableClientState':
             print('    server_enable(array, 1);')
@@ -345,13 +342,14 @@ def gen_server(protos):
             print('    server_enable(array, 0);')
         if name in ('glDrawArrays', 'glDrawElements'):
             print('    apply_arrays();')
-        if name == 'glViewport':
-            print('    gl_viewport(x, y, width, height); break;\n}')
-            continue
-        if name == 'glScissor':
-            print('    gl_scissor(x, y, width, height); break;\n}')
-            continue
-        call = f'{name}({", ".join(args)})'
+        # Uploads: checked against what arrived, BGRA swizzled where the driver lacks it.
+        if name == 'glTexImage2D':
+            print('    if (pixels_p) { pixels_p = upload("glTexImage2D", width, height, &internalformat, &format, type, pixels_p); if (pixels_p == (const void *)-1) break; }')
+        if name == 'glTexSubImage2D':
+            print('    if (pixels_p) { pixels_p = upload("glTexSubImage2D", width, height, NULL, &format, type, pixels_p); if (pixels_p == (const void *)-1) break; }')
+        if name == 'glPixelStorei':
+            print('    if (pname == 0x0CF5) unpack_alignment = param;')
+        call = f'{call_name}({", ".join(args)})'
         print(f'    {call};' if ret == 'void' else f'    (void){call};')
         print('    break;\n}')
     print('#endif')

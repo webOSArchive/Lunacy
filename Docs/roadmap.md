@@ -16,9 +16,11 @@ the way: the prebuilt busybox called `setuid` at every start and Android 10+ kil
 scripts for it, so busybox is now built by `tools/build-busybox.sh`. A survey of the mirror
 counts 729 PDK apps, 151 of them 2D, 473 GLES 1.1, 122 GLES 2; SDL_mixer is built. The
 second app, Transformers G1, plays: its GLES 1.1 calls stream to the shell and are
-replayed on the card (both ends generated from the PDK's headers), letterboxed and
-turned as a phone game needs, natively on the Nexus 5 and under qemu on the Pixel
-Tablet. Next: SDL_image/ttf, pacing, the GL card's thumbnail. All in [pdk.md](pdk.md).
+replayed into a framebuffer of the app's own size, shown in the card full screen and
+turned as the TouchPad turns a buffer of the other shape (measured on it), natively on
+the Nexus 5 and under qemu on the Pixel Tablet. SDL_image, SDL_ttf, SDL_net and the
+image and font libraries apps link by name are built, and webOS's paths resolve in the
+webOS root. Next: a GLES 2 stream, hybrid apps. All in [pdk.md](pdk.md).
 
 **2026-10-02, afternoon: a phone layout.** `FormFactor` decides phone or tablet from the
 screen (short side in dp, diagonal in inches, shape as the tie-breaker) or the owner's

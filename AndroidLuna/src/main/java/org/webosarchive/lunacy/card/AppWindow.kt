@@ -119,9 +119,9 @@ open class AppWindow(
      * says otherwise. An emulated card ignores it (the shell doesn't turn for one).
      */
     @Volatile var fixedOrientation: String? = null
-    /** What the app last asked for through PalmSystem.enableFullScreenMode. */
+    /** What the app last asked for through PalmSystem.enableFullScreenMode; a PDK app's card is full screen from the start. */
     var fullScreen = false
-        private set
+        protected set
     /**
      * setWindowProperties' statusBarColor, as 0xRRGGBB, or null if the app never set one. The
      * shell reads it when the card is maximized, which is when LunaSysMgr did.

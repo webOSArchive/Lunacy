@@ -40,10 +40,8 @@ class PdkHost(
     interface Listener {
         /** The app set its screen size; the frame bitmap is this size from now on. gl: an OpenGL ES mode, no bitmap. */
         fun onMode(width: Int, height: Int, gl: Boolean)
-        /** A batch of GL commands to replay before the next swap. Reader thread. */
+        /** A batch of GL commands from the app's libGLES_CM.so, its swaps among them. Reader thread. */
         fun onGl(batch: ByteArray)
-        /** The app swapped its OpenGL buffers: the replayed frame is complete. Reader thread. */
-        fun onGlSwap()
         /** A new frame is in [frame]. Main thread. */
         fun onFrame(frame: Bitmap)
         fun onCaption(title: String)
@@ -90,19 +88,20 @@ class PdkHost(
         // A 32-bit CPU runs the binary through the loader; a 64-bit-only one runs it under
         // qemu, which loads the program itself and finds the loader under the runtime folder.
         val command = if (loader != null) listOf(loader.path, "--library-path", lib.path, binary.path)
-            else listOf(emulator!!.path, "-L", lib.parentFile!!.path, "-E", "LD_LIBRARY_PATH=/lib", binary.path)
+            else listOf(emulator!!.path, "-L", lib.parentFile!!.path, "-E", "LD_LIBRARY_PATH=/lib",
+                "-E", "LD_PRELOAD=/lib/liblunacy-preload.so", binary.path)
         // In the app's own folder, as LunaSysMgr started a native app; the binary may sit in a
         // subfolder (Transformers: transg1/transg1.exe) and still read its data from the top.
         val appDir = File(runtime.appsRoot, app.dir)
         val pb = ProcessBuilder(command).directory(appDir).redirectErrorStream(true)
         // qemu's own libraries (Termux's build), beside the runtime.
         if (loader == null) runtime.qemuLibDir?.let { pb.environment()["LD_LIBRARY_PATH"] = it.path }
-        // Through the loader, /proc/self/exe would name the loader: the preload answers it
-        // with the binary, which is where a game looks for its data from (Transformers G1).
-        if (loader != null) {
-            pb.environment()["LD_PRELOAD"] = File(lib, "liblunacy-preload.so").path
-            pb.environment()["LUNACY_PDK_EXE"] = binary.path
-        }
+        // The preload (LunaRuntimes/pdk/libpreload): /proc/self/exe as the binary, not the
+        // loader (Transformers G1 finds its data from it), and webOS's own paths (/usr/share/fonts,
+        // /media/internal...) in the webOS root. Under qemu it goes to the guest by -E above.
+        if (loader != null) pb.environment()["LD_PRELOAD"] = File(lib, "liblunacy-preload.so").path
+        pb.environment()["LUNACY_PDK_EXE"] = binary.path
+        pb.environment()["LUNACY_PDK_ROOT"] = File(context.filesDir, "webos").path
         pb.environment().apply {
             put("SDL_VIDEODRIVER", "lunacy"); put("SDL_AUDIODRIVER", "lunacy")
             put("LUNACY_PDK_SOCKET", socketName); put("LUNACY_PDK_FB", fbFile.path)
@@ -151,11 +150,28 @@ class PdkHost(
                 'V'.code -> { control = c.outputStream; readControl(input) }
                 'P'.code -> readControl(input)   // libpdl's own: requests only, no input goes back down it
                 'A'.code -> readAudio(input)
+                'G'.code -> { glOut = c.outputStream; readGl(input) }   // libGLES_CM's own (PdkGl)
                 else -> c.close()
             }
         } catch (e: Exception) {
             if (!stopped) Log.i(AppServer.TAG, "pdk [$appId]: connection ended: $e")
         }
+    }
+
+    @Volatile private var glOut: java.io.OutputStream? = null
+
+    private fun readGl(input: DataInputStream) {
+        while (!stopped) {
+            val (type, _, len) = readHeader(input)
+            val payload = ByteArray(len); input.readFully(payload)
+            if (type == GL) listener.onGl(payload)
+        }
+    }
+
+    /** Answers for the app's GL library (swap acknowledgements, read pixels), already framed. */
+    fun glAnswer(bytes: ByteArray) {
+        val out = glOut ?: return
+        try { synchronized(out) { out.write(bytes); out.flush() } } catch (e: Exception) { }
     }
 
     private fun readHeader(input: DataInputStream): IntArray {
@@ -171,7 +187,7 @@ class PdkHost(
             val p = ByteBuffer.wrap(payload).order(ByteOrder.LITTLE_ENDIAN)
             when (type) {
                 VIDEO_MODE -> if (a == 1) glMode(p.int, p.int) else setMode(p.int, p.int, p.int)
-                FRAME -> if (a == 1) listener.onGlSwap() else frame()
+                FRAME -> if (a == 0) frame()   // a = 1: a swap from a GL library that isn't Lunacy's; nothing to show
                 GL -> listener.onGl(payload)
                 CAPTION -> String(payload).let { t -> main.post { listener.onCaption(t) } }
                 PDL -> runCatching { JSONObject(String(payload)) }.getOrNull()?.let { r -> main.post { listener.onPdl(r) } }
@@ -183,6 +199,14 @@ class PdkHost(
         width = w; height = h; bpp = bits
         val size = w.toLong() * h * (bits / 8)
         val channel = RandomAccessFile(fbFile, "r").channel
+        // An app that sets two modes in a row (Falling Sand) has shrunk the shared file for
+        // the second before this maps it for the first: that mode is stale, and the next
+        // message brings the one that holds.
+        if (channel.size() < size) {
+            channel.close(); mapped = null
+            Log.i(AppServer.TAG, "pdk [$appId]: video mode $w x $h superseded before it was shown")
+            return
+        }
         mapped = channel.map(FileChannel.MapMode.READ_ONLY, 0, size)
         channel.close()
         val config = if (bits == 16) Bitmap.Config.RGB_565 else Bitmap.Config.ARGB_8888
@@ -202,6 +226,7 @@ class PdkHost(
     private fun frame() {
         val buf = mapped ?: return
         val bmp = frames[frameIndex] ?: return
+        if (buf.capacity() < bmp.byteCount) return
         buf.rewind()
         bmp.copyPixelsFromBuffer(buf)
         frameIndex = 1 - frameIndex
@@ -348,6 +373,19 @@ class PdkRuntime(private val context: Context, val appsRoot: File, val screenWid
         val names = context.assets.list("pdk/lib").orEmpty()
         if (names.isEmpty()) return null
         for (n in names) context.assets.open("pdk/lib/$n").use { s -> File(dir, n).outputStream().use { s.copyTo(it) } }
+        // Other names apps link the same libraries by (libSDL.so, libdl.so...): symlinks.
+        runCatching { context.assets.open("pdk/aliases").bufferedReader().readLines() }.getOrNull()?.forEach { line ->
+            val (alias, target) = line.trim().split(Regex("\\s+")).takeIf { it.size == 2 } ?: return@forEach
+            val f = File(dir, alias)
+            f.delete()
+            runCatching { android.system.Os.symlink(target, f.path) }
+                .onFailure { Log.w(AppServer.TAG, "pdk: no alias $alias -> $target: ${it.message}") }
+        }
+        // The system fonts, where webOS kept them: apps open them by path with SDL_ttf
+        // (/usr/share/fonts/PreludeCondensed-Medium.ttf). Laid down once per runtime.
+        val fonts = File(context.filesDir, "webos/usr/share/fonts").also { it.mkdirs() }
+        for (n in context.assets.list("luna/fonts").orEmpty()) if (n.endsWith(".ttf"))
+            context.assets.open("luna/fonts/$n").use { s -> File(fonts, n).outputStream().use { s.copyTo(it) } }
         val qemuLibs = context.assets.list("pdk/qemu-lib").orEmpty()
         if (qemuLibs.isNotEmpty()) {
             val q = File(dir.parentFile, "qemu-lib").also { it.mkdirs() }

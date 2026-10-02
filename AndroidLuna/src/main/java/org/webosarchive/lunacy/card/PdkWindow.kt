@@ -27,12 +27,10 @@ import org.json.JSONObject
  * The app's screen keeps its shape in the card: a 1024 x 768 game on a portrait phone is
  * drawn at the card's width with black above and below, as a letterboxed card.
  *
- * Orientation (codepoet): PDK games start from landscape. A TouchPad game's buffer is
- * landscape as it is; a phone-era game drew for a 320 x 480 screen held sideways, its
- * picture turned inside its buffer, and the card turns the buffer back. PDL_SetOrientation
- * counts from "the action button below the screen" - the TouchPad's landscape, the Pre's
- * portrait - so its value says which way the buffer's bottom edge faces ([orient]). The
- * card's own orientation follows the shape of the turned picture.
+ * Orientation (codepoet: PDK games start from landscape and turn themselves): the screen is
+ * held the device's way up while the card is up, and a buffer of the other shape is turned
+ * a quarter counter-clockwise, as the TouchPad does ([orient]). The app is told its device's
+ * own screen, 1024 x 768 for the TouchPad.
  */
 @SuppressLint("ViewConstructor")
 class PdkWindow(
@@ -42,6 +40,9 @@ class PdkWindow(
     private val app: AppInfo,
     runtime: PdkRuntime,
 ) : AppWindow(context, appId, shell), PdkHost.Listener {
+
+    /** The device's screen is landscape (the TouchPad's 1024 x 768) or portrait (the Pre3's). */
+    private val landscapeDevice = runtime.screenWidth >= runtime.screenHeight
 
     private val host = PdkHost(context, appId, app, runtime, this)
     private val frameView = FrameView(context)
@@ -61,19 +62,26 @@ class PdkWindow(
         setBackgroundColor(Color.BLACK)
         @Suppress("DEPRECATION")
         addView(frameView, AbsoluteLayout.LayoutParams(AbsoluteLayout.LayoutParams.MATCH_PARENT, AbsoluteLayout.LayoutParams.MATCH_PARENT, 0, 0))
-        fixedOrientation = "landscape"
+        fixedOrientation = if (landscapeDevice) "right" else "up"
+        // A PDK app had the whole screen on webOS, no status bar (codepoet); the shell slides
+        // the bar away while the card is maximized, as for PalmSystem.enableFullScreenMode.
+        fullScreen = true
     }
 
-    /** Works out the turn from the buffer's shape and the PDL request, and the card's orientation from it. */
+    /**
+     * As the reference TouchPad shows a PDK app (measured 2026-10-02 with a probe holding
+     * 1024 x 768, 768 x 1024 and 320 x 480 buffers): the screen stays the device's own way up -
+     * landscape on a TouchPad - and a buffer of the other shape is turned a quarter
+     * counter-clockwise and scaled to fit, letterboxed. An app that wants to be held another
+     * way draws itself turned. PDL_SetOrientation only tells the system which way the app is
+     * drawing, for its banners (the PDK's PDL.h); it moves nothing, so it is only noted. The
+     * Pre3 profile's portrait screen is assumed to turn the same way (no Pre3 to measure).
+     */
     private fun orient() {
         val gw = host.width; val gh = host.height
-        turn = when (pdlOrientation) {
-            0 -> 0; 1 -> 90; 2 -> 180; 3 -> -90
-            else -> if (gh > gw) -90 else 0   // the landscape starting point
-        }
-        val quarter = turn == 90 || turn == -90
-        val landscape = if (quarter) gh > gw else gw >= gh
-        val o = if (landscape) "landscape" else "portrait"
+        if (gw <= 0 || gh <= 0) return
+        turn = if ((gw >= gh) == landscapeDevice) 0 else -90
+        val o = if (landscapeDevice) "right" else "up"
         if (o != fixedOrientation) { fixedOrientation = o; shell.orientationRequested(this) }
         gl?.turn(turn)
         frameView.invalidate()
@@ -98,11 +106,14 @@ class PdkWindow(
     // ---- what the host reports ----
 
     override fun onMode(width: Int, height: Int, gl: Boolean) {
+        shell.fullScreen(this)   // the card exists by now
         if (gl && this.gl == null && PdkGl.available) {
             // An OpenGL ES app: its commands are replayed on a texture the size of the window,
             // letterboxed and turned by the native side (PdkGl); the frame view stays on top
             // for the touches.
-            val stream = PdkGl(appId, width, height)
+            val stream = PdkGl(appId, width, height, host::glAnswer) {
+                post { if (!drawn) { drawn = true; shell.onStageReady(this); shell.onPageDrawn(this) } }
+            }
             synchronized(earlyBatches) {
                 for (b in earlyBatches) stream.replay(b)
                 if (earlyBatches.isNotEmpty()) Log.i(AppServer.TAG, "pdk [$appId]: ${earlyBatches.size} GL batches from before the mode")
@@ -131,16 +142,6 @@ class PdkWindow(
         synchronized(earlyBatches) { if (gl == null) earlyBatches.add(batch) else gl?.replay(batch) }
     }
 
-    /** The app's swap: the replayed frame is shown, and the first one takes the loading card away. */
-    override fun onGlSwap() {
-        val stream = gl ?: return
-        stream.swap {
-            if (!drawn) {
-                drawn = true
-                post { shell.onStageReady(this); shell.onPageDrawn(this) }
-            }
-        }
-    }
 
     override fun onFrame(frame: Bitmap) {
         this.frame = frame

@@ -1,10 +1,12 @@
 /*
- * The hand-written half of libGLES_CM.so (Docs/pdk.md, "Transformers G1"); gen_gles1.py
+ * The hand-written half of libGLES_CM.so (Docs/pdk.md, "The GL stream"); gen_gles1.py
  * appends the generated glXxx functions below it. This half keeps the client-side state
  * the stream depends on - which arrays are enabled and where they point, which buffers
- * are bound and what they hold, the unpack alignment - batches the commands, and sends a
- * batch down the control socket the SDL video driver opened (LPDK_GL) when it is full, at
- * glFlush/glFinish, and at SDL_GL_SwapBuffers (the SDL driver calls lunacy_gl_flush).
+ * are bound and what they hold, the pixel alignments - batches the commands, and sends a
+ * batch down a connection of its own to the shell (greeting 'G') when it is full, at
+ * glFlush/glFinish, and at the swap. The connection is blocking and answers come back on
+ * it: the pixels of a glReadPixels, and an acknowledgement of each swap once the shell
+ * has shown it, which paces the app to the screen with one frame in flight.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,12 +16,52 @@
 typedef void *GLeglImageOES;
 #include <GLES/glext.h>
 
-#define LPDK_GL 6
+#include <unistd.h>
+#include <errno.h>
+
+#define LPDK_GL        6   /* to the shell: a batch */
+#define LPDK_GL_PIXELS 7   /* from the shell: a glReadPixels' bytes */
+#define LPDK_GL_ACK    8   /* from the shell: a swap was shown */
 #define ARRAY_OP 0xFFFFu
+#define READ_OP  0xFFFEu
+#define SWAP_OP  0xFFFDu
 #define BATCH_SIZE (512 * 1024)
 
-extern int LUNACY_control_sock;
+extern int LUNACY_Connect(const char *hello);
 extern int LUNACY_Send(int sock, uint32_t type, uint32_t a, const void *payload, uint32_t len);
+
+static int gl_sock = -2;     /* -2: not tried yet; -1: no shell (LUNACY_PDK_NOSHELL), calls go nowhere */
+static int swaps_in_flight;
+static int sock(void)
+{
+	if (gl_sock == -2) gl_sock = getenv("LUNACY_PDK_NOSHELL") ? -1 : LUNACY_Connect("G");
+	return gl_sock;
+}
+static int read_all(int fd, void *p, size_t n)
+{
+	char *c = p;
+	while (n) {
+		ssize_t r = read(fd, c, n);
+		if (r < 0 && errno == EINTR) continue;
+		if (r <= 0) return -1;
+		c += r; n -= (size_t)r;
+	}
+	return 0;
+}
+/* Reads one message from the shell; an acknowledgement is counted and the next one read
+   unless it was asked for. Returns the type, the payload in *out (malloc'd), its length in *len. */
+static int read_msg(uint32_t want, uint8_t **out, uint32_t *len)
+{
+	for (;;) {
+		uint32_t h[3];
+		if (sock() < 0 || read_all(gl_sock, h, sizeof h) < 0) { gl_sock = -1; return -1; }
+		uint8_t *p = h[2] ? malloc(h[2]) : NULL;
+		if (h[2] && (!p || read_all(gl_sock, p, h[2]) < 0)) { free(p); gl_sock = -1; return -1; }
+		if (h[0] == LPDK_GL_ACK && swaps_in_flight > 0) swaps_in_flight--;
+		if (h[0] == want) { if (out) *out = p; else free(p); if (len) *len = h[2]; return (int)h[0]; }
+		free(p);
+	}
+}
 
 static uint8_t *batch;
 static size_t batch_len;
@@ -29,7 +71,7 @@ static GLenum gl_error = GL_NO_ERROR;
 static GLuint next_name = 1;
 static GLint viewport[4] = { 0, 0, 1024, 768 };
 static GLint scissor[4] = { 0, 0, 1024, 768 };
-static GLint unpack_alignment = 4;
+static GLint unpack_alignment = 4, pack_alignment = 4;
 static GLuint array_buffer, element_buffer;
 static int client_unit;
 
@@ -52,7 +94,7 @@ static int pname_count(GLenum pname, int n, const int *table)
 void lunacy_gl_flush(void)
 {
 	if (!batch_len) return;
-	if (LUNACY_control_sock >= 0) LUNACY_Send(LUNACY_control_sock, LPDK_GL, 0, batch, (uint32_t)batch_len);
+	if (sock() >= 0 && LUNACY_Send(gl_sock, LPDK_GL, 0, batch, (uint32_t)batch_len) < 0) gl_sock = -1;
 	batch_len = 0;
 }
 
@@ -79,7 +121,7 @@ static void end(uint8_t *w)
 {
 	if (big_start) {
 		uint32_t payload; memcpy(&payload, big_start + 4, 4);
-		if (LUNACY_control_sock >= 0) LUNACY_Send(LUNACY_control_sock, LPDK_GL, 0, big_start, 8 + payload);
+		if (sock() >= 0 && LUNACY_Send(gl_sock, LPDK_GL, 0, big_start, 8 + payload) < 0) gl_sock = -1;
 		free(big_start); big_start = NULL;
 		return;
 	}
@@ -101,19 +143,24 @@ static uint8_t *put_blob(uint8_t *w, const void *p, size_t n)
 
 /* ---- pixels ---- */
 
+static size_t image_bytes_aligned(GLsizei width, GLsizei height, GLenum format, GLenum type, GLint alignment);
 static size_t image_bytes(GLsizei width, GLsizei height, GLenum format, GLenum type)
+{
+	return image_bytes_aligned(width, height, format, type, unpack_alignment);
+}
+static size_t image_bytes_aligned(GLsizei width, GLsizei height, GLenum format, GLenum type, GLint alignment)
 {
 	size_t bpp;
 	switch (type) {
 	case GL_UNSIGNED_SHORT_5_6_5: case GL_UNSIGNED_SHORT_4_4_4_4: case GL_UNSIGNED_SHORT_5_5_5_1: bpp = 2; break;
 	default:
 		switch (format) {
-		case GL_RGBA: bpp = 4; break; case GL_RGB: bpp = 3; break;
+		case GL_RGBA: case 0x80E1 /* GL_BGRA_EXT */: bpp = 4; break; case GL_RGB: bpp = 3; break;
 		case GL_LUMINANCE_ALPHA: bpp = 2; break; default: bpp = 1; break;
 		}
 	}
 	size_t row = (size_t)width * bpp;
-	size_t a = (size_t)(unpack_alignment > 0 ? unpack_alignment : 1);
+	size_t a = (size_t)(alignment > 0 ? alignment : 1);
 	row = (row + a - 1) / a * a;
 	return row * (size_t)height;
 }
@@ -231,4 +278,44 @@ static void send_arrays(size_t vertices, size_t count, GLenum index_type, const 
 		w = put_blob(w, a->ptr, n);
 		end(w);
 	}
+}
+
+/* ---- what the SDL driver calls ---- */
+
+/* The mode is set: GL's default viewport and scissor box are the whole screen. */
+void lunacy_gl_mode(int w, int h)
+{
+	viewport[0] = viewport[1] = 0; viewport[2] = w; viewport[3] = h;
+	memcpy(scissor, viewport, sizeof scissor);
+}
+
+/* SDL_GL_SwapBuffers: the swap goes in the stream, after the frame's commands, and the app
+   waits only while two swaps are unanswered - the shell drawing one, the app the next. */
+int lunacy_gl_swap(void)
+{
+	uint8_t *w = begin(SWAP_OP, 0);
+	if (w) end(w);
+	lunacy_gl_flush();
+	if (sock() < 0) return 1;
+	swaps_in_flight++;
+	while (swaps_in_flight > 1) if (read_msg(LPDK_GL_ACK, NULL, NULL) < 0) { swaps_in_flight = 0; break; }
+	return 1;
+}
+
+/* glReadPixels: the shell reads its copy of the app's framebuffer and sends the bytes. */
+static void read_pixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void *pixels)
+{
+	size_t n = image_bytes_aligned(width, height, format, type, pack_alignment);
+	if (!pixels || !n) return;
+	memset(pixels, 0, n);
+	uint8_t *w = begin(READ_OP, 7 * 4);
+	if (!w) return;
+	w = put_u32(w, (uint32_t)x); w = put_u32(w, (uint32_t)y); w = put_u32(w, (uint32_t)width); w = put_u32(w, (uint32_t)height);
+	w = put_u32(w, format); w = put_u32(w, type); w = put_u32(w, (uint32_t)n);
+	end(w);
+	lunacy_gl_flush();
+	uint8_t *p = NULL; uint32_t len = 0;
+	if (read_msg(LPDK_GL_PIXELS, &p, &len) < 0) return;
+	memcpy(pixels, p, len < n ? len : n);
+	free(p);
 }

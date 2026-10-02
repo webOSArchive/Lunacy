@@ -349,7 +349,7 @@ class AppServer(
         val token = fontToken()
         val tag = "<link rel=\"stylesheet\" href=\"/__lunacy/fonts.css\">" + fontLoad(token) +
             "<script src=\"/__lunacy/compat.js\"></script><script src=\"/__lunacy/bridge.js\"></script>" +
-            "<script src=\"/__lunacy/net.js\"></script>" + preload(app) +
+            "<script src=\"/__lunacy/net.js\"></script><script src=\"/__lunacy/websql.js\"></script>" + preload(app) +
             "<script src=\"/__lunacy/fonts-ready.js?t=$token\"></script>"
         val m = Regex("<head[^>]*>", RegexOption.IGNORE_CASE).find(html)
         html = if (m != null) html.substring(0, m.range.last + 1) + tag + html.substring(m.range.last + 1) else tag + html

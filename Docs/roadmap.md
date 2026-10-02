@@ -3,7 +3,16 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-10-01)
+## Where things stand (2026-10-02)
+
+**2026-10-02: WebSQL where the WebView has none.** The Pixel Tablet's WebView (153) has no
+`openDatabase`, Chromium having removed WebSQL in 119, so Apollo, and every Mojo app's Depot,
+stopped at the first store. `websql.js` now provides the device's API over `WebSql.kt`, one
+SQLite file per app and database name ([architecture.md](architecture.md), "WebSQL"); the
+Android 5 devices keep the WebView's own. Measured against the TouchPad's rows in
+[mojo.md](mojo.md) inside Apollo's card; Apollo starts, and its settings survive a restart.
+Untested: the copy-in of a WebView's own WebSQL files, which needs a device updated across the
+removal. Not yet on the 32-bit build's devices: the same sources, but no run there since.
 
 **2026-10-01: 0.4.0. 64-bit ARM, Android 17, First Use, and a 2012 Nexus 7.** Both Lunacy APKs
 and the keyboard are 0.4.0. Node, its libc++, the launcher and
@@ -657,7 +666,10 @@ corpus survey says how many apps this phase can reach, and whether it is worth d
   - Recover through `onRenderProcessGone` (Android 8 and later).
   - Handle the conflict between the gesture bar and Android's gesture navigation (Android 10
     and later).
-  - Add the WebSQL polyfill when a target's WebView drops WebSQL.
+  - ~~Add the WebSQL polyfill when a target's WebView drops WebSQL.~~ Done 2026-10-02
+    (`websql.js` and `WebSql.kt`), for the Pixel Tablet's WebView 153. Its migration of a
+    WebView's own WebSQL files is written but untested: it needs a device whose WebView was
+    updated across the removal.
   - Move to current AndroidX once `minSdk` rises.
   - **Developer verification** (Google, not an Android version: it arrives through Google
     System Updates). From 2026-09-30 in Brazil, Indonesia, Singapore and Thailand, and

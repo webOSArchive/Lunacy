@@ -243,7 +243,7 @@ Added as the first 64-bit-only and first Android 17 device. Not a supported targ
 
 **Device:** Google Pixel Tablet (tangorpro), Android 17 (API 37, build CP3A.260905.009), `arm64-v8a`
 only, Tensor G2, 7.6 GB of RAM, 2560 x 1600 at 320 dpi (shell scale 2), 4 KB memory pages,
-WebView 149.0.7827.5. The memory limiter reports itself disabled on this build.
+WebView 149.0.7827.5 (153.0.8010.36 by 2026-10-02). The memory limiter reports itself disabled on this build.
 
 | Change | How | Note |
 |---|---|---|
@@ -259,6 +259,9 @@ WebView 149.0.7827.5. The memory limiter reports itself disabled on this build.
 | Storage revoked and re-granted, First Use reset | `pm revoke` of both storage permissions, the `firstUseDone` key deleted from `shared_prefs/device.xml` with `run-as`, then `pm grant` of both after Android had refused twice | Walking First Use's refusal paths. Android 17 makes a second refusal final (`USER_FIXED`), which is what the page's "Open Android Settings" button is for. First Use was then finished normally, so the flag is set. |
 | Lunacy uninstalled and installed afresh, twice | `adb uninstall org.webosarchive.lunacy`, then `adb install out/AndroidLuna-arm64-debug.apk` | For codepoet to go through First Use by hand on a clean install; again after the Start Over and auto-prompt changes. Each uninstall took the installed apps, the derived device id and both grants with it; the keyboard stayed. In between, First Use was driven over DevTools (`Workbench/cdp.sh`, `adb forward` removed afterwards) to find why the Start Over link took no taps. |
 | First Use reset once more, home-app dialog cancelled | the `firstUseDone` key deleted again with `run-as`; Android's "Set Lunacy as your default home app?" dialog, opened from First Use's Home Screen page, was cancelled | Testing the Home Screen page. The Pixel Launcher stays the home app. |
+| adb over Wi-Fi without pairing (2026-10-02) | `adb tcpip 5555` over the cable, then `adb connect 192.168.10.153:5555` | As on the Nexus 7: the cable only has to hold for the `tcpip` switch. Reset by a reboot. |
+| Apollo 1.2.8 launched over adb (2026-10-02) | `am start -n org.webosarchive.lunacy/.shell.ShellActivity --es launch com.jmtk.apollo` | It sat on its splash: WebView 153 has no WebSQL (`openDatabase is not defined`), which is what the polyfill in [architecture.md](architecture.md) "WebSQL" is for. |
+| Lunacy with the WebSQL polyfill installed (2026-10-02) | `adb install -r out/AndroidLuna-arm64-debug.apk` over Wi-Fi, then a force-stop and restart | Apollo now reaches its sign-in page and its settings survive a restart. The contract probe (arity, the two-argument open, `no such table: nosuchtable`, rollback, `changeVersion`) was run inside Apollo's card over DevTools; its two probe databases were deleted from `files/websql/com.jmtk.apollo/` afterwards. |
 | Hello installed again, Quick Tip Calculator installed | `--es install` from the package mirror, as above | Hello (an Ares app) for the Mojo initialisation error; Quick Tip Calculator 1.0.1 as a Mojo app whose page carries the tag itself, to check the normal path after the mojo.js prelude. |
 | 64-bit Node and busybox checked | `run-as org.webosarchive.lunacy`, running `liblunacynode.so -e …` (Node 12.19.0, arm64) and busybox through a temporary symlink named `busybox` in the app's data folder, removed afterwards | The webOS root had already linked `/bin/sh` and `/bin/busybox` to the arm64 busybox. |
 

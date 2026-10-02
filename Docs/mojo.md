@@ -244,6 +244,10 @@ Both matter, and both stopped drPodder: the first at "Error Creating DB!", the s
 and never saw it. The compat layer fills in the two missing arguments and strips the wrapper
 back off the message.
 
+On a WebView from Chromium 119 on there is no `openDatabase` to correct: Lunacy's own
+(`websql.js`, [architecture.md](architecture.md) "WebSQL") is the device's API, with both of
+those as measured, on SQLite files of Lunacy's own.
+
 ## PalmSystem.runTextIndexer
 
 webOS's linkifier, which Mojo hands every piece of user text through

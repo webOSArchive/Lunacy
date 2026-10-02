@@ -10,7 +10,7 @@ out on the reference devices. Changes made to the Android device are listed sepa
 |---|---|---|
 | `AndroidLuna/` | The Lunacy app (Kotlin, Android Views, `minSdk 21`) | yes |
 | `AndroidLuna/src/main/assets/luna/` | LunaCE images (Apache 2.0), Prelude fonts and TouchPad wallpapers (abandonware), each with a NOTICE | yes |
-| `AndroidLuna/src/main/assets/lunacy/` | Injected page scripts: `compat.js` (input model, flicks, uncaught errors), `bridge.js` (PalmSystem, PalmServiceBridge), `net.js` (network shim), `fonts.css` (generated) | yes |
+| `AndroidLuna/src/main/assets/lunacy/` | Injected page scripts: `compat.js` (input model, flicks, uncaught errors), `bridge.js` (PalmSystem, PalmServiceBridge), `net.js` (network shim), `websql.js` (WebSQL on WebViews that dropped it), `fonts.css` (generated) | yes |
 | `AndroidLuna/src/main/assets/certs/` | Mozilla CA roots for Lunacy's own HTTP (MPL 2.0), with a NOTICE | yes |
 | `AndroidLuna/src/main/assets/apps/` | The bundled apps: Lunacy's own (Device Info, the shortcuts to Android's settings, Sounds & Alerts), Palm's own that ship as abandonware (Screen & Lock, Help, Exhibition, Clock, Calculator, Memos, and the Video Player, which has no icon and is launched by other apps), and App Catalog 6.2, webOS Archive's restoration of the TouchPad's own. Each carries a NOTICE | yes |
 | `AndroidLuna/src/main/assets/luna-systemui/` | The system UI webOS served from the OS, at its own paths: Lunacy's file picker | yes |

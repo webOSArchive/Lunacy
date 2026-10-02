@@ -139,6 +139,8 @@ class AppWindow(
     @Volatile var keyboardResizes = true
         private set
     private lateinit var net: NetShim
+    /** The WebSQL polyfill's store (assets/lunacy/websql.js), on a WebView without WebSQL. */
+    private lateinit var sql: WebSql
     /** The webOS device this window reports itself as. */
     private val profile = DeviceProfile.forScreen(context)
     /** This window's "process id": webOS gave one per window, and apps print it. */
@@ -170,6 +172,9 @@ class AppWindow(
         net = NetShim(appId, settings.userAgentString, profile.carrierCode) { id ->
             main.post { if (!destroyed) evaluateJavascript("window.__lunacyNetDone&&__lunacyNetDone($id)", null) }
         }
+        sql = WebSql(context, appId) { id ->
+            main.post { if (!destroyed) evaluateJavascript("window.__lunacySqlDone&&__lunacySqlDone($id)", null) }
+        }
         // 1 CSS px = 1 TouchPad px, as the shell uses; the layout width follows from it.
         setInitialScale(Math.round(host.pixelScale * 100))
         settings.setSupportZoom(false)
@@ -199,7 +204,7 @@ class AppWindow(
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? =
                 host.server.serve(req.url)
             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
-                page++; net.reset(); endCalls()
+                page++; net.reset(); sql.reset(); endCalls()
                 pageReady = false; told = null
             }
             override fun onPageFinished(view: WebView, url: String) {
@@ -223,6 +228,7 @@ class AppWindow(
     override fun destroy() {
         destroyed = true
         net.reset()
+        sql.close()
         endCalls()
         super.destroy()
     }
@@ -348,6 +354,11 @@ class AppWindow(
         /** A synchronous XHR: blocks this page's script until the answer is in, as on webOS. */
         @JavascriptInterface fun netSendSync(request: String): String = net.sendSync(request)
         @JavascriptInterface fun netAbort(id: Int) = net.abort(id)
+
+        /** The WebSQL polyfill (assets/lunacy/websql.js): openDatabase, then its transactions. */
+        @JavascriptInterface fun sqlOpen(name: String, version: String, host: String, creationCallback: Boolean): String = sql.open(name, version, host, creationCallback)
+        @JavascriptInterface fun sqlRequest(id: Int, request: String) = sql.request(id, request)
+        @JavascriptInterface fun sqlResult(id: Int): String = sql.result(id)
 
         @JavascriptInterface fun screenOrientation(): String = host.screenOrientation()
         /**

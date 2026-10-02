@@ -92,7 +92,7 @@ Lunacy (Android app)
 │    ├─ Lunacy-backed     applicationManager · db8 · preferences · notifications ·
 │    │                    downloadmanager · Preware install handler
 │    └─ Android-backed    connectionmanager · power · systemservice · audio · intents
-├─ WebSQL                 native in Lollipop's WebView; polyfill when targets drop it
+├─ WebSQL                 native in Lollipop's WebView; websql.js + per-app SQLite on Chromium 119+
 ├─ Package manager        .ipk install · appinfo.json · icons · per-app data
 └─ App Catalog            the TouchPad's own client (webOS Archive's 6.2), bundled; installs via the bus
 ```
@@ -831,11 +831,38 @@ model, so apps can't tell the difference.
 
 ## WebSQL
 
-Many Enyo 1 apps call `openDatabase()` directly. Every WebView available on Android 5
-(Chromium 37 to about 95) still has native WebSQL, stored per origin, so Lunacy uses it as
-it is. When a later platform target's WebView drops WebSQL, Lunacy provides
-`window.openDatabase` in JS instead. The polyfill is backed by per-app SQLite databases
-over the bus, keeps the original async transaction API, and migrates the existing data.
+Mojo apps keep their data in WebSQL (`Mojo.Depot` is a table layout over `openDatabase`), and
+many Enyo 1 apps call `openDatabase()` directly. Every WebView available on Android 5
+(Chromium 37 to about 95) still has native WebSQL, stored per origin, so Lunacy uses it as it
+is, with the compat layer correcting the two things WebKit 534.6 did differently
+([mojo.md](mojo.md), "What a browser gets wrong about WebSQL"). Chromium removed WebSQL in
+version 119, so on a WebView from then on (the Pixel Tablet's 153, 2026-10-02) the page gets
+no `openDatabase` at all, and Lunacy provides it in JS instead:
+
+- **`websql.js`**, injected after the network shim and doing nothing where the native one
+  exists, is the API as the device had it: `openDatabase` with an arity of 0 and the
+  two-argument form, `Database.transaction`, `readTransaction` and `changeVersion` with its
+  preflight, transactions run one at a time per database, statement callbacks that queue
+  more statements into the same transaction, an error callback that keeps the transaction
+  alive by returning `false`, `SQLResultSet` with `rows.item()`, `rowsAffected` and an
+  `insertId` that throws when nothing was inserted, and `SQLError` with WebKit's codes and
+  SQLite's own wording.
+- **`WebSql.kt`** is its store, one per window like the network shim: the window's statements
+  run in order on a thread of their own, never the main thread, through the same request id,
+  `evaluateJavascript` delivery and fetch-back as `net.js`. Each transaction is a native
+  SQLite transaction held open across the round trips, with each batch of statements run in
+  order up to the first failure, which the page then rules on.
+- **One SQLite file per app and database name**, under `files/websql/<app id>/`, so an app's
+  data is the app's whichever origin its windows load from (the native store was per origin,
+  and an app updated from bundled to installed changed origin). The version lives inside the
+  file in WebKit's `__WebKitDatabaseInfo__` table, which Chromium kept, so a database the
+  WebView stored before it lost WebSQL is copied in whole, version and all, the first time
+  the polyfill opens that name (Chromium's `Databases.db` index names the file). The
+  migration is written to Chromium's layout and has not yet been exercised on a device whose
+  WebView was updated across the removal.
+- Not over the bus, as first planned: a service would put every statement through two
+  main-thread hops and give it a name no webOS app ever saw, where the window's own bridge
+  is invisible to the page and keeps the statements off the main thread.
 
 ## Package manager and App Catalog
 

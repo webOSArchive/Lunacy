@@ -5,6 +5,10 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-10-03)
 
+**For the next release, since 0.5.0:** PVRTC textures draw on GPUs without PowerVR's
+compression. The shell decodes them to RGBA where the driver refuses the format; before,
+they were white (Tiger Woods PGA Tour on the HP 10 G2's Mali-450; [pdk.md](pdk.md)).
+
 **2026-10-03: 0.5.0.** Both Lunacy APKs and the keyboard are 0.5.0, built without the test apps. codepoet's pre-release list, and the phone layout finished. Mojo lists coast
 again: the compat layer sent its synthesised flick *after* the mouseup, which Mojo's gesture
 tracker had already finished with ([fix-log.md](fix-log.md)). The launcher's over-scroll

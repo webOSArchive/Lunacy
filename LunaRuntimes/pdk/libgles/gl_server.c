@@ -52,6 +52,7 @@
 #include <math.h>
 #include <time.h>
 #include <unistd.h>
+#include "pvrtc.h"
 
 #define GLES_NAMES
 #include REPLAY_INC
@@ -235,6 +236,31 @@ static const void *upload(const char *name, GLsizei w, GLsizei h, GLint *interna
 	for (size_t i = 0; i + 3 < need; i += 4) { swizzled[i] = s[i + 2]; swizzled[i + 1] = s[i + 1]; swizzled[i + 2] = s[i]; swizzled[i + 3] = s[i + 3]; }
 	*format = GL_RGBA; if (internalformat && *internalformat == 0x80E1) *internalformat = GL_RGBA;
 	return swizzled;
+}
+/*
+ * Before glCompressedTexImage2D / glCompressedTexSubImage2D: PVRTC (the TouchPad's own
+ * compression, which PDK games ship their textures in) is decoded to RGBA8 and uploaded as
+ * that where the driver hasn't GL_IMG_texture_compression_pvrtc (pvrtc.h). Returns 1 when
+ * the call was handled here.
+ */
+static int has_pvrtc = -1;
+static int compressed_upload(int sub, GLenum target, GLint level, GLint xoff, GLint yoff, GLenum format, GLsizei w, GLsizei h, const void *data)
+{
+	if (!data || !pvrtc_is_format(format)) return 0;
+	if (has_pvrtc < 0) { const char *e = (const char *)glGetString(GL_EXTENSIONS); has_pvrtc = e && strstr(e, "GL_IMG_texture_compression_pvrtc") != NULL; }
+	if (has_pvrtc) return 0;
+	uint8_t *rgba = pvrtc_decode(data, blob_len, w, h, format == PVRTC_RGB_2BPP || format == PVRTC_RGBA_2BPP, format >= PVRTC_RGBA_4BPP);
+	if (!rgba) {
+		static int told;
+		if (told++ < 5) LOGW("pdk gl: PVRTC 0x%x %d x %d in %u bytes not decoded; skipped", format, w, h, blob_len);
+		return 1;
+	}
+	GLint align = 4; glGetIntegerv(GL_UNPACK_ALIGNMENT, &align); glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+	if (sub) glTexSubImage2D(target, level, xoff, yoff, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+	else glTexImage2D(target, level, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, align);
+	free(rgba);
+	return 1;
 }
 
 /* ---- the app's framebuffer and the card ---- */

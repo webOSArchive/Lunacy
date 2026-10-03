@@ -253,6 +253,11 @@ framebuffer in its own pixels: framebuffer objects (134 apps), `glCopyTexSubImag
 - Uploads are checked against the bytes that arrived before the driver reads them, and
   BGRA (`GL_EXT_texture_format_BGRA8888`, Mandelbrot) is swizzled to RGBA where the
   device's GLES 1.1 hasn't it.
+- PVRTC (`GL_IMG_texture_compression_pvrtc`, the TouchPad's PowerVR format) is decoded to
+  RGBA in the shell where the driver hasn't it (`pvrtc.h`, both GLES versions). Mali,
+  Adreno and Tegra refuse the formats with `GL_INVALID_ENUM`, and the texture drew white:
+  Tiger Woods PGA Tour's backgrounds and golfer (4 and 2 bpp) on the HP 10 G2's Mali-450.
+  The decoded textures take 8 to 16 times the memory the compressed ones did.
 - The GL card shows in the card view as any card does: a `TextureView` is part of the
   view tree, so it scales with the card; there is no separate thumbnail to make.
 

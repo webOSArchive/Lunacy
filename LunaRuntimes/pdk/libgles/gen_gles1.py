@@ -347,6 +347,11 @@ def gen_server(protos):
             print('    if (pixels_p) { pixels_p = upload("glTexImage2D", width, height, &internalformat, &format, type, pixels_p); if (pixels_p == (const void *)-1) break; }')
         if name == 'glTexSubImage2D':
             print('    if (pixels_p) { pixels_p = upload("glTexSubImage2D", width, height, NULL, &format, type, pixels_p); if (pixels_p == (const void *)-1) break; }')
+        # PVRTC decoded where the driver lacks it (pvrtc.h).
+        if name == 'glCompressedTexImage2D':
+            print('    if (compressed_upload(0, target, level, 0, 0, internalformat, width, height, data_p)) break;')
+        if name == 'glCompressedTexSubImage2D':
+            print('    if (compressed_upload(1, target, level, xoffset, yoffset, format, width, height, data_p)) break;')
         if name == 'glPixelStorei':
             print('    if (pname == 0x0CF5) unpack_alignment = param;')
         call = f'{call_name}({", ".join(args)})'

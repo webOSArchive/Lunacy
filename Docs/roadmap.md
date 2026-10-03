@@ -615,6 +615,8 @@ work started ahead of phases 1 and 2. The shell is the strongest signal that thi
   - status bar menus;
   - phone layout: the launcher's icon grid needs more vertical spacing (codepoet,
     2026-10-02; `Launcher.Phone`, [phone.md](phone.md)).
+  - Just Type responds to keyboard input immediately, the first keystroke opening it with
+    that character, as on the TouchPad (codepoet, 2026-10-02).
 
 Planned scope:
 

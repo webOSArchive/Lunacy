@@ -142,25 +142,34 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
      * sideways instead of squeezing, so a phone can hold as many tabs as a tablet; cells and
      * icons seven-eighths the size, so four columns fit a 360 px portrait; and two permanent
      * tabs rather than four, so the owner can take a phone down to two.
+     *
+     * A cell is 84 wide but 112 tall: the TouchPad's 128 at seven-eighths, which is what a
+     * 56 px icon over a two-line label needs. An 84 px square held 92 px of icon and label,
+     * and each row's labels ran into the next row's icons (codepoet, 2026-10-02). The row
+     * gap, top margin and the icon's lift are the TouchPad's at the same scale.
      */
     object Phone {
         const val TAB_BAR = 40f
         const val TAB_W = 150f            // the TouchPad's tab width, scrolled rather than shrunk
-        const val CELL = 84f
+        const val CELL = 84f              // a cell's width, and the column pitch before gaps
+        const val ROW = 112f              // a cell's height
         const val ICON = 56f
-        const val ICON_DY = -9f
+        const val ICON_DY = -10f
         const val LABEL_W = 80f
+        const val LABEL_PX = 13f          // the TouchPad's 14 px bold read heavy under a 56 px icon (codepoet, 2026-10-03)
         const val LEFT_MARGIN = 6f
-        const val TOP_MARGIN = 12f
-        const val ROW_GAP = 6f
+        const val TOP_MARGIN = 18f
+        const val ROW_GAP = 9f
+        const val FRAME_INSET = 16        // edit-icon-bg.png's corners, kept true at 84 × 112
         const val FEEDBACK = 80f
-        const val DELETE_DX = -36f
-        const val DELETE_DY = -36f
+        const val DELETE_DX = -30f        // the badge 12 px in from the cell's corner: the TouchPad's 14 at seven-eighths
+        const val DELETE_DY = -44f
         const val PERMANENT_TABS = 2
         const val TAB_SCROLL_MS = 250L    // the selected tab brought into view, with the page snap
     }
     private val phone = luna.phone
     private val cell = if (phone) Phone.CELL else Params.CELL
+    private val rowH = if (phone) Phone.ROW else Params.CELL
     private val icon = if (phone) Phone.ICON else Params.ICON
     private val iconDy = if (phone) Phone.ICON_DY else Params.ICON_DY
     private val labelW = if (phone) Phone.LABEL_W else Params.LABEL_W
@@ -316,7 +325,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private val prefs = context.getSharedPreferences("launcher", Context.MODE_PRIVATE)
     private val tabText = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = luna.px(16f); typeface = luna.fontBold; textAlign = Paint.Align.CENTER }
     private val doneText = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = luna.px(15f); typeface = luna.fontBold; color = Color.WHITE; textAlign = Paint.Align.CENTER }
-    private val label = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = luna.px(14f); typeface = luna.fontBold; color = Color.WHITE }
+    private val label = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = luna.px(if (phone) Phone.LABEL_PX else 14f); typeface = luna.fontBold; color = Color.WHITE }
     private val labels = HashMap<String, StaticLayout>()
 
     /**
@@ -441,11 +450,11 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     }
     private fun columns(): Int = columnLayout().first
     private fun columnPitch(): Float = luna.px(cell + columnLayout().second)
-    private fun rowPitch() = luna.px(cell + rowGap)
+    private fun rowPitch() = luna.px(rowH + rowGap)
     private fun cellCentre(i: Int): PointF {
         val n = columns()
         val x = luna.px(leftMargin) + (i % n) * columnPitch() + luna.px(cell) / 2
-        val y = pageTop() + luna.px(topMargin) + (i / n) * rowPitch() + luna.px(cell) / 2
+        val y = pageTop() + luna.px(topMargin) + (i / n) * rowPitch() + luna.px(rowH) / 2
         return PointF(x, y)
     }
     /** The cell under a point in page coordinates. */
@@ -590,10 +599,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private fun drawGroup(c: Canvas, g: Tile.Group, centre: PointF) {
         val cx = centre.x; val cy = centre.y
         val iy = cy + luna.px(iconDy)
-        if (editing) {
-            val fh = luna.px(cell) / 2
-            luna.image("launcher3/edit-icon-bg.png")?.let { c.drawBitmap(it, null, RectF(cx - fh, cy - fh, cx + fh, cy + fh), null) }
-        }
+        if (editing) drawFrame(c, cx, cy)
         if (groupTarget == g.id || feedbackId == g.id) {
             val gh = luna.px(glow) / 2
             luna.image("launcher3/launcher-touch-feedback.png")?.let { c.drawBitmap(it, null, RectF(cx - gh, iy - gh, cx + gh, iy + gh), null) }
@@ -611,10 +617,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val cx = centre.x; val cy = centre.y
         val half = luna.px(icon) / 2
         val iy = cy + luna.px(iconDy)
-        if (editing) {
-            val fh = luna.px(cell) / 2
-            luna.image("launcher3/edit-icon-bg.png")?.let { c.drawBitmap(it, null, RectF(cx - fh, cy - fh, cx + fh, cy + fh), null) }
-        }
+        if (editing) drawFrame(c, cx, cy)
         if (feedbackId == app.id || groupTarget == app.id) {
             val gh = luna.px(glow) / 2
             luna.image("launcher3/launcher-touch-feedback.png")?.let { c.drawBitmap(it, null, RectF(cx - gh, iy - gh, cx + gh, iy + gh), null) }
@@ -627,6 +630,14 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             val d = deleteCentre(centre)
             drawDelete(c, d.x, d.y, pressed = pressedDelete == app.id)
         }
+    }
+
+    /** Edit mode's frame behind a cell: the 128 px art as it is on a tablet, a nine-slice on a phone's taller cell. */
+    private fun drawFrame(c: Canvas, cx: Float, cy: Float) {
+        val fw = luna.px(cell) / 2; val fh = luna.px(rowH) / 2
+        val r = RectF(cx - fw, cy - fh, cx + fw, cy + fh)
+        if (phone) luna.nine(c, "launcher3/edit-icon-bg.png", r, Phone.FRAME_INSET, Phone.FRAME_INSET, Phone.FRAME_INSET, Phone.FRAME_INSET)
+        else luna.image("launcher3/edit-icon-bg.png")?.let { c.drawBitmap(it, null, r, null) }
     }
 
     /** The delete badge, centred: 32 × 32 at (2, 1), pressed at (2, 41). */
@@ -803,8 +814,8 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val page = currentPage()
         val fx = dragX; val fy = dragY + page.scrollY
         val hit = page.tiles.withIndex().firstOrNull { (i, _) ->
-            val c = cellCentre(i); val half = luna.px(cell) / 2
-            abs(fx - c.x) < half && abs(fy - c.y) < half
+            val c = cellCentre(i); val half = luna.px(cell) / 2; val halfV = luna.px(rowH) / 2
+            abs(fx - c.x) < half && abs(fy - c.y) < halfV
         }
         if (hit != null && hit.value !== app && app is Tile.App) {
             val c = cellCentre(hit.index); val core = luna.px(cell) * Params.GROUP_CORE / 2
@@ -971,8 +982,8 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private fun tileAt(x: Float, y: Float): Tile? {
         if (y < pageTop() || y > pageBottom() || abs(pagePos - pagePos.roundToInt()) > 0.01f) return null
         val page = currentPage()
-        val half = luna.px(cell) / 2
-        return page.tiles.withIndex().firstOrNull { (i, _) -> val c = cellCentre(i); abs(x - c.x) < half && abs(y + page.scrollY - c.y) < half }?.value
+        val half = luna.px(cell) / 2; val halfV = luna.px(rowH) / 2
+        return page.tiles.withIndex().firstOrNull { (i, _) -> val c = cellCentre(i); abs(x - c.x) < half && abs(y + page.scrollY - c.y) < halfV }?.value
     }
 
     private fun deleteAt(x: Float, y: Float): AppInfo? {
@@ -1128,11 +1139,22 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         flickV = v0
         val t = abs(v0) / Params.FRICTION
         val distance = v0 * v0 / (2 * Params.FRICTION) * Math.signum(v0) * luna.density
+        if (start < 0 || start > m) { overscrollFlick(page, v0); return }
         val over = luna.px(Params.MAX_OVERSCROLL)
         val target = (start + distance).coerceIn(-over, m + over)
+        val t0 = System.currentTimeMillis()
         anim = ValueAnimator.ofFloat(start, target).apply {
             duration = t.toLong().coerceAtLeast(1L); interpolator = Easing.OutCubic
-            addUpdateListener { page.scrollY = it.animatedValue as Float; invalidate() }
+            addUpdateListener {
+                page.scrollY = it.animatedValue as Float; invalidate()
+                // Past the end the flick carries on under a friction that grows with how far
+                // past it is (KineticScroller's FlickOverScroll), not for its full time.
+                if (page.scrollY < 0 || page.scrollY > m) {
+                    val elapsed = (System.currentTimeMillis() - t0).toFloat()
+                    it.cancel()
+                    overscrollFlick(page, v0 - Params.FRICTION * Math.signum(v0) * elapsed)
+                }
+            }
             addListener(object : android.animation.AnimatorListenerAdapter() {
                 var cancelled = false
                 override fun onAnimationCancel(a: android.animation.Animator) { cancelled = true }
@@ -1142,6 +1164,41 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
                     if (page.scrollY < 0 || page.scrollY > m) settle(page, Params.OVERSCROLL_FIX_MS)
                 }
             })
+            start()
+        }
+    }
+
+    /**
+     * KineticScroller's FlickOverScroll state: a flick that is past the end (or starts there)
+     * keeps its velocity under an opposing friction that grows every frame by the fraction of
+     * the 100 px of overscroll it has used, so it dies in a few frames rather than crawling
+     * for the flick's whole time, and then the 350 ms correction brings it back. Before this
+     * the launcher let the eased flick run its full course against the overscroll clamp, and
+     * an over-scrolled grid hung pulled out of place for most of a second (codepoet,
+     * 2026-10-03). Velocities in TouchPad px per ms, as fling's.
+     */
+    private fun overscrollFlick(page: Page, v0: Float) {
+        anim?.cancel()
+        val m = maxScroll(page)
+        if (v0 == 0f) { flickV = 0f; settle(page, Params.OVERSCROLL_FIX_MS); return }
+        var v = v0
+        var friction = Params.FRICTION * -Math.signum(v0)
+        var last = System.currentTimeMillis()
+        val over = luna.px(Params.MAX_OVERSCROLL)
+        anim = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 10_000L; interpolator = Easing.Linear
+            addUpdateListener {
+                val now = System.currentTimeMillis(); val dt = (now - last).toFloat(); last = now
+                page.scrollY += v * dt * luna.density
+                v += friction * dt
+                val amount = if (page.scrollY < 0) -page.scrollY else if (page.scrollY > m) page.scrollY - m else 0f
+                friction += friction * (amount / over)
+                invalidate()
+                if (Math.signum(v) != Math.signum(v0)) {
+                    it.cancel(); flickV = 0f
+                    settle(page, Params.OVERSCROLL_FIX_MS)
+                }
+            }
             start()
         }
     }

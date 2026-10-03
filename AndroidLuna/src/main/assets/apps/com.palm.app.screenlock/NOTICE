@@ -4,8 +4,14 @@ Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence; di
 Lunacy as abandonware, like Mojo, the Prelude fonts and the TouchPad wallpapers: no owner has
 asserted rights since webOS was discontinued.
 
-The app is here exactly as it was packaged, and Lunacy does not change it (rule 5 in
-CLAUDE.md). It runs because Lunacy answers what it asks for: com.palm.systemservice keeps its
+The app is here as it was packaged, with one change of Lunacy's, codepoet's exception to
+rules 0 and 5 (2026-10-03): a Layout group on its main view, between the screen settings and
+Wallpaper, where the owner chooses Lunacy's phone or tablet layout (Docs/phone.md). It is the
+only non-Palm thing in the app, marked [Lunacy] in source/ScreenLockPrefApp.js, and talks to
+Lunacy's own service, not a webOS name. With it, two stylesheet rules (marked [Lunacy] in
+stylesheets/screenlock.css): the view fits a phone's card, which Palm's fixed 500 px column did
+not, and every footnote under a group has the same 6 px above and 9 px below. Everything else
+is Palm's and runs because Lunacy answers what it asks for: com.palm.systemservice keeps its
 preferences and its wallpaper, com.palm.display/control sets Android's brightness and
 screen-off timeout, and enyo.FilePicker finds Lunacy's picker at webOS's own path. What
 Lunacy hasn't got - a lock screen, com.palm.systemmanager - returns the bus's honest error.

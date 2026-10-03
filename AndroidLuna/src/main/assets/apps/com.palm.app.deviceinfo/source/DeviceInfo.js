@@ -56,7 +56,8 @@ enyo.kind({
 						{kind: "InfoRow", name: "card", label: $L("Card")},
 						{kind: "InfoRow", name: "scale", label: $L("Scale")},
 						{kind: "InfoRow", name: "orientation", label: $L("Orientation")},
-						{kind: "InfoRow", name: "layout", label: $L("Layout"), tapHighlight: true, onclick: "editLayout"}
+						{kind: "InfoRow", name: "layout", label: $L("Layout")},
+						{kind: "InfoRow", name: "appWidth", label: $L("Phone Zoom Width"), tapHighlight: true, onclick: "editAppWidth"}
 					]},
 					{name: "layoutNote", className: "note"},
 					// The TouchPad's Device Info lists its software as title and version rows
@@ -90,19 +91,13 @@ enyo.kind({
 				{kind: "Button", className: "enyo-button-affirmative", caption: $L("Save"), onclick: "saveDeviceId"}
 			]}
 		]},
-		// Phone or tablet: the shell decides from the screen, and this is where to overrule
-		// it. The app layout width is the phone's app scale (Docs/phone.md).
+		// Phone Zoom's width, the phone's app scale (Docs/phone.md). Phone or tablet itself
+		// is a setting of the screen, in Screen & Lock (codepoet, 2026-10-03).
 		{kind: "Dialog", name: "layoutDialog", lazy: false, components: [
-			{content: $L("Layout"), className: "dialog-title"},
-			{name: "layoutClues", className: "note"},
-			{kind: "RadioGroup", name: "layoutChoice", components: [
-				{caption: $L("Automatic"), value: "auto"},
-				{caption: $L("Phone"), value: "phone"},
-				{caption: $L("Tablet"), value: "tablet"}
-			]},
-			{className: "note", content: $L("Phone Zoom's width: an app with it on (Software, below) is laid out this many pixels wide and shrunk to fit the card.")},
+			{content: $L("Phone Zoom Width"), className: "dialog-title"},
+			{className: "note", content: $L("An app with Phone Zoom on (Software, below) is laid out this many pixels wide and shrunk to fit the card. 0 lays it out at the card's own width.")},
 			{kind: "Input", name: "appWidthInput", className: "id-input", hint: $L("Phone Zoom width, px")},
-			{className: "note", content: $L("Lunacy restarts to apply a change.")},
+			{className: "note", content: $L("An app that is open shows the change after it is closed and started again.")},
 			{layoutKind: "HFlexLayout", pack: "center", components: [
 				{kind: "Button", caption: $L("Cancel"), onclick: "closeLayout"},
 				{kind: "Button", className: "enyo-button-affirmative", caption: $L("Save"), onclick: "saveLayout"}
@@ -182,7 +177,8 @@ enyo.kind({
 		this.$.layout.setValue(y.layout ? name[y.layout] + (y.setting === "auto" ? " " + $L("(from the screen)") : " " + $L("(chosen)")) : "");
 		this.$.layoutNote.setContent((y.layout === "phone"
 			? $L("The phone layout: a tighter launcher, a scrolling tab bar and a four-icon dock, and apps are told they are on a Pre3.")
-			: $L("The TouchPad's layout, and apps are told they are on a TouchPad.")) + " " + $L("Tap to change."));
+			: $L("The TouchPad's layout, and apps are told they are on a TouchPad.")) + " " + $L("Change it in Screen & Lock."));
+		this.$.appWidth.setValue(y.appLayoutWidth === undefined ? "" : (y.appLayoutWidth === 0 ? $L("the card's own") : y.appLayoutWidth + " px"));
 		this.software(r.software || []);
 		this.$.pane.selectViewByName("info");
 	},
@@ -226,10 +222,8 @@ enyo.kind({
 		var gb = n / (1024 * 1024 * 1024);
 		return gb >= 1 ? (Math.round(gb * 10) / 10) + " GB" : Math.round(n / (1024 * 1024)) + " MB";
 	},
-	editLayout: function() {
+	editAppWidth: function() {
 		var y = this.layout || {};
-		this.$.layoutClues.setContent($L("This screen reads as a") + " " + (y.detected || "?") + ": " + (y.reasons || []).join("; ") + ".");
-		this.$.layoutChoice.setValue(y.setting || "auto");
 		this.$.appWidthInput.setValue(String(y.appLayoutWidth === undefined ? 640 : y.appLayoutWidth));
 		this.$.layoutDialog.open();
 	},
@@ -238,11 +232,11 @@ enyo.kind({
 	},
 	saveLayout: function() {
 		var width = parseInt(this.$.appWidthInput.getValue(), 10);
-		this.$.setLayout.call({layout: this.$.layoutChoice.getValue(), appLayoutWidth: isNaN(width) ? 0 : width});
+		this.$.setLayout.call({appLayoutWidth: isNaN(width) ? 0 : width});
 	},
 	layoutSet: function(inSender, r) {
 		this.$.layoutDialog.close();
-		if (!r || !r.returnValue) { this.showError(r && r.errorText || $L("The layout couldn't be set.")); return; }
+		if (!r || !r.returnValue) { this.showError(r && r.errorText || $L("The width couldn't be set.")); return; }
 		this.refresh();
 	},
 	editDeviceId: function() {

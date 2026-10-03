@@ -42,3 +42,15 @@
 	height: 57px; 
 	background:transparent url('../images/light_chrome_drop_shadow_footer.png') top repeat-x;
 }
+
+/* [Lunacy] Every footnote under a group, Palm's two and the Layout note, has 6 px above it
+   and 9 px below (codepoet, 2026-10-03; Palm's had none above and 0 or 24 below). */
+.accounts-body-text, .accounts-gestures-text { padding-top: 6px; padding-bottom: 9px; }
+
+/* [Lunacy] A phone's card (Docs/phone.md): Palm's 500 px column and its footnotes were laid
+   out for a TouchPad and ran off a 360 px card. On a card narrower than 540 px they take the
+   width, less margins; nothing changes on a tablet. codepoet, 2026-10-03. */
+@media (max-width: 540px) {
+	.box-center { width: auto; margin: 23px 12px 0; }
+	.accounts-body-text, .accounts-gestures-text { width: auto; margin-right: 15px; }
+}

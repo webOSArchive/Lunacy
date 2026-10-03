@@ -58,7 +58,17 @@ two things:
 
 ## One size, and why
 
-The keyboard has a single height, and it is the art's own. Nothing is ever scaled.
+The keyboard has a single height, and it is the art's own. Nothing is ever resampled.
+
+Since 0.5.0 the whole of it is drawn at a whole-number scale, every picture and letter alike,
+so a 2x keyboard is the 1x one with each pixel a 2 x 2 block: on a screen whose pixels are
+smaller than a TouchPad's the art would otherwise be tiny (a Nexus 5 at 480 dpi showed it
+at 3.7 mm a row; codepoet, 2026-10-03: "could stand to be double height"). The scale is
+automatic from the screen - the keyboard is 340 px of a TouchPad's 1024 x 768, and it keeps
+that share of a screen's pixels by growing with the geometric mean of the screen's two sides
+over the TouchPad's, rounded: an HP 10 G2 and a 2012 Nexus 7 at 1, a Nexus 5 and a Pixel
+Tablet at 2 - or the owner's choice of 1x, 2x or 3x in the setup screen, taken up the next
+time the keyboard comes up.
 
 LunaCE offered four heights - 243, 291, 340 and 393 px - and scaled its pictures to fit
 them. Scaling costs you the glyphs and the key bevels: at anything but the tallest, the

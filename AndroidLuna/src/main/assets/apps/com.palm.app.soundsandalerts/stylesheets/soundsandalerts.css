@@ -1,6 +1,12 @@
+/* The column: Palm's 500 px, centred; on a card narrower than 540 px (a phone's) the
+   card's width less 12 px margins, so the view fits as Device Info's does (codepoet,
+   2026-10-03). Margins rather than padding: Enyo's boxes count padding inside max-width. */
 .box-center {
 	width:500px;
 	margin:23px auto 0;
+}
+@media (max-width: 540px) {
+	.box-center { width:auto; margin:23px 12px 0; }
 }
 .box-center .enyo-spinner{
 	margin-right:8px;

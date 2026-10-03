@@ -1,0 +1,1 @@
+{"id": "com.lunacy.turnprobe", "version": "1.0.0", "vendor": "Lunacy", "type": "pdk", "main": "turnprobe", "title": "Turn Probe", "icon": "icon.png", "requiredMemory": 10}

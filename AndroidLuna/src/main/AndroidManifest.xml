@@ -14,6 +14,10 @@
          Android 5; from Android 6 the shell asks for it at startup. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <!-- The launcher's delete badge on an Android app hands it to Android's uninstaller
+         (AndroidApps.uninstall). From a target of 28 (the arm64 flavour) ACTION_DELETE is
+         silently dropped without this; the user still confirms on Android's own dialog. -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <application
         android:label="Lunacy"
         android:icon="@mipmap/ic_launcher"

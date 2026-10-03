@@ -3,7 +3,30 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-10-02)
+## Where things stand (2026-10-03)
+
+**2026-10-03: 0.5.0.** Both Lunacy APKs and the keyboard are 0.5.0, built without the test apps. codepoet's pre-release list, and the phone layout finished. Mojo lists coast
+again: the compat layer sent its synthesised flick *after* the mouseup, which Mojo's gesture
+tracker had already finished with ([fix-log.md](fix-log.md)). The launcher's over-scroll
+snaps back as LunaCE's does, under a friction that grows past the end, instead of crawling
+against the clamp for most of a second ([luna-deltas.md](luna-deltas.md) B5). Android apps
+can be uninstalled from the launcher on a target-28 build (`REQUEST_DELETE_PACKAGES`). webOS
+Community Account Manager installs on the Pixel Tablet: its postinst needs busybox, and the
+64-bit busybox never ran there - Android's seccomp policy killed the static glibc build in
+its own startup - so `tools/build-busybox.sh` now builds both ABIs against bionic
+([BUILDING.md](../BUILDING.md)). A Pre3 was connected and measured for the PDK phase: it
+turns an other-shape buffer *clockwise*, the opposite of the TouchPad, which `PdkWindow`
+now does on a portrait device, and the accelerometer's axis 0 is positive to the right, as
+assumed ([pdk.md](pdk.md)). A border-image on an element with zero border widths is
+not painted, as the TouchPad's WebKit had it (A11; First Use's Start Over button). The phone
+layout: taller launcher cells, a shorter dock, Just Type's panel fitted to a phone, a
+keyboard's first key opening Just Type, and the layout choice moved into Screen & Lock as
+codepoet's exception to rules 0 and 5 (B11; [phone.md](phone.md)), with Screen & Lock and
+Sounds & Alerts fitting a phone's card. The keyboard (0.5.0) draws at a whole-number scale
+chosen from the screen, 2x on the Nexus 5 and the Pixel Tablet, with 1x to 3x on its setup
+screen ([LunaKeyboard/README.md](../LunaKeyboard/README.md)). Both APKs are 0.5.0.
+
+## Where things stood (2026-10-02)
 
 **2026-10-02, evening: the first PDK app.** Commander Keen, the TouchPad's own binary, runs in
 a Lunacy card on the Nexus 5 with no emulation: Debian's armel glibc as the runtime, SDL 1.2
@@ -26,13 +49,19 @@ PDK plugin), OpenSSL 0.9.8 and curl. All in [pdk.md](pdk.md).
 
 **2026-10-02, afternoon: a phone layout.** `FormFactor` decides phone or tablet from the
 screen (short side in dp, diagonal in inches, shape as the tie-breaker) or the owner's
-setting (Device Info, `system/setLayout`, `--es layout`), and the shell and the device
-profile both follow it. On a phone the launcher has a 40 px tab bar whose 150 px tabs scroll
+setting (Screen & Lock's Layout group since 2026-10-03, codepoet's exception to rules 0
+and 5, [luna-deltas.md](luna-deltas.md) B11; `system/setLayout`; `--es layout`), and the
+shell and the device profile both follow it. On a phone the launcher has a 40 px tab bar whose 150 px tabs scroll
 sideways, two permanent tabs instead of four, 84 px cells with 56 px icons (four across a
-Nexus 5 portrait), and a dock of four icons with the launcher button as the fifth equal
-slot. What an app is told (a Pre3) follows the same decision; whether its page is scaled
-is the per-app fixed-viewport switch, in Device Info's new Software group, on by default
-for Palm's Clock, Calculator and Memos, which then fit whole. All in [phone.md](phone.md),
+Nexus 5 portrait; since 2026-10-03 the cells are 112 tall, the TouchPad's at seven-eighths,
+so labels no longer run into the row below), and a dock of four icons with the launcher
+button as the fifth equal slot (since 2026-10-03, 95 px tall with 59 px icons: codepoet's
+5 % and 8 %). Just Type's panel also has a phone layout since 2026-10-03 (the field and
+groups span the width, the tiles as many across as fit), and a keyboard's first printable
+key in the card view or the launcher opens Just Type with that character, as on a TouchPad
+with a keyboard paired. What an app is told (a Pre3) follows the same decision; whether its
+page is scaled is the per-app fixed-viewport switch, in Device Info's new Software group, on
+by default for Palm's Clock, Calculator and Memos, which then fit whole. All in [phone.md](phone.md),
 with what is still unmeasured. The tablet is unchanged (checked on the Pixel Tablet).
 
 **2026-10-02: WebSQL where the WebView has none.** The Pixel Tablet's WebView (153) has no
@@ -613,12 +642,6 @@ work started ahead of phases 1 and 2. The shell is the strongest signal that thi
   - banners and the dashboard;
   - landscape and portrait layouts;
   - status bar menus;
-  - phone layout: the launcher's icon grid needs more vertical spacing (codepoet,
-    2026-10-02; `Launcher.Phone`, [phone.md](phone.md)).
-  - Just Type responds to keyboard input immediately, the first keystroke opening it with
-    that character, as on the TouchPad (codepoet, 2026-10-02).
-  - the Just Type panel (its results) laid out for phone mode (codepoet, 2026-10-02;
-    [phone.md](phone.md)).
 
 Planned scope:
 
@@ -702,13 +725,9 @@ per-app code.
     tried on 2026-10-02 is one.
   - **OpenSSL 0.9.8 and curl**: about 50 apps link `libcrypto.so.0.9.8`, `libssl.so.0.9.8`
     or `libcurl.so.4`, which the runtime doesn't provide yet.
-  - **The accelerometer's x sign**: assumed positive to the right; one tilt of the TouchPad
-    with the joystick probe settles it.
   - **`PDL_ServiceCall` to the bus**, as JS services have it.
   - **A keyboard** for apps that ask for one (`PDL_SetKeyboardState`).
   - **The launcher's runnable state** for a `pdk` app where the runtime is absent.
-  - **The Pre3 profile's turn**: a buffer of the other shape is assumed to turn
-    counter-clockwise as on the TouchPad; a Pre3 would confirm it.
 
 **Exit:** a handful of well-known PDK apps run at full speed on a current device. The
 corpus survey says how many apps this phase can reach, and whether it is worth doing.

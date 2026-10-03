@@ -33,6 +33,11 @@ import org.webosarchive.lunacy.card.AppInfo
  * The filter tabs (ALL, CONTACTS, CONTENT, ACTIONS), "Search using…" and the rest of Just
  * Type are out of scope for now (codepoet, 2026-09-22).
  *
+ * On a phone (Docs/phone.md) the TouchPad's 570 px field and 736 px groups would overrun a
+ * 360 px screen, so both span the width less 12 px margins, and the tiles, still 85 × 113,
+ * sit as many to a row as fit with equal gaps of at least 10 px between and around them
+ * (three across a Nexus 5 portrait, six across its landscape). Nothing changes on a tablet.
+ *
  * Which apps match is LunaSysMgr's `applicationManager/searchApps`
  * (ApplicationManager::searchLaunchPoints): a title that starts with the text, or has a word
  * that does, sorted by title; then, for a default launch point, a keyword that starts with it
@@ -55,11 +60,14 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         const val TILE_PITCH_X = 138f            // 28 + 85 + 25
         const val TILE_PITCH_Y = 138f            // 10 + 113 + 15
         const val SEARCH_H = 74f
+        const val PHONE_MARGIN = 12f             // the field's and the groups' side margins on a phone
+        const val PHONE_TILE_GAP = 10f           // the least gap between and around a phone's tiles
         /** The reference TouchPad's DuckDuckGo entry (com.palm.universalsearch). */
         const val DUCKDUCKGO = "https://lite.duckduckgo.com/lite/?q="
         private val DELIMITERS = " ,._-:;()\\[]{}\"/".toSet()
     }
 
+    private val phone = luna.phone
     var onLaunch: (AppInfo) -> Unit = {}
     var onSearch: (url: String) -> Unit = {}
     var apps: List<AppInfo> = emptyList()
@@ -162,10 +170,20 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
     // ---- layout ----
 
     private fun px(v: Float) = luna.px(v)
-    private fun fieldRect() = RectF((width - px(FIELD_W)) / 2, px(FIELD_TOP), (width + px(FIELD_W)) / 2, px(FIELD_TOP) + px(36f))
+    private fun fieldW() = if (phone) width - 2 * px(PHONE_MARGIN) else px(FIELD_W)
+    private fun groupW() = if (phone) width - 2 * px(PHONE_MARGIN) else px(GROUP_W)
+    private fun fieldRect() = RectF((width - fieldW()) / 2, px(FIELD_TOP), (width + fieldW()) / 2, px(FIELD_TOP) + px(36f))
     private fun clearRect(): RectF { val f = fieldRect(); val s = px(20f); return RectF(f.right - px(18f) - s, f.centerY() - s / 2, f.right - px(18f), f.centerY() + s / 2) }
-    private fun groupLeft() = (width - px(GROUP_W)) / 2
-    private fun perRow() = maxOf(1, ((px(GROUP_W) - px(TILE_LEFT)) / px(TILE_PITCH_X)).toInt())
+    private fun groupLeft() = (width - groupW()) / 2
+    /** A phone's tiles: as many as fit inside the group's 14 px borders with equal gaps, no narrower than PHONE_TILE_GAP. */
+    private fun phoneColumns(): Pair<Int, Float> {
+        val inner = groupW() - 2 * px(14f)
+        val n = maxOf(1, ((inner - px(PHONE_TILE_GAP)) / (px(TILE_W) + px(PHONE_TILE_GAP))).toInt())
+        return n to (inner - n * px(TILE_W)) / (n + 1)
+    }
+    private fun perRow() = if (phone) phoneColumns().first else maxOf(1, ((px(GROUP_W) - px(TILE_LEFT)) / px(TILE_PITCH_X)).toInt())
+    private fun tileLeft() = if (phone) px(14f) + phoneColumns().second else px(TILE_LEFT)
+    private fun tilePitchX() = if (phone) px(TILE_W) + phoneColumns().second else px(TILE_PITCH_X)
     private fun launchTop() = px(HEADER_H) + px(GROUP_TOP) - scroll
     private fun launchHeight(): Float {
         val rows = (results.size + perRow() - 1) / perRow()
@@ -173,11 +191,11 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
     }
     private fun searchTop() = if (results.isEmpty()) launchTop() else launchTop() + launchHeight() + px(GROUP_GAP)
     private fun tileRect(i: Int): RectF {
-        val l = groupLeft() + px(TILE_LEFT) + (i % perRow()) * px(TILE_PITCH_X)
+        val l = groupLeft() + tileLeft() + (i % perRow()) * tilePitchX()
         val t = launchTop() + px(TILE_TOP) + (i / perRow()) * px(TILE_PITCH_Y)
         return RectF(l, t, l + px(TILE_W), t + px(TILE_H))
     }
-    private fun searchRect() = RectF(groupLeft(), searchTop(), groupLeft() + px(GROUP_W), searchTop() + px(SEARCH_H))
+    private fun searchRect() = RectF(groupLeft(), searchTop(), groupLeft() + groupW(), searchTop() + px(SEARCH_H))
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
         val f = fieldRect()
@@ -211,7 +229,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
 
     private fun drawLaunch(c: Canvas, term: String) {
         val top = launchTop()
-        val box = RectF(groupLeft(), top, groupLeft() + px(GROUP_W), top + launchHeight())
+        val box = RectF(groupLeft(), top, groupLeft() + groupW(), top + launchHeight())
         luna.nine(c, "justtype/group-labeled.png", box, 14, 36, 14, 14)
         c.drawText("LAUNCH", box.left + px(12f), top + px(19f), groupLabel)
         results.forEachIndexed { i, app ->

@@ -119,6 +119,12 @@
 	function end(ev) {
 		if (!st) { return; }
 		var t = ev.changedTouches[0], target = under(t);
+		// The flick goes first, before the mouseup, as LunaSysMgr delivered it: Mojo's
+		// gesture tracker only notes a flick (Mojo.Gesture.dispatchGesture sets sendFlick and
+		// the velocity) and sends its own flick event from the mouseup that follows. A flick
+		// after the mouseup was never seen, and no Mojo scroller coasted (codepoet,
+		// 2026-10-03; Enyo's scroller measures its own, so it was unaffected).
+		if (st.moved && ev.type === "touchend") { flick(t); }
 		// Read before the mouse events go out: that is when a framework may focus a field.
 		var before = document.activeElement;
 		fire("mouseup", t, target);
@@ -136,7 +142,6 @@
 			if (!f) { afterTap(st.target, before); }
 		}
 		fire("mouseout", t, target);
-		if (st.moved && ev.type === "touchend") { flick(t); }
 		st = null;
 		ev.preventDefault();
 	}
@@ -250,6 +255,103 @@
 	window.addEventListener("resize", window.__lunacyKeepFieldVisible);
 	// And when a field is focused while the keyboard is already up, which fires no resize.
 	document.addEventListener("focusin", window.__lunacyKeepFieldVisible, true);
+})();
+
+// A border-image is painted only where a border is. The reference TouchPad's WebKit (534.6)
+// drew the nine-piece image from paintBorder(), which it called only when
+// RenderStyle::hasBorder() held - a border width above zero on some side. Chromium paints a
+// border-image whenever there is one, fill and all. So an element that turns its border off
+// with `border-width: 0` while a stylesheet still gives it a border-image shows the image's
+// middle as a box the TouchPad never drew: First Use's and webOS Account's Start Over button,
+// Enyo's `.enyo-button` art under the app's `.restart { border-width: 0; background: none }`
+// (codepoet, 2026-10-03, on the Pixel Tablet). Done here for every page: elements matching
+// a rule that declares a border-image are checked, and one with every border width at zero
+// gets `border-image-source: none` inline until its widths change. Chromium 37 has no
+// Element.matches; MutationObserver it has.
+(function () {
+	var MARK = "data-lunacy-border-image";
+	function matches(el, sel) {
+		var f = el.matches || el.webkitMatchesSelector;
+		try { return f.call(el, sel); } catch (e) { return false; }
+	}
+	function selectors() {
+		var out = [], sheets = document.styleSheets, i, j, rules, r, st;
+		for (i = 0; i < sheets.length; i++) {
+			try { rules = sheets[i].cssRules; } catch (e) { rules = null; }
+			if (!rules) { continue; }
+			for (j = 0; j < rules.length; j++) {
+				r = rules[j]; st = r.style;
+				if (!st || !r.selectorText) { continue; }
+				if (st.getPropertyValue("border-image-source") || st.getPropertyValue("-webkit-border-image") || st.getPropertyValue("border-image")) {
+					out.push(r.selectorText);
+				}
+			}
+		}
+		return out;
+	}
+	function check(el) {
+		var cs = getComputedStyle(el);
+		if (!cs) { return; }
+		var zero = cs.borderTopWidth === "0px" && cs.borderRightWidth === "0px" && cs.borderBottomWidth === "0px" && cs.borderLeftWidth === "0px";
+		var marked = el.hasAttribute(MARK);
+		if (zero && !marked) {
+			if (cs.borderImageSource === "none" || !cs.borderImageSource) { return; }
+			el.style.setProperty("border-image-source", "none");
+			el.setAttribute(MARK, "");
+		} else if (!zero && marked) {
+			el.style.removeProperty("border-image-source");
+			el.removeAttribute(MARK);
+		}
+	}
+	function pass(roots) {
+		var sels = selectors();
+		if (!sels.length) { return; }
+		var sel = sels.join(","), i, k, found, seen = [];
+		for (i = 0; i < roots.length; i++) {
+			var root = roots[i];
+			if (root.nodeType !== 1) { continue; }
+			if (matches(root, sel) && seen.indexOf(root) < 0) { seen.push(root); check(root); }
+			try { found = root.querySelectorAll(sel); } catch (e) { found = []; }
+			for (k = 0; k < found.length; k++) { if (seen.indexOf(found[k]) < 0) { seen.push(found[k]); check(found[k]); } }
+		}
+	}
+	var pending = null;
+	function schedule(roots) {
+		if (!pending) { pending = []; }
+		if (roots === document) { pending = [document.documentElement]; }
+		else if (pending.length !== 1 || pending[0] !== document.documentElement) {
+			for (var i = 0; i < roots.length; i++) { if (pending.indexOf(roots[i]) < 0) { pending.push(roots[i]); } }
+		}
+		if (pending.length === 1 && pending[0] === document.documentElement && pending.scheduled) { return; }
+		if (!pending.scheduled) {
+			pending.scheduled = true;
+			setTimeout(function () { var p = pending; pending = null; pass(p); }, 0);
+		}
+	}
+	function start() {
+		schedule(document);
+		new MutationObserver(function (records) {
+			var roots = [], i, j, rec;
+			for (i = 0; i < records.length; i++) {
+				rec = records[i];
+				if (rec.type === "attributes") {
+					if (rec.attributeName === MARK) { continue; }
+					roots.push(rec.target);
+				} else if (rec.type === "childList") {
+					for (j = 0; j < rec.addedNodes.length; j++) { roots.push(rec.addedNodes[j]); }
+					// A stylesheet arriving (Enyo loads its CSS by script) can give existing elements a border-image.
+					for (j = 0; j < rec.addedNodes.length; j++) {
+						var n = rec.addedNodes[j];
+						if (n.nodeType === 1 && (n.tagName === "LINK" || n.tagName === "STYLE")) { schedule(document); return; }
+					}
+				}
+			}
+			if (roots.length) { schedule(roots); }
+		}).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style"] });
+		// Stylesheets load after the DOM they style; look again when they have.
+		window.addEventListener("load", function () { schedule(document); });
+	}
+	if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", start); } else { start(); }
 })();
 
 // Uncaught script errors reach only the console. The reference TouchPad (WebKit 534.6)

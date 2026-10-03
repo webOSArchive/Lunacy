@@ -36,6 +36,20 @@ enyo.kind({
 					                                            				]}
 					]}
 	        	]},
+	        	// [Lunacy] The shell's layout, phone or tablet (Docs/phone.md), as a setting of
+	        	// the screen: codepoet's exception to rules 0 and 5, 2026-10-03. A TouchPad had
+	        	// no such setting; everything else in this app is Palm's.
+	        	{kind: "RowGroup", caption:$L("Layout"), components: [
+	        		{kind: "Item", layoutKind:"HFlexLayout", tapHighlight: false, components: [
+	        			{flex:1, content:$L("Screen Layout")},
+	        			{kind: "ListSelector", value: "auto", name:"layoutSelector", onChange:"handleLayoutChange", items: [
+	        				{caption: $L('Automatic'), value:'auto'},
+	        				{caption: $L('Phone'), value:'phone'},
+	        				{caption: $L('Tablet'), value:'tablet'}
+	        			]}
+	        		]}
+	        	]},
+	        	{name:"layoutText", content: $L("Lunacy will restart to apply."), className:"accounts-gestures-text"},
 	        	{kind: "RowGroup", caption:$L("Wallpaper"),
 	        		components: [
 	        		             {kind: "Item", tapHighlight: true, layoutKind: "HFlexLayout", onclick:"launchFilePicker", components: [{content: $L("Change Wallpaper")}]},
@@ -106,6 +120,11 @@ enyo.kind({
    	            
 				   ]},
 					{kind:"PalmService", service:"palm://com.palm.systemservice/wallpaper/", name:"importWallpaper", method:"importWallpaper", onResponse:"handleImportWallpaper"},         	
+					// [Lunacy] The layout setting lives on Lunacy's own service.
+					{kind:"PalmService", service:"palm://org.webosarchive.lunacy/", components:[
+						{name:"getEnvironment", method:"system/getEnvironment", onResponse:"handleGetEnvironment"},
+						{name:"setLayout", method:"system/setLayout", onResponse:"handleSetLayout"}
+					]},
 						{name:'imagePicker', kind: "FilePicker", fileType:["image"], onPickFile: "selectedImageFile"},                  
 	    				{kind:"SetPasswordDialog", lazy:false, onCancel:"handleSetPasswordCancel", onDone:"handleSetPasswordDone"},                 
 	    				{kind:"PasswordUnlock", lazy:false, onCancelClick:"handleSetPasswordCancel", onPasswordVerified:"handleVerifyPasswordDone"},
@@ -136,6 +155,7 @@ enyo.kind({
 		this.inherited(arguments);
 		this.$.getPreferencesSpinner.show();
 		this.$.getSecurityPolicy.call();
+		this.$.getEnvironment.call({});
 		this.$.lockTimerOptions.setItems(this.availableLockTimers);
 		
 		this.currentSecurity = 'none';
@@ -175,6 +195,24 @@ enyo.kind({
 		this.$.displayTimer.setValue(inResponse.timeout);
 		this.$.brightnessSlider.setPosition(inResponse.maximumBrightness);	
 		this.$.getSystemPreferences.call({keys:["showAlertsWhenLocked","sysUiEnableNextPrevGestures","BlinkNotifications","onDeviceDemoRunning", "enableALS"]});
+	},
+	// [Lunacy] The layout: what the shell decided and why, and the owner's word over it.
+	handleGetEnvironment: function(inSender, inResponse) {
+		var y = inResponse && inResponse.layout;
+		if (!y) { return; }
+		var name = {phone: $L("phone"), tablet: $L("tablet")};
+		this.$.layoutSelector.setValue(y.setting || "auto");
+		this.$.layoutText.setContent($L("This device was detected as a") + " " + (name[y.detected] || y.detected) + ", " +
+			$L("if things don't look right, change this setting to force a mode. Lunacy will restart to apply."));
+	},
+	handleLayoutChange: function(inSender, inValue) {
+		this.$.setLayout.call({layout: inValue});
+	},
+	handleSetLayout: function(inSender, inResponse) {
+		if (!inResponse || !inResponse.returnValue) {
+			this.showDialog((inResponse && inResponse.errorText) || $L("Unable to set the layout"));
+			this.$.getEnvironment.call({});
+		}
 	},
 	launchFilePicker: function(inSender, inEvent) {	
 		this.$.imagePicker.pickFile();

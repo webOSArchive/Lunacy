@@ -47,6 +47,27 @@ class SetupActivity : Activity() {
         root.addView(button("2. Choose the keyboard") {
             (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker()
         })
+        // The size: automatic from the screen, or a whole number of device pixels per art pixel.
+        root.addView(TextView(this).apply {
+            text = "Size"
+            setTextColor(Color.rgb(0xb4, 0xb4, 0xb4))
+            gravity = Gravity.CENTER
+            setPadding(0, pad * 2, 0, 0)
+        })
+        val sizes = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        val choices = listOf(0 to "Auto (${KeyboardView.Scale.auto(this)}x)", 1 to "1x", 2 to "2x", 3 to "3x")
+        val buttons = ArrayList<Button>()
+        fun refresh() { val cur = KeyboardView.Scale.setting(this); buttons.forEachIndexed { i, b -> b.alpha = if (choices[i].first == cur) 1f else 0.5f } }
+        for ((v, label) in choices) {
+            val b = Button(this).apply {
+                text = label
+                setOnClickListener { KeyboardView.Scale.setSetting(this@SetupActivity, v); refresh() }
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            buttons += b; sizes.addView(b)
+        }
+        refresh()
+        root.addView(sizes)
         // Somewhere to try it, so the two steps above can be checked without leaving the app.
         root.addView(EditText(this).apply {
             hint = "Try it here"

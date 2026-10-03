@@ -24,6 +24,11 @@ import android.view.View
  * other four - which is LunaCE's own `fullKeymapHeight`, the height its comment calls the
  * assets' "ideal non-scaled" size.
  *
+ * The whole of it is drawn at a whole-number [scale], the same for every picture and every
+ * letter, so a 2x keyboard is the 1x one with each of its pixels a 2 x 2 block: still nothing
+ * resampled, and the art's own size on a screen whose pixels are TouchPad-sized. Which
+ * scale is [Scale.auto]'s, or the owner's choice in the setup screen.
+ *
  * The view is taller than that by [headroom], and the extra is transparent. It is where the
  * press-and-hold balloon goes, and it has to be part of this view rather than a window of its
  * own because Android clamps a touch to the frame of the window that caught it: a finger
@@ -50,6 +55,32 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
     private val art = Art(context)
     private val handler = Handler(Looper.getMainLooper())
 
+    /**
+     * Device pixels per art pixel. [Scale.auto] picks it from the screen: the keyboard is
+     * 340 px of a TouchPad's 1024 x 768, and it keeps that share of a screen's pixels by
+     * growing with the geometric mean of the screen's two sides over the TouchPad's, rounded
+     * to whole pixels. An HP 10 G2 (1280 x 800) and a 2012 Nexus 7 come out at 1, a Nexus 5
+     * (1080 x 1920) and a Pixel Tablet (2560 x 1600) at 2 (codepoet, 2026-10-03: on those two
+     * it "could stand to be double height"), a 1920 x 1200 tablet at 2 as well.
+     */
+    val scale: Int = Scale.current(context)
+
+    object Scale {
+        const val PREFS = "keyboard"
+        const val KEY = "scale"       // 0 = automatic, else the whole number of device px per art px
+        const val MAX = 4
+        fun setting(context: Context): Int = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(KEY, 0)
+        fun setSetting(context: Context, v: Int) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putInt(KEY, v.coerceIn(0, MAX)).apply()
+        fun auto(context: Context): Int {
+            val m = android.util.DisplayMetrics()
+            @Suppress("DEPRECATION")
+            (context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager).defaultDisplay.getRealMetrics(m)
+            val long = Math.max(m.widthPixels, m.heightPixels).toFloat(); val short = Math.min(m.widthPixels, m.heightPixels).toFloat()
+            return Math.round(Math.sqrt(((long / 1024f) * (short / 768f)).toDouble()).toFloat()).coerceIn(1, MAX)
+        }
+        fun current(context: Context): Int = setting(context).let { if (it in 1..MAX) it else auto(context) }
+    }
+
     // --- Sizes ------------------------------------------------------------------------------
 
     /**
@@ -73,8 +104,8 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
      */
     val headroom get() = Math.max(0, (art.image("popup-bg-2.png")?.height ?: 150) - POPUP_TOP_TO_KEY)
 
-    /** Where the keyboard proper starts: everything above this is the balloon's room. */
-    fun keyboardTop() = height - keysHeight - topPadding
+    /** Where the keyboard proper starts, in device px: everything above this is the balloon's room. */
+    fun keyboardTop() = height - (keysHeight + topPadding) * scale
 
     // --- State ------------------------------------------------------------------------------
 
@@ -121,10 +152,12 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
     private val zones = ArrayList<Zone>()
 
     override fun onMeasure(widthSpec: Int, heightSpec: Int) {
-        setMeasuredDimension(MeasureSpec.getSize(widthSpec), headroom + topPadding + keysHeight)
+        setMeasuredDimension(MeasureSpec.getSize(widthSpec), (headroom + topPadding + keysHeight) * scale)
     }
 
-    override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
+    /** Everything inside is laid out, drawn and touched in art px: the view's size over [scale]. */
+    override fun onSizeChanged(wDev: Int, hDev: Int, ow: Int, oh: Int) {
+        val w = wDev / scale; val h = hDev / scale
         zones.clear()
         // The keys sit at the bottom, as they did on webOS, whatever room the host gave us.
         var top = (h - keysHeight).toFloat()
@@ -158,11 +191,15 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
     private val functionColor = Color.rgb(0xd2, 0xd2, 0xd2)
 
     override fun onDraw(c: Canvas) {
+        c.save()
+        c.scale(scale.toFloat(), scale.toFloat())
+        val w = width / scale; val h = height / scale
         art.image("keyboard-bg.png")?.let {
-            c.drawBitmap(it, null, RectF(0f, keyboardTop().toFloat(), width.toFloat(), height.toFloat()), null)
+            c.drawBitmap(it, null, RectF(0f, (h - keysHeight - topPadding).toFloat(), w.toFloat(), h.toFloat()), null)
         }
         for (z in zones) drawKey(c, z)
         drawExtended(c)
+        c.restore()
     }
 
     /** The plate under a key: webOS picked it by what kind of key it is. */
@@ -367,7 +404,7 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
         val h = art.image(popupBg(chars))?.height ?: 90
         val w = POPUP_LEFT + POPUP_RIGHT + perLine(chars) * POPUP_KEY_WIDTH
         val left = (z.rect.centerX() - POPUP_KEY_WIDTH / 2f - POPUP_LEFT)
-            .coerceIn(0f, Math.max(0f, width - w.toFloat()))
+            .coerceIn(0f, Math.max(0f, width / scale - w.toFloat()))
         // Above the key, which [headroom] guarantees is still inside the view.
         val top = Math.max(0f, z.rect.top - h + POPUP_TOP_TO_KEY)
         extendedFrame = RectF(left, top, left + w, top + h)
@@ -413,7 +450,7 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
-        val x = e.x; val y = e.y
+        val x = e.x / scale; val y = e.y / scale
         if (e.actionMasked == MotionEvent.ACTION_DOWN) { lastX = x; lastY = y }
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {

@@ -31,8 +31,21 @@ instead.
 
 **Or the owner's word.** The `layout` preference, `auto` (default), `phone` or `tablet`:
 
-- Device Info's Display group has a Layout row saying what was decided and from what
-  ("Phone (from the screen)"); tapping it opens the choice, and the app layout width below.
+- **Screen & Lock's Layout group**, a Screen Layout selector (Automatic, Phone, Tablet) on
+  its main view between the screen settings and Wallpaper, with a note saying what the
+  screen reads as. Choosing a layout that differs from the one showing restarts the shell.
+  This is codepoet's exception to rules 0 and 5 (2026-10-03): a TouchPad's Screen & Lock
+  had no such group, and the app is otherwise Palm's, unchanged (its NOTICE says so; the
+  addition is marked `[Lunacy]` in its source). It moved here from Device Info because a
+  screen's layout is a setting of the screen, and it should be in plain sight, not behind
+  a tap on an information row. The app's stylesheet also gained a media query so its 500 px
+  column fits a card under 540 px wide (the Nexus 5's 360), the way Device Info's
+  `max-width` column does; every footnote under a group, Palm's two included, has 6 px
+  above and 9 px below (codepoet, 2026-10-03). Lunacy's own Sounds & Alerts has the same
+  media query for its column, so it fits a phone too; Device Info already did.
+- Device Info's Display group still has a Layout row saying what was decided and from
+  what ("Phone (from the screen)"), read-only, and a Phone Zoom Width row below it that
+  opens the width (§4).
 - `palm://org.webosarchive.lunacy/system/setLayout {"layout": "phone", "appLayoutWidth": 640}`
   on the bus, Lunacy's own apps only; `system/getEnvironment` reports `layout` with the
   clues. The shell takes a change up when it next starts (the choice fixes `Luna.density`
@@ -52,12 +65,12 @@ tablets on all three.
 | Tab width | min(bar / tabs, 150) | **150**, always | The TouchPad's width; the bar **scrolls sideways** instead of squeezing, so a phone holds as many tabs as a tablet (6) |
 | Tab bar scrolling | – | a sideways drag on the bar scrolls it; tapping a tab or landing on a page scrolls that tab fully into view (250 ms InQuad, with the page snap) | The "+" for a new tab sits after the last tab in the scrolling content, held as on a tablet |
 | Permanent tabs | 4 | **2** | LunaCE won't delete its four built-in tabs; a phone can go down to two. Deleting a built-in page sends its icons to the first page, as any deletion does, and apps that would have landed on it land on the first page |
-| Cell | 128 | **84** | Four columns across a 360 px portrait, seven across its 640 px landscape |
+| Cell | 128 square | **84 wide, 112 tall** | Four columns across a 360 px portrait, seven across its 640 px landscape. The height is the TouchPad's at seven-eighths, which a 56 px icon over a two-line label needs; an 84 px square held 92 px of icon and label and each row's labels ran into the next row's icons (codepoet, 2026-10-02) |
 | Icon | 64 | **56** | Seven-eighths; a group's 68 px composite is drawn at the same size |
-| Label width | 100 | 80 | Still 14 px bold, two lines |
+| Label | 100 wide, 14 px bold | 80 wide, **13 px** bold | Two lines; the TouchPad's 14 read heavy under a 56 px icon (codepoet, 2026-10-03) |
 | Columns | LunaCE's rule from `MaxIconsPerRow` | as many cells as fit between 6 px margins, the rest shared as gaps | The TouchPad rule gives two columns at 360 |
-| Row gap, top margin | 10, 20 | 6, 12 | |
-| Launch glow, delete badge offset | 90; −50, −50 | 80; −36, −36 | Scaled with the cell |
+| Row gap, top margin, icon lift above the cell centre | 10, 20, 11 | 9, 18, 10 | Seven-eighths |
+| Launch glow, delete badge offset | 90; −50, −50 | 80; −30, −44 | The glow scaled with the icon; the badge 12 px in from the cell's corner, the TouchPad's 14 at seven-eighths. Edit mode's frame, a 128 px square on a tablet, is drawn as a nine-slice (16 px corners) to fill the taller cell |
 
 The group panel caps its columns at what the width holds (a phone's 360 holds two 118 px
 cells), and the Rename/New Tab dialog shrinks from 520 px to the width less its padding.
@@ -68,9 +81,11 @@ cells), and the Rename/New Tab dialog shrinks from 520 px to the width less its 
 |---|---|---|
 | Icons | up to 5 | **up to 4** |
 | Launcher button | its own place, 64 px in from the right edge, the icons sharing the space to its left | **the fifth of five equal slots**: the same size as the icons, no room of its own on the right |
-| Icon size | 64 | 64, or 85 % of a slot where that is narrower (61 px on a Nexus 5 portrait) |
+| Icon size | 64 | **59**, or 78 % of a slot where that is narrower (56 px on a Nexus 5 portrait); the launcher button the same |
+| Height, icon centre from the top | 100, 54 | **95, 51** |
 
-The dock stays 100 px tall. A dock saved with five icons on a tablet shows four on a phone;
+The dock is 5 % shorter and its icons 8 % smaller than the tablet's (codepoet, 2026-10-03; both
+measured against the TouchPad's dock on the Nexus 5). A dock saved with five icons on a tablet shows four on a phone;
 the fifth is kept in the saved list.
 
 ## 4. Fixed viewport, per app
@@ -85,7 +100,7 @@ Two things, each with one owner (codepoet, 2026-10-02):
 A TouchPad app is written for a 1024 × 768 screen: Palm's Clock is a 514 px face, its
 Calculator a 500 × 690 panel, Memos a 943 px grid. On a 360 px card they are simply
 clipped. With the switch **on** the page is laid out at the **fixed viewport width**
-(`FormFactor.appLayoutWidth`, default **640** px, set in Device Info's Layout dialog) and
+(`FormFactor.appLayoutWidth`, default **640** px, set in Device Info's Phone Zoom Width row) and
 the card shows it whole, scaled by card width over that width wherever the card is narrower:
 on a Nexus 5 in portrait 360 / 640 = 0.5625, 1.6875 device px per CSS px; its 640 px
 landscape card, and every tablet card, are at 1, so the switch is harmless there. With the
@@ -115,7 +130,26 @@ TouchPad portrait's height less its bars, and the 1088 px page is taller than a 
 ever was (the architecture doc's "1024 × 768, scaled to fit" would need the card's aspect
 too; 640 is the width that reads best, and it is a setting).
 
-## 5. Not yet measured
+## 5. Just Type (`JustTypePanel`)
+
+| | TouchPad | Phone |
+|---|---|---|
+| Field width | 570 | the width less 12 px margins |
+| Group width | 736 | the width less 12 px margins |
+| Tiles | 85 × 113 at a 138 px pitch from 40 px in | 85 × 113, as many to a row as fit inside the group's 14 px borders with equal gaps of at least 10 px: three across a Nexus 5 portrait (13 px gaps), six across its landscape (11 px) |
+
+The header, field height, row pitch and the "Search DuckDuckGo" row are the TouchPad's.
+Done 2026-10-03 (codepoet: "it's too wide"); nothing changes on a tablet (the launcher,
+its edit mode, the dock and Just Type checked unchanged on the Pixel Tablet the same day).
+
+**Typing opens it.** A keyboard's printable key in the card view or the launcher opens Just
+Type with that character, as on a TouchPad with a keyboard paired: `ShellActivity`'s
+`dispatchKeyEvent`, not while a card is up, a text field (a tab's or a group's name) has the
+focus, or Ctrl, Alt or Meta is held. Both form factors; checked on the Nexus 5 with
+`adb shell input keyevent KEYCODE_T` from the launcher (codepoet, 2026-10-02; done
+2026-10-03).
+
+## 6. Not yet measured
 
 - Nothing here has been put beside a Pre3 or a TouchPad in the same state; the TouchPad in
   portrait was at its lock screen when the first screenshots were taken.

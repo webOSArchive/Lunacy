@@ -49,6 +49,18 @@ adb shell am start -n org.webosarchive.lunacy/.shell.ShellActivity \
     --es launch <appid> [--es params '<json>']
 ```
 
+**Over Wi-Fi, not USB.** The development VM's USB passthrough drops during installs and
+leaves the device `offline` (CLAUDE.md). Plug in once for `adb tcpip 5555` (needed again
+after every reboot), then `adb connect <ip>:5555`, unplug, and pass `-s <ip>:5555` when
+more than one device is attached. The test devices:
+
+| Device | Address | Note |
+|---|---|---|
+| Nexus 5 (Android 6, the phone layout) | `192.168.10.195:5555` | `adb tcpip` over the cable after a reboot |
+| Nexus 7 2012 (Android 5.1.1) | `192.168.10.198:5555` | the same |
+| Pixel Tablet (Android 17, arm64 only) | `192.168.10.153:5555` | `adb tcpip` as above (it answered on 5555 on 2026-10-03); wireless debugging's pairing port varies per reboot, so prefer tcpip |
+| HP 10 G2 (Android 5.0.1, the reference) | `adb tcpip` then its address | |
+
 - `--es install <url or path>` installs a package through the same path the App Museum
   uses. To install from a local copy of the package host, serve it and forward the port:
   `python3 -m http.server 8123` in the folder, `adb reverse tcp:8123 tcp:8123`, then

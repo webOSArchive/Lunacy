@@ -147,7 +147,11 @@ Three things were learnt the hard way, each with `qemu-user`'s `-strace` or by e
   busybox binaries (busybox.net's armv7, Alpine's arm64) call `setuid` and `setgid` as every
   applet starts, and both are on bionic's blocklist: exit 159, no output, before the first
   line. `tools/build-busybox.sh` builds busybox for both ABIs with `FEATURE_SUID` off, and
-  `fetch-assets.sh` keeps that build. Keen's postinst then ran clean on the tablet.
+  `fetch-assets.sh` keeps that build. Keen's postinst then ran clean on the tablet - under
+  Android's own `/system/bin/sh`, it turned out: the static glibc build still died of
+  SIGSYS in glibc's own startup, so the tablet's root had no busybox commands and a postinst
+  that used one (webOS Account's `mount`) failed. Since 2026-10-03 the script builds against
+  bionic ([BUILDING.md](../BUILDING.md)), and every system call is one Android makes itself.
 - **qemu checks the execute bit**, and the installer keeps a package's files as they came,
   with none; the binary was "Exec format error" until `PdkHost` sets it before launch.
 - qemu needs the program run as the program (`qemu-arm -L <runtime> <binary>`), not the
@@ -270,6 +274,21 @@ toolchain (`/opt/PalmPDK/arm-gcc`), run from `/tmp` over novacom, reported and h
 | a 320 x 480 buffer | turned counter-clockwise, scaled to fit, black above and below |
 | `PDL_SetOrientation(3)` (Mandelbrot) | turns the system's banners; the app's picture doesn't move |
 
+**The same on a Pre3 (2026-10-03),** with `Workbench/probe/turnprobe` installed as a PDK app
+(an app launched by the system, not run from a shell: on webOS 2.2.4 a PDK process started
+over novacom gets no window and no accelerometer):
+
+| | the Pre3 |
+|---|---|
+| `PDL_GetScreenMetrics` | 480 x 800, 260 dpi |
+| `SDL_SetVideoMode(800, 480)` | an 800 x 480 surface |
+| an 800 x 480 buffer | turned a quarter **clockwise**, filling the screen: its top edge on the screen's right (`results/pre3-turn.png`) |
+| the accelerometer | SDL joystick 0 "webOS accelerometer", three axes; **axis 0 positive toward the right edge** (right edge down: `pre3-right.png`; left edge down: `pre3-left.png`), axis 1 positive toward the top, axis 2 about -32700 lying face up |
+
+So the two devices turn an other-shape buffer opposite ways, and `PdkWindow.orient` turns
+clockwise on a portrait device and counter-clockwise on a landscape one. The accelerometer's
+x sign that was assumed is confirmed.
+
 So the screen stays the device's way up and a buffer of the other shape is turned; a game
 that wants to be held otherwise draws itself turned (codepoet: PDK games start from
 landscape and turn themselves). Lunacy does the same: the app is told its device's screen
@@ -336,7 +355,7 @@ were lost (Dice drew nothing). Both fixed; the shell logs a batch that doesn't p
 TouchPad with a probe: one joystick named "webOS accelerometer", three axes, no buttons; at
 rest a magnitude of about 32768 (1 g); axis 1 positive toward the top of the screen, axis 2
 negative with the screen tilted back. Axis 0's sign wasn't measurable in the pose the
-TouchPad was in and is assumed positive to the right: a tilt test on the TouchPad settles it.
+TouchPad was in; a tilt test on the Pre3 (above, 2026-10-03) found it positive to the right.
 The card reads Android's accelerometer while it is the active card, turns it into the
 device's frame and those units, and sends it (`LPDK_ACCEL`); `SDL_lunacyjoystick.c` replaces
 SDL's Linux joystick driver. Readings are coalesced, latest wins.

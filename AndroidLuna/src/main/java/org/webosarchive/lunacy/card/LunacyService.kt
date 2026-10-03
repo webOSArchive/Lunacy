@@ -38,6 +38,8 @@ class LunacyService(
     private val display: () -> JSONObject,
     private val requestPermissions: (List<String>, (granted: Boolean, askAgain: Boolean) -> Unit) -> Unit,
     private val startForResult: (Intent) -> Boolean,
+    /** The layout setting changed: the shell restarts to take it up (ShellActivity.recreate). */
+    private val onLayoutChanged: () -> Unit = {},
 ) {
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     /** The two answers that take real time - Node's version is asked of Node, and a listing walks a folder - come from here. */
@@ -294,15 +296,21 @@ class LunacyService(
     /**
      * The layout setting (FormFactor): `layout` "auto", "phone" or "tablet", and
      * `appLayoutWidth`, the width in px a phone lays an app's page out at (0: the card's own).
-     * Lunacy's own apps only. The shell takes it up when it next starts.
+     * Lunacy's own apps only: Device Info, and Screen & Lock, where the layout is a setting
+     * of the screen (codepoet, 2026-10-03). A layout that comes out different from what the
+     * shell is showing restarts the shell, once the reply is on its way; the width is taken
+     * up when an app next loads a page.
      */
     private fun setLayout(caller: String, p: JSONObject): String {
         if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can set the layout (asked by $caller)", -1)
+        val before = FormFactor.of(context)
         if (p.has("layout") && !FormFactor.setSetting(context, p.optString("layout"))) {
             return Bus.error("layout is auto, phone or tablet")
         }
         if (p.has("appLayoutWidth")) FormFactor.setAppLayoutWidth(context, p.optInt("appLayoutWidth"))
-        return Bus.ok(mapOf("layout" to FormFactor.describe(context).put("appLayoutWidth", FormFactor.appLayoutWidth(context)), "restart" to true))
+        val restart = FormFactor.of(context) != before
+        if (restart) main.postDelayed({ onLayoutChanged() }, RESTART_DELAY_MS)
+        return Bus.ok(mapOf("layout" to FormFactor.describe(context).put("appLayoutWidth", FormFactor.appLayoutWidth(context)), "restart" to restart))
     }
 
     /**
@@ -339,7 +347,7 @@ class LunacyService(
      * with the same id replaces the bundled app, so the registry has the last word.
      */
     private fun ownApp(appId: String): Boolean {
-        val known = appId == "com.palm.app.deviceinfo" || appId.startsWith("org.webosarchive.lunacy")
+        val known = appId == "com.palm.app.deviceinfo" || appId == "com.palm.app.screenlock" || appId.startsWith("org.webosarchive.lunacy")
         return known && registry.get(appId)?.userInstalled == false
     }
 
@@ -432,6 +440,8 @@ class LunacyService(
         /** Lunacy's First Use app, launched by the shell on the first start (ShellActivity). */
         const val FIRST_USE_APP = "org.webosarchive.lunacy.firstuse"
         private val STORAGE = listOf(android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        /** Long enough for the setting app's reply to land and its selector to close before the shell goes. */
+        const val RESTART_DELAY_MS = 400L
         fun firstUseDone(context: Context): Boolean =
             context.getSharedPreferences("device", Context.MODE_PRIVATE).getBoolean("firstUseDone", false)
         fun setFirstUseDone(context: Context) {

@@ -21,6 +21,8 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         editor = info
+        // A size chosen in the setup screen takes effect the next time the keyboard comes up.
+        if (view?.scale != KeyboardView.Scale.current(this)) setInputView(onCreateInputView())
         view?.reset()
     }
 

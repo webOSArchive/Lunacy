@@ -29,8 +29,9 @@ import org.json.JSONObject
  *
  * Orientation (codepoet: PDK games start from landscape and turn themselves): the screen is
  * held the device's way up while the card is up, and a buffer of the other shape is turned
- * a quarter counter-clockwise, as the TouchPad does ([orient]). The app is told its device's
- * own screen, 1024 x 768 for the TouchPad.
+ * a quarter ([orient]): counter-clockwise on a TouchPad, clockwise on a Pre3, each measured
+ * on the device (Docs/pdk.md). The app is told its device's own screen, 1024 x 768 for the
+ * TouchPad, 480 x 800 for the Pre3.
  */
 @SuppressLint("ViewConstructor")
 class PdkWindow(
@@ -80,7 +81,10 @@ class PdkWindow(
     private fun orient() {
         val gw = host.width; val gh = host.height
         if (gw <= 0 || gh <= 0) return
-        turn = if ((gw >= gh) == landscapeDevice) 0 else -90
+        // The TouchPad turns an other-shape buffer counter-clockwise, the Pre3 clockwise:
+        // its top edge lands on the screen's right (measured 2026-10-03 with an 800 x 480
+        // buffer on a Pre3; the TouchPad's on 2026-10-02).
+        turn = if ((gw >= gh) == landscapeDevice) 0 else if (landscapeDevice) -90 else 90
         val o = if (landscapeDevice) "right" else "up"
         if (o != fixedOrientation) { fixedOrientation = o; shell.orientationRequested(this) }
         gl?.turn(turn)

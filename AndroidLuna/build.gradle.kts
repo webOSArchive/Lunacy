@@ -25,7 +25,7 @@ android {
         // The 64-bit flavour targets 28 (below): Android 17 warns at launch under that.
         targetSdk = 24
         versionCode = buildNumber
-        versionName = "0.4.0"
+        versionName = "0.5.0"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

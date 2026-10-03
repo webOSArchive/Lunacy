@@ -26,6 +26,15 @@ class QuickLaunch(context: Context, private val luna: Luna, private val onLaunch
     companion object {
         const val HEIGHT = 100
         const val ICON = 64
+        // On a phone (Docs/phone.md): the bar 5 % shorter and its icons, the launcher button
+        // among them, 8 % smaller (codepoet, 2026-10-03), the icon row centred as on the bar.
+        const val PHONE_HEIGHT = 95
+        const val PHONE_ICON = 59
+        const val PHONE_ICON_Y = 51
+        const val SLOT_SHARE = 0.85f      // an icon's share of a slot narrower than it, on a phone
+        const val PHONE_SLOT_SHARE = 0.78f
+        /** The bar's height in TouchPad px. */
+        fun barHeight(phone: Boolean) = if (phone) PHONE_HEIGHT else HEIGHT
         // Icon centre below the bar top: 54, level with the launcher button, measured on the
         // reference TouchPad (the 65 in LunaCE's layout settings is not what it shows).
         const val ICON_Y = 54
@@ -38,6 +47,10 @@ class QuickLaunch(context: Context, private val luna: Luna, private val onLaunch
 
     private val phone = luna.phone
     val maxItems = if (phone) PHONE_MAX_ITEMS else MAX_ITEMS
+    private val barHeight = barHeight(phone)
+    private val iconSize = if (phone) PHONE_ICON else ICON
+    private val iconY = if (phone) PHONE_ICON_Y else ICON_Y
+    private val slotShare = if (phone) PHONE_SLOT_SHARE else SLOT_SHARE
     var apps: List<AppInfo> = emptyList()
         set(v) { field = v.take(maxItems); invalidate() }
     var editing = false
@@ -57,7 +70,7 @@ class QuickLaunch(context: Context, private val luna: Luna, private val onLaunch
 
     fun cancelLaunchFeedback() { removeCallbacks(clearFeedback); feedback = -1; invalidate() }
 
-    override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(MeasureSpec.getSize(w), luna.px(HEIGHT))
+    override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(MeasureSpec.getSize(w), luna.px(barHeight))
 
     /**
      * The launcher button: on a tablet, 64 px in from the right, level with the icons; on a
@@ -80,8 +93,8 @@ class QuickLaunch(context: Context, private val luna: Luna, private val onLaunch
      */
     private fun slotRect(i: Int, count: Int): RectF {
         val slot = slotWidth(count)
-        val s = minOf(luna.px(ICON.toFloat()), slot * 0.85f)
-        val cx = slot * (i + 0.5f); val cy = luna.px(ICON_Y.toFloat())
+        val s = minOf(luna.px(iconSize.toFloat()), slot * slotShare)
+        val cx = slot * (i + 0.5f); val cy = luna.px(iconY.toFloat())
         return RectF(cx - s / 2, cy - s / 2, cx + s / 2, cy + s / 2)
     }
     private fun itemRect(i: Int, count: Int = apps.size): RectF = slotRect(i, count)
@@ -110,7 +123,7 @@ class QuickLaunch(context: Context, private val luna: Luna, private val onLaunch
         }
         // The picked-up icon, under the finger, over the dock and above it.
         if (dragging in apps.indices) {
-            val half = luna.px(ICON.toFloat()) / 2; val cy = dragY - luna.px(LIFT)
+            val half = luna.px(iconSize.toFloat()) / 2; val cy = dragY - luna.px(LIFT)
             val r = RectF(dragX - half, cy - half, dragX + half, cy + half)
             val p = android.graphics.Paint().apply { alpha = if (dragY <= 0) 128 else 255 }
             (luna.appIcon(apps[dragging]) ?: luna.image("default-app-icon.png"))?.let { c.drawBitmap(it, null, r, p) }

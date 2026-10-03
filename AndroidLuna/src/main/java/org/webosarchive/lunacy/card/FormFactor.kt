@@ -15,8 +15,8 @@ import kotlin.math.sqrt
  *
  * Decided from the screen - its size, its pixel count and its shape, which are the clues a
  * screen gives - unless the owner has said which they want: the `layout` preference,
- * "auto", "phone" or "tablet", set from the Device Info app (`system/setLayout` on Lunacy's
- * own service) or over adb (`--es layout phone`). [describe] says what was decided and why,
+ * "auto", "phone" or "tablet", set from Screen & Lock (`system/setLayout` on Lunacy's own
+ * service; Device Info shows it) or over adb (`--es layout phone`). [describe] says what was decided and why,
  * for Device Info to show.
  */
 object FormFactor {

@@ -184,7 +184,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             addAction(android.content.Intent.ACTION_PACKAGE_REPLACED)
             addDataScheme("package")
         })
-        launcher.dockHeight = luna.px(QuickLaunch.HEIGHT).toFloat()
+        launcher.dockHeight = luna.px(QuickLaunch.barHeight(luna.phone)).toFloat()
         launcher.visibility = View.INVISIBLE
         root.addView(launcher, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
         // [LunaCE] Launcher groups: the panel a group opens into.
@@ -243,7 +243,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         launcher.onDropOnDock = { app, x -> dropOnDock(app, x) }
         launcher.onEditModeChanged = { on -> quickLaunch.editing = on }
         showDock()
-        root.addView(quickLaunch, FrameLayout.LayoutParams(MATCH_PARENT, luna.px(QuickLaunch.HEIGHT)).apply { gravity = android.view.Gravity.BOTTOM })
+        root.addView(quickLaunch, FrameLayout.LayoutParams(MATCH_PARENT, luna.px(QuickLaunch.barHeight(luna.phone))).apply { gravity = android.view.Gravity.BOTTOM })
 
         // Notifications layer (reference §1.1): popup alerts, then the dashboard drop-down, under the status bar.
         statusBar = StatusBar(this, luna)
@@ -1557,7 +1557,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // Lunacy's own service, on its own name: the environment it really runs in, and
         // Android's settings screens for the settings Android owns.
         org.webosarchive.lunacy.card.LunacyService(this, registry, jsServices, jsServices.root, { displayInfo() }, ::askPermissions,
-            { intent -> runCatching { startActivityForResult(intent, 200) }.isSuccess }).register(bus)
+            { intent -> runCatching { startActivityForResult(intent, 200) }.isSuccess }, onLayoutChanged = { recreate() }).register(bus)
         org.webosarchive.lunacy.card.ConnectionManager(this).register(bus)
         // Secrets, where the accounts service keeps each account's credentials.
         org.webosarchive.lunacy.card.KeyManager(java.io.File(filesDir, "keymanager.json")).register(bus)
@@ -1804,11 +1804,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * and the dock go (reference §3.1), and the status bar says "Just Type" with its ▾, as
      * SystemUiController::updateStatusBarTitle has it.
      */
-    private fun openJustType() {
+    private fun openJustType(initial: String = "") {
         if (cards.maximized != null) return
         if (launcherOpen) closeLauncher()
         justTypePanel.apps = registry.launchPoints + androidById.values
-        justTypePanel.open()
+        justTypePanel.open(initial)
         fade(justType, false); showDock(false)
         statusBar.setMode(StatusBar.Mode.APP)
         statusBar.title = "Just Type"
@@ -1861,7 +1861,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     /** The dock slides by its own height and fades (quickLaunchDuration, quickLaunchFadeDuration). */
     private fun showDock(show: Boolean) {
-        val h = quickLaunch.height.toFloat().takeIf { it > 0 } ?: luna.px(QuickLaunch.HEIGHT).toFloat()
+        val h = quickLaunch.height.toFloat().takeIf { it > 0 } ?: luna.px(QuickLaunch.barHeight(luna.phone)).toFloat()
         quickLaunch.animate().cancel()
         if (show) quickLaunch.visibility = View.VISIBLE
         quickLaunch.animate().translationY(if (show) 0f else h).setDuration(DOCK_MS).setInterpolator(Easing.OutCubic).start()
@@ -1901,6 +1901,25 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         /** Package installers apps hand .ipks to: Preware on webOS, and LuneOS's Preware. */
         val INSTALLERS = setOf("org.webosinternals.preware", "org.webosports.app.preware")
         const val IPK_MIME = "application/vnd.webos.ipk"
+    }
+
+    /**
+     * Just type: a keyboard's printable key in the card view or the launcher opens Just Type
+     * with that character, as on a TouchPad with a keyboard paired (codepoet, 2026-10-02).
+     * Not while a card is up, a text field (a tab's name, a group's) has the focus, or a
+     * modifier is held.
+     */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN && !justTypePanel.showing && cards.maximized == null &&
+            !exhibitionOn && !tabDialog.showing && currentFocus !is android.widget.EditText &&
+            !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed) {
+            val ch = event.unicodeChar
+            if (ch != 0 && (ch and android.view.KeyCharacterMap.COMBINING_ACCENT) == 0 && !Character.isISOControl(ch) && !Character.isWhitespace(ch)) {
+                openJustType(String(Character.toChars(ch)))
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     /** A hardware keyboard's Escape is webOS's back gesture, delivered to the maximized card. */

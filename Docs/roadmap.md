@@ -685,8 +685,24 @@ per-app code.
 - ~~A glibc/SDL 1.2/PDL loader over Android (apkenv in reverse).~~ Started 2026-10-02: the
   binaries run as they are on 32-bit ARM, through the glibc loader with SDL 1.2 rebuilt to
   talk to the shell and Lunacy's own libpdl; Commander Keen plays on the Nexus 5
-  ([pdk.md](pdk.md)). Open: SDL_mixer/image/ttf, GLES, the bus from PDL, and an emulator
-  (possibly a companion APK, codepoet) for 64-bit-only SoCs.
+  ([pdk.md](pdk.md)). Since done, the same day: SDL_mixer, SDL_image, SDL_ttf, SDL_net and
+  the image and font libraries apps link by name; GLES 1.1 and GLES 2 streamed to the shell
+  and replayed into a framebuffer of the app's own size; the TouchPad's way of showing a
+  buffer, measured on it; the accelerometer as SDL joystick 0; qemu for 64-bit-only devices,
+  inside the arm64 APK. Codepoet's first tests passed.
+- **Next:**
+  - **Hybrid apps**: web apps that embed a PDK plugin (`<object type="application/x-palm-remote">`),
+    the plugin drawing into a region of the page and called from JavaScript. The chess app
+    tried on 2026-10-02 is one.
+  - **OpenSSL 0.9.8 and curl**: about 50 apps link `libcrypto.so.0.9.8`, `libssl.so.0.9.8`
+    or `libcurl.so.4`, which the runtime doesn't provide yet.
+  - **The accelerometer's x sign**: assumed positive to the right; one tilt of the TouchPad
+    with the joystick probe settles it.
+  - **`PDL_ServiceCall` to the bus**, as JS services have it.
+  - **A keyboard** for apps that ask for one (`PDL_SetKeyboardState`).
+  - **The launcher's runnable state** for a `pdk` app where the runtime is absent.
+  - **The Pre3 profile's turn**: a buffer of the other shape is assumed to turn
+    counter-clockwise as on the TouchPad; a Pre3 would confirm it.
 
 **Exit:** a handful of well-known PDK apps run at full speed on a current device. The
 corpus survey says how many apps this phase can reach, and whether it is worth doing.

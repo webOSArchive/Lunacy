@@ -617,6 +617,8 @@ work started ahead of phases 1 and 2. The shell is the strongest signal that thi
     2026-10-02; `Launcher.Phone`, [phone.md](phone.md)).
   - Just Type responds to keyboard input immediately, the first keystroke opening it with
     that character, as on the TouchPad (codepoet, 2026-10-02).
+  - the Just Type panel (its results) laid out for phone mode (codepoet, 2026-10-02;
+    [phone.md](phone.md)).
 
 Planned scope:
 

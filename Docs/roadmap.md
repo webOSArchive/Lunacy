@@ -612,7 +612,9 @@ work started ahead of phases 1 and 2. The shell is the strongest signal that thi
   - card groups/stacks;
   - banners and the dashboard;
   - landscape and portrait layouts;
-  - status bar menus.
+  - status bar menus;
+  - phone layout: the launcher's icon grid needs more vertical spacing (codepoet,
+    2026-10-02; `Launcher.Phone`, [phone.md](phone.md)).
 
 Planned scope:
 

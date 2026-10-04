@@ -39,10 +39,22 @@
 		return null;
 	}
 	var opts = { capture: true, passive: false };  // Chromium 37 reads this as capture=true
+	// Text editing - the caret, holding in a field, selection and its popup - is textedit.js's.
+	// A touch that starts on its popup or handles is its own and the page never hears of it.
+	var edit = null, editTouch = false;
+	function E() { return edit || (edit = window.__lunacyEdit || null); }
 	document.addEventListener("touchstart", function (ev) {
-		if (ev.touches.length > 1) { st = null; return; }  // leave multi-touch (pinch) alone
+		if (ev.touches.length > 1) { st = null; if (E()) { E().moved(); } return; }  // leave multi-touch (pinch) alone
 		var t = ev.changedTouches[0];
+		if (E() && E().owns(t)) {
+			st = null; editTouch = true;
+			E().uiTouch("start", t, t.target);
+			ev.preventDefault();
+			return;
+		}
+		editTouch = false;
 		st = { x: t.clientX, y: t.clientY, target: t.target, moved: false, t: Date.now(), px: t.clientX, py: t.clientY };
+		if (E()) { E().down(t, t.target); }
 		samples = []; sample(t);
 		fire("mouseover", t, t.target);
 		// Enyo cancels every mousedown and moves the focus itself on the mouseup
@@ -72,6 +84,7 @@
 		return dx * dx + dy * dy < radius * radius;
 	}
 	document.addEventListener("touchmove", function (ev) {
+		if (editTouch) { E().uiTouch("move", ev.changedTouches[0]); ev.preventDefault(); return; }
 		if (!st) { return; }
 		var t = ev.changedTouches[0];
 		sample(t);
@@ -79,6 +92,7 @@
 		if (!st.moved) {
 			if (stillATap(t)) { return; }
 			st.moved = true;
+			if (E()) { E().moved(); }
 		} else if (t.clientX === st.px && t.clientY === st.py) {
 			return;
 		}
@@ -131,6 +145,13 @@
 	}
 
 	function end(ev) {
+		if (editTouch) {
+			var u = ev.changedTouches[0];
+			editTouch = false;
+			E().uiTouch("end", u, ev.type === "touchend" ? document.elementFromPoint(u.clientX, u.clientY) : null);
+			ev.preventDefault();
+			return;
+		}
 		if (!st) { return; }
 		var t = ev.changedTouches[0], target = under(t);
 		// The flick goes first, before the mouseup, as LunaSysMgr delivered it: Mojo's
@@ -154,6 +175,7 @@
 			// So the decision waits until the tap has been handled, and stands only if
 			// nothing took focus in the meantime.
 			if (!f && !st.enyoFocus) { afterTap(st.target, before); }
+			if (E()) { E().tapped(t, st.target); }
 		}
 		fire("mouseout", t, target);
 		st = null;

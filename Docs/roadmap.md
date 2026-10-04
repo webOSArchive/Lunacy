@@ -15,10 +15,10 @@ app"). Open: Add to Launcher (`addLaunchPoint`), the download manager's history,
 TouchPad's default bookmarks. Against the TouchPad's Web app the action bar's contents sit
 3 px low, an engine difference left as it is ([luna-deltas.md](luna-deltas.md) A12).
 The Edit menu's Paste works in Mojo and Enyo apps, and Enyo no longer swallows the first tap
-after a field is focused ([fix-log.md](fix-log.md)). Open: text can't be selected by touch -
-the compat layer cancels every touch to give apps webOS's mouse events, so a long press
-selects nothing, and only Select All makes a selection. Waiting on codepoet: how a long press
-on text behaved on the TouchPad (word selection, handles, a popup?), before anything is built.
+after a field is focused ([fix-log.md](fix-log.md)). Text selection and the hold popup are webOS's, measured on the TouchPad with codepoet
+(architecture.md, "Text editing"): tap to place the caret, hold for Select / Select All /
+Paste, handles, Cut / Copy, double tap. In the Web app, holding on page text gives
+Android's own selection, kept by codepoet's decision ([luna-deltas.md](luna-deltas.md) A13).
 
 **2026-10-03: 0.5.0.** Both Lunacy APKs and the keyboard are 0.5.0, built without the test apps. codepoet's pre-release list, and the phone layout finished. Mojo lists coast
 again: the compat layer sent its synthesised flick *after* the mouseup, which Mojo's gesture

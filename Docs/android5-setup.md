@@ -46,6 +46,7 @@ and the screen was turned to landscape (`user_rotation 3`) and back to how it wa
 | adb over Wi-Fi at `192.168.10.34:5555` (2026-10-04) | `adb tcpip 5555` over the cable, then `adb connect`; the VM's USB hung `adb shell` right after the switch, but the Wi-Fi connection worked | Reset by a reboot |
 | Android's wallpaper replaced by Lunacy's (2026-10-04) | The 32-bit build with `HostWallpaper` installed over Wi-Fi; Screen & Lock's "Use on Android" turned on over DevTools (`Workbench/cdp.sh`), the webOS wallpaper changed to 05.jpg and back to 22.jpg, the switch turned off. Android 5's lock screen showed 22.jpg | Android's wallpaper is 22.jpg; the previous one is gone. The switch is off (`shared_prefs/hostwallpaper.xml`) |
 | Lunacy with the Web app installed, twice (2026-10-04) | `adb install -r` of the 32-bit build over Wi-Fi; the Web app opened on Wikipedia and its bookmarks drawer opened and closed | The factory WebView (Chromium 37) draws the pages; Android 5's certificate store refuses Wikipedia's chain, which Lunacy's bundled roots accept. No bookmarks or files were added |
+| Text-editing build installed (2026-10-04) | `adb install -r` of the 32-bit build over Wi-Fi; the Web app's address bar given test text over DevTools, held, selected and copied | Android's clipboard holds "bravo" |
 
 The **CPU governor cannot be changed** on this device: there is no `su`, and
 `/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor` is MediaTek's `hotplug` (idling at
@@ -244,6 +245,11 @@ For the Web app's look (2026-10-04). On the **reference TouchPad**: its Web app 
 Wikipedia's webOS page over the bus (the card left open), and `…lunacy.enyoprobe` 0.0.1 installed
 with `palm-install` and run. On the **HP 10 G2**, inside Lunacy: the same probe installed through
 `--es install` from the workstation (`python3 -m http.server`, stopped afterwards) and run.
+
+For text selection (2026-10-04). On the **reference TouchPad**, by codepoet's hand: a memo
+written in Memos ("Jon was here this is complicated but I get it") and its words held, selected,
+copied and pasted; the Web app opened on blog.jonandnic.com and page text held; Preware or IAmA
+reddit tried. Screenshots under `Workbench/results/tp-sel-*`.
 
 ## Pixel Tablet, Android 17 (2026-10-01)
 

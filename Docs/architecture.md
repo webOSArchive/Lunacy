@@ -536,6 +536,19 @@ product; being "close enough" is not the goal.
 - **`palmGetResource(url, hint)`** takes an absolute URL. It returns the parsed object with a
   `json` hint, the text otherwise, and `null` for a missing or disallowed file (measured on
   a TouchPad).
+- **Text editing** (`assets/lunacy/textedit.js`). The compat layer cancels every touch to give
+  apps webOS's mouse events, so the engine never places a caret or selects anything. What the
+  TouchPad's system did in every editable field, Enyo or Mojo alike, is done here instead, as
+  measured on the reference TouchPad: a tap puts the caret under the finger; holding a second
+  puts it there and shows "Select | Select All" (with "| Paste" when the clipboard has text)
+  under it; Select and Select All highlight in yellow at 60% with a grey handle at each end; a
+  touch on the selection or a dragged handle shows "Cut | Copy"; a double tap selects a word
+  without handles; a tap elsewhere clears it all. The popup is drawn to the TouchPad's
+  measurements and goes over the text where there is no room under it. An input or textarea is
+  measured through a copy laid over it for a moment, since a page can't see where its text
+  is. Touches that start on the popup or a handle are taken by position, not by their target:
+  the engine gives a touch a few px from a focused field to the field. Text that isn't
+  editable can't be selected in an app, as on the TouchPad.
 - **Two Enyo code paths.** Enyo behaves differently when `PalmSystem` exists: for example,
   it focuses inputs through `PalmSystem.simulateMouseClick`. Lunacy provides `PalmSystem`, so
   that is the path the fork is fixed and tested on.

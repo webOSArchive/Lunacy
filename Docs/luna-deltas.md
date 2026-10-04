@@ -264,6 +264,10 @@ A text button keeps its padding, so its client's margins stay inside it on both 
 
 **If it is revisited:** a compat-layer rule beside A11's pass: for an element whose parent is a `-webkit-box` and which has no top (or bottom) padding or border, its first (or last) in-flow child's top (or bottom) margin is taken as zero. Measure a second case on the TouchPad first (a vertical box, and a child that isn't a ToolButton) before making it general.
 
+### A13. Selecting text in a web page, in the Web app
+
+**A deliberate delta, codepoet's decision, 2026-10-04 ("i like it").** On the reference TouchPad, holding on a web page's text in the Web app selects the word, shows both handles and a "Copy" popup over it, all at once (`Workbench/results/tp-sel-6-landscape.png`). In Lunacy the page is drawn by Android's own WebView (Enyo patch 0005), and holding on its text gives Android's selection: its teardrop handles and its floating toolbar. Fields - the Web app's address bar included, and every field in an app - behave as the TouchPad's (architecture.md, "Text editing"). The community's patch that adds a menu for holding on a page's white space is not reproduced either; the stock browser had none.
+
 ## B. The shell
 
 ### B1. Card view: stacks, reorder, dimming, the angry card

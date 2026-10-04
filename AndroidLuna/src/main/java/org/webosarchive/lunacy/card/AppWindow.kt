@@ -462,6 +462,13 @@ open class AppWindow(
         fun addBanner(message: String, params: String, icon: String, soundClass: String, soundFile: String, duration: Int): Int =
             host.addBanner(this@AppWindow, message, params, icon, soundClass, soundFile, duration)
         @JavascriptInterface fun paste() { main.post { host.paste(this@AppWindow) } }
+        /** Whether Android's clipboard has text: the hold popup offers Paste only then. */
+        @JavascriptInterface
+        fun clipboardHasText(): Boolean = runCatching {
+            (context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).let {
+                it.hasPrimaryClip() && (it.primaryClipDescription?.let { d -> d.hasMimeType("text/*") } ?: false)
+            }
+        }.getOrDefault(false)
         /** A page's copy or cut, which this engine won't put on the clipboard itself. */
         @JavascriptInterface
         fun setClipboard(text: String) {

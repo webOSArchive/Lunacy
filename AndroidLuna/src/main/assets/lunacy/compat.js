@@ -29,7 +29,7 @@
 		var e = document.createEvent("MouseEvents");
 		e.initMouseEvent(type, true, true, window, 1, t.screenX, t.screenY, t.clientX, t.clientY,
 			false, false, false, false, 0, null);
-		target.dispatchEvent(e);
+		return target.dispatchEvent(e);
 	}
 	function under(t) { return document.elementFromPoint(t.clientX, t.clientY) || (st && st.target) || document.body; }
 	function focusable(el) {
@@ -45,7 +45,11 @@
 		st = { x: t.clientX, y: t.clientY, target: t.target, moved: false, t: Date.now(), px: t.clientX, py: t.clientY };
 		samples = []; sample(t);
 		fire("mouseover", t, t.target);
-		fire("mousedown", t, t.target);
+		// Enyo cancels every mousedown and moves the focus itself on the mouseup
+		// (enyo.gesture.tryFocus), keeping it where a control asks - its Edit menu does, so
+		// that Cut, Copy and Paste reach the field they are for. On such a page the tap-away
+		// rule below would second-guess it.
+		st.enyoFocus = !fire("mousedown", t, t.target) && !!(window.enyo && enyo.gesture);
 		ev.preventDefault();
 	}, opts);
 	// A move reaches the page only once the finger has really gone somewhere, as LunaSysMgr's
@@ -97,7 +101,17 @@
 	 * tap changes nothing about focus, so no focusin comes and the keyboard has to be asked
 	 * for here.
 	 */
+	// Mojo's popups - the app menu and its Edit submenu, pickers - are drawn over the scene and
+	// act on the field that has the focus: Edit's Cut, Copy and Paste are greyed out the moment
+	// no text field is focused. A tap in one is not a tap away.
+	function inMojoPopup(el) {
+		for (; el && el.nodeType === 1; el = el.parentNode) {
+			if ((" " + el.className + " ").indexOf(" palm-popup-container ") >= 0) { return true; }
+		}
+		return false;
+	}
 	function afterTap(target, before) {
+		if (inMojoPopup(target)) { return; }
 		setTimeout(function () {
 			var now = document.activeElement;
 			var tell = window.__lunacyFieldTapped;
@@ -139,7 +153,7 @@
 			// typed into, because the field was focused and then blurred a line later.
 			// So the decision waits until the tap has been handled, and stands only if
 			// nothing took focus in the meantime.
-			if (!f) { afterTap(st.target, before); }
+			if (!f && !st.enyoFocus) { afterTap(st.target, before); }
 		}
 		fire("mouseout", t, target);
 		st = null;

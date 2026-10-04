@@ -151,13 +151,22 @@
 		markFirstUseDone: function () {},
 		setAlertSound: function () {},
 		enableDockMode: function () {},
-		// Enyo uses these to focus inputs. On webOS the host injected a real click; the spike
-		// focuses the element under the point.
+		// Enyo and Mojo focus a field with these: on webOS the host put a real mousedown and
+		// mouseup into the page at the point, and the field took focus from them. The events
+		// matter as well as the focus. Enyo marks itself "focusing" before the call and only
+		// clears it on the mouseup that follows (enyo.gesture.mouseup); without one the next
+		// tap the user made was swallowed instead, and a tap away from a field did nothing.
+		// Mojo makes the call with its own mouse handling switched off, so the events go out
+		// now, inside the call, as they did there.
 		useSimulatedMouseClicks: function () {},
 		simulateMouseClick: function (x, y, down) {
-			if (down) { return; }
 			var el = document.elementFromPoint(x, y);
-			if (el && el.focus) { el.focus(); }
+			if (!el) { return; }
+			var e = document.createEvent("MouseEvents");
+			e.initMouseEvent(down ? "mousedown" : "mouseup", true, true, window, 1, x, y, x, y,
+				false, false, false, false, 0, null);
+			el.dispatchEvent(e);
+			if (!down && el.focus) { el.focus(); }
 		}
 	};
 	// On a device PalmSystem is a host object, and none of its members enumerate: a page that
@@ -344,8 +353,10 @@
 	// The rest of the PalmSystem surface measured on a TouchPad (docs/spike-1.md). Calls with no
 	// Lunacy equivalent yet are logged no-ops, so apps don't throw; the log shows what's used.
 	// The clipboard. paste() pastes the system clipboard into the focused field of whichever
-	// card is up (LunaSysMgr sent it to the active window, not the caller); copiedToClipboard()
-	// says "Selection Copied" in a banner; pastedFromClipboard() did nothing on a device.
+	// card is up (LunaSysMgr sent it to the active window, not the caller - a Mojo card's
+	// framework runs in the app's own page, so that is where Mojo's Edit menu calls it from);
+	// copiedToClipboard() says "Selection Copied" in a banner; pastedFromClipboard() did
+	// nothing on a device.
 	define(PalmSystem, "paste", function () { N.paste(); });
 	define(PalmSystem, "copiedToClipboard", function () { N.copiedToClipboard(); });
 	define(PalmSystem, "pastedFromClipboard", function () {});

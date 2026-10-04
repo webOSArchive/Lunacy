@@ -20,6 +20,7 @@ import java.io.File
  * honest about which is which (Docs/architecture.md, "Luna bus").
  *
  * - `system/getEnvironment` reports what Lunacy actually runs on, for Lunacy's Device Info.
+ * - `system/setHostWallpaper` is the opt-in to Android's wallpaper following webOS's.
  * - `android/openSettings` hands a setting that belongs to the host OS to Android's own UI.
  * - `permissions/status` and `permissions/request` are Android's runtime permissions, for
  *   Lunacy's First Use; `firstUse/done` is how First Use says it has run.
@@ -40,6 +41,8 @@ class LunacyService(
     private val startForResult: (Intent) -> Boolean,
     /** The layout setting changed: the shell restarts to take it up (ShellActivity.recreate). */
     private val onLayoutChanged: () -> Unit = {},
+    /** How to read the wallpaper the shell shows, for [HostWallpaper]; asked on the main thread. */
+    private val wallpaper: () -> () -> java.io.InputStream = { { throw java.io.FileNotFoundException("no wallpaper") } },
 ) {
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     /** The two answers that take real time - Node's version is asked of Node, and a listing walks a folder - come from here. */
@@ -51,6 +54,7 @@ class LunacyService(
         bus.register(SERVICE, "system/setDeviceId") { caller, p, reply -> reply(setDeviceId(caller, p)) }
         bus.register(SERVICE, "system/setLayout") { caller, p, reply -> reply(setLayout(caller, p)) }
         bus.register(SERVICE, "system/setFixedViewport") { caller, p, reply -> reply(setFixedViewport(caller, p)) }
+        bus.register(SERVICE, "system/setHostWallpaper") { caller, p, reply -> setHostWallpaper(caller, p, reply) }
         bus.register(SERVICE, "android/openSettings") { _, p, reply -> reply(openSettings(p.optString("panel"))) }
         bus.register(SERVICE, "android/settingsPanels") { _, _, reply ->
             reply(Bus.ok(mapOf("panels" to org.json.JSONArray(PANELS.keys.sorted()))))
@@ -195,6 +199,7 @@ class LunacyService(
         j.put("webview", webView())
         j.put("display", display())
         j.put("layout", FormFactor.describe(context).put("appLayoutWidth", FormFactor.appLayoutWidth(context)))
+        j.put("hostWallpaper", HostWallpaper.isOn(context))
         j.put("software", FixedViewport.describe(context, registry.apps.filter { it.androidComponent == null }.sortedBy { it.title.lowercase() }))
         return j.toString()
     }
@@ -324,6 +329,27 @@ class LunacyService(
         val app = registry.get(id) ?: return Bus.error("No app $id")
         FixedViewport.set(context, id, if (p.has("on")) p.optBoolean("on") else null)
         return Bus.ok(mapOf("id" to id, "on" to FixedViewport.isOn(context, id), "default" to FixedViewport.default(id), "title" to app.title))
+    }
+
+    /**
+     * Whether Android's wallpaper follows webOS's ([HostWallpaper]): `on` true or false.
+     * Lunacy's own apps only. Turning it on sets Android's wallpaper straight away, and the
+     * reply waits for that, so a device that refuses says so.
+     */
+    private fun setHostWallpaper(caller: String, p: JSONObject, reply: (String) -> Unit) {
+        if (!ownApp(caller)) return reply(Bus.error("Only Lunacy's own apps can set Android's wallpaper (asked by $caller)", -1))
+        if (!p.has("on")) return reply(Bus.error("on is required"))
+        val on = p.optBoolean("on")
+        if (!on) {
+            HostWallpaper.setOn(context, false)
+            return reply(Bus.ok(mapOf("on" to false)))
+        }
+        val open = wallpaper()
+        worker.execute {
+            val failed = HostWallpaper.apply(context, open)
+            if (failed == null) HostWallpaper.setOn(context, true)
+            main.post { reply(failed?.let { Bus.error(it) } ?: Bus.ok(mapOf("on" to true))) }
+        }
     }
 
     private fun setDeviceId(caller: String, p: JSONObject): String {

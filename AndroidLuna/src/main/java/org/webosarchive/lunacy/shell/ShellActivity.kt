@@ -1299,6 +1299,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
     }
 
+    /** Reads the wallpaper [showWallpaper] shows: the owner's pick, else the one Lunacy ships. */
+    private fun wallpaperSource(): () -> java.io.InputStream {
+        val chosen = systemService.fileOf(systemService.get("wallpaper") as? JSONObject)
+        return { chosen?.inputStream() ?: assets.open("luna/wallpapers/${Luna.DEFAULT_WALLPAPER}") }
+    }
+
     /**
      * A stored preference the shell owns. webOS worked the same way: the service keeps the
      * key, and whoever owns the thing it names acts on it. Keys nothing here owns are kept
@@ -1306,7 +1312,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      */
     private fun onPreferenceChanged(key: String, value: Any?) {
         when (key) {
-            "wallpaper" -> showWallpaper()
+            "wallpaper" -> {
+                showWallpaper()
+                // Android's own wallpaper follows, if the owner asked (Screen & Lock).
+                if (org.webosarchive.lunacy.card.HostWallpaper.isOn(this)) {
+                    val open = wallpaperSource()
+                    Thread { org.webosarchive.lunacy.card.HostWallpaper.follow(applicationContext, open) }.start()
+                }
+            }
             // webOS's Auto Dim: the display owner acts on it, and here that is Android's.
             "enableALS" -> displayService.setAutomaticBrightness(value == true)
         }
@@ -1557,7 +1570,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // Lunacy's own service, on its own name: the environment it really runs in, and
         // Android's settings screens for the settings Android owns.
         org.webosarchive.lunacy.card.LunacyService(this, registry, jsServices, jsServices.root, { displayInfo() }, ::askPermissions,
-            { intent -> runCatching { startActivityForResult(intent, 200) }.isSuccess }, onLayoutChanged = { recreate() }).register(bus)
+            { intent -> runCatching { startActivityForResult(intent, 200) }.isSuccess }, onLayoutChanged = { recreate() },
+            wallpaper = ::wallpaperSource).register(bus)
         org.webosarchive.lunacy.card.ConnectionManager(this).register(bus)
         // Secrets, where the accounts service keeps each account's credentials.
         org.webosarchive.lunacy.card.KeyManager(java.io.File(filesDir, "keymanager.json")).register(bus)

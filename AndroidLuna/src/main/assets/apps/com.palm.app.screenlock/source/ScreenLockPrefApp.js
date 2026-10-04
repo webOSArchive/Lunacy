@@ -53,7 +53,13 @@ enyo.kind({
 	        	{kind: "RowGroup", caption:$L("Wallpaper"),
 	        		components: [
 	        		             {kind: "Item", tapHighlight: true, layoutKind: "HFlexLayout", onclick:"launchFilePicker", components: [{content: $L("Change Wallpaper")}]},
+	        		             // [Lunacy] Android's own wallpaper follows this one, if the owner wants it.
+	        		             {kind: "Item", tapHighlight: false, layoutKind: "HFlexLayout", components: [
+	        		             	{flex:1, content: $L("Use on Android")},
+	        		             	{kind: "ToggleButton", name:"hostWallpaper", state:false, onChange:"toggleHostWallpaper"}
+	        		             ]}
 	        	]},
+	        	{content: $L("Android's home and lock screens show this wallpaper too."), className:"accounts-gestures-text"},
 	        	{kind: "RowGroup", caption:$L("Advanced Gestures"), components: [
 	        	                                        					{kind: "Item", tapHighlight: false, layoutKind: "HFlexLayout", components: [
 	        	                                        						{flex:1, content: $L("Enable Gestures")},
@@ -123,7 +129,8 @@ enyo.kind({
 					// [Lunacy] The layout setting lives on Lunacy's own service.
 					{kind:"PalmService", service:"palm://org.webosarchive.lunacy/", components:[
 						{name:"getEnvironment", method:"system/getEnvironment", onResponse:"handleGetEnvironment"},
-						{name:"setLayout", method:"system/setLayout", onResponse:"handleSetLayout"}
+						{name:"setLayout", method:"system/setLayout", onResponse:"handleSetLayout"},
+						{name:"setHostWallpaper", method:"system/setHostWallpaper", onResponse:"handleSetHostWallpaper"}
 					]},
 						{name:'imagePicker', kind: "FilePicker", fileType:["image"], onPickFile: "selectedImageFile"},                  
 	    				{kind:"SetPasswordDialog", lazy:false, onCancel:"handleSetPasswordCancel", onDone:"handleSetPasswordDone"},                 
@@ -198,6 +205,9 @@ enyo.kind({
 	},
 	// [Lunacy] The layout: what the shell decided and why, and the owner's word over it.
 	handleGetEnvironment: function(inSender, inResponse) {
+		if (inResponse && inResponse.hostWallpaper !== undefined) {
+			this.$.hostWallpaper.setState(inResponse.hostWallpaper);
+		}
 		var y = inResponse && inResponse.layout;
 		if (!y) { return; }
 		var name = {phone: $L("phone"), tablet: $L("tablet")};
@@ -211,6 +221,16 @@ enyo.kind({
 	handleSetLayout: function(inSender, inResponse) {
 		if (!inResponse || !inResponse.returnValue) {
 			this.showDialog((inResponse && inResponse.errorText) || $L("Unable to set the layout"));
+			this.$.getEnvironment.call({});
+		}
+	},
+	// [Lunacy] Android's wallpaper following webOS's.
+	toggleHostWallpaper: function(inSender, inEvent) {
+		this.$.setHostWallpaper.call({on: inSender.getState()});
+	},
+	handleSetHostWallpaper: function(inSender, inResponse) {
+		if (!inResponse || !inResponse.returnValue) {
+			this.showDialog((inResponse && inResponse.errorText) || $L("Unable to set Android's wallpaper"));
 			this.$.getEnvironment.call({});
 		}
 	},

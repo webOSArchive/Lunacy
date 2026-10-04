@@ -43,6 +43,8 @@ and the screen was turned to landscape (`user_rotation 3`) and back to how it wa
 | LunaKeyboard enabled and selected | `adb shell ime enable`/`ime set org.webosarchive.keyboard/.KeyboardService`; testing the companion keyboard | Left selected. Was `com.google.android.inputmethod.latin/.LatinIME`; `ime set` that to put it back |
 | Daydream on, screen saver set to **Lunacy Exhibition** | Settings → Display → Daydream; testing the Exhibition dream | Left on and selected (`screensaver_components org.webosarchive.lunacy/…ExhibitionDream`) |
 | `setprop debug.hwui.profile true` | Per-frame timings for the card animations (`dumpsys gfxinfo`) | Set back to `false`. It is a property, so a reboot clears it anyway |
+| adb over Wi-Fi at `192.168.10.34:5555` (2026-10-04) | `adb tcpip 5555` over the cable, then `adb connect`; the VM's USB hung `adb shell` right after the switch, but the Wi-Fi connection worked | Reset by a reboot |
+| Android's wallpaper replaced by Lunacy's (2026-10-04) | The 32-bit build with `HostWallpaper` installed over Wi-Fi; Screen & Lock's "Use on Android" turned on over DevTools (`Workbench/cdp.sh`), the webOS wallpaper changed to 05.jpg and back to 22.jpg, the switch turned off. Android 5's lock screen showed 22.jpg | Android's wallpaper is 22.jpg; the previous one is gone. The switch is off (`shared_prefs/hostwallpaper.xml`) |
 
 The **CPU governor cannot be changed** on this device: there is no `su`, and
 `/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor` is MediaTek's `hotplug` (idling at
@@ -266,6 +268,7 @@ WebView 149.0.7827.5 (153.0.8010.36 by 2026-10-02). The memory limiter reports i
 | Lunacy with the WebSQL polyfill installed (2026-10-02) | `adb install -r out/AndroidLuna-arm64-debug.apk` over Wi-Fi, then a force-stop and restart | Apollo now reaches its sign-in page and its settings survive a restart. The contract probe (arity, the two-argument open, `no such table: nosuchtable`, rollback, `changeVersion`) was run inside Apollo's card over DevTools; its two probe databases were deleted from `files/websql/com.jmtk.apollo/` afterwards. |
 | Hello installed again, Quick Tip Calculator installed | `--es install` from the package mirror, as above | Hello (an Ares app) for the Mojo initialisation error; Quick Tip Calculator 1.0.1 as a Mojo app whose page carries the tag itself, to check the normal path after the mojo.js prelude. |
 | 64-bit Node and busybox checked | `run-as org.webosarchive.lunacy`, running `liblunacynode.so -e …` (Node 12.19.0, arm64) and busybox through a temporary symlink named `busybox` in the app's data folder, removed afterwards | The webOS root had already linked `/bin/sh` and `/bin/busybox` to the arm64 busybox. |
+| Android's wallpaper replaced by Lunacy's (2026-10-04) | the 64-bit build with `HostWallpaper` installed over Wi-Fi; Screen & Lock's "Use on Android" tapped on, the webOS wallpaper changed to 05.jpg and back to 22.jpg over DevTools (`Workbench/cdp.sh`), then the switch turned off | Android 17 took both home and lock (`which = 3`), and the lock screen showed 22.jpg. The Pixel's own wallpaper (a GradientColorWallpaper on the lock screen) is gone; 22.jpg stays on both until it is changed in Android's settings. The switch is off (`shared_prefs/hostwallpaper.xml`). |
 
 ## Nexus 5 test phone (2026-09-23)
 

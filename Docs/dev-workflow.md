@@ -59,7 +59,7 @@ more than one device is attached. The test devices:
 | Nexus 5 (Android 6, the phone layout) | `192.168.10.195:5555` | `adb tcpip` over the cable after a reboot |
 | Nexus 7 2012 (Android 5.1.1) | `192.168.10.198:5555` | the same |
 | Pixel Tablet (Android 17, arm64 only) | `192.168.10.153:5555` | `adb tcpip` as above (it answered on 5555 on 2026-10-03); wireless debugging's pairing port varies per reboot, so prefer tcpip |
-| HP 10 G2 (Android 5.0.1, the reference) | `adb tcpip` then its address | |
+| HP 10 G2 (Android 5.0.1, the reference) | `192.168.10.34:5555` | `adb tcpip` over the cable after a reboot (it answered there on 2026-10-04) |
 
 - `--es install <url or path>` installs a package through the same path the App Museum
   uses. To install from a local copy of the package host, serve it and forward the port:

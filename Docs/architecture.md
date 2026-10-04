@@ -621,6 +621,13 @@ so it has no icon but still runs, still answers `listApps` and can still be laun
   `{wallpaperName, wallpaperFile, wallpaperThumbFile}` - the shape the reference TouchPad's own
   preference has. Lunacy ships the TouchPad's wallpapers into `/media/internal/wallpapers/`,
   where a device kept them, so there is something to pick on a fresh install.
+- **Android's wallpaper, opt-in.** Screen & Lock's "Use on Android" (a [Lunacy] switch, off by
+  default) calls `org.webosarchive.lunacy` `system/setHostWallpaper`, which sets Android's
+  wallpaper to webOS's through `WallpaperManager` (`SET_WALLPAPER`, a normal permission), and
+  from then on the shell does again whenever the `wallpaper` preference changes
+  (`HostWallpaper.kt`). From Android 7 the lock screen is set as well; Android 5 and 6 have one
+  wallpaper, which their lock screen shows. Nothing Lunacy draws changes. Turning it off leaves
+  Android's wallpaper as it is.
 - **Android's settings, written for real.** `WRITE_SETTINGS` is granted at install on
   Android 5. Lunacy targets API 24, so from Android 6 it needs the user's consent: the first
   refused write in a run opens Android's "Modify system settings" screen for Lunacy

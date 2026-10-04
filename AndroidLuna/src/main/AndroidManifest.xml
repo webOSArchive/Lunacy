@@ -7,6 +7,12 @@
          com.palm.display/control. Granted at install on Android 5; from Android 6 the user
          grants it on Android's own screen, which DisplayService opens (Docs/architecture.md). -->
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <!-- Screen & Lock's opt-in to Android's home and lock screen wallpaper following webOS's
+         (HostWallpaper.kt). A normal permission, granted at install on every version. -->
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
+    <!-- PDL_Vibrate, for PDK apps (PdkWindow.onPdl). A normal permission; without it the
+         call was refused and nothing buzzed. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- The status bar's Bluetooth icon: whether the adapter is on and connected. -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <!-- webOS's /media/internal is the user's own storage, and apps read and wrote it freely.

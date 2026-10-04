@@ -792,8 +792,12 @@ corpus survey says how many apps this phase can reach, and whether it is worth d
   - **Starting as the home screen hasn't been timed.** Android starts Lunacy at boot and
     after every low-memory kill, and on a 1 GB device each start first readies the webOS
     root (`WebosRoot`).
-  - Not planned (codepoet, 2026-09-26): Android widgets and Android's own wallpaper. webOS
-    had neither.
+  - Not planned (codepoet, 2026-09-26): Android widgets. webOS had none.
+  - Android's own wallpaper, opt-in (codepoet, 2026-10-04): Screen & Lock's "Use on Android"
+    sets Android's home screen wallpaper (and lock screen, from Android 7) to webOS's, and
+    keeps it following (`HostWallpaper`). Off by default. Works on the Pixel Tablet (Android
+    17, home and lock) and the HP 10 G2 (Android 5.0.1, whose lock screen shows the one
+    wallpaper).
 - Just Type (universal search).
 
 ## Open questions

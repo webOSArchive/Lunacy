@@ -112,9 +112,11 @@ switch **off**, the default, the page is laid out at the card's own width, which
 every app written for the Pre3 wants: the SDK had it declare its viewport
 (`height=device-height`) and size itself with the framework.
 
-**Defaults.** Off, except the bundled Palm apps known to draw a fixed screen: Clock,
-Calculator and Memos (`FixedViewport.DEFAULT_ON`, a shipped default for the user's switch;
-the apps themselves are untouched). An app's switch is forgotten when the app is removed.
+**Defaults.** Off, except the bundled Palm apps known to draw a fixed screen - Clock,
+Calculator and Memos - and the two whose chrome is a TouchPad's width, the Web app (its
+action bar left no room for the address) and App Catalog (codepoet, 2026-10-04)
+(`FixedViewport.DEFAULT_ON`, a shipped default for the user's switch; the apps themselves are
+untouched). An app's switch is forgotten when the app is removed.
 
 **Where.** Device Info's "Software — Use Phone Zoom" group (the switch is called Phone Zoom there) lists every app as the TouchPad's Device Info did
 (title on the left, "v" and the version on the right), with the switch at the right of each

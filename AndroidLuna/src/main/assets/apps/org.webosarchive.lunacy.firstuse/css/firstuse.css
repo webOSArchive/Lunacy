@@ -105,8 +105,6 @@ body {
 }
 .firstuse .buttons {
 	-webkit-box-orient: horizontal;
-	-webkit-flex-wrap: wrap;
-	flex-wrap: wrap;
 	-webkit-box-pack: center;
 }
 .firstuse .box .text {
@@ -127,4 +125,17 @@ body {
 .firstuse .buttons .enyo-button {
 	width: 240px;
 	margin: 0 8px 5px;
+}
+/* Two buttons need 512 px. On a narrower card they stack: -webkit-box doesn't wrap (Chromium 37
+   to 131 lay it out with the old flexible box, which has no wrapping), so the row stops being
+   a box there. */
+@media (max-width: 539px) {
+	.firstuse .buttons {
+		display: block;
+		text-align: center;
+	}
+	.firstuse .buttons .enyo-button {
+		display: block;
+		margin: 0 auto 8px;
+	}
 }

@@ -1,12 +1,14 @@
-HP's Calculator (com.palm.calculator 1.0.0), as shipped on HP webOS 3.x. Its folder is
-com.palm.app.calculator, as on the device; webOS takes the app's id from appinfo.json.
+HP's Calculator (com.palm.calculator), as modernized by webOS Archive: version 3.2.0, "Calculator
+(webOS CE)", from the WOSA Modernize feed (com.palm.app.calculator_3.2.0_all.ipk). It adds a
+scientific layout in landscape, parentheses with operator precedence, and an expression line
+above the readout; portrait is the stock keypad. Its folder is com.palm.app.calculator, as on
+the device; webOS takes the app's id from appinfo.json.
 
-Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence; distributed by
-Lunacy as abandonware, like Mojo, the Prelude fonts and the TouchPad wallpapers: no owner has
-asserted rights since webOS was discontinued.
+The original is copyright Palm, Inc. / Hewlett-Packard, never released under an open licence;
+distributed by Lunacy as abandonware, like Mojo, the Prelude fonts and the TouchPad wallpapers:
+no owner has asserted rights since webOS was discontinued. The 3.2.0 changes are webOS
+Archive's.
 
-Copied from the reference TouchPad, where it is pre-installed but lives in the user area of
-the filesystem (/media/cryptofs/apps). The app is here exactly as it was packaged, and Lunacy
-does not change it (rule 5 in CLAUDE.md). The build scripts and tests that shipped beside it
-(Rakefile, Gemfile, Gemfile.lock, build.sh, ci_build.sh, jasminerunner.html, spec/) are left
+The app's files are here exactly as the package carries them, and Lunacy does not change them
+(rule 5 in CLAUDE.md). The package's own copy of its resources under usr/palm/packages is left
 out; nothing else is.

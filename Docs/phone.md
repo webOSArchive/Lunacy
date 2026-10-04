@@ -99,11 +99,15 @@ Two things, each with one owner (codepoet, 2026-10-02):
 
 A TouchPad app is written for a 1024 × 768 screen: Palm's Clock is a 514 px face, its
 Calculator a 500 × 690 panel, Memos a 943 px grid. On a 360 px card they are simply
-clipped. With the switch **on** the page is laid out at the **fixed viewport width**
-(`FormFactor.appLayoutWidth`, default **640** px, set in Device Info's Phone Zoom Width row) and
-the card shows it whole, scaled by card width over that width wherever the card is narrower:
-on a Nexus 5 in portrait 360 / 640 = 0.5625, 1.6875 device px per CSS px; its 640 px
-landscape card, and every tablet card, are at 1, so the switch is harmless there. With the
+clipped. With the switch **on** the page is laid out so that the card's **shorter side** is
+the **fixed viewport width** (`FormFactor.appLayoutWidth`, default **640** px, set in Device
+Info's Phone Zoom Width row), and the card shows it whole, scaled down to fit: on a Nexus 5 in
+portrait 360 / 640 = 0.5625, 1.6875 device px per CSS px, a 640 × 1088 page; in landscape the
+640 × 332 card shows a 1234 × 640 page at 0.519. Until 2026-10-04 only the width counted, and
+a phone in landscape showed these apps at 1, clipped below about 330 px; Calculator 3.2.0's
+landscape scientific layout (it wants a window 900 px wide) is what showed it. The switch only
+acts in the phone layout: a tablet's card is a TouchPad's size already, and the Pixel
+Tablet's landscape card (1024 × 612) would otherwise be shrunk. With the
 switch **off**, the default, the page is laid out at the card's own width, which is what
 every app written for the Pre3 wants: the SDK had it declare its viewport
 (`height=device-height`) and size itself with the framework.

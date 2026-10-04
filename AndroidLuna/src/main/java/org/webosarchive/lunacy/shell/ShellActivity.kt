@@ -1098,8 +1098,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     override val pixelScale get() = luna.density
+    // A phone's: a tablet's card is a TouchPad's size already, and its landscape card, shorter
+    // than the 640 px a phone's shorter side is laid out at, would otherwise be shrunk.
     override fun fixedViewportWidth(appId: String) =
-        if (org.webosarchive.lunacy.card.FixedViewport.isOn(this, appId)) org.webosarchive.lunacy.card.FormFactor.appLayoutWidth(this) else 0
+        if (org.webosarchive.lunacy.card.FormFactor.isPhone(this) && org.webosarchive.lunacy.card.FixedViewport.isOn(this, appId))
+            org.webosarchive.lunacy.card.FormFactor.appLayoutWidth(this) else 0
 
     /**
      * The device an app sees. Which one is DeviceProfile's decision - a TouchPad on a

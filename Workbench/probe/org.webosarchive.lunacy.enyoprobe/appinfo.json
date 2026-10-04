@@ -1,0 +1,10 @@
+{
+	"id": "org.webosarchive.lunacy.enyoprobe",
+	"version": "0.0.1",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Enyo Probe",
+	"icon": "icon.png",
+	"uiRevision": 2
+}

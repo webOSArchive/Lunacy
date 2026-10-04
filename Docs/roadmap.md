@@ -12,7 +12,8 @@ Android's wallpaper can follow webOS's (Screen & Lock's "Use on Android", opt-in
 a browser: Palm's Web app, unchanged, on a native WebView behind `enyo.WebView` (Enyo patch
 0005), and web links from apps open in it ([architecture.md](architecture.md), "The Web
 app"). Open: Add to Launcher (`addLaunchPoint`), the download manager's history, the
-TouchPad's default bookmarks, and a look-and-feel pass against the TouchPad's Web app.
+TouchPad's default bookmarks. Against the TouchPad's Web app the action bar's contents sit
+3 px low, an engine difference left as it is ([luna-deltas.md](luna-deltas.md) A12).
 
 **2026-10-03: 0.5.0.** Both Lunacy APKs and the keyboard are 0.5.0, built without the test apps. codepoet's pre-release list, and the phone layout finished. Mojo lists coast
 again: the compat layer sent its synthesised flick *after* the mouseup, which Mojo's gesture

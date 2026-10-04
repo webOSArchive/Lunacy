@@ -244,6 +244,26 @@ Found 2026-09-22 with `emuprobe`: its inline script, run while the page is parse
 
 **Done 2026-10-03 (compat).** The reference TouchPad's WebKit (534.6) painted a border-image from `paintBorder()`, and called that only when `RenderStyle::hasBorder()` held: some border width above zero. Chromium paints a border-image whenever one is set, including its `fill`. So an element that turns its border off with `border-width: 0` while a stylesheet still gives it a border-image shows the image's middle as a box the TouchPad never drew: First Use's and webOS Account's Start Over button (Enyo's `.enyo-button` art under the app's `.restart { border-width: 0; background: none }`), seen by codepoet on the Pixel Tablet and confirmed live over DevTools (`border-image-source: none` on the button leaves the icon and label alone, as a device shows). compat.js now does that for every page: elements matching a rule that declares a border-image are checked, and one with all four border widths at zero gets `border-image-source: none` inline until a width changes. Fix log, 2026-10-03.
 
+### A12. A margin inside a zero-padding `-webkit-box` child
+
+**Measured 2026-10-04; left as it is (codepoet: "something I can live with").** The Web app's action bar draws its buttons, URL field and icons 3 px lower than the TouchPad does; the bar's own edges, its art and the icons match. Comparison: `Workbench/results/web-actionbar-compare.png` (TouchPad above Lunacy on the HP 10 G2, 1:1 and 3x).
+
+The cause is the engine, not the app. An Enyo `ToolButton` is a block holding `.enyo-tool-button-client`, which has 3 px top and bottom margins. The Web app gives its action bar's buttons `padding: 0` (`.actionbar-tool-button`). With no padding or border between them, the client's margins collapse through the button, and the TouchPad's `-webkit-box` (WebKit 534.6) then ignored them: the button is as tall as the client. Chromium makes a flex item an independent formatting context, so the margins stay inside it and the button grows by 6 px; the row it is centred in grows with it.
+
+`Workbench/probe/org.webosarchive.lunacy.enyoprobe` builds that toolbar from stock Enyo with the app's four CSS rules and logs the boxes (`ENYOPROBE` lines; palm-log on the TouchPad, logcat in Lunacy):
+
+| | TouchPad | Lunacy (HP 10 G2, Chromium 37) |
+|---|---|---|
+| row (`menu-container`) | y 2, h 53 | y 2, h 56 |
+| icon button | y 5, h 48 | y 3, h 55 |
+| its client | y 5, h 48 | y 6, h 49 |
+| icon | y 11 | y 12 |
+| text button (Enyo's own padding) | y 3, h 52 | y 4.5, h 52 |
+
+A text button keeps its padding, so its client's margins stay inside it on both engines; that is why zeroing the client's margins everywhere is wrong (tried live: the icon buttons came right and the text button shrank to 46). The client is also 1 px taller here (49 against 48), the line box under the inline-block icon, from font metrics.
+
+**If it is revisited:** a compat-layer rule beside A11's pass: for an element whose parent is a `-webkit-box` and which has no top (or bottom) padding or border, its first (or last) in-flow child's top (or bottom) margin is taken as zero. Measure a second case on the TouchPad first (a vertical box, and a child that isn't a ToolButton) before making it general.
+
 ## B. The shell
 
 ### B1. Card view: stacks, reorder, dimming, the angry card

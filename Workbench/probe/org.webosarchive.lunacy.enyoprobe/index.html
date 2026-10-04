@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+<head>
+<title>Enyo Probe</title>
+<script src="/usr/palm/frameworks/enyo/0.10/framework/enyo.js" type="text/javascript"></script>
+<style>
+/* The Web app's action bar rules (com.palm.app.browser css/browser.css). */
+.actionbar.enyo-toolbar { height: 54px; border-width: 2px 0; }
+.actionbar .enyo-tool-button .enyo-button-icon { margin: 2px; }
+.actionbar .menu-container { padding: 1px 4px 0; }
+.actionbar-tool-button { padding: 0; }
+#out { font: 12px monospace; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<script type="text/javascript">
+// How tall an Enyo 1 ToolButton with an icon comes out, in a toolbar shaped like the Web
+// app's action bar. Logged as ENYOPROBE lines (console.error reaches palm-log on 3.x).
+enyo.kind({
+	name: "Probe", kind: enyo.VFlexBox, components: [
+		{name: "bar", kind: enyo.VFlexBox, className: "enyo-toolbar actionbar", components: [
+			{name: "row", kind: enyo.HFlexBox, className: "menu-container", align: "center", components: [
+				{name: "btn", kind: "ToolButton", className: "actionbar-tool-button", icon: "images/menu-icon-back.png"},
+				{name: "plain", kind: "ToolButton", caption: "Text"}
+			]}
+		]},
+		{name: "out", allowHtml: false}
+	],
+	rendered: function() {
+		this.inherited(arguments);
+		setTimeout(enyo.bind(this, "measure"), 1500);
+	},
+	measure: function() {
+		var lines = [];
+		function box(name, n) {
+			var r = n.getBoundingClientRect(), s = getComputedStyle(n);
+			lines.push(name + " y=" + r.top + " h=" + r.height + " lh=" + s.lineHeight + " fs=" + s.fontSize + " va=" + s.verticalAlign + " disp=" + s.display);
+		}
+		var b = this.$.btn.hasNode();
+		box("bar", this.$.bar.hasNode());
+		box("row", this.$.row.hasNode());
+		box("button", b);
+		box("client", b.firstChild);
+		box("icon", b.firstChild.firstChild);
+		var p = this.$.plain.hasNode();
+		box("textButton", p);
+		box("textClient", p.firstChild);
+		lines.push("ua " + navigator.userAgent);
+		for (var i = 0; i < lines.length; i++) {
+			try { console.error("ENYOPROBE " + lines[i]); } catch (e) {}
+		}
+		this.$.out.setContent(lines.join(" | "));
+	}
+});
+new Probe().renderInto(document.body);
+</script>
+</body>
+</html>

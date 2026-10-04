@@ -240,6 +240,11 @@ as a target ([roadmap.md](roadmap.md), 2026-10-01); codepoet flashed Google's 5.
 | adb over Wi-Fi | `adb tcpip 5555` over the cable, then `adb connect 192.168.10.198:5555` | Android 5 has no wireless-debugging pairing; `tcpip` is reset by a reboot and must be issued over USB again. |
 | Install Lunacy and the keyboard | `adb -s 192.168.10.198:5555 install -r out/AndroidLuna-arm32-debug.apk`, and the keyboard APK | The 32-bit flavour, target 24. |
 
+For the Web app's look (2026-10-04). On the **reference TouchPad**: its Web app opened on
+Wikipedia's webOS page over the bus (the card left open), and `…lunacy.enyoprobe` 0.0.1 installed
+with `palm-install` and run. On the **HP 10 G2**, inside Lunacy: the same probe installed through
+`--es install` from the workstation (`python3 -m http.server`, stopped afterwards) and run.
+
 ## Pixel Tablet, Android 17 (2026-10-01)
 
 Added as the first 64-bit-only and first Android 17 device. Not a supported target yet.

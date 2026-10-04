@@ -249,7 +249,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
 
         fun command(method: String, a: JSONArray) {
             when (method) {
-                "openURL" -> a.optString(0).takeIf { it.isNotEmpty() }?.let { loadUrl(it) }
+                "openURL" -> a.optString(0).takeIf { it.isNotEmpty() }?.let { loadUrl(withScheme(it)) }
                 "setHTML" -> loadDataWithBaseURL(a.optString(0).ifEmpty { null }, a.optString(1), "text/html", "utf-8", null)
                 "reloadPage" -> reload()
                 "stopLoad" -> stopLoading()
@@ -278,6 +278,11 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 else -> Log.i(TAG, "enyo.WebView.$method isn't supported by Lunacy's browser view")
             }
         }
+
+        // The Web app passes what was typed ("example.com"); webOS's adapter added the http://
+        // a bare host needs, and Android's loadUrl doesn't. "host:8080" is a port, not a scheme.
+        private fun withScheme(url: String) =
+            if (Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:(?!\\d)").containsMatchIn(url)) url else "http://$url"
 
         private fun addRedirect(regex: String, enable: Boolean, cookie: String) {
             val r = runCatching { Regex(regex) }.getOrNull() ?: return

@@ -1,0 +1,7 @@
+{
+	"Block Popups": "Block Pop‑ups",
+	"Link Copied to clipboard": "Link copied to clipboard",
+	"Organization": "Organisation",
+	"The security certificate #{websiteName} sent is expired. Connecting to this site might put your confidential information at risk.": "The security certificate #{websiteName} sent has expired. Connecting to this site might put your confidential information at risk.",
+	"The website #{websiteName} didn't send a security certificate to identify itself. Connecting to this site might put your confidential information at risk.": "The web site #{websiteName} did not send a security certificate to identify itself. Connecting to this site might put your confidential information at risk."
+}

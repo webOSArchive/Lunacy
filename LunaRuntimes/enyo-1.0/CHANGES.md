@@ -129,6 +129,44 @@ buttons measure the same 144, 110 and 110.
 
 Files: `framework/source/base/layout/FlexLayout.js`, `framework/build/enyo-build.js`.
 
+### 0005-webview-native.patch
+
+In a Lunacy card, `enyo.WebView` shows pages in a native Android WebView rather than an iframe.
+
+Patch 0002's iframe can't show a page that refuses to be framed (most large sites send
+`X-Frame-Options` or a `frame-ancestors` policy), and can't see into a page on another origin,
+so it had no title, history or load progress. That was enough for an app showing its own
+pages, not for a browser: Palm's Web app is `enyo.WebView` and little else.
+
+The override is the same text appended to both copies, and it only takes over where the card
+offers `LunacyNative.webViewCreate`; elsewhere (a desktop browser) 0002's iframe stays.
+
+- **The node** is an empty `div`. Connecting makes a native view ([BrowserViews.kt](../../AndroidLuna/src/main/java/org/webosarchive/lunacy/card/BrowserViews.kt)),
+  a child of the card's own WebView, so it moves, scales and clips with the card in card view.
+- **Its place.** The box's rectangle, the page's width (from which the card's scale follows),
+  whether it is shown and whether a popup is over it, sent when any of them changes; they are
+  looked at five times a second, since a pane sliding or the keyboard moves the box without an
+  event.
+- **The plugin's calls** (`_callBrowserAdapter`) go across by name with their arguments as
+  JSON; a function argument (`saveImageAtPoint`'s callback) waits on the page under a token.
+- **The plugin's callbacks** come back by name onto the BasicWebView (`window.__lunacyWebView`):
+  `loadStarted`, `loadProgressChanged`, `loadStopped`, `documentLoadFinished`,
+  `urlTitleChanged` (with back and forward), `mainDocumentLoadFailed` (with webOS's error codes
+  where the app knows them), `dialogAlert`/`Confirm`/`Prompt`, `dialogSSLConfirm`,
+  `dialogUserPassword`, `mimeNotSupported`, `urlRedirected`, `createPage`, and `eventFired`
+  with a `mousehold` on a link or image, which is how the app's context menu opens.
+- **Popups.** The plugin drew into the page, so Enyo's popups came out over the web content.
+  The native view is over the whole page. While an `enyo.BasicPopup` is open, or is still on
+  screen over the box (a toaster sliding away), the view is *covered*: Android draws it into a
+  picture, the page shows the picture as the box's background, and the view steps aside once
+  the picture is up; it comes back when the popup has gone. `BasicPopup.prepareOpen` and
+  `close` are wrapped so that this happens at once rather than at the next look.
+
+`destroy` is replaced rather than wrapped: the original sets a property on `this.node`, which
+throws when the control is destroyed before it was ever rendered.
+
+Files: `framework/source/palm/controls/BasicWebView.js`, `framework/build/enyo-build.js`.
+
 ## Added
 
 Files upstream never had, added whole by `fetch-assets.sh` rather than patched in.

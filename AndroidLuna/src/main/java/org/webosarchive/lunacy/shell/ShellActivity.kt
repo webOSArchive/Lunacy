@@ -233,7 +233,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         justTypePanel.onLaunch = { app -> closeJustType(); launch(app.id) }
         justTypePanel.onSearch = { url ->
             closeJustType()
-            org.webosarchive.lunacy.card.WebosLinks.intentFor("", null, url)?.let { org.webosarchive.lunacy.card.WebosLinks.open(this, it) }
+            if (registry.get(BROWSER) != null) launch(BROWSER, JSONObject().put("target", url))
+            else org.webosarchive.lunacy.card.WebosLinks.intentFor("", null, url)?.let { org.webosarchive.lunacy.card.WebosLinks.open(this, it) }
         }
 
         quickLaunch = QuickLaunch(this, luna, onLaunch = { app -> quickLaunch.postDelayed({ launch(app.id) }, LAUNCH_DELAY_MS) }, onLauncher = { toggleLauncher() })
@@ -764,6 +765,25 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         return j.put("returnValue", true).put("resourceHandlers", JSONObject().put("activeHandler", JSONObject()
             .put("mime", IPK_MIME).put("extension", "ipk").put("appId", "org.webosinternals.preware")
             .put("streamable", true).put("index", 0).put("appName", "Preware"))).toString()
+    }
+
+    private fun isWebUrl(url: String) = url.startsWith("http://", true) || url.startsWith("https://", true) || url.startsWith("data:", true)
+
+    /**
+     * applicationManager/getResourceInfo: which app a URL's content goes to, and whether that
+     * app streams it. Measured on the reference TouchPad (2026-10-04): `{"returnValue":true,
+     * "uri":…, "appIdByExtension":…, "canStream":…}`; an mp3 goes to the streaming music player
+     * (canStream true), and a type nothing handles - a zip, application/octet-stream - to the
+     * Web app, which downloads it. Lunacy's handlers are its video player for video; anything
+     * else is the Web app's.
+     */
+    private fun resourceInfo(p: JSONObject): String {
+        val uri = p.optString("uri")
+        if (uri.isEmpty()) return Bus.error("getResourceInfo: no uri")
+        val ext = android.webkit.MimeTypeMap.getFileExtensionFromUrl(uri).lowercase()
+        val mime = p.optString("mime").ifEmpty { android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext).orEmpty() }
+        val video = registry.get(VIDEO_PLAYER)?.takeIf { mime.startsWith("video/") }
+        return Bus.ok(mapOf("uri" to uri, "appIdByExtension" to (video?.id ?: BROWSER), "canStream" to (video != null)))
     }
 
     /**
@@ -1529,6 +1549,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val launchHandler = Bus.Handler { caller, p, reply ->
             val id = p.optString("id")
             val params = p.optJSONObject("params")
+            // A web page is the Web app's, as webOS's command-resource-handlers said (^https?: and
+            // ^data: to com.palm.app.browser): a card of its own for each.
+            if (id.isEmpty() && isWebUrl(p.optString("target")) && registry.get(BROWSER) != null) {
+                launch(BROWSER, JSONObject().put("target", p.optString("target")))
+                reply(Bus.ok(mapOf("processId" to "success")))
+                return@Handler
+            }
             // A link, an email, a phone number, a map: webOS's own apps owned these and Lunacy
             // doesn't have them, so Android's answer instead. See WebosLinks.
             val link = org.webosarchive.lunacy.card.WebosLinks.intentFor(id, params, p.optString("target"))
@@ -1602,6 +1629,18 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
         bus.register("com.palm.applicationManager", "launchPointChanges", Bus.CallHandler { launchPointChanges(it) })
         bus.register("com.palm.applicationManager", "listAllHandlersForMime") { _, p, reply -> reply(handlersForMime(p)) }
+        bus.register("com.palm.applicationManager", "getResourceInfo") { _, p, reply -> reply(resourceInfo(p)) }
+        org.webosarchive.lunacy.card.UniversalSearch(this).register(bus)
+        // browserserver's own calls, which the Web app makes for its Preferences.
+        bus.register("com.palm.browserServer", "clearCache") { _, _, reply ->
+            android.webkit.WebView(this).apply { clearCache(true); destroy() }
+            reply(Bus.ok())
+        }
+        bus.register("com.palm.browserServer", "clearCookies") { _, _, reply ->
+            // webOS's browser kept its own cookies; Android's WebView has one jar for the whole
+            // of Lunacy, so clearing the browser's would sign every app out as well.
+            reply(Bus.error("Lunacy's browser shares its cookies with every app, so they can't be cleared on their own"))
+        }
         bus.register("com.palm.applicationManager", "listPackages", Bus.CallHandler { c ->
             c.reply(if (!c.privateBus) Bus.error("Unknown method \"listPackages\" for category \"/\"") else listPackages())
         })
@@ -1914,6 +1953,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         const val MEMORY_CALM_MS = 30_000L
         /** Package installers apps hand .ipks to: Preware on webOS, and LuneOS's Preware. */
         val INSTALLERS = setOf("org.webosinternals.preware", "org.webosports.app.preware")
+        /** webOS's Web app, which Lunacy ships; web links open in it. */
+        const val BROWSER = "com.palm.app.browser"
+        const val VIDEO_PLAYER = "com.palm.app.videoplayer"
         const val IPK_MIME = "application/vnd.webos.ipk"
     }
 

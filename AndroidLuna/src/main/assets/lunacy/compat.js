@@ -318,14 +318,15 @@
 	var pending = null;
 	function schedule(roots) {
 		if (!pending) { pending = []; }
-		if (roots === document) { pending = [document.documentElement]; }
+		// The whole document replaces the list, but not the pass already queued for it.
+		if (roots === document) { var queued = pending.scheduled; pending = [document.documentElement]; pending.scheduled = queued; }
 		else if (pending.length !== 1 || pending[0] !== document.documentElement) {
 			for (var i = 0; i < roots.length; i++) { if (pending.indexOf(roots[i]) < 0) { pending.push(roots[i]); } }
 		}
 		if (pending.length === 1 && pending[0] === document.documentElement && pending.scheduled) { return; }
 		if (!pending.scheduled) {
 			pending.scheduled = true;
-			setTimeout(function () { var p = pending; pending = null; pass(p); }, 0);
+			setTimeout(function () { var p = pending; pending = null; if (p) { pass(p); } }, 0);
 		}
 	}
 	function start() {

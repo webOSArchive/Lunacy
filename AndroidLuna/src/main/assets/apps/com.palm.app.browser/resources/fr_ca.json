@@ -1,0 +1,18 @@
+{
+	"Accept Cookies": "Accepter les témoins",
+	"Add to Launcher": "Ajouter à écran lancement",
+	"Are you sure you want to clear the Downloads list?": "Voulez-vous vraiment supprimer la liste de téléchargements?",
+	"Clear Cookies": "Effacer les témoins",
+	"Failed to set wallpaper": "Impossible de choisir un fond d’écran",
+	"Here's a website I think you'll like: <a href=\"{$src}\">{$title}</a>": "Je pense que ce site Web vous plaira : <a href=\"{$src}\">{$title}</a>",
+	"Issuer Information": "Coordonnées de l’émetteur",
+	"Open In New Card": "Ouvrir dans Nouvelle carte",
+	"Share Image": "Échanger l’image",
+	"Share Link": "Échanger le lien",
+	"Subject information": "Coordonnées du sujet",
+	"Would you like to clear your bookmarks?": "Voulez-vous effacer vos signets?",
+	"Would you like to clear your browser cache?": "Voulez-vous effacer la mémoire cache de votre navigateur?",
+	"Would you like to clear your browser cookies and local plug-in data?": "Voulez-vous effacer les témoins et les données locales de module d'extension de votre navigateur ?",
+	"Would you like to clear your browser history?": "Voulez-vous effacer votre historique de navigation?",
+	"web": "web"
+}

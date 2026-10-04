@@ -1,0 +1,13 @@
+{
+	"Add Bookmark": "Añadir favorito",
+	"Add to Launcher": "Añadir al Lanzador",
+	"Bookmarks & History": "Favoritos e historial",
+	"Clear Bookmarks": "Borrar favoritos",
+	"Done": "Aceptar",
+	"Issued By": "Emitidos por",
+	"No Internet Connection.": "No hay conexión Internet.",
+	"Share Image": "Enviar imagen",
+	"Share Link": "Enviar enlace",
+	"The website #{websiteName} didn't send a security certificate to identify itself. Connecting to this site might put your confidential information at risk.": "El sitio web #{websiteName} no ha enviado un certificado de seguridad para identificarse. Si te conectas a este sitio podría correr riesgo tu información confidencial.",
+	"There was a problem downloading ": "Se ha producido un problema al descargar "
+}

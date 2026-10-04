@@ -24,6 +24,7 @@
 	],
 	"layout": [
 		{"title": "apps", "items": [
+			"com.palm.app.browser_default",
 			"com.palm.app.notes_default",
 			"com.palm.calculator_default",
 			"com.palm.app.clock_default"

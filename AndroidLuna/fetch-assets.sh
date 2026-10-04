@@ -217,6 +217,12 @@ for k in com.palm.appcatalog com.palm.appcatalog.editionfile com.palm.appcatalog
     cp $V/touchpad/etc-db/db/kinds/$k $R/etc/palm/db/kinds/
     cp $V/touchpad/etc-db/db/permissions/$k $R/etc/palm/db/permissions/
 done
+# The Web app's bookmark, history and preference kinds, owned on the device by the system
+# rather than the app (Lunacy ships Palm's app; see its NOTICE).
+for k in com.palm.browserbookmarks com.palm.browserhistory com.palm.browserpreferences; do
+    cp $V/touchpad/etc-db/db/kinds/$k $R/etc/palm/db/kinds/
+    cp $V/touchpad/etc-db/db/permissions/$k $R/etc/palm/db/permissions/
+done
 # /usr/palm/ipkgs/manifest.json lists the packages a device's ROM ships, which App Catalog offers
 # to revert to (the reference TouchPad lists 14, the catalog among them). Lunacy's ROM ships no
 # packages, so it lists none.
@@ -224,8 +230,9 @@ mkdir -p $R/usr/palm/ipkgs && echo '[]' > $R/usr/palm/ipkgs/manifest.json
 cp -r $V/touchpad/etc-db/tempdb/kinds $V/touchpad/etc-db/tempdb/permissions $R/etc/palm/tempdb/
 rm -rf $R/etc/palm/tempdb/permissions/com.palm.imbuddystatus
 cat > $R/etc/palm/NOTICE <<'NOTICE'
-db8 kind and permission files for the accounts and palmprofile services, from /etc/palm on the
-reference TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. / LG Electronics.
+db8 kind and permission files for the accounts and palmprofile services, App Catalog and the
+Web app, from /etc/palm on the reference TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. /
+LG Electronics.
 NOTICE
 
 # busybox: webOS's /bin and /usr/bin were busybox, and package scripts are written for it.

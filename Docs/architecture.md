@@ -501,13 +501,33 @@ product; being "close enough" is not the goal.
   frame in the WebView, including remote iframes. On Android 5 this is accepted. On later
   targets, the bridge moves to `WebMessageListener` restricted to `*.media.cryptofs.apps`.
 - **Enyo's `WebView` control.** On webOS, `enyo.WebView` wrapped the native `BrowserAdapter`
-  plugin, which talked to browserserver in another process. Lunacy has no plugin, so the
-  framework fork draws the control with an iframe instead: the control, its scroller and its
-  events are Enyo's own code, and only the bottom layer - the node, and the one call every
-  command goes through - changes. Loading, the load events, the page title and back/forward
-  work; what only the plugin could do (saving to files, its dialogs, printing, find-in-page)
-  is logged once per call rather than silently ignored. See
-  [the fork's change log](../LunaRuntimes/enyo-1.0/CHANGES.md).
+  plugin, which drew a page that browserserver, another process, had loaded. In a Lunacy card
+  the plugin is a native Android WebView (`BrowserViews.kt`), a child of the card's own
+  WebView so that it moves, scales and clips with the card; the page's node is an empty box
+  the native view is kept over. The control, its events and the app are Enyo's and the app's
+  own code; only the bottom layer - the node, and the one call every command goes through -
+  changes. The plugin's commands and callbacks cross by name: loading and its progress, the
+  title with back and forward, load errors, the page's alert/confirm/prompt, certificate and
+  password dialogs, downloads, links to other schemes, new windows (`createPage`, which the
+  app answers with a card of its own), and holding a link or image (the app's context menu).
+  The plugin drew into the page, so Enyo's popups came out over the web content; while one is
+  open over the box, the native view is drawn into a picture that takes its place in the page,
+  and steps aside until the popup has gone. Outside a Lunacy card the fork still draws an
+  iframe. See [the fork's change log](../LunaRuntimes/enyo-1.0/CHANGES.md), 0002 and 0005.
+- **The Web app.** Palm's own (`com.palm.app.browser`) ships with Lunacy, unchanged, and is
+  where web links go: `applicationManager/open` with an `http`, `https` or `data` target opens
+  it in a card of its own, as the TouchPad's `command-resource-handlers.json` said; so does
+  Just Type's search. What it asks of the system is answered: its db8 kinds (bookmarks,
+  history, preferences) are in the ROM's `/etc/palm`, `com.palm.universalsearch` gives the
+  TouchPad's web search engines, `applicationManager/getResourceInfo` sends a download to the
+  app that handles it (video to the video player, anything else to the Web app, which
+  downloads it, as measured), and its bookmark thumbnails are served from
+  `/var/luna/data/browser`. Its pages are drawn light whatever Android's theme is, and it sends
+  the WebView's own user agent: the TouchPad's would get today's sites' unsupported-browser
+  pages, while app cards keep the TouchPad's for the services they talk to. Two things
+  are honest errors: `browserServer/clearCookies`, because Android's WebView has one cookie jar
+  for the whole of Lunacy and clearing it would sign every app out; and
+  `applicationManager/addLaunchPoint` (Add to Launcher), which Lunacy's launcher hasn't got.
 - **System files.** Apps ask for files beyond the framework, e.g.
   `/usr/palm/command-resource-handlers.json`. On a TouchPad most of those requests throw,
   because apps can't read arbitrary local files. Lunacy matches that: it serves the

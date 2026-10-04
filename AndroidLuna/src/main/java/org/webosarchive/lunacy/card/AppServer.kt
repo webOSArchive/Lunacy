@@ -16,7 +16,7 @@ import org.json.JSONObject
 class AppServer(
     private val assets: AssetManager,
     private val files: AppFiles,
-    private val webosRoot: java.io.File,
+    val webosRoot: java.io.File,
     /** Where the per-app lists of framework art live; see [preload]. */
     private val artCacheDir: java.io.File,
 ) {
@@ -82,6 +82,10 @@ class AppServer(
          * iframe. Lunacy serves its own pages there, so the control works in every app.
          */
         const val SYSTEM_UI = "usr/lib/luna/system/luna-systemui/app/"
+        /** Just Type's search engine icons, which com.palm.universalsearch names (UniversalSearch). */
+        const val SEARCH_ICONS = "usr/lib/luna/system/luna-applauncher/images/"
+        /** The Web app's bookmark thumbnails and icons, which its WebView writes (BrowserViews). */
+        const val BROWSER_DATA = "var/luna/data/browser/"
 
         /**
          * webOS's thumbnailer, which was a FUSE filesystem rather than a service: a read of
@@ -153,6 +157,9 @@ class AppServer(
             mojo != null -> if (mojo.groupValues[1] == "mojo.js" && !resource) mojoJs("fw/mojo/mojo.js") else asset("fw/mojo/" + mojo.groupValues[1], path, resource)
             frameworks != null -> if (frameworks.groupValues[1] == "mojo2/mojo.js" && !resource) mojoJs("fw/frameworks/mojo2/mojo.js") else asset("fw/frameworks/" + frameworks.groupValues[1], path, resource)
             path.startsWith(SYSTEM_UI) -> asset("luna-systemui/" + path.removePrefix(SYSTEM_UI), path, resource)
+            path.startsWith(SEARCH_ICONS) -> asset("luna-applauncher/images/" + path.removePrefix(SEARCH_ICONS), path, resource)
+            path.startsWith(BROWSER_DATA) -> java.io.File(webosRoot, path).takeIf { it.isFile && it.canonicalPath.startsWith(java.io.File(webosRoot, BROWSER_DATA).canonicalPath + java.io.File.separator) }
+                ?.let { respond(it.inputStream(), path, resource, app) }
             // The webOS root's list of the packages its ROM ships (WebosRoot), which App Catalog
             // reads as the apps it can revert to their shipped version.
             path.startsWith(IPKGS) -> java.io.File(webosRoot, path).takeIf { it.isFile && it.canonicalPath.startsWith(java.io.File(webosRoot, IPKGS).canonicalPath + java.io.File.separator) }

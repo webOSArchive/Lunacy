@@ -97,6 +97,20 @@ object Http {
             if (k == null || k.startsWith("X-Android-", ignoreCase = true)) emptyList() else vs.map { k to it }
         }
 
+    /**
+     * The certificate [host] presents, if it holds up under Lunacy's trust (Android's store and
+     * the bundled roots) and names the host; null if it doesn't. Blocking.
+     */
+    fun verifiedLeaf(host: String, port: Int): ByteArray? = runCatching {
+        (tls.createSocket(host, port) as javax.net.ssl.SSLSocket).use { socket ->
+            socket.soTimeout = 15_000
+            socket.startHandshake()
+            val session = socket.session
+            if (!HttpsURLConnection.getDefaultHostnameVerifier().verify(host, session)) return@runCatching null
+            session.peerCertificates.firstOrNull()?.encoded
+        }
+    }.getOrNull()
+
     private fun tlsFactory(): SSLSocketFactory {
         val system = trustManager(null)
         val bundled = trustManager(KeyStore.getInstance(KeyStore.getDefaultType()).apply {

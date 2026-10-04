@@ -12,8 +12,9 @@ import org.json.JSONObject
  * `applicationManager/open` is how a webOS app opens something it doesn't own: a link, an
  * email, a phone number, a map. It takes either a bare `target` - "open whatever handles this
  * URI" - or the id of one of webOS's own apps with parameters for it. Those apps were part of
- * the OS, and Lunacy doesn't have them; Android does. So `com.palm.app.browser` with a target
- * opens Android's browser, `com.palm.app.email` opens its mail composer, and so on.
+ * the OS, and Lunacy doesn't have most of them; Android does. So `com.palm.app.email` opens
+ * Android's mail composer, and so on. Web pages are the exception: Lunacy ships Palm's Web app,
+ * and the shell opens them there; Android's browser answers only if it isn't installed.
  *
  * This is the same bargain as the settings shortcuts (Docs/architecture.md, "Settings"): where
  * the thing belongs to the host OS, hand it over rather than pretend. It is a mapping of

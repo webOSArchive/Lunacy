@@ -1,0 +1,12 @@
+Palm's Web app (com.palm.app.browser), copied from /usr/palm/applications on the reference
+TouchPad (webOS CE 3.1.0), where its search list already offers DuckDuckGo first.
+
+Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence; distributed by
+Lunacy as abandonware, like Mojo, the Prelude fonts and the TouchPad wallpapers: no owner has
+asserted rights since webOS was discontinued.
+
+The app is here exactly as it was packaged. It runs because Lunacy answers what it asks for:
+enyo.WebView draws pages with Android's own WebView in place of webOS's BrowserAdapter plugin
+(LunaRuntimes/enyo-1.0/CHANGES.md, 0005), db8 holds the browser's bookmark, history and
+preference kinds as the device's /etc/palm did, and the application manager, universal search
+and download manager answer its calls.

@@ -3,9 +3,9 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-10-03)
+## Where things stand (2026-10-04)
 
-**For the next release, since 0.5.0:** PVRTC textures draw on GPUs without PowerVR's
+**2026-10-04: 0.5.5.** The shell is 0.5.5; the keyboard is unchanged at 0.5.0. PVRTC textures draw on GPUs without PowerVR's
 compression. The shell decodes them to RGBA where the driver refuses the format; before,
 they were white (Tiger Woods PGA Tour on the HP 10 G2's Mali-450; [pdk.md](pdk.md)).
 Android's wallpaper can follow webOS's (Screen & Lock's "Use on Android", opt-in). Lunacy has
@@ -14,6 +14,8 @@ a browser: Palm's Web app, unchanged, on a native WebView behind `enyo.WebView` 
 app"). Open: Add to Launcher (`addLaunchPoint`), the download manager's history, the
 TouchPad's default bookmarks. Against the TouchPad's Web app the action bar's contents sit
 3 px low, an engine difference left as it is ([luna-deltas.md](luna-deltas.md) A12).
+Calculator is webOS Archive's 3.2.0, with scientific keys in landscape, and the phone layout's
+fixed viewport fits a phone held either way ([phone.md](phone.md) §4).
 The Edit menu's Paste works in Mojo and Enyo apps, and Enyo no longer swallows the first tap
 after a field is focused ([fix-log.md](fix-log.md)). Text selection and the hold popup are webOS's, measured on the TouchPad with codepoet
 (architecture.md, "Text editing"): tap to place the caret, hold for Select / Select All /

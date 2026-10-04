@@ -91,7 +91,7 @@ Building from source is [BUILDING.md](BUILDING.md).
 
 ## Status
 
-In *early* development; 0.5.0 is the current release. The Luna shell (card view with card
+In *early* development; 0.5.5 is the current release. The Luna shell (card view with card
 stacks, launcher, status bar, notifications, Just Type) and Enyo and Mojo apps such as the App
 Catalog run on an Android 5 tablet, measured against a real TouchPad. Newer Android installs it
 without workarounds (tested on Android 14). See [Docs/roadmap.md](Docs/roadmap.md)

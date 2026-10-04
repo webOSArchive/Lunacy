@@ -30,6 +30,38 @@ subprojects {
     }
 }
 
+/**
+ * Release builds are signed with codepoet's key, named in keystore.properties at the top of the
+ * repo, which is git-ignored and stays on the machine that builds releases:
+ *
+ *     storeFile=/path/to/keystore.jks
+ *     storePasswordFile=/path/to/file-holding-the-store-password
+ *     keyAlias=upload
+ *     keyPasswordFile=/path/to/file   (optional: the store's password otherwise)
+ *
+ * The passwords are read from their files, so neither is written here or in the properties.
+ * Without the file a release build is left unsigned and Android won't install it; the debug
+ * build is signed with the SDK's debug key as before.
+ */
+val signing = rootProject.file("keystore.properties").takeIf { it.isFile }?.let { f ->
+    java.util.Properties().apply { f.inputStream().use { load(it) } }
+}
+subprojects {
+    plugins.withId("com.android.application") {
+        if (signing == null) return@withId
+        extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
+            fun secret(key: String) = file(signing.getProperty(key)).readText().trimEnd('\n', '\r')
+            val release = signingConfigs.create("lunacy") {
+                storeFile = file(signing.getProperty("storeFile"))
+                storePassword = secret("storePasswordFile")
+                keyAlias = signing.getProperty("keyAlias")
+                keyPassword = secret(if (signing.getProperty("keyPasswordFile") != null) "keyPasswordFile" else "storePasswordFile")
+            }
+            buildTypes.getByName("release").signingConfig = release
+        }
+    }
+}
+
 /** Clears out/ along with the modules' own build folders. */
 tasks.register<Delete>("clean") {
     delete(outDir)

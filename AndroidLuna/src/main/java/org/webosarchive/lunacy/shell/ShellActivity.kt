@@ -122,6 +122,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private val bannerIds = java.util.concurrent.atomic.AtomicInteger(1)
     /** Headless root windows of noWindow apps: attached so their scripts run, never shown. */
     private lateinit var hidden: FrameLayout
+    /** A debuggable build (the debug build type), which keeps the adb development extras. */
+    private val devBuild by lazy { applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0 }
+
     /** Running apps: app id to all its windows, root first. */
     private val running = LinkedHashMap<String, MutableList<AppWindow>>()
 
@@ -369,9 +372,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * Android's screen saver asking for Exhibition (ExhibitionDream), and extras for
      * development over adb: launch <appid> [params <json>], install <url or path>, layout
      * auto|phone|tablet (the FormFactor setting; the shell restarts), launcher (opens it).
+     * The shell is exported to every app on the device, so the ones that install a package
+     * or run a command - install, sh, rawsh - are a debug build's only ([devBuild]).
      */
     private fun handleIntent(intent: android.content.Intent) {
-        intent.getStringExtra("install")?.let { install(it) }
+        if (devBuild) intent.getStringExtra("install")?.let { install(it) }
         intent.getStringExtra("layout")?.let { v ->
             if (org.webosarchive.lunacy.card.FormFactor.setSetting(this, v)) { intent.removeExtra("layout"); recreate() }
             else Log.w(AppServer.TAG, "layout: $v is not auto, phone or tablet")
@@ -379,10 +384,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (intent.hasExtra("launcher")) { intent.removeExtra("launcher"); if (started && !launcherOpen) openLauncher() }
         // `--es sh '<command>'`: runs it in the webOS root from this process, with its output
         // in the log, for seeing what a package's script sees under the app's own sandbox.
-        intent.getStringExtra("sh")?.let { cmd -> intent.removeExtra("sh"); packages.shell(cmd) }
+        if (devBuild) intent.getStringExtra("sh")?.let { cmd -> intent.removeExtra("sh"); packages.shell(cmd) }
         // `--es rawsh '<command>'`: the same through Android's own shell with no environment
         // of Lunacy's, to tell the sandbox's doing from the runner's.
-        intent.getStringExtra("rawsh")?.let { cmd ->
+        if (devBuild) intent.getStringExtra("rawsh")?.let { cmd ->
             intent.removeExtra("rawsh")
             Thread {
                 try {

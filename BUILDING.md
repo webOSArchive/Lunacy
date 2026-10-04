@@ -102,6 +102,19 @@ every compatibility fix is logged in [Docs/fix-log.md](Docs/fix-log.md) with the
 in. [Docs/dev-workflow.md](Docs/dev-workflow.md) covers the devices, the reference TouchPad and
 how visual changes are checked.
 
+## Signed releases
+
+A release is `./gradlew assembleRelease`: `out/AndroidLuna-arm32-release.apk`,
+`out/AndroidLuna-arm64-release.apk` and `out/LunaKeyboard-release.apk`, signed with
+codepoet's key from 0.5.5 on. The key is named in `keystore.properties` at the top of the
+repo, which is git-ignored and stays on the machine that builds releases (its format is in
+`build.gradle.kts`); the passwords are read from files it points at. Without it a release build
+is unsigned. A release build isn't debuggable, so the adb development extras that install a
+package or run a command (`install`, `sh`, `rawsh`) aren't in it; `launch`, `layout` and
+`launcher` are. Debug builds are still signed with the SDK's debug key, and Android won't
+update one with the other: moving between them means uninstalling first, which takes Lunacy's
+data with it.
+
 ## Version and build number
 
 The version name (`versionName` in `AndroidLuna/build.gradle.kts`) is changed by hand, when

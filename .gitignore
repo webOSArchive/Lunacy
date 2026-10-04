@@ -25,3 +25,6 @@ build/
 out/
 local.properties
 .kotlin/
+
+# Release signing: names codepoet's key and its password files (build.gradle.kts)
+keystore.properties

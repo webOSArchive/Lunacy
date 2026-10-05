@@ -21,6 +21,16 @@ those files loadable as ordinary scripts. Everything else is Palm's, unchanged.
 (`AndroidLuna/tools/make-enyo-patch.sh` does it there); `fetch-assets.sh` applies them in order
 and fails the build if one no longer applies.
 
+**Then the SDK.** Every patch here goes into the SDK too (codepoet, 2026-10-05):
+[webos-sdk-redux](https://github.com/webOSArchive/webos-sdk-redux) ships Mojo for desktop
+previews, and its `update-frameworks.sh` rebuilds it from this folder; run it and commit the
+result there. A desktop page doesn't load the builtins a device's browser had compiled in: it
+loads the SDK's `javascripts/`, HP's own desktop build of the same framework. So a patch to the
+builtins needs a desktop form as well, the same change made in `javascripts/`, kept in
+`sdk-patches/` under the same name (a diff with `a/` and `b/` at the submission folder);
+`update-frameworks.sh` applies those. A patch to the submission's stylesheets or other assets
+applies to the SDK as it is. Each entry below says which it is.
+
 ## Patches
 
 ### 0001-run-outside-webos-browser.patch
@@ -57,6 +67,9 @@ parameters the shell passes.
 
 Files: `builtins/InstallPrototypeBuiltIn.js`, `builtins/palmInitFramework506.js`.
 
+SDK: none needed. It makes the builtins load as ordinary scripts, which `javascripts/` already
+are, and a desktop page is on `file://` or `http://`, which Mojo knew.
+
 ### 0002-mojo2-builtins.patch
 
 The same treatment for **Mojo 2**, which Palm's own Video Player loads and which nothing had
@@ -82,6 +95,9 @@ Files: `builtins/palmInitFramework2205.js`, `builtins/palmmojo_coreVersion1_0.js
 `palmcontactsVersion1_0.js` is patched with the others for consistency; nothing has loaded it
 yet.
 
+SDK: none needed. The SDK ships Mojo 1's submission 506 only, and these are the same loading
+fixes as 0001.
+
 ### 0003-scene-fills-its-scroller.patch
 
 A scene element is the content of Mojo's scene scroller, and the scroller is given the card's
@@ -104,6 +120,8 @@ File: `submissions/506/stylesheets/global-base.css`, which on the device is a sy
 `mojocommon/stylesheets/global-base.css`; the patch is applied through the link
 (`patch --follow-symlinks`), so it is mojocommon's file that changes, as it would on a device.
 
+SDK: applies as it is (`update-frameworks.sh` applies it to the SDK's copy of the stylesheet).
+
 ### 0004-whole-pixel-dimensions.patch
 
 `Mojo.View.getDimensions` is `offsetWidth` and `offsetHeight`. The TouchPad's WebKit laid out
@@ -124,3 +142,6 @@ before, so a transformed element, whose box differs by more than that, is untouc
 
 Files: `builtins/palmInitFramework506.js` (Mojo 1), `builtins/palmInitFramework2205.js`
 (Mojo 2).
+
+SDK: `sdk-patches/0004-whole-pixel-dimensions.patch`, the same change to `javascripts/view.js`,
+which is where a desktop page gets `Mojo.View.getDimensions`.

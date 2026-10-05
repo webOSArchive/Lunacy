@@ -27,7 +27,9 @@ Enyo/Mojo frameworks and a simulated Luna service bus. Read [README.md](README.m
 3. **Don't force a viewport.** Enyo layouts are responsive; render at the real device width.
 4. **Every change is traceable.** Log each change to the Enyo/Mojo forks against their
    upstream, and log where every compatibility fix landed (framework, compat layer, or
-   nowhere general).
+   nowhere general). A patch to Enyo or Mojo goes into the SDK too
+   ([webos-sdk-redux](https://github.com/webOSArchive/webos-sdk-redux)): run its
+   `update-frameworks.sh` and commit the result there (codepoet, 2026-10-05).
 5. **Never edit an app.** Installed apps stay exactly as packaged, and nothing may target one
    app. Global serve-time transforms (one mechanical rule applied to every app's files as
    they are served) are allowed, and belong to the compat layer.

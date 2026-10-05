@@ -30,7 +30,12 @@ cd AndroidLuna
 tools/make-enyo-patch.sh 000N-name framework/source/<file> framework/build/enyo-build.js
 ```
 
-and add an entry below. A patch in a series has to be a diff against the tree with the
+and add an entry below. Then update the SDK, which ships the same Enyo for desktop previews:
+run [webos-sdk-redux](https://github.com/webOSArchive/webos-sdk-redux)'s
+`update-frameworks.sh` (it applies this series to the TouchPad's tree) and commit the result
+there. Every patch here goes into the SDK too (codepoet, 2026-10-05).
+
+A patch in a series has to be a diff against the tree with the
 *earlier* patches applied, not against stock, or applying them in order fails; the script
 builds that base itself so it can't be got wrong by hand.
 

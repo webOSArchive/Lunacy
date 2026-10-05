@@ -1,0 +1,23 @@
+--- a/javascripts/view.js	2026-10-05 14:30:50.667184631 -0400
++++ b/javascripts/view.js	2026-10-05 14:30:50.679184663 -0400
+@@ -947,7 +947,19 @@
+ 
+ /*Safe way to get dimensions of an element. Prototype version appears broken*/
+ Mojo.View.getDimensions = function(element) {
+-	return {width: element.offsetWidth, height: element.offsetHeight};
++	var width = element.offsetWidth, height = element.offsetHeight, box;
++	// Lunacy: the TouchPad's WebKit laid out in whole pixels, so offsetWidth was an element's
++	// width. A modern engine lays out in fractions and rounds offsetWidth to the nearest pixel,
++	// which can be a fraction more than the element has: a TextField measured beside its label
++	// came back 1202 for 1201.875 px of room and no longer fit beside the label. A size that
++	// rounded up by less than a pixel comes back as the whole pixels the element has.
++	// (Lunacy's Mojo patch 0004, for the builtins a device loads.)
++	if ((width || height) && element.getBoundingClientRect) {
++		box = element.getBoundingClientRect();
++		if (width > box.width && width - box.width < 1) { width = Math.floor(box.width); }
++		if (height > box.height && height - box.height < 1) { height = Math.floor(box.height); }
++	}
++	return {width: width, height: height};
+ };
+ 
+ /* 

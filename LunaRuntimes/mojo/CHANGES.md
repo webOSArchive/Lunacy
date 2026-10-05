@@ -31,6 +31,13 @@ builtins needs a desktop form as well, the same change made in `javascripts/`, k
 `update-frameworks.sh` applies those. A patch to the submission's stylesheets or other assets
 applies to the SDK as it is. Each entry below says which it is.
 
+`sdk-patches/` also carries the desktop form of a fix Lunacy makes in its compat layer when
+Mojo can't work without it in a current browser, named `compat-<name>.patch`: a desktop
+preview has no compat layer. So far that is `compat-mutation-events.patch`, compat.js's
+`DOMNodeRemovedFromDocument`/`DOMNodeInsertedIntoDocument` (Mojo cleans its widgets up on
+them, and current engines fire neither), put at the top of `javascripts/framework.js`, the
+first file the desktop loader runs.
+
 ## Patches
 
 ### 0001-run-outside-webos-browser.patch

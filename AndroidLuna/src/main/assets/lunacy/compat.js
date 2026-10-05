@@ -928,6 +928,8 @@ window.__lunacyFileUrl = function (u, media) {
 // changes, so a node that moves gets the removal and then the insertion. They arrive once the
 // script that made the change returns, not inside the removeChild call; Mojo's handlers only
 // clean up and record. The observer starts only when a page listens for one of them.
+// The SDK's desktop Mojo carries the same code (LunaRuntimes/mojo/sdk-patches,
+// compat-mutation-events.patch); a change here goes there too.
 (function () {
 	var REMOVED = "DOMNodeRemovedFromDocument", INSERTED = "DOMNodeInsertedIntoDocument";
 	if (!window.MutationObserver || !window.EventTarget) { return; }

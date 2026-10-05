@@ -1,5 +1,5 @@
---- a/javascripts/view.js	2026-10-05 14:30:50.667184631 -0400
-+++ b/javascripts/view.js	2026-10-05 14:30:50.679184663 -0400
+--- a/javascripts/view.js
++++ b/javascripts/view.js
 @@ -947,7 +947,19 @@
  
  /*Safe way to get dimensions of an element. Prototype version appears broken*/

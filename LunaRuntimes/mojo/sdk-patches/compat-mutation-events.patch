@@ -1,0 +1,60 @@
+--- a/javascripts/framework.js
++++ b/javascripts/framework.js
+@@ -14,6 +14,57 @@
+  * @namespace Holds framework-wide functionality
+  */
+ 
++// Lunacy (LunaRuntimes/mojo/sdk-patches, the desktop form of a fix in Lunacy's compat.js):
++// DOMNodeRemovedFromDocument and DOMNodeInsertedIntoDocument, where the browser no longer fires
++// them. Mojo cleans a widget up when its element gets DOMNodeRemovedFromDocument, and a dialog's
++// cleanup is what takes away the focus guard it puts on its scene. Current browsers fire no DOM
++// mutation events at all, so no widget was ever cleaned up and every closed dialog left a guard
++// that blurs any field taking focus. Where the events are missing, a MutationObserver sends them
++// as webOS's WebKit did: not bubbling, to each removed or added node and every element in it, in
++// the order of the changes. They arrive once the script that made the change returns rather than
++// inside the removeChild call. The observer starts only when something listens for them.
++(function () {
++	var REMOVED = "DOMNodeRemovedFromDocument", INSERTED = "DOMNodeInsertedIntoDocument";
++	if (!window.MutationObserver || !window.EventTarget) { return; }
++	var fired = false, probe = document.createElement("div");
++	probe.addEventListener(INSERTED, function () { fired = true; }, false);
++	document.documentElement.appendChild(probe);
++	document.documentElement.removeChild(probe);
++	if (fired) { return; }
++
++	function send(node, type) {
++		var list = [node], i, e;
++		if (node.getElementsByTagName) {
++			var all = node.getElementsByTagName("*");
++			for (i = 0; i < all.length; i++) { list.push(all[i]); }
++		}
++		for (i = 0; i < list.length; i++) {
++			e = document.createEvent("Event");
++			e.initEvent(type, false, false);
++			list[i].dispatchEvent(e);
++		}
++	}
++	var observer = null;
++	function start() {
++		if (observer) { return; }
++		observer = new MutationObserver(function (records) {
++			for (var r = 0; r < records.length; r++) {
++				var rec = records[r], j;
++				for (j = 0; j < rec.removedNodes.length; j++) { send(rec.removedNodes[j], REMOVED); }
++				for (j = 0; j < rec.addedNodes.length; j++) {
++					if (document.documentElement.contains(rec.addedNodes[j])) { send(rec.addedNodes[j], INSERTED); }
++				}
++			}
++		});
++		observer.observe(document, { childList: true, subtree: true });
++	}
++	var add = EventTarget.prototype.addEventListener;
++	EventTarget.prototype.addEventListener = function (type) {
++		if (type === REMOVED || type === INSERTED) { start(); }
++		return add.apply(this, arguments);
++	};
++})();
++
+ Mojo.Config = {};
+ 
+ // WebKit may someday be whitelisting paths to be accessible by getResource().

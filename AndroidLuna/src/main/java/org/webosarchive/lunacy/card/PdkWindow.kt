@@ -196,9 +196,20 @@ class PdkWindow(
     /** The back gesture: Palm's SDL gave a PDK app the gesture as an Escape key. */
     override fun sendBack() { host.key(true, PdkHost.SDLK_ESCAPE); host.key(false, PdkHost.SDLK_ESCAPE) }
 
+    /**
+     * What the app was last told, null before its card was first focused. SDL starts an app
+     * active, so a card still waiting in the card view for its first frame has nothing to
+     * tell: told it was deactivated, Fieldrunners paused before drawing that frame, and the
+     * card waited for it for ever (on the Nexus 5, HP 10 G2 and Kyocera, as the timing fell).
+     */
+    private var toldActive: Boolean? = null
+
     override fun setStageActive(active: Boolean) {
-        host.active(active)
         if (active) startAccel() else stopAccel()
+        if (toldActive == null && !active) return
+        if (toldActive == active) return
+        toldActive = active
+        host.active(active)
     }
 
     // ---- the accelerometer, as webOS's SDL joystick 0 (sdl-lunacy/SDL_lunacyjoystick.c) ----

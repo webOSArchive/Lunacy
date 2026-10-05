@@ -3,7 +3,25 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-10-04)
+## Where things stand (2026-10-05)
+
+**2026-10-05: the SDK's tools, and the TouchPad's Enyo.** The Palm SDK's `palm-install`,
+`palm-launch`, `palm-run`, `palm-log`, `novacom` and `novaterm` work against Lunacy over adb,
+through [webos-sdk-redux](https://github.com/webOSArchive/webos-sdk-redux) 0.4's novacomd,
+which lists Lunacy as `adb lunacy` beside a TouchPad. Lunacy serves novacomd's device side
+(`Novacom.kt`), keeps `/var/log/messages` in webOS's format (`SysLog.kt`), and gained
+appinstaller `installNoVerify`/`remove`, applicationManager `running`/`close` and display
+`setState "on"`, all measured on the TouchPad ([architecture.md](architecture.md), "Developer
+tools"; [dev-workflow.md](dev-workflow.md)). Lunacy says it is Lunacy in
+`/etc/palm-build-info` and the SDK recognises it by name (codepoet). A palm-install shows the
+launcher's pending icon, now named from the package's `appinfo.json` for every install. The
+Enyo fork is rebased onto the TouchPad's own framework: the GitHub release it patched before
+is a different build ([CHANGES.md](../LunaRuntimes/enyo-1.0/CHANGES.md)); ten bundled apps
+drew the same on both bases. SDK 0.4 ships the same Enyo. Open: compare `palm-log` output for
+the Web app's plugin calls with the TouchPad's; Mojo samples don't open in a desktop browser
+(webos-sdk-redux FRAMEWORKS.md); APK versionName is still 0.5.5.
+
+## Where things stood (2026-10-04)
 
 **2026-10-04: 0.5.5.** The shell is 0.5.5; the keyboard is unchanged at 0.5.0. PVRTC textures draw on GPUs without PowerVR's
 compression. The shell decodes them to RGBA where the driver refuses the format; before,

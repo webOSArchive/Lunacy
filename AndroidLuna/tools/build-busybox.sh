@@ -1,6 +1,7 @@
 #!/bin/sh
 # Builds Lunacy's busybox for both ABIs, against Android's own libc (bionic), into
-# local-jni/<abi>/libbusybox.so (gitignored; fetch-assets.sh keeps a built one).
+# local-build/busybox/out/<abi>/libbusybox.so (gitignored). fetch-assets.sh runs this when
+# there is no build yet and copies the result into local-jni, which it empties on every run.
 #
 # Why not the prebuilt ones, and why bionic: Android's seccomp policy for apps allows the
 # system calls bionic makes and kills a process with SIGSYS (exit 159) on any other. The
@@ -89,16 +90,16 @@ PY
 }
 
 configure build64
-mkdir -p "$HERE/local-jni/arm64-v8a"
-build build64 aarch64-linux-android28 "$HERE/local-jni/arm64-v8a/libbusybox.so"
+mkdir -p "$WORK/out/arm64-v8a"
+build build64 aarch64-linux-android28 "$WORK/out/arm64-v8a/libbusybox.so"
 
 # API 21's bionic has no fseeko (fseek does; nothing here seeks past 2 GB), sigtimedwait
 # (init and mdev), getlogin_r (logname only), syncfs (sync -f only), sethostname, getrandom
 # (seedrng), the ns_* resolver calls (nslookup), adjtimex (ntpd), DHCPv6's headers or
 # System V IPC (logread, syslogd's shared-memory log).
 configure build32 "INIT LINUXRC MDEV FEATURE_MDEV_CONF FEATURE_MDEV_RENAME FEATURE_MDEV_RENAME_REGEXP FEATURE_MDEV_EXEC FEATURE_MDEV_LOAD_FIRMWARE FEATURE_MDEV_DAEMON LOGREAD FEATURE_LOGREAD_REDUCED_LOCKING FEATURE_IPC_SYSLOG HOSTNAME DNSDOMAINNAME SEEDRNG NSLOOKUP FEATURE_NSLOOKUP_BIG FEATURE_NSLOOKUP_LONG_OPTIONS NTPD FEATURE_NTPD_SERVER FEATURE_NTPD_CONF FEATURE_NTP_AUTH UDHCPC6 FEATURE_UDHCPC6_RFC3646 FEATURE_UDHCPC6_RFC4704 FEATURE_UDHCPC6_RFC4833 FEATURE_UDHCPC6_RFC5970 FEATURE_SYNC_FANCY FEATURE_USE_INITTAB FEATURE_KILL_REMOVED FEATURE_INIT_SCTTY FEATURE_INIT_SYSLOG FEATURE_INIT_QUIET FEATURE_INIT_COREDUMPS LOGNAME"
-mkdir -p "$HERE/local-jni/armeabi-v7a"
-build build32 armv7a-linux-androideabi21 "$HERE/local-jni/armeabi-v7a/libbusybox.so" "-Dfseeko=fseek -Dftello=ftell"
+mkdir -p "$WORK/out/armeabi-v7a"
+build build32 armv7a-linux-androideabi21 "$WORK/out/armeabi-v7a/libbusybox.so" "-Dfseeko=fseek -Dftello=ftell"
 
-# fetch-assets.sh leaves a built busybox alone.
-echo "busybox $BB_VER, against bionic, PIE, FEATURE_SUID off; built $(date -u +%Y-%m-%d)" > "$HERE/local-jni/.busybox-built"
+# What fetch-assets.sh looks for, last, so that a failed build is built again.
+echo "busybox $BB_VER, against bionic, PIE, FEATURE_SUID off; built $(date -u +%Y-%m-%d)" > "$WORK/out/BUILT"

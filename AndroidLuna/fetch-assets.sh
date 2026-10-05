@@ -233,41 +233,21 @@ LG Electronics.
 NOTICE
 
 # busybox: webOS's /bin and /usr/bin were busybox, and package scripts are written for it.
-# Packaged as a library so that Android installs it where it may be run, one per ABI, each
-# checked against the hash it was first fetched with. 32-bit is the static ARM build
-# busybox.net publishes (1.31.0). busybox.net has no 64-bit ARM build, so 64-bit is Alpine's
-# busybox-static package (1.36.1), a static musl build like busybox.net's.
-BBD=$V/busybox
-mkdir -p $BBD
-fetch_checked() { # file url sha256
-    [ -f "$1" ] || curl -sfL -o "$1" "$2"
-    echo "$3  $1" | sha256sum -c --quiet || { echo "fetch-assets: $1 isn't the busybox it should be" >&2; exit 1; }
-}
-# A busybox built by tools/build-busybox.sh is kept: the prebuilt ones call setuid() as they
-# start, which Android 10 and later kill a process for (the script says why).
-if [ -f local-jni/.busybox-built ]; then
-    echo "fetch-assets: keeping the busybox built by tools/build-busybox.sh"
-else
-BB32=$BBD/busybox-armv7l
-fetch_checked $BB32 https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/busybox-armv7l \
-    cd04052b8b6885f75f50b2a280bfcbf849d8710c8e61d369c533acf307eda064
-cp $BB32 local-jni/armeabi-v7a/libbusybox.so
-BB64=$BBD/busybox-static-1.36.1-r31-aarch64.apk
-fetch_checked $BB64 https://dl-cdn.alpinelinux.org/alpine/v3.20/main/aarch64/busybox-static-1.36.1-r31.apk \
-    1d8e7a7fc2ed69bdb8eb7be9d962489c21a0f75b72d8a325437c8a09d4cfac70
-tar -xzOf $BB64 bin/busybox.static > local-jni/arm64-v8a/libbusybox.so
-echo "ebd2865edcab0b590c7d0edb70d3e782cbfb541e518a390ced3a3e186509bc7f  local-jni/arm64-v8a/libbusybox.so" | sha256sum -c --quiet ||
-    { echo "fetch-assets: the 64-bit busybox isn't the one it should be" >&2; exit 1; }
-fi
+# Packaged as a library so that Android installs it where it may be run, one per ABI. It is
+# built from source against bionic by tools/build-busybox.sh, which says why: the prebuilt
+# static busyboxes are killed by Android 10 and later's seccomp policy (exit 159). The build
+# lives in local-build/, which this script doesn't empty, and is made here the first time.
+BBO=local-build/busybox/out
+[ -f $BBO/BUILT ] || NDK=$NDK sh tools/build-busybox.sh ||
+    { echo "fetch-assets: tools/build-busybox.sh failed" >&2; exit 1; }
+for ABI in armeabi-v7a arm64-v8a; do cp $BBO/$ABI/libbusybox.so local-jni/$ABI/; done
+echo "fetch-assets: busybox: $(cat $BBO/BUILT)"
 cat > $L/rootfs/NOTICE.busybox <<'NOTICE'
-busybox (libbusybox.so in the APK), unmodified, GPL-2.0:
-- armeabi-v7a: 1.31.0, the static armv7l build from
-  https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl/ .
-  Source: https://busybox.net/downloads/busybox-1.31.0.tar.bz2
-- arm64-v8a: 1.36.1, bin/busybox.static from Alpine Linux's busybox-static-1.36.1-r31 package
-  (https://dl-cdn.alpinelinux.org/alpine/v3.20/main/aarch64/). Source:
-  https://busybox.net/downloads/busybox-1.36.1.tar.bz2 with Alpine's patches
-  (https://gitlab.alpinelinux.org/alpine/aports/-/tree/v3.20-stable/main/busybox).
+busybox 1.37.0 (libbusybox.so in the APK), GPL-2.0, built from the unmodified source
+https://busybox.net/downloads/busybox-1.37.0.tar.bz2 by AndroidLuna/tools/build-busybox.sh
+(https://github.com/webOSArchive/Lunacy/blob/main/AndroidLuna/tools/build-busybox.sh), which
+holds the configuration: defconfig with FEATURE_SUID, STATIC and the applets Android's libc
+can't build turned off, compiled against bionic with -DBB_GLOBAL_CONST= .
 NOTICE
 # The ROM's symlinks, made on the device as links (WebosRoot.syncRom), and its file list, so
 # that Lunacy needn't walk it with AssetManager.list(), which reads the APK's whole asset
@@ -275,4 +255,7 @@ NOTICE
 chmod -R u+w $R
 links $R $L/rootfs.links
 (cd $L/rootfs && find . -type f | sed 's#^\./##' | sort) > $L/rootfs.index
+# The PDK runtime goes into local-assets and local-jni, both emptied above, so it is built
+# again on every run (its downloads and builds are kept in local-build/pdk).
+NDK=$NDK sh tools/build-pdk.sh > /dev/null || { echo "fetch-assets: tools/build-pdk.sh failed" >&2; exit 1; }
 echo "local-assets ready: $(du -sh $L | cut -f1); local-jni: $(du -sh local-jni | cut -f1)"

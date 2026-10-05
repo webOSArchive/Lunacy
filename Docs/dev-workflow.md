@@ -31,7 +31,6 @@ out on the reference devices. Changes made to the Android device are listed sepa
 | `Workbench/vendor/palm-apps/` | Palm's own apps pulled off the reference TouchPad (Clock, Exhibition, Video Player), before they are bundled | no |
 | `Workbench/vendor/touchpad/sysmgr-qml/` | The device's own `/usr/palm/sysmgr/uiComponents` QML, which is what the shell's Exhibition faces are drawn from | no |
 | `Workbench/vendor/touchpad/os-services/`, `etc-db/` | The TouchPad's palmprofile and accounts services, its account templates and its `/etc/palm/db` and `tempdb` kinds; `fetch-assets.sh` builds the webOS root's ROM from them | no |
-| `Workbench/vendor/busybox/` | The static busybox build `fetch-assets.sh` fetches (and checks by hash) for the webOS root | no |
 | `Workbench/vendor/settings-apps/` | Palm's settings apps not yet shipped; `fetch-assets.sh` copies the ones that aren't already in `assets/apps/` into `local-assets/apps/` for testing | no |
 | `Workbench/results/` | Screenshots and logs | no |
 | `Meta/` | codepoet's artwork, including the launcher icon the mipmaps are made from | yes |

@@ -152,6 +152,12 @@ Three things were learnt the hard way, each with `qemu-user`'s `-strace` or by e
   SIGSYS in glibc's own startup, so the tablet's root had no busybox commands and a postinst
   that used one (webOS Account's `mount`) failed. Since 2026-10-03 the script builds against
   bionic ([BUILDING.md](../BUILDING.md)), and every system call is one Android makes itself.
+- **And then the prebuilts came back.** `fetch-assets.sh` empties `local-jni/` before it
+  looked there for the marker saying busybox had been built, so every run after 0.5.0 quietly
+  put the prebuilt busyboxes back - and emptied the PDK runtime with them. Found 2026-10-05
+  on the Pixel Tablet, where every novacom `run` died with exit 159. The build now lives in
+  `local-build/busybox/out/`, which `fetch-assets.sh` builds when it is missing and copies
+  from on every run, and `fetch-assets.sh` runs `build-pdk.sh` at its end.
 - **qemu checks the execute bit**, and the installer keeps a package's files as they came,
   with none; the binary was "Exec format error" until `PdkHost` sets it before launch.
 - qemu needs the program run as the program (`qemu-arm -L <runtime> <binary>`), not the

@@ -77,6 +77,7 @@ struct ctx {
 	int dump;                   /* this frame's commands go to the log (the dump file was seen) */
 	double t_mark, last_swap;   /* for the frame rate, and the 60-a-second pace */
 	int frames;
+	int show_failures;          /* window swaps that failed, logged */
 };
 
 static struct ctx *cur;   /* the context the replay is for (one app at a time per thread) */
@@ -532,12 +533,19 @@ static double now(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts
 /* The app's swap: its frame goes to the card, and is acknowledged. */
 static void app_swap(struct ctx *c)
 {
+	double t0 = now();
+	/* A card that stays black: the app's pauses (Where's My Water loads a level for 20 to
+	   65 s under qemu on a Galaxy Tab A7 Lite, drawing nothing), and the card's failures. */
+	if (c->last_swap > 0 && t0 - c->last_swap > 2) LOGI("pdk gl: frame %d came %.1f s after the last", c->frames + 1, t0 - c->last_swap);
 	if (c->window_surface != EGL_NO_SURFACE) {
 		glFlush();
 		if (eglMakeCurrent(c->display, c->window_surface, c->window_surface, c->blit)) {
 			show(c);
-			eglSwapBuffers(c->display, c->window_surface);
-		}
+			if (!eglSwapBuffers(c->display, c->window_surface) && c->show_failures++ < 10)
+				LOGW("pdk gl: frame %d didn't reach the card (0x%x)", c->frames + 1, eglGetError());
+			double took = now() - t0;
+			if (took > 0.25) LOGW("pdk gl: frame %d took %.0f ms to reach the card", c->frames + 1, took * 1000);
+		} else if (c->show_failures++ < 10) LOGW("pdk gl: frame %d: the card's surface isn't current (0x%x)", c->frames + 1, eglGetError());
 		eglMakeCurrent(c->display, c->pbuffer, c->pbuffer, c->context);
 	}
 	/* The TouchPad's pace: a PDK app's swaps went at 60 a second, each waiting for the

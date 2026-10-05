@@ -11,7 +11,9 @@ it is: the PDK runtime gained a `libEGL.so` answering as the TouchPad's did (mea
 `Workbench/probe/eglprobe`), keeps Android's `/system` and `/vendor` out of a PDK app's
 sight, and its GLES 1 library answers state queries truthfully ([pdk.md](pdk.md) 6b). Swaps keep
 the TouchPad's 60 a second and SDL's audio stays as far ahead as the TouchPad's did, which
-ended a stutter. Open: the Nexus 5's picture, the other ten ports.
+ended a stutter. codepoet's
+1.0.3 of the port (current apkenv) fills a phone's screen too, and plays on all three test
+devices. Open: the other ten ports; `palm-install` of a 24 MB package was reset by the relay.
 
 **2026-10-05: the SDK's tools, and the TouchPad's Enyo.** The Palm SDK's `palm-install`,
 `palm-launch`, `palm-run`, `palm-log`, `novacom` and `novaterm` work against Lunacy over adb,

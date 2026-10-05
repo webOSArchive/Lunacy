@@ -19,7 +19,7 @@ Enyo fork is rebased onto the TouchPad's own framework: the GitHub release it pa
 is a different build ([CHANGES.md](../LunaRuntimes/enyo-1.0/CHANGES.md)); ten bundled apps
 drew the same on both bases. SDK 0.4 ships the same Enyo. Open: compare `palm-log` output for
 the Web app's plugin calls with the TouchPad's; Mojo samples don't open in a desktop browser
-(webos-sdk-redux FRAMEWORKS.md); APK versionName is still 0.5.5.
+(webos-sdk-redux FRAMEWORKS.md); the APK says 0.6.0 (unreleased; the keyboard stays 0.5.0).
 
 ## Where things stood (2026-10-04)
 

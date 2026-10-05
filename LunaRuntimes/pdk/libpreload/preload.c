@@ -13,6 +13,12 @@
  *   of /usr, /media, /var, /etc/palm, /etc/openal or /home/root, so a path under them is
  *   looked up in Lunacy's webOS root (LUNACY_PDK_ROOT), which has the same tree. One rule
  *   for every app; nothing else is touched.
+ *
+ * - Android's own system folders, /system and /vendor, which a TouchPad didn't have. They
+ *   are looked up in the webOS root too, where they don't exist either. apkenv's bionic
+ *   linker (the Android ports, Docs/pdk.md "EGL and the Android ports") searches
+ *   /vendor/lib and /system/lib before its own bionic: on webOS it found nothing there,
+ *   on Android it loaded the device's libc.so and quit on its pthread_gettid_np.
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>
@@ -48,7 +54,7 @@ static ssize_t answer(char *buf, size_t len)
 
 /* ---- webOS paths ---- */
 
-static const char *const webos_dirs[] = { "/usr/", "/media/", "/var/", "/etc/palm/", "/etc/openal/", "/home/root/", NULL };
+static const char *const webos_dirs[] = { "/usr/", "/media/", "/var/", "/etc/palm/", "/etc/openal/", "/home/root/", "/system/", "/vendor/", NULL };
 
 /* The path to use for `path`: in the webOS root if it is a webOS path, else itself. */
 static const char *map(const char *path, char *buf)

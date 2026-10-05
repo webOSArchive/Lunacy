@@ -63,6 +63,12 @@ if ! grep -q 'Palm attributes' $S/src/video/SDL_video.c; then
   sed -i '/^int SDL_GL_SetAttribute( SDL_GLattr attr, int value )/,/^}/ s/^\t\tdefault:/\t\tcase 17: case 18: case 19: \/* Palm attributes (16, SDL_GL_RETAINED_BACKING, is stock SDL_GL_SWAP_CONTROL here) *\/ retval = 0; break;\n\t\tdefault:/' $S/src/video/SDL_video.c
   grep -q 'Palm attributes' $S/src/video/SDL_video.c || { echo "the SDL_GL_SetAttribute patch didn't apply"; exit 1; }
 fi
+# The major version is kept for the driver (LUNACY_gl_major): it picks the GL library and
+# answers SDL_GL_GetAttribute, and libEGL reports it.
+if ! grep -q 'LUNACY_gl_major' $S/src/video/SDL_video.c; then
+  sed -i 's|^\t\tcase 17: case 18: case 19: /\* Palm attributes|\t\tcase 17: { extern int LUNACY_gl_major; LUNACY_gl_major = value; }   /* fall through */\n\t\tcase 18: case 19: /* Palm attributes|' $S/src/video/SDL_video.c
+  grep -q 'LUNACY_gl_major' $S/src/video/SDL_video.c || { echo "the GLES major version patch didn't apply"; exit 1; }
+fi
 sed -i 's/DUMMYAUD_bootstrap/LUNACYAUD_bootstrap/g' $S/src/audio/SDL_audio.c $S/src/audio/SDL_sysaudio.h
 # No pointer: webOS's SDL drew none, and stock SDL paints a software arrow into a 2D app's
 # screen until the app hides it (Drum Machine never does). Hidden from the start; an app
@@ -266,12 +272,15 @@ EOA
 # liblunacygl.so, replays it on a GLES 1.1 context of its own. Both are generated from the
 # same headers so the opcodes agree. gen_gles1_log.py is the stage-one logging library.
 python3 "$SRC/libgles/gen_gles1.py" client "$PDK_INC/GLES/gl.h" "$PDK_INC/GLES/glext.h" > libgles_cm.c
-$CC -O2 -shared -fPIC -Wl,-soname,libGLES_CM.so -I"$PDK_INC" -I"$SRC/libgles" libgles_cm.c -o "$OUT/lib/libGLES_CM.so"
+$CC -O2 -shared -fPIC -Wl,-soname,libGLES_CM.so -Wl,-Bsymbolic -I"$PDK_INC" -I"$SRC/libgles" libgles_cm.c -o "$OUT/lib/libGLES_CM.so"
 python3 "$SRC/libgles/gen_gles1.py" server "$PDK_INC/GLES/gl.h" "$PDK_INC/GLES/glext.h" > gles_replay.inc
 # GLES 2 the same way (gen_gles2.py): libGLESv2.so for the app, liblunacygl2.so for the shell.
 python3 "$SRC/libgles/gen_gles2.py" client "$PDK_INC/GLES2/gl2.h" "$PDK_INC/GLES2/gl2ext.h" > libglesv2.c
-$CC -O2 -shared -fPIC -Wl,-soname,libGLESv2.so -I"$PDK_INC" -I"$SRC/libgles" libglesv2.c -o "$OUT/lib/libGLESv2.so"
+$CC -O2 -shared -fPIC -Wl,-soname,libGLESv2.so -Wl,-Bsymbolic -I"$PDK_INC" -I"$SRC/libgles" libglesv2.c -o "$OUT/lib/libGLESv2.so"
 python3 "$SRC/libgles/gen_gles2.py" server "$PDK_INC/GLES2/gl2.h" "$PDK_INC/GLES2/gl2ext.h" > gles2_replay.inc
+# Each client library binds its own lunacy_gl_* (-Bsymbolic above): an apkenv port loads both.
+# libEGL: the TouchPad's EGL as a PDK app saw it, over SDL's one context (Docs/pdk.md, "EGL").
+$CC -O2 -shared -fPIC -Wl,-soname,libEGL.so "$SRC/libegl/egl.c" -o "$OUT/lib/libEGL.so" -ldl
 for abi in armeabi-v7a:armv7a-linux-androideabi21 arm64-v8a:aarch64-linux-android21; do
   mkdir -p "$HERE/local-jni/${abi%%:*}"
   "$BIN/clang" --target="${abi##*:}" -O2 -g -shared -fPIC -Wl,-soname,liblunacygl.so -I. -I"$SRC/libgles" "$SRC/libgles/gl_server.c" \
@@ -417,6 +426,7 @@ The PDK runtime (Docs/pdk.md), built by tools/build-pdk.sh:
 - libGLES_CM.so: Lunacy's own (LunaRuntimes/pdk/libgles), generated from the PDK's Khronos
   GLES 1.1 headers (SGI Free Software License B); its shell-side half is liblunacygl.so in
   the APK's own libraries. libGLESv2.so likewise from the GLES 2 headers (liblunacygl2.so).
+- libEGL.so: Lunacy's own (LunaRuntimes/pdk/libegl).
 - libSDL_cinema.so: Lunacy's own stub (LunaRuntimes/pdk/libcinema).
 - libopenal.so.1: OpenAL Soft $AL_VER (LGPL 2), the TouchPad's version, from
   https://github.com/kcat/openal-soft (tag openal-soft-$AL_VER), with Lunacy's SDL backend

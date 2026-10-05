@@ -70,6 +70,57 @@ LOCAL = {
 }
 ARRAY_OP = 0xFFFF
 
+# The client's record of GL state the app may read back: call -> the C that records it.
+FX = '/ 65536.0f'
+STATE_HOOKS = {
+    'glEnable': 'set_cap(cap, 1);', 'glDisable': 'set_cap(cap, 0);',
+    'glActiveTexture': 'if (texture >= 0x84C0 && texture < 0x84C0 + UNITS) server_unit = (int)texture - 0x84C0;',
+    'glBindTexture': 'if (target == GL_TEXTURE_2D) bound_texture[server_unit] = texture;',
+    'glDeleteTextures': 'deleted_textures(n, textures);',
+    'glBindFramebufferOES': 'bound_framebuffer = framebuffer;',
+    'glBindRenderbufferOES': 'bound_renderbuffer = renderbuffer;',
+    'glDeleteFramebuffersOES': 'for (GLsizei i_ = 0; framebuffers && i_ < n; i_++) if (framebuffers[i_] == bound_framebuffer) bound_framebuffer = 0;',
+    'glDeleteRenderbuffersOES': 'for (GLsizei i_ = 0; renderbuffers && i_ < n; i_++) if (renderbuffers[i_] == bound_renderbuffer) bound_renderbuffer = 0;',
+    'glMatrixMode': 'set_value(GL_MATRIX_MODE, (GLfloat)mode, 0, 0, 0);',
+    'glBlendFunc': 'set_value(GL_BLEND_SRC, (GLfloat)sfactor, 0, 0, 0); set_value(GL_BLEND_DST, (GLfloat)dfactor, 0, 0, 0);',
+    'glBlendEquationOES': 'set_value(0x8009, (GLfloat)mode, 0, 0, 0);',
+    'glClearColor': 'set_value(GL_COLOR_CLEAR_VALUE, red, green, blue, alpha);',
+    'glClearColorx': f'set_value(GL_COLOR_CLEAR_VALUE, red {FX}, green {FX}, blue {FX}, alpha {FX});',
+    'glClearColorxOES': f'set_value(GL_COLOR_CLEAR_VALUE, red {FX}, green {FX}, blue {FX}, alpha {FX});',
+    'glColor4f': 'set_value(GL_CURRENT_COLOR, red, green, blue, alpha);',
+    'glColor4ub': 'set_value(GL_CURRENT_COLOR, red / 255.0f, green / 255.0f, blue / 255.0f, alpha / 255.0f);',
+    'glColor4x': f'set_value(GL_CURRENT_COLOR, red {FX}, green {FX}, blue {FX}, alpha {FX});',
+    'glColor4xOES': f'set_value(GL_CURRENT_COLOR, red {FX}, green {FX}, blue {FX}, alpha {FX});',
+    'glDepthFunc': 'set_value(GL_DEPTH_FUNC, (GLfloat)func, 0, 0, 0);',
+    'glCullFace': 'set_value(GL_CULL_FACE_MODE, (GLfloat)mode, 0, 0, 0);',
+    'glFrontFace': 'set_value(GL_FRONT_FACE, (GLfloat)mode, 0, 0, 0);',
+    'glShadeModel': 'set_value(GL_SHADE_MODEL, (GLfloat)mode, 0, 0, 0);',
+    'glDepthMask': 'set_value(GL_DEPTH_WRITEMASK, flag ? 1 : 0, 0, 0, 0);',
+    'glColorMask': 'set_value(GL_COLOR_WRITEMASK, red ? 1 : 0, green ? 1 : 0, blue ? 1 : 0, alpha ? 1 : 0);',
+    'glAlphaFunc': 'set_value(GL_ALPHA_TEST_FUNC, (GLfloat)func, 0, 0, 0); set_value(GL_ALPHA_TEST_REF, ref, 0, 0, 0);',
+    'glAlphaFuncx': f'set_value(GL_ALPHA_TEST_FUNC, (GLfloat)func, 0, 0, 0); set_value(GL_ALPHA_TEST_REF, ref {FX}, 0, 0, 0);',
+    'glAlphaFuncxOES': f'set_value(GL_ALPHA_TEST_FUNC, (GLfloat)func, 0, 0, 0); set_value(GL_ALPHA_TEST_REF, ref {FX}, 0, 0, 0);',
+    'glClearDepthf': 'set_value(GL_DEPTH_CLEAR_VALUE, depth, 0, 0, 0);',
+    'glClearDepthfOES': 'set_value(GL_DEPTH_CLEAR_VALUE, depth, 0, 0, 0);',
+    'glClearDepthx': f'set_value(GL_DEPTH_CLEAR_VALUE, depth {FX}, 0, 0, 0);',
+    'glClearDepthxOES': f'set_value(GL_DEPTH_CLEAR_VALUE, depth {FX}, 0, 0, 0);',
+    'glLineWidth': 'set_value(GL_LINE_WIDTH, width, 0, 0, 0);',
+    'glLineWidthx': f'set_value(GL_LINE_WIDTH, width {FX}, 0, 0, 0);',
+    'glLineWidthxOES': f'set_value(GL_LINE_WIDTH, width {FX}, 0, 0, 0);',
+    'glPolygonOffset': 'set_value(GL_POLYGON_OFFSET_FACTOR, factor, 0, 0, 0); set_value(GL_POLYGON_OFFSET_UNITS, units, 0, 0, 0);',
+    'glPolygonOffsetx': f'set_value(GL_POLYGON_OFFSET_FACTOR, factor {FX}, 0, 0, 0); set_value(GL_POLYGON_OFFSET_UNITS, units {FX}, 0, 0, 0);',
+    'glPolygonOffsetxOES': f'set_value(GL_POLYGON_OFFSET_FACTOR, factor {FX}, 0, 0, 0); set_value(GL_POLYGON_OFFSET_UNITS, units {FX}, 0, 0, 0);',
+    # The texture environment: one value, or GL_TEXTURE_ENV_COLOR's four.
+    'glTexEnvf': '{ GLfloat f_[1] = { param }; set_env(pname, f_, 0); }',
+    'glTexEnvi': '{ GLfloat f_[1] = { (GLfloat)param }; set_env(pname, f_, 0); }',
+    'glTexEnvx': '{ GLfloat f_[1] = { (GLfloat)param }; set_env(pname, f_, 1); }',
+    'glTexEnvxOES': '{ GLfloat f_[1] = { (GLfloat)param }; set_env(pname, f_, 1); }',
+    'glTexEnvfv': 'if (params) set_env(pname, params, 0);',
+    'glTexEnviv': 'if (params) { GLfloat f_[4]; for (int i_ = 0; i_ < (pname == GL_TEXTURE_ENV_COLOR ? 4 : 1); i_++) f_[i_] = (GLfloat)params[i_]; set_env(pname, f_, 0); }',
+    'glTexEnvxv': 'if (params) { GLfloat f_[4]; for (int i_ = 0; i_ < (pname == GL_TEXTURE_ENV_COLOR ? 4 : 1); i_++) f_[i_] = (GLfloat)params[i_]; set_env(pname, f_, 1); }',
+    'glTexEnvxvOES': 'if (params) { GLfloat f_[4]; for (int i_ = 0; i_ < (pname == GL_TEXTURE_ENV_COLOR ? 4 : 1); i_++) f_[i_] = (GLfloat)params[i_]; set_env(pname, f_, 1); }',
+}
+
 
 def params(text):
     text = text.strip()
@@ -186,6 +237,10 @@ def gen_client(protos):
             print('    client_unit = (int)texture - 0x84C0; if (client_unit < 0 || client_unit > 3) client_unit = 0;')
         if name == 'glBindBuffer':
             print('    bind_buffer(target, buffer);')
+        # What the app sets that it may read back (client_prelude.c, "the state an app reads back").
+        state = STATE_HOOKS.get(name)
+        if state:
+            print('    ' + state)
         if name == 'glBufferData':
             print('    remember_buffer(target, (size_t)size, data);')
         if name == 'glBufferSubData':
@@ -238,25 +293,36 @@ def local_body(name, ret, ps):
                 'case GL_STENCIL_BITS: *params = 8; break; case GL_RED_BITS: case GL_GREEN_BITS: case GL_BLUE_BITS: case GL_ALPHA_BITS: *params = 8; break; case GL_MAX_LIGHTS: *params = 8; break; '
                 'case GL_NUM_COMPRESSED_TEXTURE_FORMATS: *params = 1; break; case GL_COMPRESSED_TEXTURE_FORMATS: *params = 0x8D64; break; case GL_ARRAY_BUFFER_BINDING: *params = (GLint)array_buffer; break; '
                 'case GL_ELEMENT_ARRAY_BUFFER_BINDING: *params = (GLint)element_buffer; break; case GL_UNPACK_ALIGNMENT: *params = unpack_alignment; break; case GL_MAX_MODELVIEW_STACK_DEPTH: *params = 16; break; '
-                'case GL_PACK_ALIGNMENT: *params = pack_alignment; break; case 0x8B9A: *params = GL_UNSIGNED_BYTE; break; case 0x8B9B: *params = GL_RGBA; break; case GL_MAX_PROJECTION_STACK_DEPTH: *params = 2; break; case GL_MAX_TEXTURE_STACK_DEPTH: *params = 2; break; case GL_MAX_CLIP_PLANES: *params = 6; break; default: *params = 0; }')
+                'case GL_PACK_ALIGNMENT: *params = pack_alignment; break; case 0x8B9A: *params = GL_UNSIGNED_BYTE; break; case 0x8B9B: *params = GL_RGBA; break; case GL_MAX_PROJECTION_STACK_DEPTH: *params = 2; break; case GL_MAX_TEXTURE_STACK_DEPTH: *params = 2; break; case GL_MAX_CLIP_PLANES: *params = 6; break; '
+                'default: { GLfloat f_[4]; int c_, n_ = get_state(pname, f_, &c_); *params = 0; for (int i_ = 0; i_ < n_; i_++) params[i_] = c_ ? color_int(f_[i_]) : (GLint)f_[i_]; } }')
     if name in ('glGetFloatv', 'glGetFixedv', 'glGetFixedvOES'):
         one = '65536' if 'Fixed' in name else '1.0f'
         sixty = '(64 << 16)' if 'Fixed' in name else '64.0f'
         big = '(2048 << 16)' if 'Fixed' in name else '2048.0f'
+        base_t = 'GLfixed' if 'Fixed' in name else 'GLfloat'
+        scale = ' * 65536.0f' if 'Fixed' in name else ''
         return (f'    switch (pname) {{ case GL_ALIASED_POINT_SIZE_RANGE: case GL_ALIASED_LINE_WIDTH_RANGE: case GL_SMOOTH_POINT_SIZE_RANGE: case GL_SMOOTH_LINE_WIDTH_RANGE: params[0] = {one}; params[1] = {sixty}; break; '
-                f'case GL_MAX_TEXTURE_SIZE: params[0] = {big}; break; default: *params = 0; }}')
+                f'case GL_MAX_TEXTURE_SIZE: params[0] = {big}; break; '
+                f'default: {{ GLfloat f_[4]; int c_, n_ = get_state(pname, f_, &c_); *params = 0; for (int i_ = 0; i_ < n_; i_++) params[i_] = ({base_t})(f_[i_]{scale}); }} }}')
     if name == 'glGetBooleanv':
-        return '    *params = GL_FALSE;'
+        return '    { GLfloat f_[4]; int c_, n_ = get_state(pname, f_, &c_); *params = GL_FALSE; for (int i_ = 0; i_ < n_; i_++) params[i_] = f_[i_] != 0 ? GL_TRUE : GL_FALSE; }'
     if name == 'glCheckFramebufferStatusOES':
         return '    return GL_FRAMEBUFFER_COMPLETE_OES;'
     if name in ('glIsTexture', 'glIsBuffer', 'glIsFramebufferOES', 'glIsRenderbufferOES'):
         return '    return GL_TRUE;'
     if name == 'glIsEnabled':
-        return '    return array_enabled_cap(cap);'
+        return '    return cap_enabled(cap);'
     if name == 'glMapBufferOES':
         return '    return NULL;'
     if name == 'glUnmapBufferOES':
         return '    return GL_FALSE;'
+    if name.startswith('glGetTexEnv'):
+        # Enums come back as themselves; through the fixed-point call the scales and the
+        # colour are 16.16, and through the integer one the colour is scaled as glGetIntegerv's.
+        conv = {'glGetTexEnvfv': 'f_[i_]',
+                'glGetTexEnviv': '(pname == GL_TEXTURE_ENV_COLOR ? color_int(f_[i_]) : (GLint)f_[i_])'}.get(
+            name, '(pname == GL_TEXTURE_ENV_COLOR || pname == GL_RGB_SCALE || pname == GL_ALPHA_SCALE ? (GLfixed)(f_[i_] * 65536.0f) : (GLfixed)f_[i_])')
+        return f'    {{ GLfloat f_[4]; int n_ = get_env(pname, f_); if (params) *params = 0; for (int i_ = 0; params && i_ < n_; i_++) params[i_] = {conv}; }}'
     if name == 'glReadPixels':
         return '    read_pixels(x, y, width, height, format, type, pixels);'
     if name == 'glQueryMatrixxOES':

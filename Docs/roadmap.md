@@ -5,6 +5,13 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-10-05)
 
+**2026-10-05, evening: the Android ports.** Where's My Water, codepoet's first apkenv port,
+plays under Lunacy on the HP 10 G2 and on the Pixel Tablet under qemu, as the webOS package
+it is: the PDK runtime gained a `libEGL.so` answering as the TouchPad's did (measured with
+`Workbench/probe/eglprobe`), keeps Android's `/system` and `/vendor` out of a PDK app's
+sight, and its GLES 1 library answers state queries truthfully ([pdk.md](pdk.md) 6b). Open:
+stuttering sound, the game's 200 frames/s, the Nexus 5's picture, the other ten ports.
+
 **2026-10-05: the SDK's tools, and the TouchPad's Enyo.** The Palm SDK's `palm-install`,
 `palm-launch`, `palm-run`, `palm-log`, `novacom` and `novaterm` work against Lunacy over adb,
 through [webos-sdk-redux](https://github.com/webOSArchive/webos-sdk-redux) 0.4's novacomd,

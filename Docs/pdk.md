@@ -438,6 +438,73 @@ which the card turns as it turns any landscape buffer on a portrait phone (Keen 
 1024 x 768 and was already turned). `PDL_GetScreenMetrics` still reports the screen as
 measured on the Pre3.
 
+## 6b. EGL and the Android ports: Where's My Water, 2026-10-05
+
+The Android games codepoet ported to webOS with apkenv
+([Android-to-webOS-Ports](https://github.com/webOSArchive/Android-to-webOS-Ports); eleven `com.apkenv.*` packages
+in the catalog) are PDK apps: an ordinary glibc binary, `apkenv`, which loads the game's
+own Android libraries with a bionic linker of its own and drives them through faked JNI.
+Lunacy runs them as it runs any PDK app, so nothing is undone on the webOS side. Three things
+stood in the way, each general.
+
+**No libEGL.** The binary links `libEGL.so`, Qualcomm's library, which the TouchPad had
+beside the PDK's but the PDK never published headers for (exit 127 at the loader). apkenv
+looks GL extensions up through `eglGetProcAddress`. What the device's EGL answers a PDK app
+whose context SDL made was measured with `Workbench/probe/eglprobe`, built with the PDK's
+toolchain and run from `/tmp`, in GLES 1 and GLES 2:
+
+| | the TouchPad |
+|---|---|
+| current display, context, surfaces before `SDL_SetVideoMode` | none |
+| after it | display 0x2, context 0x1, draw and read 0x1; `eglGetDisplay(EGL_DEFAULT_DISPLAY)` 0x1 |
+| `eglInitialize` | 1.4 |
+| `eglQueryString` | vendor "Qualcomm, Inc", 1.4, seven extensions (`EGL_KHR_image`, `EGL_KHR_lock_surface`, ...), client APIs the string "NULL"; no display: NULL and `EGL_BAD_DISPLAY`; an unknown name: NULL and `EGL_BAD_PARAMETER` |
+| `eglQuerySurface`, `eglQueryContext` | 1024 x 768; client version as SDL was asked; config 5 |
+| `eglGetProcAddress` | NULL for core GL (`glClear`; `glCreateShader` in GLES 1); the extension functions of the context's GLES only (`glGenFramebuffersOES`, `glDrawTexiOES` in GLES 1; nothing of GLES 1's in GLES 2); GLES 1's before any context; NULL for unknown names |
+| `eglSwapBuffers` | the current surface: true; `EGL_NO_SURFACE`: false, `EGL_BAD_SURFACE` |
+| `eglSwapInterval(1)` | ended the probe's process |
+
+Lunacy's `libEGL.so` (`LunaRuntimes/pdk/libegl`) answers the same over SDL's one context and
+surface, with Lunacy's own vendor and only the EGL extensions it has (none), as its
+`glGetString` does. It makes no other context or surface (`EGL_BAD_ALLOC`); the interval is
+accepted, the shell paces the stream. The survey of the catalog found every EGL import of
+the apkenv ports among these (Kindle and Movie Store's player link the library too).
+
+apkenv links both `libGLES_CM.so` and `libGLESv2.so`. The SDL driver now keeps the GLES
+version asked for with Palm's `SDL_GL_CONTEXT_MAJOR_VERSION` (`SDL_video.c` patched by
+`build-pdk.sh`), takes the mode, swap and `SDL_GL_GetProcAddress` from that version's client
+library, and answers `SDL_GL_GetAttribute` with it; each client library is linked
+`-Bsymbolic`, so its own `lunacy_gl_*` calls never reach the other's.
+
+**Android's own libraries.** The bionic linker searches `/vendor/lib` and `/system/lib`
+before its own bundled bionic. A TouchPad had neither folder; Android has its own current
+bionic there, which apkenv loaded and quit on (`Unimplemented but required:
+pthread_gettid_np`, exit 4). The preload now looks `/system` and `/vendor` up in the webOS
+root, where, as on a device, they don't exist.
+
+**State an app reads back.** The GLES 1 client sends calls and gets nothing back, and
+answered `glIsEnabled`, `glGetIntegerv` and `glGetTexEnviv` with 0 for anything it didn't
+keep. apkenv saves that state around its own blit of the game's portrait framebuffer and
+puts it back, so after the first frame texturing was off and every quad drew in its vertex
+colour: white, with blocks for text (on the Nexus 5 also `GL_INVALID_ENUM`, for the active
+texture put back as 0). The client now keeps what an app can read back, starting from
+GLES 1.1's initial values: the enables (`GL_TEXTURE_2D` and the point sprite per texture
+unit), the active and client-active unit, the bound texture per unit and the bound
+framebuffer and renderbuffer, the texture environment per unit, and the matrix mode, blend,
+depth, cull, alpha test, clear values, current colour and masks. GLES 2's queries are round
+trips already. Found with the dev tools above: the shell's `gldump` showed draws with
+textures bound and nothing wrong, `LUNACY_GL_TRACE` counted 48 uploads and 16,000 `glIsEnabled`.
+
+**Result.** Where's My Water 1.0.2 is playable on the HP 10 G2 and on the Pixel Tablet
+under qemu (codepoet). The game draws portrait into the TouchPad's landscape buffer, so on a
+tablet held landscape it is sideways, as on a TouchPad held so. Open: the sound stutters on
+the Pixel Tablet (codepoet; perhaps on the HP 10 G2 too, which was muted); the shell's frame
+rate counter reads about 200 frames/s for this game on both tablets, so the swap is
+acknowledged faster than the screen shows it, where the TouchPad's pace is still to be
+measured (`Workbench/probe/swapprobe`); the Nexus 5 drew white before the state fix and draws
+its picture cut off (the phone turns the landscape buffer again); `eglSwapInterval` is not
+measured beyond killing the probe; the other ten ports are untried.
+
 ## 7. Still to do on the first path
 
 - The bus for `PDL_ServiceCall` through the host, as JS services have it.

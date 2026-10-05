@@ -45,6 +45,19 @@
 #define LUNACYVID_DRIVER_NAME "lunacy"
 
 int LUNACY_control_sock = -1;
+/* Palm's SDL_GL_CONTEXT_MAJOR_VERSION (17), as the app set it; SDL_video.c's
+   SDL_GL_SetAttribute stores it here (tools/build-pdk.sh patches it in). */
+int LUNACY_gl_major = 1;
+
+/* The GL client library for the GLES the app asked for. An Android port built with apkenv
+   links both libGLES_CM.so and libGLESv2.so, and each has its own stream; one linking only
+   one of them gets that one, whatever it asked for. */
+static void *gl_sym(const char *name)
+{
+	void *h = dlopen(LUNACY_gl_major == 2 ? "libGLESv2.so" : "libGLES_CM.so", RTLD_LAZY | RTLD_NOLOAD);
+	void *f = h ? dlsym(h, name) : NULL;
+	return f ? f : dlsym(RTLD_DEFAULT, name);
+}
 
 /* ---- the socket ---- */
 
@@ -257,7 +270,7 @@ SDL_Surface *LUNACY_SetVideoMode(_THIS, SDL_Surface *current, int width, int hei
 		mode[0] = width; mode[1] = height; mode[2] = 0;
 		LUNACY_Send(this->hidden->sock, LPDK_VIDEO_MODE, 1, mode, sizeof mode);
 		/* libGLES_CM's default viewport and scissor are the screen, as on a device. */
-		{ void (*gl_mode)(int, int) = (void (*)(int, int))dlsym(RTLD_DEFAULT, "lunacy_gl_mode"); if (gl_mode) gl_mode(width, height); }
+		{ void (*gl_mode)(int, int) = (void (*)(int, int))gl_sym("lunacy_gl_mode"); if (gl_mode) gl_mode(width, height); }
 		return current;
 	}
 	if (!path || !*path) { SDL_SetError("LUNACY_PDK_FB is not set"); return NULL; }
@@ -327,7 +340,7 @@ static int LUNACY_GL_LoadLibrary(_THIS, const char *path)
 
 static void *LUNACY_GL_GetProcAddress(_THIS, const char *proc)
 {
-	return dlsym(RTLD_DEFAULT, proc);
+	return gl_sym(proc);
 }
 
 static int LUNACY_GL_GetAttribute(_THIS, SDL_GLattr attrib, int *value)
@@ -339,8 +352,8 @@ static int LUNACY_GL_GetAttribute(_THIS, SDL_GLattr attrib, int *value)
 	case SDL_GL_BUFFER_SIZE: *value = 32; break;
 	case SDL_GL_DOUBLEBUFFER: *value = 1; break;
 	case 16: *value = 0; break;   /* Palm: SDL_GL_RETAINED_BACKING */
-	case 17: *value = 1; break;   /* Palm: SDL_GL_CONTEXT_MAJOR_VERSION, a GLES 1.1 context */
-	case 18: *value = 1; break;   /* Palm: SDL_GL_CONTEXT_MINOR_VERSION */
+	case 17: *value = LUNACY_gl_major; break;   /* Palm: SDL_GL_CONTEXT_MAJOR_VERSION */
+	case 18: *value = LUNACY_gl_major == 2 ? 0 : 1; break;   /* Palm: SDL_GL_CONTEXT_MINOR_VERSION: 1.1 or 2.0 */
 	default: *value = 0; break;
 	}
 	return 0;
@@ -353,7 +366,7 @@ static void LUNACY_GL_SwapBuffers(_THIS)
 	/* Lunacy's libGLES_CM.so puts the swap in its stream, after the frame's commands, and
 	   waits there for the shell to keep up. Another GL library: tell the shell directly. */
 	static int (*gl_swap)(void); static int looked;
-	if (!looked) { gl_swap = (int (*)(void))dlsym(RTLD_DEFAULT, "lunacy_gl_swap"); looked = 1; }
+	if (!looked) { gl_swap = (int (*)(void))gl_sym("lunacy_gl_swap"); looked = 1; }
 	if (gl_swap && gl_swap()) return;
 	LUNACY_Send(this->hidden->sock, LPDK_FRAME, 1, NULL, 0);
 }

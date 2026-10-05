@@ -9,8 +9,9 @@ and a phase is finished when its criterion is met, not when its task list runs o
 plays under Lunacy on the HP 10 G2 and on the Pixel Tablet under qemu, as the webOS package
 it is: the PDK runtime gained a `libEGL.so` answering as the TouchPad's did (measured with
 `Workbench/probe/eglprobe`), keeps Android's `/system` and `/vendor` out of a PDK app's
-sight, and its GLES 1 library answers state queries truthfully ([pdk.md](pdk.md) 6b). Open:
-stuttering sound, the game's 200 frames/s, the Nexus 5's picture, the other ten ports.
+sight, and its GLES 1 library answers state queries truthfully ([pdk.md](pdk.md) 6b). Swaps keep
+the TouchPad's 60 a second and SDL's audio stays as far ahead as the TouchPad's did, which
+ended a stutter. Open: the Nexus 5's picture, the other ten ports.
 
 **2026-10-05: the SDK's tools, and the TouchPad's Enyo.** The Palm SDK's `palm-install`,
 `palm-launch`, `palm-run`, `palm-log`, `novacom` and `novaterm` work against Lunacy over adb,

@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/socket.h>
 
 #include "SDL_rwops.h"
 #include "SDL_timer.h"
@@ -142,6 +143,14 @@ static int LUNACYAUD_OpenAudio(_THIS, SDL_AudioSpec *spec)
 		fprintf(stderr, "lunacy audio: no shell to play to (%s); running silent\n", SDL_GetError());
 		return 0;  /* an app without sound is better than no app */
 	}
+	/* How far ahead of playback the mixing runs. On the TouchPad SDL's audio thread was at
+	   most 6 buffers (128 ms) ahead of real time, refilled two or three at a time
+	   (Workbench/probe/audioprobe, 24000 Hz, 512 samples). With the socket's own buffer
+	   (some 200 KB on Android) it ran seconds ahead, and Where's My Water's sound came in
+	   bursts of its ring's size with silence between. A send buffer of one mixed buffer -
+	   the kernel doubles it and lets about two through - plus the shell's track of four
+	   keeps it near the TouchPad's. */
+	{ int sndbuf = (int)this->hidden->mixlen; setsockopt(this->hidden->sock, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof sndbuf); }
 	open_msg[0] = spec->freq; open_msg[1] = spec->format; open_msg[2] = spec->channels; open_msg[3] = spec->samples;
 	LUNACY_Send(this->hidden->sock, LPDK_AUDIO_OPEN, 0, open_msg, sizeof open_msg);
 	return 0;

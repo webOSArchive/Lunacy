@@ -11,9 +11,9 @@
  * what they meant - and binding framebuffer 0 binds this one. At each swap a second context,
  * sharing the colour texture, draws it to the card's TextureView, letterboxed and turned,
  * as the TouchPad's compositor put an app's buffer on its screen; then the swap is
- * acknowledged, which paces the app. Without a window (the card not laid out yet, a dozing
- * screen) the app keeps drawing into its framebuffer and the swap is acknowledged after a
- * frame's time.
+ * acknowledged at the TouchPad's 60 a second, which paces the app. Without a window (the
+ * card not laid out yet, a dozing screen) the app keeps drawing into its framebuffer at the
+ * same pace.
  */
 #include <jni.h>
 #include <android/log.h>
@@ -74,7 +74,7 @@ struct ctx {
 	int turn;                   /* 0, 90, 180 or -90: how the picture is turned, clockwise */
 	int errors;                 /* GL errors logged */
 	int dump;                   /* this frame's commands go to the log (the dump file was seen) */
-	double t_mark, last_swap;   /* for the frame rate, and the pace without a window */
+	double t_mark, last_swap;   /* for the frame rate, and the 60-a-second pace */
 	int frames;
 };
 
@@ -523,12 +523,15 @@ static void app_swap(struct ctx *c)
 			eglSwapBuffers(c->display, c->window_surface);
 		}
 		eglMakeCurrent(c->display, c->pbuffer, c->pbuffer, c->context);
-	} else {
-		/* Nowhere to show it: a frame's time, so a hidden game doesn't spin. */
-		double wait = c->last_swap + 1.0 / 60 - now();
-		if (wait > 0) usleep((useconds_t)(wait * 1e6));
 	}
-	c->last_swap = now();
+	/* The TouchPad's pace: a PDK app's swaps went at 60 a second, each waiting for the
+	   display (Workbench/probe/swapprobe: 60.3 swaps/s, the longest 20 ms). A TextureView's
+	   swap doesn't wait, and Where's My Water ran at 200 frames/s and starved its own sound,
+	   so the acknowledgement keeps the 60, shown or not. A frame that came late starts the
+	   count again rather than letting the next ones hurry. */
+	double t = now(), due = c->last_swap + 1.0 / 60;
+	if (t < due) { usleep((useconds_t)((due - t) * 1e6)); c->last_swap = due; }
+	else c->last_swap = t;
 	c->frames++;
 	reply(LPDK_GL_ACK, NULL, 0);
 	/* A dev tool: touching files/pdk/gldump logs one frame's commands (Docs/pdk.md). */

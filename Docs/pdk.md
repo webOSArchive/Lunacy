@@ -495,15 +495,29 @@ depth, cull, alpha test, clear values, current colour and masks. GLES 2's querie
 trips already. Found with the dev tools above: the shell's `gldump` showed draws with
 textures bound and nothing wrong, `LUNACY_GL_TRACE` counted 48 uploads and 16,000 `glIsEnabled`.
 
+**The TouchPad's pace.** The game ran at 200 frames/s on both tablets: a TextureView's
+`eglSwapBuffers` doesn't wait for the display, so the shell acknowledged each swap as soon as
+it had replayed it. On the TouchPad a PDK app's swaps went at 60 a second, each waiting up to
+20 ms (`Workbench/probe/swapprobe`, a clear and a swap in a loop: 60.3 swaps/s). The shell
+now acknowledges at most 60 a second, shown or not; a late frame restarts the count rather
+than letting the next ones hurry.
+
+**How far ahead the sound is mixed.** The sound stuttered on every device, natively too:
+recorded in the shell, it came as bursts of exactly 16 buffers (apkenv's 32 KB ring) with
+300 to 700 ms of digital silence between, while Android's track never ran short. On the
+TouchPad SDL's audio thread ran at most 6 buffers (128 ms) ahead of real time, refilled two or
+three at a time (`Workbench/probe/audioprobe`, 24000 Hz and 512 samples as the game asks);
+under Lunacy the socket to the shell, some 200 KB, let it run seconds ahead, and apkenv's
+pump and FMOD fell into those bursts. The SDL driver now gives its audio socket a send buffer
+of one mixed buffer, which with the shell's track of four keeps it near the TouchPad's. The
+same menu went from 80 silent buffers in 236 to none, on the Nexus 5 and the Pixel Tablet.
+
 **Result.** Where's My Water 1.0.2 is playable on the HP 10 G2 and on the Pixel Tablet
-under qemu (codepoet). The game draws portrait into the TouchPad's landscape buffer, so on a
-tablet held landscape it is sideways, as on a TouchPad held so. Open: the sound stutters on
-the Pixel Tablet (codepoet; perhaps on the HP 10 G2 too, which was muted); the shell's frame
-rate counter reads about 200 frames/s for this game on both tablets, so the swap is
-acknowledged faster than the screen shows it, where the TouchPad's pace is still to be
-measured (`Workbench/probe/swapprobe`); the Nexus 5 drew white before the state fix and draws
-its picture cut off (the phone turns the landscape buffer again); `eglSwapInterval` is not
-measured beyond killing the probe; the other ten ports are untried.
+under qemu (codepoet), at 60 frames/s with its sound. The game draws portrait into the
+TouchPad's landscape buffer, so on a tablet held landscape it is sideways, as on a TouchPad
+held so. Open: the Nexus 5 draws its picture cut off (the phone turns the landscape buffer
+again); `eglSwapInterval` is not measured beyond killing the probe; the other ten ports are
+untried.
 
 ## 7. Still to do on the first path
 

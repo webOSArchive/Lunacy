@@ -518,7 +518,8 @@ TouchPad's landscape buffer, so on a tablet held landscape it is sideways, as on
 held so. On the Nexus 5 1.0.2 drew into a corner: its apkenv
 shows the whole 768 x 1024 portrait canvas it made for the TouchPad, and the game, given the
 phone profile's 800 x 480, drew 480 x 800 of it. codepoet's 1.0.3, built with the current
-apkenv (which shows only the region drawn), fills the screen. It also asks
+apkenv (which shows only the region drawn), fills the screen; it plays on the HP 10 G2,
+the Nexus 5 and the Pixel Tablet (codepoet). It also asks
 `eglGetProcAddress` before `SDL_Init`, as the TouchPad allowed; Lunacy's libEGL had asked SDL
 for the GLES version there, and stock SDL dereferences its video device before one exists
 (the game quit at once, exit 1). libEGL now reads the version the SDL driver keeps. Open: `eglSwapInterval` is not measured beyond killing the probe; the other ten ports are

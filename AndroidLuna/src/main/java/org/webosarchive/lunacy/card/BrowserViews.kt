@@ -67,6 +67,9 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         /** Host and certificate pairs that held up under Lunacy's own trust store. */
         private val verified = HashSet<String>()
         private val worker = Executors.newSingleThreadExecutor()
+        /** The plugin's calls that write an image the page reads straight after. */
+        private val IMAGE_COMMANDS = setOf("saveViewToFile", "generateIconFromFile", "resizeImage")
+        private const val IMAGE_WAIT_MS = 3000L
 
         /**
          * webOS's load errors as the browser app knows them (Browser.WebKitErrors), from
@@ -106,7 +109,17 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
 
     fun call(id: Int, method: String, argsJson: String) {
         val args = runCatching { JSONArray(argsJson) }.getOrElse { JSONArray() }
-        main.post { views[id]?.command(method, args) }
+        if (method !in IMAGE_COMMANDS) { main.post { views[id]?.command(method, args) }; return }
+        // The plugin's calls returned once the file was written: the Web app's createPageImages
+        // makes a page's thumbnail and icons and shows them at once, in its Add Bookmark and
+        // Add to Launcher dialogs. So the page waits here (on the bridge's thread, not the main
+        // one) until the image worker has done this one; a fast device showed a broken image.
+        val done = java.util.concurrent.CountDownLatch(1)
+        main.post {
+            runCatching { views[id]?.command(method, args) }
+            worker.execute { done.countDown() }
+        }
+        done.await(IMAGE_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
     }
 
     /**

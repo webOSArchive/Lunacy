@@ -210,7 +210,8 @@ records the contract as the device presents it.
   - 487 images differ.
 
   `en_us.json` is missing on the TouchPad too, so that isn't a gap. The fork starts from
-  stock, and imports the TouchPad differences where they matter.
+  stock, and imports the TouchPad differences where they matter. (Since 2026-10-05 the fork
+  starts from the TouchPad's tree instead: LunaRuntimes/enyo-1.0/CHANGES.md.)
 
 ## Not yet done
 

@@ -46,8 +46,8 @@ and `./gradlew clean` empties `out/` along with the modules' build folders.
 
 ### What `fetch-assets.sh` does
 
-It fills `AndroidLuna/local-assets/`, which is **not committed**: a stock Enyo 1.0 tree with
-`LunaRuntimes/enyo-1.0/patches/` applied, Palm's Mojo from a reference TouchPad with its own
+It fills `AndroidLuna/local-assets/`, which is **not committed**: the TouchPad's own Enyo 1.0 tree
+(from `Workbench/vendor/touchpad/enyo-0.10`) with `LunaRuntimes/enyo-1.0/patches/` applied, Palm's Mojo from a reference TouchPad with its own
 patches, third-party test apps, and Node for JS services. Glimpse is the exception: it goes to
 `AndroidLuna/local-test-apps/`, also not committed, and is in the APK only when the build asks
 for it:

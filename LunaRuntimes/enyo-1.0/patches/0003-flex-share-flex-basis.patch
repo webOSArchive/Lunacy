@@ -1,68 +1,10 @@
---- a/framework/source/base/layout/FlexLayout.js
-+++ b/framework/source/base/layout/FlexLayout.js
-@@ -75,7 +75,13 @@
- 				// we redefine flex to mean 'be exactly the left over space'
- 				// as opposed to 'natural size plus the left over space'
- 				if (!s[inExtent]) {
--					s[inExtent] = "0px";
-+					// Lunacy: a width is said with flex-basis where the engine counts a 0
-+					// width (see enyo.FlexLayout.zeroWidthCounts below). Heights are left be.
-+					if (inExtent == "width" && enyo.FlexLayout.zeroWidthCounts()) {
-+						s["flex-basis"] = "0px";
-+					} else {
-+						s[inExtent] = "0px";
-+					}
- 				}
- 				// Mozilla doesn't seem to 'stretch' correctly on this axis
- 				if (enyo.isMoz && inExtent == "height" && this.align == "stretch") {
-@@ -116,6 +122,42 @@
- 	]}
- 
- */
-+// Lunacy: whether this engine lets a flexed child's 0 width count when its box is sized to its
-+// content.
-+//
-+// Enyo says "take exactly a share of the leftover space" with width 0 plus a box-flex. The
-+// WebKit of 2011 ignored a fixed width of 0 when it worked out how wide a box's content wanted
-+// to be, so a box sized to its content (a RadioGroup between two Spacers in a Toolbar) came out
-+// as wide as its buttons' content and then split that evenly. Chromium's later -webkit-box
-+// counts the 0: the same group comes out as wide as its buttons' borders, and Palm's Clock drew
-+// its clock/alarm switch as two squashed icons. On such an engine the share is said with
-+// flex-basis instead, which it honours in -webkit-box and which leaves the content counted.
-+// Only widths: the old engine worked out a box's content height by laying it out, where a 0
-+// height stays 0, so heights came out the same then as now.
-+// Checked once, on a throwaway box: the engines that need this are the ones that answer 0.
-+enyo.FlexLayout.zeroWidthCounts = function() {
-+	var f = enyo.FlexLayout, root = document.body || document.documentElement;
-+	if (f._zeroWidthCounts === undefined && root) {
-+		var box = document.createElement("div"), child = document.createElement("div");
-+		box.style.cssText = "position:absolute;visibility:hidden;display:-webkit-inline-box";
-+		child.style.cssText = "-webkit-box-flex:1;width:0px";
-+		child.textContent = "xx";
-+		box.appendChild(child);
-+		root.appendChild(box);
-+		var counts = box.offsetWidth === 0;
-+		// And that flex-basis does share a fixed box out evenly, or there is nothing to gain.
-+		var wide = document.createElement("div");
-+		wide.style.cssText = "-webkit-box-flex:1;flex-basis:0px";
-+		wide.textContent = "xxxxxxxxxxxxxxxxxxxx";
-+		child.style.cssText = "-webkit-box-flex:1;flex-basis:0px";
-+		box.appendChild(wide);
-+		box.style.cssText = "position:absolute;visibility:hidden;display:-webkit-box;width:400px";
-+		f._zeroWidthCounts = counts && Math.abs(child.offsetWidth - wide.offsetWidth) <= 1;
-+		root.removeChild(box);
-+	}
-+	return Boolean(f._zeroWidthCounts);
-+};
-+
- enyo.kind({
- 	name: "enyo.HFlexLayout", 
- 	//* @protected
+diff --git a/framework/build/enyo-build.js b/framework/build/enyo-build.js
+index f7817d9..0a6693f 100644
 --- a/framework/build/enyo-build.js
 +++ b/framework/build/enyo-build.js
-@@ -13180,3 +13180,55 @@
- 		}
+@@ -13179,3 +13179,55 @@ Tellurium.setup(window.enyo), console.log("Tellurium loading...");
  	};
+ 	p._callBrowserAdapter.nom = "enyo.BasicWebView._callBrowserAdapter()";
  })();
 +
 +// ---------------------------------------------------------------------------
@@ -116,3 +58,65 @@
 +		}
 +	};
 +})();
+diff --git a/framework/source/base/layout/FlexLayout.js b/framework/source/base/layout/FlexLayout.js
+index e922478..a04e8fe 100644
+--- a/framework/source/base/layout/FlexLayout.js
++++ b/framework/source/base/layout/FlexLayout.js
+@@ -75,7 +75,13 @@ enyo.kind({
+ 				// we redefine flex to mean 'be exactly the left over space'
+ 				// as opposed to 'natural size plus the left over space'
+ 				if (!s[inExtent]) {
+-					s[inExtent] = "0px";
++					// Lunacy: a width is said with flex-basis where the engine counts a 0
++					// width (see enyo.FlexLayout.zeroWidthCounts below). Heights are left be.
++					if (inExtent == "width" && enyo.FlexLayout.zeroWidthCounts()) {
++						s["flex-basis"] = "0px";
++					} else {
++						s[inExtent] = "0px";
++					}
+ 				}
+ 				// Mozilla doesn't seem to 'stretch' correctly on this axis
+ 				if (enyo.isMoz && inExtent == "height" && this.align == "stretch") {
+@@ -116,6 +122,42 @@ this creates a a set of horizontally-centered buttons positioned at the bottom o
+ 	]}
+ 
+ */
++// Lunacy: whether this engine lets a flexed child's 0 width count when its box is sized to its
++// content.
++//
++// Enyo says "take exactly a share of the leftover space" with width 0 plus a box-flex. The
++// WebKit of 2011 ignored a fixed width of 0 when it worked out how wide a box's content wanted
++// to be, so a box sized to its content (a RadioGroup between two Spacers in a Toolbar) came out
++// as wide as its buttons' content and then split that evenly. Chromium's later -webkit-box
++// counts the 0: the same group comes out as wide as its buttons' borders, and Palm's Clock drew
++// its clock/alarm switch as two squashed icons. On such an engine the share is said with
++// flex-basis instead, which it honours in -webkit-box and which leaves the content counted.
++// Only widths: the old engine worked out a box's content height by laying it out, where a 0
++// height stays 0, so heights came out the same then as now.
++// Checked once, on a throwaway box: the engines that need this are the ones that answer 0.
++enyo.FlexLayout.zeroWidthCounts = function() {
++	var f = enyo.FlexLayout, root = document.body || document.documentElement;
++	if (f._zeroWidthCounts === undefined && root) {
++		var box = document.createElement("div"), child = document.createElement("div");
++		box.style.cssText = "position:absolute;visibility:hidden;display:-webkit-inline-box";
++		child.style.cssText = "-webkit-box-flex:1;width:0px";
++		child.textContent = "xx";
++		box.appendChild(child);
++		root.appendChild(box);
++		var counts = box.offsetWidth === 0;
++		// And that flex-basis does share a fixed box out evenly, or there is nothing to gain.
++		var wide = document.createElement("div");
++		wide.style.cssText = "-webkit-box-flex:1;flex-basis:0px";
++		wide.textContent = "xxxxxxxxxxxxxxxxxxxx";
++		child.style.cssText = "-webkit-box-flex:1;flex-basis:0px";
++		box.appendChild(wide);
++		box.style.cssText = "position:absolute;visibility:hidden;display:-webkit-box;width:400px";
++		f._zeroWidthCounts = counts && Math.abs(child.offsetWidth - wide.offsetWidth) <= 1;
++		root.removeChild(box);
++	}
++	return Boolean(f._zeroWidthCounts);
++};
++
+ enyo.kind({
+ 	name: "enyo.HFlexLayout", 
+ 	//* @protected

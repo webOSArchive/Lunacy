@@ -1,9 +1,11 @@
---- a/framework/source/palm/controls/BasicWebView.js
-+++ b/framework/source/palm/controls/BasicWebView.js
-@@ -638,3 +638,196 @@
- 		this.urlTitleChanged(inUrl, inTitle, inCanGoBack, inCanGoForward);
- 	}
- });
+diff --git a/framework/build/enyo-build.js b/framework/build/enyo-build.js
+index a2c09cc..6909535 100644
+--- a/framework/build/enyo-build.js
++++ b/framework/build/enyo-build.js
+@@ -13293,3 +13293,199 @@ Tellurium.setup(window.enyo), console.log("Tellurium loading...");
+ 		}
+ 	};
+ })();
 +
 +// ---------------------------------------------------------------------------
 +// Lunacy: enyo.BasicWebView on a native Android WebView (patch 0005).
@@ -62,6 +64,8 @@
 +	// Every plugin call goes through here. A function argument (saveImageAtPoint's callback)
 +	// can't cross to Android, so it waits here under a token and the answer comes back to it.
 +	p._callBrowserAdapter = function (inName, inArgs) {
++		// As the TouchPad's Enyo does: every call is logged, setHTML without its arguments.
++		if (inName == "setHTML") { this.log(inName); } else { this.log(inName, inArgs); }
 +		if (!this._lunacyId) { return; }
 +		var a = [];
 +		for (var i = 0; inArgs && i < inArgs.length; i++) {
@@ -74,6 +78,7 @@
 +		}
 +		N.webViewCall(this._lunacyId, inName, JSON.stringify(a));
 +	};
++	p._callBrowserAdapter.nom = "enyo.BasicWebView._callBrowserAdapter()";
 +
 +	p.destroy = function () {
 +		if (this._lunacyId) {
@@ -197,12 +202,14 @@
 +		}
 +	};
 +})();
---- a/framework/build/enyo-build.js
-+++ b/framework/build/enyo-build.js
-@@ -13294,3 +13294,196 @@
- 		}
- 	};
- })();
+diff --git a/framework/source/palm/controls/BasicWebView.js b/framework/source/palm/controls/BasicWebView.js
+index f0bb3dd..7f75065 100644
+--- a/framework/source/palm/controls/BasicWebView.js
++++ b/framework/source/palm/controls/BasicWebView.js
+@@ -658,3 +658,199 @@ enyo.kind({
+ 		this.urlTitleChanged(inUrl, inTitle, inCanGoBack, inCanGoForward);
+ 	}
+ });
 +
 +// ---------------------------------------------------------------------------
 +// Lunacy: enyo.BasicWebView on a native Android WebView (patch 0005).
@@ -261,6 +268,8 @@
 +	// Every plugin call goes through here. A function argument (saveImageAtPoint's callback)
 +	// can't cross to Android, so it waits here under a token and the answer comes back to it.
 +	p._callBrowserAdapter = function (inName, inArgs) {
++		// As the TouchPad's Enyo does: every call is logged, setHTML without its arguments.
++		if (inName == "setHTML") { this.log(inName); } else { this.log(inName, inArgs); }
 +		if (!this._lunacyId) { return; }
 +		var a = [];
 +		for (var i = 0; inArgs && i < inArgs.length; i++) {
@@ -273,6 +282,7 @@
 +		}
 +		N.webViewCall(this._lunacyId, inName, JSON.stringify(a));
 +	};
++	p._callBrowserAdapter.nom = "enyo.BasicWebView._callBrowserAdapter()";
 +
 +	p.destroy = function () {
 +		if (this._lunacyId) {

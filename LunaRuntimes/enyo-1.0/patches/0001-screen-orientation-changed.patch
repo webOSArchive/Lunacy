@@ -1,6 +1,23 @@
+diff --git a/framework/build/enyo-build.js b/framework/build/enyo-build.js
+index dcb8329..c51962e 100644
+--- a/framework/build/enyo-build.js
++++ b/framework/build/enyo-build.js
+@@ -2718,7 +2718,9 @@ type: a,
+ target: enyo.webosGesture.lastDownTarget
+ }, b);
+ enyo.dispatch(c);
+-}, Mojo.screenOrientationChanged = function() {}, enyo.requiresWindow(function() {
++}, Mojo.screenOrientationChanged = function() {
++enyo.sendOrientationChange();
++}, enyo.requiresWindow(function() {
+ document.addEventListener("gesturestart", enyo.dispatch), document.addEventListener("gesturechange", enyo.dispatch), document.addEventListener("gestureend", enyo.dispatch);
+ })) : webosEvent = {
+ event: enyo.nop,
+diff --git a/framework/source/compatibility/webosGesture.js b/framework/source/compatibility/webosGesture.js
+index ad288c9..6a93f1a 100644
 --- a/framework/source/compatibility/webosGesture.js
 +++ b/framework/source/compatibility/webosGesture.js
-@@ -28,7 +28,13 @@
+@@ -28,7 +28,13 @@ if (window.PalmSystem) {
  	// NOTE: we are generating the event for orientation change by watching window.resize since
  	// this method is not called on dartfish. However, it is called in catfish and sysmgr
  	// generates an error if this function does not exist!
@@ -15,16 +32,3 @@
  
  	enyo.requiresWindow(function() {
  		// add gesture event suppport
---- a/framework/build/enyo-build.js
-+++ b/framework/build/enyo-build.js
-@@ -2719,7 +2719,9 @@
- target: enyo.webosGesture.lastDownTarget
- }, b);
- enyo.dispatch(c);
--}, Mojo.screenOrientationChanged = function() {}, enyo.requiresWindow(function() {
-+}, Mojo.screenOrientationChanged = function() {
-+enyo.sendOrientationChange();
-+}, enyo.requiresWindow(function() {
- document.addEventListener("gesturestart", enyo.dispatch), document.addEventListener("gesturechange", enyo.dispatch), document.addEventListener("gestureend", enyo.dispatch);
- })), typeof webosEvent == "undefined" && (webosEvent = {
- event: enyo.nop,

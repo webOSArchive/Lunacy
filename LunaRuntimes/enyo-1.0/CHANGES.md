@@ -1,14 +1,24 @@
 # Lunacy's changes to Enyo 1.0
 
-Upstream: [enyojs/enyo-1.0](https://github.com/enyojs/enyo-1.0), tag `r1` (Enyo 1.0 submission
-128, as shipped on HP webOS 3.0.5). Apache 2.0.
+Base: Enyo as it is on the reference TouchPad (webOS CE 3.1.0),
+`/usr/palm/frameworks/enyo/0.10`, copied off the device into `Workbench/vendor/touchpad/enyo-0.10`.
+Enyo is Apache 2.0 ([enyojs/enyo-1.0](https://github.com/enyojs/enyo-1.0)); the libraries and
+localized resources HP shipped only on the device are Palm/HP's, shipped as abandonware.
+
+**Rebased 2026-10-05.** Until then the base was the GitHub release (`submissions/128.2`), which
+this file called the build HP shipped. It isn't: its built `enyo-build.js` differs from the
+device's in about a hundred files' worth of code (clipboard paste and the `webosEvent` setup among
+them), it lacks the device's `resources/` and some of its libraries, and its `BasicWebView` has
+none of the device's call logging. The TouchPad's built file is byte-identical to the one in HP's
+3.0.5 SDK. Every app in Lunacy now runs the framework code the TouchPad runs, plus the patches
+below; webos-sdk-redux 0.4 ships the same tree, built from this series, for desktop previews.
 
 Lunacy serves this framework at `/usr/palm/frameworks/enyo/…`, where apps load it from the OS,
 so a fix here reaches every app built on it - which is the point (rule 1 in
 [CLAUDE.md](../../CLAUDE.md)). The fork is **stock Enyo plus the patches in `patches/`**:
-`fetch-assets.sh` copies the upstream clone and applies them in order, and fails if one
-doesn't apply. That keeps every change to the framework readable as a diff against upstream,
-which is what rule 4 asks for.
+`fetch-assets.sh` copies the device's tree and applies them in order (with no fuzz), and fails
+if one doesn't apply. That keeps every change to the framework readable as a diff against what
+the device had, which is what rule 4 asks for.
 
 Enyo is served from `framework/build/enyo-build.js` (its non-debug path), so a change has to
 be made in the built file as well as in `framework/source/`. Each patch does both.
@@ -74,6 +84,10 @@ Two things to know if you change this:
   kind, and calling one silently stopped the load ever reaching the app.
 - The load listener is bound when a page is first opened, not in `rendered()`: something in
   the kind machinery replaces `rendered` after the override runs.
+
+The device's `BasicWebView` logs every call it makes to the plugin (`setHTML` without its
+arguments, for privacy, as Palm's comment says), so its `palm-log` shows them. The replacement
+`_callBrowserAdapter` keeps that logging, in the source and in the built file's override.
 
 Files: `framework/source/palm/controls/BasicWebView.js`, `framework/build/enyo-build.js`.
 
@@ -165,22 +179,14 @@ offers `LunacyNative.webViewCreate`; elsewhere (a desktop browser) 0002's iframe
 `destroy` is replaced rather than wrapped: the original sets a property on `this.node`, which
 throws when the control is destroyed before it was ever rendered.
 
+Its `_callBrowserAdapter` logs each call first, as the device's does (see 0002).
+
 Files: `framework/source/palm/controls/BasicWebView.js`, `framework/build/enyo-build.js`.
 
 ## Added
 
-Files upstream never had, added whole by `fetch-assets.sh` rather than patched in.
-
-### lib/networkproxy
-
-HP's network-proxy settings library, which the TouchPad ships in its framework folder beside
-the libraries the Apache 2.0 release does include. The Wi-Fi library and anything built on it
-load it (`$enyo-lib/networkproxy/`); the webOS Community Account Manager's app does, and
-without it its Wi-Fi popup kind never defined and the app stopped while starting. Copied from
-the reference TouchPad with a NOTICE (HP's, abandonware); `fetch-assets.sh` fails if upstream
-ever gains a folder of that name.
-
-**Not done:** the TouchPad's copies of the other libraries (`accounts`, `authlib`,
-`addressing` and more) are newer than upstream's and carry localized `resources/`. Lunacy
-still serves upstream's; any app that trips over the difference is the case for taking the
-device's.
+Nothing, since the rebase. `lib/networkproxy` (HP's network-proxy settings library, which the
+Wi-Fi library loads, and without which the webOS Community Account Manager's app stopped while
+starting) used to be copied in from the TouchPad beside the GitHub release; it is part of the
+device's tree, and so are the device's newer `accounts`, `authlib` and `addressing` libraries and
+their localized `resources/`, which the earlier base lacked.

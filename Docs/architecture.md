@@ -262,9 +262,13 @@ product; being "close enough" is not the goal.
   has never run gets no preload. Preloading a framework's whole theme instead was measured and
   is worse - it pays for the fifty images nobody asked for and the page appears half a second
   later ([fix-log.md](fix-log.md)).
-- **The fork is stock Enyo plus patches.** `LunaRuntimes/enyo-1.0/patches/` holds Lunacy's
-  changes as diffs against upstream, and `fetch-assets.sh` applies them after copying the
-  upstream clone, failing the build if one no longer applies. So every framework change stays
+- **The fork is the TouchPad's Enyo plus patches.** The base is the framework the reference
+  TouchPad runs (`/usr/palm/frameworks/enyo/0.10`, the build HP shipped, whose built file is
+  byte-identical to HP's 3.0.5 SDK's); the GitHub release is a slightly different build, and
+  was the base until 2026-10-05. `LunaRuntimes/enyo-1.0/patches/` holds Lunacy's changes as
+  diffs against the device's tree, and `fetch-assets.sh` applies them after copying it,
+  failing the build if one no longer applies. webos-sdk-redux ships the same tree for desktop
+  previews. So every framework change stays
   readable as a diff and nothing can drift in unrecorded;
   [CHANGES.md](../LunaRuntimes/enyo-1.0/CHANGES.md) says what each one is and why. Enyo
   serves its built file (`framework/build/enyo-build.js`) rather than `source/`, so a patch

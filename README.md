@@ -22,7 +22,7 @@ Lunacy reimplements the contract, not the machine:
    view, gestures, launcher, notification banners and dashboard. None of Palm's code runs.
    It only has to look and behave like webOS, and it has to feel right.
 2. **Modernized frameworks.** Apps don't ship their framework; they load it from
-   `/usr/palm/frameworks/…` and trust the OS to provide it. Lunacy supplies a fork of
+   `/usr/palm/frameworks/…` and trust the OS to provide it. Lunacy supplies the TouchPad's own
    [Enyo 1.0](https://github.com/enyojs/enyo-1.0) (Apache 2.0), fixed to run on a modern
    Chromium renderer. One fix in the library covers every app built on it.
 3. **Apps as cards.** Each app runs unmodified in its own WebView card, on its own origin.

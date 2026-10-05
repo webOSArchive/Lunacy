@@ -11,29 +11,26 @@ V=../Workbench/vendor
 L=local-assets
 T=local-test-apps
 rm -rf $L $T && mkdir -p $L/fw/enyo $L/apps $T/apps
-# The framework only: support/ is the SDK's examples, docs and enyo-compress (with its
-# node_modules), none of it on a device, and 11 MB of APK when it was shipped.
-cp -r $V/enyo-1.0 $L/fw/enyo/1.0 && rm -rf $L/fw/enyo/1.0/.git $L/fw/enyo/1.0/support
-# Lunacy's changes to Enyo, as diffs against upstream: LunaRuntimes/enyo-1.0/CHANGES.md says what
-# each one is and why. A patch that no longer applies is a build failure, not a silent skip.
+# Enyo as the reference TouchPad has it: /usr/palm/frameworks/enyo/0.10 off the device
+# (webOS CE 3.1.0), the build HP shipped, with the libraries (networkproxy among them) and the
+# localized resources the Apache 2.0 release on GitHub lacks. That release is a slightly
+# different build; Lunacy patched it until 2026-10-05 (LunaRuntimes/enyo-1.0/CHANGES.md).
+cp -r $V/touchpad/enyo-0.10 $L/fw/enyo/1.0
+# Lunacy's changes to Enyo, as diffs against the device's: LunaRuntimes/enyo-1.0/CHANGES.md says
+# what each one is and why. A patch that no longer applies is a build failure, not a silent skip.
 for patch in ../LunaRuntimes/enyo-1.0/patches/*.patch; do
     [ -e "$patch" ] || continue
-    (cd $L/fw/enyo/1.0 && patch -p1 --forward --silent --follow-symlinks < "$HERE/$patch") ||
-        { echo "fetch-assets: $patch does not apply to stock Enyo" >&2; exit 1; }
+    (cd $L/fw/enyo/1.0 && patch -p1 --forward --silent --fuzz=0 --follow-symlinks < "$HERE/$patch") ||
+        { echo "fetch-assets: $patch does not apply to the TouchPad's Enyo" >&2; exit 1; }
     echo "enyo: applied $(basename "$patch")"
 done
-# Enyo libraries HP shipped in the TouchPad's framework folder and never released with the
-# source: added whole from the reference TouchPad (LunaRuntimes/enyo-1.0/CHANGES.md, "Added").
-for lib in networkproxy; do
-    [ -d $L/fw/enyo/1.0/framework/lib/$lib ] && { echo "fetch-assets: upstream Enyo has lib/$lib now" >&2; exit 1; }
-    cp -r $V/touchpad/enyo-0.10/framework/lib/$lib $L/fw/enyo/1.0/framework/lib/
-    cat > $L/fw/enyo/1.0/framework/lib/$lib/NOTICE <<'NOTICE'
-From /usr/palm/frameworks/enyo/0.10/framework/lib on the reference TouchPad (webOS CE 3.1.0).
-Copyright Palm, Inc. / Hewlett-Packard; not part of the Apache 2.0 Enyo release. Distributed by
-Lunacy as abandonware, like Mojo.
+cat > $L/fw/enyo/1.0/NOTICE <<'NOTICE'
+Enyo 1.0 as it is on the reference TouchPad (webOS CE 3.1.0), /usr/palm/frameworks/enyo/0.10,
+with Lunacy's patches (LunaRuntimes/enyo-1.0/patches in the Lunacy repository). Enyo itself is
+Apache 2.0 (Hewlett-Packard; github.com/enyojs/enyo-1.0). The libraries and localized
+resources HP shipped on the device and never released with the source (lib/networkproxy among
+them) are Palm/HP's, distributed by Lunacy as abandonware, like Mojo.
 NOTICE
-    echo "enyo: added lib/$lib"
-done
 cp -r ../Workbench/apps-src/com.ingloriousapps.glimpse/usr/palm/applications/com.ingloriousapps.glimpse $T/apps/
 # Palm's own settings apps that Lunacy ships (Screen & Lock, Help) are committed under
 # assets/apps/ with their NOTICE, like Mojo and the fonts. Any others under

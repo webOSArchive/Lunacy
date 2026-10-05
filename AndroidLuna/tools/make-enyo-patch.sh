@@ -15,7 +15,8 @@ name=$1; shift
 out=../LunaRuntimes/enyo-1.0/patches/$name.patch
 base=$(mktemp -d)
 trap 'rm -rf "$base"' EXIT
-cp -r ../Workbench/vendor/enyo-1.0/. "$base/"
+# The base is the TouchPad's own Enyo, as fetch-assets.sh lays it down.
+cp -r ../Workbench/vendor/touchpad/enyo-0.10/. "$base/"
 for p in ../LunaRuntimes/enyo-1.0/patches/*.patch; do
     [ -e "$p" ] || continue
     case "$(basename "$p" .patch)" in

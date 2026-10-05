@@ -87,14 +87,15 @@ static sdl_surface_head *gl_screen(void)
 	sdl_surface_head *s = get ? get() : NULL;
 	return s && (s->flags & SDL_OPENGL) ? s : NULL;
 }
-/* The GLES version SDL was asked for (Palm's SDL_GL_CONTEXT_MAJOR_VERSION, 17). */
+/* The GLES version SDL was asked for (Palm's SDL_GL_CONTEXT_MAJOR_VERSION, 17), as Lunacy's
+   SDL driver keeps it. Read directly: SDL_GL_GetAttribute dereferences the video device,
+   which isn't there before SDL_Init, and apkenv asks eglGetProcAddress that early (the
+   TouchPad answered it, with GLES 1's functions). */
 static int gles_major(void)
 {
-	static int (*get)(int, int *);
-	int v = 1;
-	if (!get) *(void **)&get = dlsym(RTLD_DEFAULT, "SDL_GL_GetAttribute");
-	if (get) get(17, &v);
-	return v == 2 ? 2 : 1;
+	static int *major;
+	if (!major) major = (int *)dlsym(RTLD_DEFAULT, "LUNACY_gl_major");
+	return major && *major == 2 ? 2 : 1;
 }
 
 static int valid_display(EGLDisplay d) { return d == DEFAULT_DISPLAY || d == CURRENT_DISPLAY; }

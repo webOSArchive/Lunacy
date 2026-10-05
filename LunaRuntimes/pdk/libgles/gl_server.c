@@ -633,13 +633,39 @@ static int create_contexts(struct ctx *c)
 	EGLint n = 0;
 	if (!eglChooseConfig(c->display, attribs, &c->config, 1, &n) || n < 1) { LOGW("pdk gl: no EGL config"); return 0; }
 	const EGLint pb_attribs[] = { EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE };
+#if GLES_VERSION == 1
+	/* Adreno 620's GLES 1 (the Kyocera, Android 12, both ABIs) loads its GLES 1 layer as the
+	   first GLES 1 context is made, and on the way asks its GLES 2 library for a string in
+	   whatever context the thread has. In Lunacy's process, with none current, that read
+	   went through a null pointer (glGetString under Load_Gll_2_0) and took the shell down;
+	   a program of its own on the same device didn't need this. So a throwaway GLES 2
+	   context is current while ours are made, and goes once ours is. */
+	EGLSurface warm_pb = EGL_NO_SURFACE; EGLContext warm = EGL_NO_CONTEXT;
+	{
+		const EGLint a2[] = { EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT, EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_NONE };
+		const EGLint ca2[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
+		EGLConfig cfg2; EGLint n2 = 0;
+		if (eglChooseConfig(c->display, a2, &cfg2, 1, &n2) && n2 > 0) {
+			warm_pb = eglCreatePbufferSurface(c->display, cfg2, pb_attribs);
+			warm = eglCreateContext(c->display, cfg2, EGL_NO_CONTEXT, ca2);
+			if (warm_pb != EGL_NO_SURFACE && warm != EGL_NO_CONTEXT) eglMakeCurrent(c->display, warm_pb, warm_pb, warm);
+		}
+	}
+#endif
 	c->pbuffer = eglCreatePbufferSurface(c->display, c->config, pb_attribs);
 	const EGLint ctx_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, GLES_VERSION, EGL_NONE };
 	c->context = eglCreateContext(c->display, c->config, EGL_NO_CONTEXT, ctx_attribs);
 	c->blit = eglCreateContext(c->display, c->config, c->context, ctx_attribs);
 	c->window_surface = EGL_NO_SURFACE;
-	if (c->pbuffer == EGL_NO_SURFACE || c->context == EGL_NO_CONTEXT || c->blit == EGL_NO_CONTEXT) { LOGW("pdk gl: no pbuffer or context (0x%x)", eglGetError()); return 0; }
-	if (!eglMakeCurrent(c->display, c->pbuffer, c->pbuffer, c->context)) { LOGW("pdk gl: make current failed (0x%x)", eglGetError()); return 0; }
+	int current = c->pbuffer != EGL_NO_SURFACE && c->context != EGL_NO_CONTEXT && c->blit != EGL_NO_CONTEXT &&
+		eglMakeCurrent(c->display, c->pbuffer, c->pbuffer, c->context);
+	EGLint err = eglGetError();
+#if GLES_VERSION == 1
+	if (warm != EGL_NO_CONTEXT) eglDestroyContext(c->display, warm);
+	if (warm_pb != EGL_NO_SURFACE) eglDestroySurface(c->display, warm_pb);
+#endif
+	if (c->pbuffer == EGL_NO_SURFACE || c->context == EGL_NO_CONTEXT || c->blit == EGL_NO_CONTEXT) { LOGW("pdk gl: no pbuffer or context (0x%x)", err); return 0; }
+	if (!current) { LOGW("pdk gl: make current failed (0x%x)", err); return 0; }
 	if (!make_app_framebuffer(c)) return 0;
 	LOGI("pdk gl: GLES %d on %s, the app's framebuffer %d x %d", GLES_VERSION, glGetString(GL_RENDERER), c->game_w, c->game_h);
 	return 1;

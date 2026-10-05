@@ -133,6 +133,15 @@ shell writes to the app from a sender thread, never the main thread.
    ABI details (FILE, pthread types, TLS) make it a long tail; the running-glibc route
    avoids all of it, so this is the fallback if exec is ever closed off.
 
+**On Android 10 and later the 32-bit build can't run a PDK app natively** (measured
+2026-10-05 on Android 12 and 14): Android's app seccomp policy refuses a 32-bit process
+`set_robust_list` (338) and `rseq` (398), both made by glibc's loader as it sets up the first
+thread, and kills it (SIGSYS, exit 159) before the program's first line. Answering them with
+-ENOSYS (a ptrace probe in the app's sandbox) lets the loader through, but glibc makes the
+same calls again as each thread starts, with every signal blocked, where no handler in the
+process can catch them. Until that is solved those devices need the 64-bit build, which runs
+PDK apps under qemu.
+
 ## 5a. 64-bit-only devices: the emulated path, measured on the Pixel Tablet
 
 Three things were learnt the hard way, each with `qemu-user`'s `-strace` or by elimination:
@@ -261,6 +270,11 @@ framebuffer in its own pixels: framebuffer objects (134 apps), `glCopyTexSubImag
   Nexus 7) answers `GL_FRAMEBUFFER_BINDING_OES` with `GL_INVALID_ENUM`, and every game
   went with no GL context (Tiger Woods PGA Tour); there the bound framebuffer's colour
   attachment, which the pbuffer's hasn't, says which it is.
+- Adreno 620's GLES 1 (a Kyocera tablet on Android 12, both ABIs) loads its GLES 1 layer as
+  the first GLES 1 context is made and asks its GLES 2 library for a string on the way; in
+  Lunacy's process, with no context current on the GL thread, that went through a null
+  pointer and took the shell down (a standalone program on the device didn't need the help).
+  A throwaway GLES 2 context is current while the server's are made.
 - Uploads are checked against the bytes that arrived before the driver reads them, and
   BGRA (`GL_EXT_texture_format_BGRA8888`, Mandelbrot) is swizzled to RGBA where the
   device's GLES 1.1 hasn't it.

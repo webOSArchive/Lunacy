@@ -256,6 +256,11 @@ framebuffer in its own pixels: framebuffer objects (134 apps), `glCopyTexSubImag
   bind a name it didn't generate (the app's draws went into the pbuffer). The shell maps
   each app name to one it generated; textures may be bound by any name in GLES 1.1 and
   pass through.
+- The shell checks that its framebuffer is complete and is the one bound: a bind that
+  doesn't take leaves the pbuffer's, which reports complete too. Tegra 3's GLES 1.1 (the
+  Nexus 7) answers `GL_FRAMEBUFFER_BINDING_OES` with `GL_INVALID_ENUM`, and every game
+  went with no GL context (Tiger Woods PGA Tour); there the bound framebuffer's colour
+  attachment, which the pbuffer's hasn't, says which it is.
 - Uploads are checked against the bytes that arrived before the driver reads them, and
   BGRA (`GL_EXT_texture_format_BGRA8888`, Mandelbrot) is swizzled to RGBA where the
   device's GLES 1.1 hasn't it.

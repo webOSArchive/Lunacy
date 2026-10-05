@@ -39,6 +39,7 @@
 #define GL_DEPTH_COMPONENT16_OES GL_DEPTH_COMPONENT16
 #define GL_FRAMEBUFFER_COMPLETE_OES GL_FRAMEBUFFER_COMPLETE
 #define GL_FRAMEBUFFER_BINDING_OES GL_FRAMEBUFFER_BINDING
+#define GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME_OES GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME
 #else
 #include <GLES/gl.h>
 #include <GLES/glext.h>
@@ -358,7 +359,22 @@ static int make_app_framebuffer(struct ctx *c)
 		fb_renderbuffer(GL_FRAMEBUFFER_OES, GL_DEPTH_ATTACHMENT_OES, GL_RENDERBUFFER_OES, app_depth);
 	}
 	bind_rb(GL_RENDERBUFFER_OES, 0);
+	/* Complete, and the one bound: a bind that didn't take leaves the default framebuffer,
+	 * which reports complete too. Tegra 3's GLES 1 doesn't answer GL_FRAMEBUFFER_BINDING_OES
+	 * (GL_INVALID_ENUM, on the Nexus 7); there the bound framebuffer's colour attachment
+	 * says which it is, as the default framebuffer has none to name. */
+	while (glGetError() != GL_NO_ERROR) {}
 	GLenum st = fb_status(GL_FRAMEBUFFER_OES); GLint bound = 0; glGetIntegerv(GL_FRAMEBUFFER_BINDING_OES, &bound);
+	if (glGetError() == GL_INVALID_ENUM) {
+#if GLES_VERSION == 2
+		void (*attachment)(GLenum, GLenum, GLenum, GLint *) = glGetFramebufferAttachmentParameteriv;
+#else
+		void (*attachment)(GLenum, GLenum, GLenum, GLint *) = (void (*)(GLenum, GLenum, GLenum, GLint *))eglGetProcAddress("glGetFramebufferAttachmentParameterivOES");
+#endif
+		GLint tex = 0;
+		if (attachment) attachment(GL_FRAMEBUFFER_OES, GL_COLOR_ATTACHMENT0_OES, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME_OES, &tex);
+		if (glGetError() == GL_NO_ERROR && (GLuint)tex == APP_TEX) bound = (GLint)app_fb;
+	}
 	if (st != GL_FRAMEBUFFER_COMPLETE_OES || (GLuint)bound != app_fb) { LOGW("pdk gl: the app's framebuffer is incomplete (0x%x, bound %d)", st, bound); return 0; }
 	/* GL's defaults for a fresh window: the whole screen, cleared black. */
 	glViewport(0, 0, c->game_w, c->game_h);

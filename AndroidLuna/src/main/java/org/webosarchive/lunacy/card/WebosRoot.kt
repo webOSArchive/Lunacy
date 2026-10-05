@@ -57,7 +57,22 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
                 "sbin", "usr/sbin", "usr/lib", "usr/palm/applications", "usr/palm/services", "usr/palm/public",
                 "usr/palm/frameworks", "etc/palm", "etc/event.d", "etc/udev/rules.d")) File(root, d).mkdirs()
         link(installedDir.path, File(root, "media/cryptofs/apps"))
+        writeBuildInfo()
         prepared = true
+    }
+
+    /**
+     * `/etc/palm-build-info`, which the SDK's tools read before anything else to learn what
+     * they are talking to. A device's said `PRODUCT_VERSION_STRING=webOS CE 3.1.0` (the
+     * reference TouchPad); Lunacy's says it is Lunacy, and webos-sdk-redux recognises it by
+     * name rather than Lunacy passing itself off as a TouchPad (codepoet, 2026-10-05).
+     */
+    private fun writeBuildInfo() {
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        @Suppress("DEPRECATION") val code = info.versionCode
+        val text = "PRODUCT_VERSION_STRING=Lunacy ${info.versionName}\nBUILDNAME=Lunacy\nBUILDNUMBER=$code\n"
+        val f = File(root, "etc/palm-build-info")
+        if (!f.isFile || f.readText() != text) { f.parentFile?.mkdirs(); f.writeText(text) }
     }
 
     // ---- the ROM ----

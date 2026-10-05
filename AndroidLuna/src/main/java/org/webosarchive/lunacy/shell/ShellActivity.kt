@@ -138,6 +138,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // (again after an update) off the main thread, below; a service's first call and a
         // package script wait for it (WebosRoot.prepare is synchronized).
         webos = org.webosarchive.lunacy.card.WebosRoot(this, bus, installed).apply { lunaSend.start() }
+        // What webOS's syslogd kept, and novacomd's device side: the SDK's tools over adb.
+        org.webosarchive.lunacy.card.SysLog.start(webos.root)
+        org.webosarchive.lunacy.card.Novacom(webos) { org.webosarchive.lunacy.card.DeviceProfile.nduid(this) }.start()
         files = AppFiles(assets, installed, webos.root, java.io.File(applicationInfo.sourceDir))
         jsServices = org.webosarchive.lunacy.card.JsServices(bus, files.root, webos)
         server = AppServer(assets, files, jsServices.root, java.io.File(filesDir, "framework-art"))
@@ -717,12 +720,15 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * tapping the "installed" banner launches the app.
      */
     private fun install(source: String, requester: String = "", onProgress: (Int) -> Unit = {},
-                        onDone: (Packages.Result) -> Unit = {}) {
+                        banners: Boolean = true, onDone: (Packages.Result) -> Unit = {}) {
         val name = android.net.Uri.decode(source.substringAfterLast('/'))
-        systemBanner(requester, "Installing $name")
+        if (banners) systemBanner(requester, "Installing $name")
         // LunaSysMgr showed the package on the launcher while it installed, with its progress.
         launcher.startInstall(source, name.removeSuffix(".ipk").substringBefore('_'))
-        packages.install(source, progress = { p -> launcher.installProgress(source, p); onProgress(p) }) { r ->
+        packages.install(source, progress = { p -> launcher.installProgress(source, p); onProgress(p) },
+            // Named after the file at first, as the package is all there is; its app's own
+            // title once the package is on the device and its appinfo.json can be read.
+            title = { t -> launcher.installTitle(source, t) }) { r ->
             launcher.endInstall(source)
             val before = registry.apps.map { it.id }.toSet()
             appsChanged()
@@ -731,6 +737,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             val app = r.appIds.firstNotNullOfOrNull { registry.inDir(it) }
                 ?: registry.apps.firstOrNull { it.id !in before && it.visible }
             when {
+                !banners -> {}
                 r.error != null -> systemBanner(requester, "Couldn't install $name: ${r.error}")
                 app == null -> systemBanner(requester, "Installed ${r.packageId.ifEmpty { name }}")
                 else -> systemBanner(app.id, "${app.title} installed")
@@ -1588,6 +1595,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // Lunacy really set. See Docs/architecture.md, "Settings".
         displayService = org.webosarchive.lunacy.card.DisplayService(this)
         displayService.onDockMode = { on -> runOnUiThread { setExhibition(on) } }
+        displayService.inDockMode = { exhibitionOn }
         displayService.register(bus)
         dockMode = org.webosarchive.lunacy.card.DockMode(this, registry).also { it.register(bus) }
         systemService = org.webosarchive.lunacy.card.SystemService(jsServices.root, java.io.File(filesDir, "systemservice.json"))
@@ -1655,7 +1663,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // App Catalog's installer, over the same install path as Preware's (AppInstallService.kt).
         org.webosarchive.lunacy.card.AppInstallService(object : org.webosarchive.lunacy.card.AppInstallService.Installer {
             override fun install(url: String, requester: String, progress: (Int) -> Unit, done: (Packages.Result) -> Unit) =
-                this@ShellActivity.install(url, requester, progress, done)
+                this@ShellActivity.install(url, requester, progress, onDone = done)
             override fun remove(appId: String, done: (String?) -> Unit) {
                 val app = registry.get(appId)
                 if (app == null || !app.userInstalled) return done("$appId isn't installed")
@@ -1663,7 +1671,38 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             }
             override fun isInstalled(appId: String) = registry.get(appId)?.userInstalled == true
         }).register(bus)
-        org.webosarchive.lunacy.card.AppInstallService.AppInstaller { filesDir.usableSpace }.register(bus)
+        // appinstaller's own installs and removals, which the SDK's palm-install makes.
+        org.webosarchive.lunacy.card.AppInstallService.AppInstaller({ filesDir.usableSpace },
+            object : org.webosarchive.lunacy.card.AppInstallService.PackageInstaller {
+                override fun installFile(file: java.io.File, done: (Packages.Result) -> Unit) =
+                    install(file.path, banners = false, onDone = done)
+                override fun removableVersion(id: String) = registry.get(id)?.takeIf { it.userInstalled }?.version
+                override fun remove(id: String, done: (String?) -> Unit) {
+                    val app = registry.get(id) ?: return done("$id isn't installed")
+                    running[id]?.toList()?.forEach { w -> onWindowClosed(w) }
+                    packages.remove(id, app.dir) { error -> appsChanged(); jsServices.reload(); showDock(); done(error) }
+                }
+            }) { path -> java.io.File(webos.mapPaths(path)) }.register(bus)
+        // Which windows are up, and closing one, as palm-launch -c and palm-run use them.
+        // Measured on the reference TouchPad (private bus only): running answers
+        // {"running":[{"id":…,"processid":"1030"},…],"returnValue":true}, one entry per window
+        // (LunaSysMgr's own system UI windows among them, which Lunacy draws natively and so
+        // has none of); close {"processId"} answers {"returnValue":true}, an unknown id too, and
+        // with none {"returnValue":false,"errorText":"Must provide a valid processId to close"}.
+        bus.register("com.palm.applicationManager", "running", Bus.CallHandler { c ->
+            if (!c.privateBus) return@CallHandler c.reply(Bus.error("Unknown method \"running\" for category \"/\""))
+            val list = org.json.JSONArray()
+            for ((id, windows) in running) for (w in windows) list.put(JSONObject().put("id", id).put("processid", w.pid.toString()))
+            c.reply(JSONObject().put("running", list).put("returnValue", true).toString())
+        })
+        bus.register("com.palm.applicationManager", "close", Bus.CallHandler { c ->
+            if (!c.privateBus) return@CallHandler c.reply(Bus.error("Unknown method \"close\" for category \"/\""))
+            val pid = c.params.optString("processId")
+            if (pid.isEmpty()) return@CallHandler c.reply(JSONObject().put("returnValue", false)
+                .put("errorText", "Must provide a valid processId to close").toString())
+            running.values.flatten().firstOrNull { it.pid.toString() == pid }?.let { onWindowClosed(it) }
+            c.reply(Bus.ok())
+        })
         bus.register("com.palm.applicationManager", "listApps") { _, _, reply ->
             reply(Bus.ok(mapOf("apps" to org.json.JSONArray(registry.apps.map { it.listEntry() }))))
         }

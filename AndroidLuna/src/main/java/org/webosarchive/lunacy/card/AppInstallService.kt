@@ -44,6 +44,15 @@ class AppInstallService(private val installer: Installer, private val icons: (St
         fun isInstalled(appId: String): Boolean
     }
 
+    /** What the shell does for appinstaller's installs and removals (the SDK's palm-install). Main thread. */
+    interface PackageInstaller {
+        /** Installs a package file already on the device, with no banners: appinstaller showed none. */
+        fun installFile(file: java.io.File, done: (Packages.Result) -> Unit)
+        /** The installed version of an app or package, or null if it isn't one that can be removed. */
+        fun removableVersion(id: String): String?
+        fun remove(id: String, done: (String?) -> Unit)
+    }
+
     private val main = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
     /** Installs the service knows about, by app id, with their details. Main thread. */
@@ -179,8 +188,21 @@ class AppInstallService(private val installer: Installer, private val icons: (St
      * the uncompressed size (twice the size when none was given) plus a few KB for the
      * filesystem; Lunacy measures it against the free space where it keeps packages.
      */
-    class AppInstaller(private val freeBytes: () -> Long) {
+    class AppInstaller(private val freeBytes: () -> Long, private val packages: PackageInstaller? = null,
+                       /** A webOS path (or one luna-send's path mapping already pointed into the root) as a file. */
+                       private val resolve: (String) -> java.io.File = { java.io.File(it) }) {
+        /** LunaSysMgr numbered installs and removals from one counter. */
+        private var tickets = 0
+
         fun register(bus: Bus) {
+            if (packages != null) {
+                bus.register(INSTALLER, "installNoVerify", Bus.CallHandler { c ->
+                    if (!c.privateBus) c.reply(Bus.error("Service does not exist: $INSTALLER.")) else installNoVerify(c, packages)
+                })
+                bus.register(INSTALLER, "remove", Bus.CallHandler { c ->
+                    if (!c.privateBus) c.reply(Bus.error("Service does not exist: $INSTALLER.")) else remove(c, packages)
+                })
+            }
             bus.register(INSTALLER, "queryInstallCapacity", Bus.CallHandler { c ->
                 if (!c.privateBus) return@CallHandler c.reply(Bus.error("Service does not exist: $INSTALLER."))
                 val p = c.params
@@ -193,6 +215,47 @@ class AppInstallService(private val installer: Installer, private val icons: (St
                 c.reply(JSONObject().put("returnValue", true).put("result", if (fits) 0 else 3)
                     .put("spaceNeededInKB", needed.toString()).toString())
             })
+        }
+
+        /**
+         * palm://com.palm.appinstaller/installNoVerify, which palm-install calls (private bus).
+         * Measured on the reference TouchPad (2026-10-05): `{"returnValue":true,"ticket":7,
+         * "subscribed":true}`, then `{"ticket":7,"status":…}` for STARTING, CREATE_TMP,
+         * VERIFYING, IPKG_INSTALL and SUCCESS; a target that isn't there goes STARTING,
+         * FAILED_PACKAGEFILE_NOT_FOUND, FAILED_IPKG_INSTALL; no target at all is
+         * `{"returnValue":false,"errorCode":"Failed to find param target in message"}`.
+         * Without subscribe the reply says `"subscribed":false` and the install still runs.
+         * The device showed nothing for it but the app arriving in the launcher.
+         */
+        private fun installNoVerify(c: Bus.Call, packages: PackageInstaller) {
+            val target = c.params.optString("target")
+            if (target.isEmpty()) return c.reply(JSONObject().put("returnValue", false)
+                .put("errorCode", "Failed to find param target in message").toString())
+            val ticket = ++tickets
+            c.reply(JSONObject().put("returnValue", true).put("ticket", ticket).put("subscribed", c.subscribe).toString())
+            fun status(s: String) { if (c.subscribe) c.reply(JSONObject().put("ticket", ticket).put("status", s).toString()) }
+            status("STARTING")
+            val file = resolve(target)
+            if (!file.isFile) { status("FAILED_PACKAGEFILE_NOT_FOUND"); status("FAILED_IPKG_INSTALL"); return }
+            status("CREATE_TMP"); status("VERIFYING"); status("IPKG_INSTALL")
+            packages.installFile(file) { r -> status(if (r.error == null) "SUCCESS" else "FAILED_IPKG_INSTALL") }
+        }
+
+        /**
+         * palm://com.palm.appinstaller/remove, palm-install -r's (private bus). Measured on the
+         * reference TouchPad: `{"ticket":3,"returnValue":true,"version":"0.0.1","subscribed":true}`,
+         * then IPKG_REMOVE and SUCCESS; a package that isn't installed, or no packageName, is
+         * `{"returnValue":false}`.
+         */
+        private fun remove(c: Bus.Call, packages: PackageInstaller) {
+            val id = c.params.optString("packageName")
+            val version = if (id.isEmpty()) null else packages.removableVersion(id)
+            if (version == null) return c.reply(JSONObject().put("returnValue", false).toString())
+            val ticket = ++tickets
+            c.reply(JSONObject().put("ticket", ticket).put("returnValue", true).put("version", version).put("subscribed", c.subscribe).toString())
+            fun status(s: String) { if (c.subscribe) c.reply(JSONObject().put("ticket", ticket).put("status", s).toString()) }
+            status("IPKG_REMOVE")
+            packages.remove(id) { error -> status(if (error == null) "SUCCESS" else "FAILED_IPKG_REMOVE") }
         }
     }
 

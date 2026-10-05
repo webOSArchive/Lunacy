@@ -303,13 +303,15 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     // ---- packages being installed ----
 
     /** A package on its way in: shown on the downloads page, its icon faded, with its progress. */
-    private class Installing(val title: String, var progress: Int)
+    private class Installing(var title: String, var progress: Int)
     private val installs = LinkedHashMap<String, Installing>()
     private fun installPage() = pages.indexOfFirst { it.designator == "downloads" }.takeIf { it >= 0 } ?: 0
     private fun installsOn(page: Page) = if (pages.indexOf(page) == installPage()) installs.values.toList() else emptyList()
 
     fun startInstall(key: String, title: String) { installs[key] = Installing(title, 0); invalidate() }
     fun installProgress(key: String, percent: Int) { installs[key]?.progress = percent.coerceIn(0, 100); invalidate() }
+    /** The pending icon's label, once the package's own title is known. */
+    fun installTitle(key: String, title: String) { installs[key]?.title = title; invalidate() }
     fun endInstall(key: String) { installs.remove(key); invalidate() }
     /** Current page position (fractional while dragging). */
     private var pagePos = 0f

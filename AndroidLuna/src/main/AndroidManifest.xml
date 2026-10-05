@@ -13,6 +13,8 @@
     <!-- PDL_Vibrate, for PDK apps (PdkWindow.onPdl). A normal permission; without it the
          call was refused and nothing buzzed. -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- display/control/setState "on": the SDK's palm-launch wakes the screen with it. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- The status bar's Bluetooth icon: whether the adapter is on and connected. -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <!-- webOS's /media/internal is the user's own storage, and apps read and wrote it freely.

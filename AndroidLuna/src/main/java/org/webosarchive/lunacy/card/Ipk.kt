@@ -20,15 +20,41 @@ object Ipk {
     /** Unpacks the package's data.tar.gz into dest. Returns the relative paths of the files written. */
     fun extract(ipk: File, dest: File): List<String> {
         BufferedInputStream(ipk.inputStream()).use { input ->
-            input.mark(8)
-            val magic = ByteArray(8).also { input.readFully(it) }
-            input.reset()
-            val data = when {
-                String(magic, Charsets.ISO_8859_1) == "!<arch>\n" -> arMember(input, "data.tar.gz")
-                magic[0] == 0x1f.toByte() && magic[1] == 0x8b.toByte() -> tarMember(GZIPInputStream(input), "data.tar.gz")
-                else -> null
-            } ?: throw BadPackage("no data.tar.gz")
+            val data = member(input, "data.tar.gz") ?: throw BadPackage("no data.tar.gz")
             return untar(GZIPInputStream(data), dest)
+        }
+    }
+
+    /**
+     * The title in the package's first app's appinfo.json, or null if it has no app or none
+     * can be read. The walk stops at that file, which palm-package puts near the start.
+     */
+    fun appTitle(ipk: File): String? = try {
+        BufferedInputStream(ipk.inputStream()).use { input ->
+            val data = member(input, "data.tar.gz") ?: return null
+            var title: String? = null
+            readTar(GZIPInputStream(data)) { path, type, size, body ->
+                val parts = path.split('/').filter { it.isNotEmpty() && it != "." }
+                if (type == '0' && parts.size == 5 && parts.take(3) == listOf("usr", "palm", "applications") &&
+                    parts[4] == "appinfo.json" && size < 1_000_000) {
+                    title = runCatching { org.json.JSONObject(String(body.readBytes(size), Charsets.UTF_8)).optString("title") }
+                        .getOrNull()?.takeIf { it.isNotBlank() }
+                    false
+                } else true
+            }
+            title
+        }
+    } catch (e: IOException) { null }
+
+    /** The named member of the package, whichever outer form it has, as a stream bounded to it. */
+    private fun member(input: BufferedInputStream, name: String): InputStream? {
+        input.mark(8)
+        val magic = ByteArray(8).also { input.readFully(it) }
+        input.reset()
+        return when {
+            String(magic, Charsets.ISO_8859_1) == "!<arch>\n" -> arMember(input, name)
+            magic[0] == 0x1f.toByte() && magic[1] == 0x8b.toByte() -> tarMember(GZIPInputStream(input), name)
+            else -> null
         }
     }
 
@@ -38,14 +64,7 @@ object Ipk {
      */
     fun control(ipk: File): Map<String, ByteArray> {
         BufferedInputStream(ipk.inputStream()).use { input ->
-            input.mark(8)
-            val magic = ByteArray(8).also { input.readFully(it) }
-            input.reset()
-            val control = when {
-                String(magic, Charsets.ISO_8859_1) == "!<arch>\n" -> arMember(input, "control.tar.gz")
-                magic[0] == 0x1f.toByte() && magic[1] == 0x8b.toByte() -> tarMember(GZIPInputStream(input), "control.tar.gz")
-                else -> null
-            } ?: return emptyMap()
+            val control = member(input, "control.tar.gz") ?: return emptyMap()
             val out = LinkedHashMap<String, ByteArray>()
             readTar(GZIPInputStream(control)) { path, type, size, body ->
                 val name = path.substringAfterLast('/')

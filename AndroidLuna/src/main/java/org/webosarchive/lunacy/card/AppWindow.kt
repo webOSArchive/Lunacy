@@ -150,7 +150,7 @@ open class AppWindow(
     /** The webOS device this window reports itself as. */
     private val profile = DeviceProfile.forScreen(context)
     /** This window's "process id": webOS gave one per window, and apps print it. */
-    private val pid = nextPid.getAndIncrement()
+    val pid = nextPid.getAndIncrement()
     /** enyo.WebView's native views in this window, made when a page first asks for one. */
     private val browserViews by lazy { BrowserViews(this, host.server.webosRoot, host.server) }
     private var hasBrowserViews = false
@@ -197,6 +197,7 @@ open class AppWindow(
         webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(m: ConsoleMessage): Boolean {
                 Log.i(AppServer.TAG, "[$appId] ${m.messageLevel()} ${m.sourceId()?.substringAfterLast('/')}:${m.lineNumber()} ${m.message()}")
+                SysLog.console(appId, m.messageLevel(), m.message(), m.sourceId(), m.lineNumber())
                 return true
             }
             override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {

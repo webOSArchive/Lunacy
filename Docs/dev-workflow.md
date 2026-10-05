@@ -231,6 +231,24 @@ reports is written up in [pre3.md](pre3.md).
 - **`systemProperties/Get` takes one `key`** on 2.2.4, not the TouchPad's `keys` array.
 - **No `takeScreenShot`** was tried here; the TouchPad's screenshot route is untested on 2.2.4.
 
+## The SDK's tools against Lunacy
+
+With [webos-sdk-redux](https://github.com/webOSArchive/webos-sdk-redux)'s novacomd and
+`webos-tools.jar` on the host (its
+[LUNACY.md](https://github.com/webOSArchive/webos-sdk-redux/blob/main/LUNACY.md)), every
+device that adb can reach and that is running Lunacy appears in `novacom -l` as `adb lunacy`,
+beside the TouchPad. The same probe then goes on both machines with the same commands:
+
+```sh
+palm-install -d lunacy <ipk>          # and -d usb for the TouchPad
+palm-launch -d lunacy <appid>
+palm-log -d lunacy -f <appid>         # console output, as /var/log/messages had it
+novaterm -d lunacy                    # a shell in Lunacy's webOS root
+```
+
+This replaces `adb push` and `--es install` for probe apps, and works with a release build.
+The architecture doc's "Developer tools" item has how it works.
+
 ## Reading a probe's output when palm-log won't
 
 `palm-log -f <appid>` holds the novacom connection, and `palm-launch` then times out behind

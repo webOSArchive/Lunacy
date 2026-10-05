@@ -28,14 +28,18 @@ class DisplayService(private val context: Context) {
 
     /**
      * webOS's display states. Lunacy answers for the two Exhibition mode uses - Palm's
-     * Exhibition app starts it with {"state":"dock"} - and says plainly which of the others
-     * it hasn't got rather than accepting them and doing nothing.
+     * Exhibition app starts it with {"state":"dock"} - and for "on", which wakes the screen
+     * (the SDK's palm-launch and palm-run send it before launching), and says plainly which
+     * of the others it hasn't got rather than accepting them and doing nothing. LunaSysMgr
+     * answered {"returnValue":true}, and ignored "on" in Exhibition (DisplayManager.cpp).
      */
     var onDockMode: (Boolean) -> Unit = {}
+    var inDockMode: () -> Boolean = { false }
 
     private fun setState(p: JSONObject): String = when (p.optString("state")) {
         "dock" -> { onDockMode(true); Bus.ok() }
         "undock" -> { onDockMode(false); Bus.ok() }
+        "on" -> { if (!inDockMode()) wake(); Bus.ok() }
         "" -> Bus.error("state is required")
         else -> Bus.error("Lunacy has no display state \"${p.optString("state")}\"")
     }
@@ -53,6 +57,14 @@ class DisplayService(private val context: Context) {
             statusSubscribers += call
             call.onCancel { statusSubscribers.remove(call) }
         }
+    }
+
+    /** Turns the screen on, as a key press would; Android's own timeout turns it off again. */
+    @Suppress("DEPRECATION")
+    private fun wake() {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        pm.newWakeLock(android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+            android.os.PowerManager.ON_AFTER_RELEASE, "lunacy:display-on").acquire(1000)
     }
 
     private fun statusReply(subscribed: Boolean): String = JSONObject()

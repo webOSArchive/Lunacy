@@ -26,11 +26,12 @@ class Packages(val root: File, private val cache: File, private val webos: Webos
 
     /**
      * source is an http(s) URL, a file:// URL or a path on the device. [progress] hears 0…100
-     * on the main thread as it goes: the download, then 100 once it is unpacked.
+     * on the main thread as it goes: the download, then 100 once it is unpacked. [title] hears
+     * the package's app's title from its appinfo.json, once the package is on the device.
      */
-    fun install(source: String, progress: (Int) -> Unit = {}, done: (Result) -> Unit) {
+    fun install(source: String, progress: (Int) -> Unit = {}, title: (String) -> Unit = {}, done: (Result) -> Unit) {
         worker.execute {
-            val r = try { installNow(source) { p -> main.post { progress(p) } } } catch (e: Exception) {
+            val r = try { installNow(source, { t -> main.post { title(t) } }) { p -> main.post { progress(p) } } } catch (e: Exception) {
                 Log.w(AppServer.TAG, "install $source failed", e)
                 Result(source, emptyList(), e.message ?: e.javaClass.simpleName)
             }
@@ -72,8 +73,9 @@ class Packages(val root: File, private val cache: File, private val webos: Webos
         }
     }
 
-    private fun installNow(source: String, progress: (Int) -> Unit): Result {
+    private fun installNow(source: String, title: (String) -> Unit, progress: (Int) -> Unit): Result {
         val (ipk, temporary) = fetch(source, progress)
+        Ipk.appTitle(ipk)?.let(title)
         val staging = File(root.parentFile, "staging").apply { deleteRecursively(); mkdirs() }
         try {
             val control = Ipk.control(ipk)

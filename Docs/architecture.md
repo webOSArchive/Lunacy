@@ -934,7 +934,9 @@ no `openDatabase` at all, and Lunacy provides it in JS instead:
     32-bit build it runs through the PDK runtime ([pdk.md](pdk.md)). Elsewhere, as before:
     launching it shows a banner saying Lunacy can't run it yet, and a bus launch returns an
     error.
-  - **Feedback.** Preware showed its own progress. Lunacy shows a banner when the install
+  - **Feedback.** The launcher's pending icon is named after the package file until the
+    package is on the device, then after the title in its app's `appinfo.json`.
+    Preware showed its own progress. Lunacy shows a banner when the install
     starts and another when it ends; tapping "installed" launches the app.
   - **Plain `http` (ratchet item).** Packages are fetched as the Museum names them, usually
     plain `http`, with no signature check, as on webOS. Android 9 blocks cleartext by
@@ -978,6 +980,34 @@ no `openDatabase` at all, and Lunacy provides it in JS instead:
   under - identity comes from a token Lunacy gave the process, never from `-a`. Apps a script
   puts in `/usr/palm/applications` are system apps: they launch and list like any other, and
   aren't removable from the launcher.
+- **Developer tools: the SDK over adb.** The Palm SDK's tools (`palm-install`, `palm-launch`,
+  `palm-run`, `palm-log`, `novacom`, `novaterm`) reach Lunacy as they reach a TouchPad, through
+  [webos-sdk-redux](https://github.com/webOSArchive/webos-sdk-redux)'s novacomd, which finds
+  Lunacy through the host's adb server and lists it as `adb lunacy` (its
+  [LUNACY.md](https://github.com/webOSArchive/webos-sdk-redux/blob/main/LUNACY.md)).
+  `Novacom.kt` is novacomd's device side on the abstract socket
+  `org.webosarchive.lunacy.novacomd`: `get` and `put` of files in the webOS root, `run` of a
+  command in it (busybox, path mapping and luna-send as a package script gets them, calling
+  the bus as `novacomd` on the private bus, as root's luna-send did), and `open tty` for
+  novaterm, through busybox's `script`. It serves only peers that are root or adb's shell
+  user, so who may use it comes from the socket (rule 10): adb's USB debugging is Android's
+  developer mode, as novacom was webOS's. **Ratchet item:** commands run with Lunacy's own
+  permissions, as root's stand-in, as package scripts do. What the tools need from the rest
+  of Lunacy, each measured on the reference TouchPad:
+  - `/etc/palm-build-info` says `PRODUCT_VERSION_STRING=Lunacy <version>`: Lunacy says what it
+    is, and the SDK recognises it by name rather than Lunacy posing as a TouchPad (codepoet).
+    `/proc/nduid`, read through novacom, is Lunacy's nduid.
+  - `appinstaller/installNoVerify` and `appinstaller/remove` (private bus) install and remove
+    through the package manager, with the device's tickets and statuses and no banners (the
+    TouchPad showed nothing until the icon arrived; Lunacy shows its pending launcher icon,
+    as for App Catalog's installs, which codepoet asked to keep);
+    `applicationManager/running` lists every window and its process id, and `close` closes one.
+  - `display/control/setState` `"on"`, which palm-launch and palm-run send first, wakes the
+    screen (Android's `WAKE_LOCK`, a permission granted at install), and is ignored in
+    Exhibition, as LunaSysMgr ignored it in dock mode.
+  - `/var/log/messages` (`SysLog.kt`) has every app's console output as LunaSysMgr logged it
+    (`… user.notice LunaSysMgr: {LunaSysMgrJS}: <appid>: <message>, <file>:<line>`), with
+    `lunacy` in the machine field, kept under 1 MB by moving it to `messages.0`.
 - **Hybrid apps.** Some web apps declare `"plug-ins": true` and ship native PDK plugins
   (Kindle does). They can run only as far as their web side goes until the PDK layer
   exists, and the compatibility score says so.

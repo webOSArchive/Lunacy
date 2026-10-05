@@ -564,7 +564,7 @@ the media indexer's db8 kinds. All in [fix-log.md](fix-log.md) "Known gaps".
   ([WebAppMgrProxy.cpp#L382](https://github.com/webOSArchive/LunaCE/blob/master/Src/remote/WebAppMgrProxy.cpp#L382));
   the TouchPad has no LED and nothing in `Src/lunaui` draws it. Enyo calls it from
   `DashboardContent`; the no-op is right.
-- **`editorFocused`, `hasAlphaHole`, `printFrame`, `encrypt`/`decrypt`, `runAnimationLoop`,
+- **`editorFocused`, `hasAlphaHole`, `printFrame`, `runAnimationLoop`,
   `hideSpellingWidget`, `getDeviceKeys`.** Plugins, PDK, printing, the phone's keyboard.
 - **Scene and cross-app transitions** (`prepareSceneTransition`, `runSceneTransition`,
   `runCrossAppTransition`, child cards). The TouchPad's Mojo (submission 506) doesn't call

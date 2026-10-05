@@ -1016,6 +1016,9 @@ no `openDatabase` at all, and Lunacy provides it in JS instead:
   - `/etc/palm-build-info` says `PRODUCT_VERSION_STRING=Lunacy <version>`: Lunacy says what it
     is, and the SDK recognises it by name rather than Lunacy posing as a TouchPad (codepoet).
     `/proc/nduid`, read through novacom, is Lunacy's nduid.
+  - `/media/internal/.developer` exists from first start, as it did on a device in developer
+    mode: `palm-install` puts the package there before installing it, and novacom's `put`
+    makes no folders. Every Lunacy is in developer mode for now (codepoet, 2026-10-05).
   - `appinstaller/installNoVerify` and `appinstaller/remove` (private bus) install and remove
     through the package manager, with the device's tickets and statuses and no banners (the
     TouchPad showed nothing until the icon arrived; Lunacy shows its pending launcher icon,

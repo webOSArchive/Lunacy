@@ -53,7 +53,9 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
             stamp.writeText(apk)
         }
         // The folders every TouchPad has, which scripts write into without making them.
-        for (d in listOf("media/internal", "tmp", "var/tmp", "var/run", "var/log", "var/palm", "var/luna/preferences", "var/luna/data", "var/preferences", "home/root", "bin", "usr/bin",
+        // media/internal/.developer is developer mode's: the SDK's palm-install puts the
+        // package there before installing it, and every Lunacy is in developer mode.
+        for (d in listOf("media/internal", "media/internal/.developer", "tmp", "var/tmp", "var/run", "var/log", "var/palm", "var/luna/preferences", "var/luna/data", "var/preferences", "home/root", "bin", "usr/bin",
                 "sbin", "usr/sbin", "usr/lib", "usr/palm/applications", "usr/palm/services", "usr/palm/public",
                 "usr/palm/frameworks", "etc/palm", "etc/event.d", "etc/udev/rules.d")) File(root, d).mkdirs()
         link(installedDir.path, File(root, "media/cryptofs/apps"))

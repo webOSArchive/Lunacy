@@ -393,7 +393,7 @@
 	};
 
 	["deactivate", "addNewContentIndicator", "removeNewContentIndicator", "cancelCrossAppScene",
-	 "cancelSceneTransition", "crossAppSceneActive", "decrypt", "editorFocused", "encrypt", "hideSpellingWidget",
+	 "cancelSceneTransition", "crossAppSceneActive", "editorFocused", "hideSpellingWidget",
 	 "prepareSceneTransition", "printFrame", "runAnimationLoop", "runCrossAppTransition",
 	 "runSceneTransition", "stagePreparing"].forEach(function (name) {
 		if (!PalmSystem[name]) {

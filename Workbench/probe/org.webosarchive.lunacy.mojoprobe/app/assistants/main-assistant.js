@@ -1,79 +1,94 @@
-// Measures drPodder's playback row, with Mojo's own ProgressSlider in it, so the same
-// markup can be read on the reference TouchPad and in Lunacy and the two compared. The row
-// is three table-cells (20% / 60% / 20%) in a plain block, which is the shape a lot of Mojo
-// chrome has: whether the anonymous table around them takes the container's width or
-// shrinks to its content decides whether the row spans the card or huddles in the corner.
+// Keyring SD 0.0.6's item fields (Workbench/probe, mojoprobe 0.0.3), to compare the reference
+// TouchPad with Lunacy: where a labelled TextField's text sits, and what a tap and a hold do
+// to a holdToEnable field. The geometry is logged once the scene is up; every focus, blur,
+// tap, hold and holdEnd on the fields is logged as it happens, with the time since launch.
 function MainAssistant() {}
 
 MainAssistant.prototype.setup = function () {
-	this.progressModel = { value: 20, progress: 0, progressStart: 0, progressEnd: 0 };
-	this.controller.setupWidget("progress",
-		{ sliderProperty: "value", minValue: 0, maxValue: 100, round: true },
-		this.progressModel);
+	this.t0 = Date.now();
+	this.item = { title: "Bank", username: "", pass: "" };
+	// Keyring's own attributes, from item-assistant.js.
+	var base = {
+		autoFocus: false,
+		holdToEnable: true,
+		focusMode: Mojo.Widget.focusSelectMode,
+		changeOnKeyPress: false,
+		textCase: Mojo.Widget.steModeLowerCase,
+		autoReplace: false,
+		requiresEnterKey: false
+	};
+	var fields = { title: "Title", username: "Username", pass: "Password" };
+	for (var f in fields) {
+		var attrs = Object.clone(base);
+		attrs.hintText = fields[f];
+		attrs.inputName = f;
+		attrs.modelProperty = f;
+		this.controller.setupWidget(f + "Field", attrs, this.item);
+	}
 	this.controller.window.setTimeout(this.report.bind(this), 1500);
 };
 
-MainAssistant.prototype.report = function () {
-	var doc = this.controller.document, win = this.controller.window;
-	var lines = [];
+MainAssistant.prototype.say = function (s) {
+	s = "MOJOPROBE +" + (Date.now() - this.t0) + "ms " + s;
+	try { console.log(s); } catch (e) {}
+	try { console.error(s); } catch (e) {}
+	return s;
+};
 
-	function say(s) {
-		try { console.log("MOJOPROBE " + s); } catch (e) {}
-		try { console.error("MOJOPROBE " + s); } catch (e) {}
-		lines.push(s);
+MainAssistant.prototype.activate = function () {
+	var doc = this.controller.document, self = this;
+	function name(e) {
+		var t = e.target;
+		return t ? (t.tagName + "#" + (t.id || "") + "." + (t.className || "")) : "?";
 	}
+	var log = function (e) { self.say("event " + e.type + " " + name(e)); };
+	var ids = ["titleField", "usernameField", "passField"];
+	for (var i = 0; i < ids.length; i++) {
+		var el = doc.getElementById(ids[i]);
+		el.addEventListener("focus", log, true);
+		el.addEventListener("blur", log, true);
+		el.addEventListener("mousedown", log, true);
+		el.addEventListener("mouseup", log, true);
+		this.controller.listen(el, Mojo.Event.tap, log, true);
+		this.controller.listen(el, Mojo.Event.hold, log, true);
+		this.controller.listen(el, Mojo.Event.holdEnd, log, true);
+	}
+};
+
+MainAssistant.prototype.report = function () {
+	var doc = this.controller.document, win = this.controller.window, lines = [], self = this;
 	function rec(k, v) {
 		var s;
 		try { s = JSON.stringify(v); } catch (e) { s = String(v); }
-		say(k + " = " + s);
+		lines.push(self.say(k + " = " + s));
 	}
 	function box(e) {
 		if (!e) { return null; }
 		var r = e.getBoundingClientRect();
-		return [Math.round(r.left * 100) / 100, Math.round(r.top * 100) / 100,
-			Math.round(r.width * 100) / 100, Math.round(r.height * 100) / 100];
+		return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
 	}
 	function get(id) { return doc.getElementById(id); }
 
 	rec("win.inner", [win.innerWidth, win.innerHeight]);
-	rec("win.client", [doc.documentElement.clientWidth, doc.documentElement.clientHeight]);
-	rec("body.offsetHeight", doc.body.offsetHeight);
-	rec("html.offsetHeight", doc.documentElement.offsetHeight);
-
-	rec("topContent", box(get("topContent")));
-	rec("progress-info", box(get("progress-info")));
-	rec("elapsed", box(get("playback-progress")));
-	rec("slider", box(get("progress")));
-	rec("duration", box(get("playback-remaining")));
-
-	// What the slider's own children came out as: if one of them is wide, that is what pushes
-	// the anonymous table out to the container's width.
-	var slider = get("progress"), kids = [];
-	if (slider) {
-		var all = slider.getElementsByTagName("div");
-		for (var i = 0; i < all.length && i < 12; i++) {
-			kids.push(all[i].className + " " + JSON.stringify(box(all[i])));
+	var ids = ["titleField", "usernameField", "passField"];
+	for (var i = 0; i < ids.length; i++) {
+		var f = get(ids[i]);
+		var row = f.parentNode.parentNode.parentNode;
+		var label = f.parentNode.getElementsByTagName("div")[0];
+		rec(ids[i] + ".row", box(row));
+		rec(ids[i] + ".label", box(label));
+		rec(ids[i] + ".field", box(f));
+		var kids = f.childNodes;
+		for (var k = 0; k < kids.length; k++) {
+			if (kids[k].nodeType !== 1) { continue; }
+			rec(ids[i] + ".child" + k, [kids[k].tagName, kids[k].id.replace(/.*Field/, ""), kids[k].className,
+				box(kids[k]), kids[k].getAttribute("style"), win.getComputedStyle(kids[k]).display]);
 		}
 	}
-	rec("slider.children", kids);
-
-	// What a scene element comes out as, and whether a child that asks to fill it gets a
-	// height. drPodder's splash paints its background that way, and Mojo's own .palm-scrim
-	// (position: fixed with all four offsets at 0) sits on top of it.
-	rec("sceneElement", box(this.controller.sceneElement));
-	rec("sceneElement.computedHeight", win.getComputedStyle(this.controller.sceneElement).height);
-	rec("sceneElement.position", win.getComputedStyle(this.controller.sceneElement).position);
-	rec("backdrop", box(get("backdrop")));
-	rec("sceneScrollerParent", (function () {
-		var p = this.controller.sceneElement.parentNode;
-		return p ? [p.id || p.className || p.tagName, JSON.stringify(box(p)),
-			win.getComputedStyle(p).height, win.getComputedStyle(p).position] : null;
-	}).call(this));
-	rec("slider.innerHTML", slider ? slider.innerHTML.replace(/\s+/g, " ").substring(0, 300) : null);
-	rec("slider.display", slider ? win.getComputedStyle(slider).display : null);
-	rec("slider.computedWidth", slider ? win.getComputedStyle(slider).width : null);
-	say("--- end ---");
-
+	rec("bareFloat", box(get("bareFloat")));
+	rec("bareBlock", box(get("bareBlock")));
+	rec("bare", box(get("bare")));
+	lines.push(this.say("--- end ---"));
 	var r = get("report");
 	if (r) { r.innerHTML = ""; r.appendChild(doc.createTextNode(lines.join("\n"))); }
 };

@@ -103,3 +103,24 @@ broke. A scene that isn't in a scroller (webOS IAmA reddit's is not) is untouche
 File: `submissions/506/stylesheets/global-base.css`, which on the device is a symlink to
 `mojocommon/stylesheets/global-base.css`; the patch is applied through the link
 (`patch --follow-symlinks`), so it is mojocommon's file that changes, as it would on a device.
+
+### 0004-whole-pixel-dimensions.patch
+
+`Mojo.View.getDimensions` is `offsetWidth` and `offsetHeight`. The TouchPad's WebKit laid out
+in whole pixels, so those were an element's size. Chromium lays out in fractions and rounds
+them to the nearest pixel, which can be a fraction *more* than the element has, and Mojo
+sizes things with what it measures. A TextField measures its text area at its natural width
+beside the row's floated label and fixes it there; in Keyring SD 0.0.6 the room beside USER
+was 1201.875 px, the measurement came back 1202, and a 1202 px box no longer fits beside the
+label, so the text dropped onto a second line and the row came out double height (codepoet,
+on the Pixel Tablet, 2026-10-05). Measured on the reference TouchPad with
+`Workbench/probe`'s mojoprobe 0.0.3: the same rows are 52 px with the text beside the label,
+and its engine also moves a box that doesn't fit below a float, so the difference is the
+rounding alone.
+
+A size that rounded up by less than a pixel now comes back as the whole pixels the element
+has (`Math.floor` of its bounding box); anything else is `offsetWidth`/`offsetHeight` as
+before, so a transformed element, whose box differs by more than that, is untouched.
+
+Files: `builtins/palmInitFramework506.js` (Mojo 1), `builtins/palmInitFramework2205.js`
+(Mojo 2).

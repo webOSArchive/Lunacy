@@ -1,13 +1,37 @@
-<div id="episodeViewScene">
-	<div id="topContent" class="topContent">
-		<div id="progress-info" class="stream-info">
-			<div id="playback-progress" class="elapsed">00:05</div>
-			<div id="progress" x-mojo-element="ProgressSlider" class="stream-buffer-bar "></div>
-			<div id="playback-remaining" class="duration">89:26</div>
-		</div>
-	</div>
-	<!-- drPodder's loading scene in miniature: a backdrop absolutely positioned to fill the
-	     scene, which only has a size if the scene element itself has one. -->
-	<div id="backdrop" style="position:absolute; z-index:-1; width:100%; height:100%"></div>
-	<div id="report"></div>
+<!-- Keyring SD 0.0.6's item scene, its first three rows as they are in
+     app/views/item/item-scene.html: a floated label and a Mojo TextField in each. -->
+<div class="palm-group unlabeled">
+ <div class="palm-list">
+  <div class="palm-row first">
+   <div class="palm-row-wrapper textfield-group" x-mojo-focus-highlight="true">
+    <div class="title">
+    <div class="label">Title</div>
+     <div id="titleField" x-mojo-element="TextField"></div>
+    </div>
+   </div>
+  </div>
+  <div class="palm-row" id="username-row">
+   <div class="palm-row-wrapper textfield-group" x-mojo-focus-highlight="true">
+    <div class="title">
+    <div class="label">User</div>
+     <div id="usernameField" x-mojo-element="TextField"></div>
+    </div>
+   </div>
+  </div>
+  <div class="palm-row last" id="pass-row">
+   <div class="palm-row-wrapper textfield-group" x-mojo-focus-highlight="true">
+    <div class="title">
+    <div class="label">Password</div>
+     <div id="passField" x-mojo-element="TextField"></div>
+    </div>
+   </div>
+  </div>
+ </div>
 </div>
+<!-- The engine alone: a right float, then a block with overflow: hidden and a width wider
+     than the room beside the float. -->
+<div id="bare" style="width:400px; font-size:14px; line-height:20px; background:#eee">
+ <div id="bareFloat" style="float:right; width:50px; background:#9cf">L</div>
+ <div id="bareBlock" style="width:390px; overflow:hidden; background:#fc9">wide block</div>
+</div>
+<div id="report"></div>

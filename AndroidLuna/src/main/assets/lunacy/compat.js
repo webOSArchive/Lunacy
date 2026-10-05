@@ -915,3 +915,57 @@ window.__lunacyFileUrl = function (u, media) {
 		}
 	});
 })();
+
+// DOMNodeRemovedFromDocument and DOMNodeInsertedIntoDocument, where the engine no longer fires
+// them. Mojo cleans a widget up when its element gets DOMNodeRemovedFromDocument (Mojo 1 and 2's
+// WidgetController, Mojo Core's scroller, Mojo's node references): a dialog's cleanup is what
+// takes away the focus guard it put on its scene, which blurs anything outside the dialog that
+// takes focus. Chromium dropped DOM mutation events altogether (none fire in WebView 153; all
+// do in 64), so there no widget was ever cleaned up and every closed dialog left its guard
+// behind: Keyring SD's fields took focus and lost it again at once (codepoet, 2026-10-05).
+// Where the events are missing, a MutationObserver sends them as the TouchPad's WebKit did:
+// not bubbling, to each removed or added node and every element in it, in the order of the
+// changes, so a node that moves gets the removal and then the insertion. They arrive once the
+// script that made the change returns, not inside the removeChild call; Mojo's handlers only
+// clean up and record. The observer starts only when a page listens for one of them.
+(function () {
+	var REMOVED = "DOMNodeRemovedFromDocument", INSERTED = "DOMNodeInsertedIntoDocument";
+	if (!window.MutationObserver || !window.EventTarget) { return; }
+	var fired = false, probe = document.createElement("div");
+	probe.addEventListener(INSERTED, function () { fired = true; }, false);
+	document.documentElement.appendChild(probe);
+	document.documentElement.removeChild(probe);
+	if (fired) { return; }
+
+	function send(node, type) {
+		var list = [node], i, e;
+		if (node.getElementsByTagName) {
+			var all = node.getElementsByTagName("*");
+			for (i = 0; i < all.length; i++) { list.push(all[i]); }
+		}
+		for (i = 0; i < list.length; i++) {
+			e = document.createEvent("Event");
+			e.initEvent(type, false, false);
+			list[i].dispatchEvent(e);
+		}
+	}
+	var observer = null;
+	function start() {
+		if (observer) { return; }
+		observer = new MutationObserver(function (records) {
+			for (var r = 0; r < records.length; r++) {
+				var rec = records[r], j;
+				for (j = 0; j < rec.removedNodes.length; j++) { send(rec.removedNodes[j], REMOVED); }
+				for (j = 0; j < rec.addedNodes.length; j++) {
+					if (document.documentElement.contains(rec.addedNodes[j])) { send(rec.addedNodes[j], INSERTED); }
+				}
+			}
+		});
+		observer.observe(document, { childList: true, subtree: true });
+	}
+	var add = EventTarget.prototype.addEventListener;
+	EventTarget.prototype.addEventListener = function (type) {
+		if (type === REMOVED || type === INSERTED) { start(); }
+		return add.apply(this, arguments);
+	};
+})();

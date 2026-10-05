@@ -1,0 +1,34 @@
+--- a/builtins/palmInitFramework506.js	2026-10-05 14:07:10.130240791 -0400
++++ b/builtins/palmInitFramework506.js	2026-10-05 14:07:10.152239531 -0400
+@@ -2357,7 +2357,19 @@
+ 
+ 
+ Mojo.View.getDimensions=function(element){
+-return{width:element.offsetWidth,height:element.offsetHeight};
++var width=element.offsetWidth,height=element.offsetHeight,box;
++// Lunacy: the TouchPad's WebKit laid out in whole pixels, so offsetWidth was an element's
++// width. Chromium lays out in fractions and rounds offsetWidth to the nearest pixel, which
++// can be a fraction more than the element has: a TextField's text measured beside its
++// label came back 1202 for 1201.875 px of room, was set to that width, and no longer fit
++// beside the label (Keyring SD's fields came out double height). A size that rounded up
++// by less than a pixel comes back as the whole pixels the element has.
++if((width||height)&&element.getBoundingClientRect){
++box=element.getBoundingClientRect();
++if(width>box.width&&width-box.width<1){width=Math.floor(box.width);}
++if(height>box.height&&height-box.height<1){height=Math.floor(box.height);}
++}
++return{width:width,height:height};
+ };
+ 
+ 
+--- a/builtins/palmInitFramework2205.js	2026-10-05 14:07:10.130240791 -0400
++++ b/builtins/palmInitFramework2205.js	2026-10-05 14:07:10.152239531 -0400
+@@ -112,7 +112,7 @@
+ Mojo.View.Template=function Template(templateString,templatePath,escape){this.templatePath=templatePath;this.templateString=templateString;this.escape=escape};
+ Mojo.View.Template.prototype.evaluate=function evaluate(propertiesSource){var that=this;var replacer=function(matchedString,propertyName){var i,value,firstPropertyNameCharacter,propertyNames,propertyNamesLength,currentPropertyName,renderingDiv,escapedValue,escapeRegex;var escape=that.escape;var firstCharacter=matchedString.charAt(0);if(firstCharacter==="\\")return matchedString.slice(1);firstPropertyNameCharacter=propertyName.charAt(0);if(firstPropertyNameCharacter==="-"){escape=false;propertyName=
+ propertyName.slice(1)}if(propertyName.indexOf(".")!==-1){value=propertiesSource;propertyNames=propertyName.split(".");propertyNamesLength=propertyNames.length;for(i=0;value!==undefined&&i<propertyNamesLength;i++){currentPropertyName=propertyNames[i];value=value[currentPropertyName]}}else value=propertiesSource[propertyName];if(value===undefined||value===null)value="";if(escape){escapeRegex=/[<&\r\n]/;value=value.toString();if(value.match(escapeRegex)){renderingDiv=document._renderingDiv;renderingDiv.innerText=
+-value;escapedValue=renderingDiv.innerHTML;value=escapedValue}}return value};return this.templateString.replace(/\\*#\{(-?[\w.]+)\}/g,replacer)};Mojo.View.getDimensions=function(element){return{width:element.offsetWidth,height:element.offsetHeight}};Mojo.View.getCursorPosition=function(optionalWindow){var targetWindow=optionalWindow||window;if(Mojo.Host.current===Mojo.Host.browser)return undefined;else return targetWindow.caretRect()};
++value;escapedValue=renderingDiv.innerHTML;value=escapedValue}}return value};return this.templateString.replace(/\\*#\{(-?[\w.]+)\}/g,replacer)};Mojo.View.getDimensions=function(element){/* Lunacy: Chromium rounds offsetWidth/offsetHeight from fractional layout; a size that rounded up by less than a pixel comes back as the whole pixels the element has, as on the TouchPad (see palmInitFramework506.js). */var width=element.offsetWidth,height=element.offsetHeight,box;if((width||height)&&element.getBoundingClientRect){box=element.getBoundingClientRect();if(width>box.width&&width-box.width<1)width=Math.floor(box.width);if(height>box.height&&height-box.height<1)height=Math.floor(box.height)}return{width:width,height:height}};Mojo.View.getCursorPosition=function(optionalWindow){var targetWindow=optionalWindow||window;if(Mojo.Host.current===Mojo.Host.browser)return undefined;else return targetWindow.caretRect()};
+ Mojo.View.createScrim=function(targetDocument,options){var scrim=Mojo.View.convertToNode("<div class='palm-scrim'></div>",targetDocument);if(options&&options.scrimClass)Mojo.Dom.addClassName(scrim,options.scrimClass);Mojo.listen(scrim,Mojo.Event.tap,function(ev){if(options&&options.tapHandler)options.tapHandler(ev)});return scrim};
+ Mojo.View.removeDOMReferences=function removeDOMReferences(targetObject){var propertyName,propertyValue,nodeType;for(propertyName in targetObject)if(targetObject.hasOwnProperty(propertyName)){propertyValue=targetObject[propertyName];nodeType=propertyValue&&propertyValue.nodeType;if(nodeType>=1&&nodeType<=13){Mojo.Log.info("removing",propertyValue,"from",propertyName);targetObject[propertyName]=null}}};Mojo.Controller={setup:function(){Mojo.Controller.appInfo=Mojo.appInfo;Mojo.Controller.appController=new Mojo.Controller.AppController;Mojo.Controller.appController.setupAppAssistant();if(Mojo.appInfo.noWindow)Mojo.Controller.appController.frameworkHideSplashScreen();else{Mojo.Controller.stageController=new Mojo.Controller.StageController;Mojo.Controller.setupStageController(window)}},setupStageController:function setupStageController(stageWindow){var sc;if(stageWindow.PalmSystem&&stageWindow.PalmSystem.useSimulatedMouseClicks)stageWindow.PalmSystem.useSimulatedMouseClicks(true);
+ if(stageWindow.Mojo.isChild){sc=stageWindow.Mojo.Controller.stageController;sc.handleDocumentLoaded(Mojo.Controller.appController,stageWindow);stageWindow.Mojo.handleSingleTap=Mojo.handleSingleTapForDocument.bind(undefined,stageWindow.document);if(stageWindow.PalmSystem&&stageWindow.PalmSystem.stagePreparing)stageWindow.PalmSystem.stagePreparing();Mojo.View.childSetup(stageWindow.document)}else{sc=Mojo.Controller.stageController;sc.handleDocumentLoaded(Mojo.Controller.appController,stageWindow)}sc.setupStageAssistant();

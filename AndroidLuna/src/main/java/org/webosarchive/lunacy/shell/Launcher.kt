@@ -291,8 +291,9 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private fun pageFor(app: AppInfo): Int {
         // Proof of concept: Android's apps start on the favorites page, named "android".
         if (app.androidComponent != null) return pages.indexOfFirst { it.designator == "favorites" }.takeIf { it >= 0 } ?: 0
-        // LauncherObject::slotAppAuxiliaryIconAdd: a launch point an app adds goes on Favorites.
-        if (app.launchPoint != null) return pages.indexOfFirst { it.designator == "favorites" }.takeIf { it >= 0 } ?: 0
+        // LauncherObject::slotAppAuxiliaryIconAdd put a launch point an app adds on Favorites,
+        // which is Android's tab in Lunacy; codepoet's call: it goes on the first page.
+        if (app.launchPoint != null) return 0
         val designator = keywordPages[app.category.lowercase()]
             ?: app.keywords.firstNotNullOfOrNull { keywordPages[it.lowercase()] }
             // LauncherObject::pageIndexForAppByPredefinedDesignators: an app the user installed

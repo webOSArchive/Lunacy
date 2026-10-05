@@ -540,8 +540,9 @@ product; being "close enough" is not the goal.
   random id and holding LunaSysMgr's JSON for it, so it outlives a restart. Any app may add one
   for any installed app; `id`, `title`, `icon` and `params` are required, and a relative icon
   is the target app's own file. The icon is squeezed to the launcher's 64 px square, as
-  LunaSysMgr's was. The new icon lands on the Favorites page (`slotAppAuxiliaryIconAdd`), which
-  is Lunacy's "android" tab. Removing it in edit mode asks "Remove Shortcut?" over "title (app)".
+  LunaSysMgr's was. The new icon lands on the first page: LunaSysMgr put it on Favorites
+  (`slotAppAuxiliaryIconAdd`), but Lunacy's Favorites is Android's tab, so it goes first
+  (codepoet's decision, 2026-10-05). Removing it in edit mode asks "Remove Shortcut?" over "title (app)".
   `removeLaunchPoint` and `updateLaunchPointIcon` (an app may change only its own launch
   points' icons, by the bus's caller id) are there too, and every change reaches
   `launchPointChanges`. A launch point whose app is removed is hidden, not deleted, as

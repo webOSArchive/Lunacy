@@ -9,9 +9,10 @@
  *
  * - webOS's own paths. Apps open the system fonts by absolute path
  *   (/usr/share/fonts/PreludeCondensed-Medium.ttf, with SDL_ttf), save into /media/internal,
- *   read /usr/palm and /etc/palm. Android has none of /usr, /media, /var, /etc/palm or
- *   /home/root, so a path under them is looked up in Lunacy's webOS root (LUNACY_PDK_ROOT),
- *   which has the same tree. One rule for every app; nothing else is touched.
+ *   read /usr/palm and /etc/palm, and OpenAL reads /etc/openal/alsoft.conf. Android has none
+ *   of /usr, /media, /var, /etc/palm, /etc/openal or /home/root, so a path under them is
+ *   looked up in Lunacy's webOS root (LUNACY_PDK_ROOT), which has the same tree. One rule
+ *   for every app; nothing else is touched.
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>
@@ -47,7 +48,7 @@ static ssize_t answer(char *buf, size_t len)
 
 /* ---- webOS paths ---- */
 
-static const char *const webos_dirs[] = { "/usr/", "/media/", "/var/", "/etc/palm/", "/home/root/", NULL };
+static const char *const webos_dirs[] = { "/usr/", "/media/", "/var/", "/etc/palm/", "/etc/openal/", "/home/root/", NULL };
 
 /* The path to use for `path`: in the webOS root if it is a webOS path, else itself. */
 static const char *map(const char *path, char *buf)

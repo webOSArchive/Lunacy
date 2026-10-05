@@ -232,6 +232,16 @@ Web app, from /etc/palm on the reference TouchPad (webOS CE 3.1.0). Copyright Pa
 LG Electronics.
 NOTICE
 
+# OpenAL's configuration, as the TouchPad had it: its OpenAL Soft 1.11 (the PDK runtime's
+# libopenal.so.1) plays through SDL with these settings. PDK apps read /etc/openal through
+# the preload (LunaRuntimes/pdk/libpreload), which looks it up here.
+mkdir -p $R/etc/openal
+cp $V/touchpad/etc-openal/alsoft.conf $R/etc/openal/
+cat > $R/etc/openal/NOTICE <<'NOTICE'
+alsoft.conf from /etc/openal on the reference TouchPad (webOS CE 3.1.0): OpenAL Soft's sample
+configuration (LGPL 2, https://github.com/kcat/openal-soft) with Palm's settings.
+NOTICE
+
 # busybox: webOS's /bin and /usr/bin were busybox, and package scripts are written for it.
 # Packaged as a library so that Android installs it where it may be run, one per ABI. It is
 # built from source against bionic by tools/build-busybox.sh, which says why: the prebuilt

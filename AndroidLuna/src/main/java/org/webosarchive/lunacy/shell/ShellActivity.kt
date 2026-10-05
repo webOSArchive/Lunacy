@@ -1681,7 +1681,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 if (file.isEmpty()) reply(Bus.error("install: no file given"))
                 else { install(file, caller); reply(Bus.ok(mapOf("processId" to "success"))) }
             } else if (registry.get(id) == null) reply(Bus.error("Application not found: $id"))
-            else if (registry.get(id)?.isWeb == false) { launch(id); reply(Bus.error("Native apps aren't supported yet: $id")) }
+            // A PDK app runs where the runtime is (Docs/pdk.md); elsewhere launch() shows why not.
+            else if (registry.get(id)?.isWeb == false) {
+                launch(id)
+                reply(if (pdkRuntime.available) Bus.ok(mapOf("processId" to "success"))
+                    else Bus.error("${registry.get(id)?.title} is a native app; this build of Lunacy can't run it"))
+            }
             else { launch(id, params); reply(Bus.ok(mapOf("processId" to "success"))) }
         }
         SystemProperties(this).register(bus)

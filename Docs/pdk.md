@@ -402,6 +402,42 @@ mono. The loading card gave way to the title screen with the game's own touch co
 the shell turned landscape for it, two taps on its ENTER button started a one-player game,
 and the card view showed the live game in its card. Not yet checked by ear: the sound.
 
+## 6a. Fieldrunners: OpenAL, 2026-10-05
+
+codepoet's Fieldrunners port (`com.subatomicstudios.fieldrunners` 1.1.0, an engine of his
+own over the iOS game's data) links `libopenal.so.1`, which every webOS device carried and
+the runtime didn't: the loader stopped at it, exit 127.
+
+**What the device had.** The PDK's copy of the TouchPad's library
+(`/opt/PalmPDK/device/lib/libopenal.so.1`) is **OpenAL Soft 1.11.753** ("1.1 ALSOFT
+1.11.753"), built by Palm with two backends: the wave writer and an `Alc/sdl.c` of Palm's
+own that loads `libSDL.so` with `dlopen` and plays through `SDL_OpenAudio` (its symbols:
+`sdl_load`, `sdl_open_playback`, `sdl_reset_playback`, `sdl_callback`, `sdl_stop_playback`,
+`sdl_close_playback`, no capture; its device "Simple Directmedia Layer"). The TouchPad's
+`/etc/openal/alsoft.conf` (read over novacom) chooses it - `drivers = sdl` - with
+`format = AL_FORMAT_STEREO16`, 44100 Hz, `period_size = 1024`, `periods = 4`, 256 sources.
+
+**What Lunacy does.** The same: OpenAL Soft 1.11.753 from its tag, built by `build-pdk.sh`
+with an SDL backend written again from those symbols and messages
+(`LunaRuntimes/pdk/openal/sdl.c`), so OpenAL's mix goes out through SDL's audio, which is
+Lunacy's SDL driver; the exported API is the device library's, function for function. The
+TouchPad's `alsoft.conf` is in the webOS root at `/etc/openal`, and the preload maps that
+path there, so OpenAL reads its settings where it did on a device. An app that opens SDL's
+audio itself as well meets the one SDL device it met on webOS.
+
+**Result.** Fieldrunners plays, with its sound, on the HP 10 G2 (61 frames/s, natively),
+the Nexus 5 (62, natively) and the Pixel Tablet (58-60 under qemu): title screen, the map
+picker and a game, audio at 44100 Hz stereo in 1024-sample buffers.
+
+**The native mode is landscape.** Fieldrunners sizes itself with `SDL_SetVideoMode(0, 0)`.
+On the phone profile that was the Pre3's portrait 480 x 800, so the game laid itself out
+portrait and its controls were out of reach (codepoet, on the Nexus 5). PDK games start
+from landscape (codepoet), and the TouchPad's own native mode was 1024 x 768, so the SDL
+driver's current mode is now the screen held landscape: 800 x 480 on the phone profile,
+which the card turns as it turns any landscape buffer on a portrait phone (Keen sized itself
+1024 x 768 and was already turned). `PDL_GetScreenMetrics` still reports the screen as
+measured on the Pre3.
+
 ## 7. Still to do on the first path
 
 - The bus for `PDL_ServiceCall` through the host, as JS services have it.

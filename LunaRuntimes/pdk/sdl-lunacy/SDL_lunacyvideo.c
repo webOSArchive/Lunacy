@@ -189,9 +189,18 @@ int LUNACY_VideoInit(_THIS, SDL_PixelFormat *vformat)
 	vformat->Rmask = 0x000000ff;
 	vformat->Gmask = 0x0000ff00;
 	vformat->Bmask = 0x00ff0000;
-	/* The current mode is the device's screen (SDL_GetVideoInfo, and SetVideoMode(0, 0)). */
-	this->info.current_w = getenv("LUNACY_PDK_SCREEN_W") ? atoi(getenv("LUNACY_PDK_SCREEN_W")) : 1024;
-	this->info.current_h = getenv("LUNACY_PDK_SCREEN_H") ? atoi(getenv("LUNACY_PDK_SCREEN_H")) : 768;
+	/* The current mode (SDL_GetVideoInfo, and SetVideoMode(0, 0)) is the device's screen,
+	   held landscape: PDK games start from landscape (codepoet), and the TouchPad's own mode
+	   was its 1024 x 768. On a portrait screen (the phone profile's Pre3, 480 x 800) the
+	   mode is turned, so a game that asks for the native mode draws landscape and the card
+	   turns its buffer, as it does one an app sized itself. PDL_GetScreenMetrics still
+	   reports the screen as measured. */
+	{
+		int w = getenv("LUNACY_PDK_SCREEN_W") ? atoi(getenv("LUNACY_PDK_SCREEN_W")) : 1024;
+		int h = getenv("LUNACY_PDK_SCREEN_H") ? atoi(getenv("LUNACY_PDK_SCREEN_H")) : 768;
+		this->info.current_w = w > h ? w : h;
+		this->info.current_h = w > h ? h : w;
+	}
 	/* LUNACY_PDK_NOSHELL: a desk test under qemu with no shell to reach; the mode is
 	   granted, frames and events go nowhere. */
 	if (getenv("LUNACY_PDK_NOSHELL")) { this->hidden->sock = -1; return 0; }

@@ -256,6 +256,7 @@ libpng12.so libpng12.so.0
 libjpeg.so libjpeg.so.62
 libfreetype.so libfreetype.so.6
 libz.so libz.so.1
+libopenal.so libopenal.so.1
 libGLES_CM.so.1 libGLES_CM.so
 libGLESv2.so.2 libGLESv2.so
 EOA
@@ -280,6 +281,60 @@ for abi in armeabi-v7a:armv7a-linux-androideabi21 arm64-v8a:aarch64-linux-androi
 done
 # liblunacy-preload: /proc/self/exe as the app's binary, not the loader's (LD_PRELOAD).
 $CC -O2 -shared -fPIC -Wl,-soname,liblunacy-preload.so "$SRC/libpreload/preload.c" -o "$OUT/lib/liblunacy-preload.so" -ldl
+# ---- OpenAL Soft 1.11.753, the version the TouchPad shipped as libopenal.so.1 ----
+# Palm built it with two backends, an SDL one of its own (Alc/sdl.c, which webOS games
+# played through) and the wave writer; Lunacy's sdl.c is written again from what the
+# device's library shows of Palm's (LunaRuntimes/pdk/openal). Built straight from the
+# sources with the flags its CMake gives a release build, with config.h written here.
+AL_VER=1.11.753
+if [ ! -d openal-soft-openal-soft-$AL_VER ]; then
+  [ -f openal-soft-$AL_VER.tar.gz ] || curl -sL https://github.com/kcat/openal-soft/archive/refs/tags/openal-soft-$AL_VER.tar.gz -o openal-soft-$AL_VER.tar.gz
+  echo "1c16af245dc5721a899d49c883f76393c1f9732681d6881894dfcc77de1ddeeb  openal-soft-$AL_VER.tar.gz" | sha256sum -c --quiet || { echo "openal-soft-$AL_VER.tar.gz isn't the source it should be"; exit 1; }
+  tar xzf openal-soft-$AL_VER.tar.gz
+fi
+A=$WORK/openal-soft-openal-soft-$AL_VER
+cp $SRC/openal/sdl.c $A/Alc/sdl.c
+# The SDL backend ahead of the wave writer, which only opens when a config names a file.
+if ! grep -q alc_sdl_init $A/Alc/ALc.c; then
+  sed -i 's|^    { "wave", alc_wave_init, alc_wave_deinit, alc_wave_probe, EmptyFuncs },|    { "sdl", alc_sdl_init, alc_sdl_deinit, alc_sdl_probe, EmptyFuncs },\n&|' $A/Alc/ALc.c
+  sed -i 's|^void alc_wave_init(BackendFuncs \*func_list);|void alc_sdl_init(BackendFuncs *func_list);\nvoid alc_sdl_deinit(void);\nvoid alc_sdl_probe(int type);\n&|' $A/OpenAL32/Include/alMain.h
+  grep -q alc_sdl_init $A/Alc/ALc.c && grep -q alc_sdl_init $A/OpenAL32/Include/alMain.h || { echo "the OpenAL backend patch didn't apply"; exit 1; }
+fi
+mkdir -p openal-build
+cat > openal-build/config.h <<CFG
+#ifndef CONFIG_H
+#define CONFIG_H
+#define ALSOFT_VERSION "$AL_VER"
+#define HAVE_DLFCN_H
+#define HAVE_STAT
+#define HAVE_SQRTF
+#define HAVE_ACOSF
+#define HAVE_ATANF
+#define HAVE_FABSF
+#define HAVE_STRTOF
+#define HAVE_STDINT_H
+#define SIZEOF_LONG 4
+#define SIZEOF_LONG_LONG 8
+#define SIZEOF_UINT 4
+#define SIZEOF_VOIDP 4
+#define HAVE_GCC_DESTRUCTOR
+#define HAVE_GCC_FORMAT
+#define HAVE_FLOAT_H
+#define HAVE_FENV_H
+#define HAVE_FESETROUND
+#define HAVE_PTHREAD_SETSCHEDPARAM
+#endif
+CFG
+$CC -O2 -funroll-loops -fomit-frame-pointer -DNDEBUG -D_GNU_SOURCE=1 -DAL_BUILD_LIBRARY -pthread \
+  -fvisibility=hidden -DHAVE_GCC_VISIBILITY -Wno-everything -shared -fPIC -Wl,-soname,libopenal.so.1 \
+  -I$WORK/openal-build -I$A/OpenAL32/Include -I$A/include \
+  $A/OpenAL32/alAuxEffectSlot.c $A/OpenAL32/alBuffer.c $A/OpenAL32/alDatabuffer.c $A/OpenAL32/alEffect.c \
+  $A/OpenAL32/alError.c $A/OpenAL32/alExtension.c $A/OpenAL32/alFilter.c $A/OpenAL32/alListener.c \
+  $A/OpenAL32/alSource.c $A/OpenAL32/alState.c $A/OpenAL32/alThunk.c \
+  $A/Alc/ALc.c $A/Alc/ALu.c $A/Alc/alcConfig.c $A/Alc/alcEcho.c $A/Alc/alcReverb.c $A/Alc/alcRing.c \
+  $A/Alc/alcThread.c $A/Alc/bs2b.c $A/Alc/wave.c $A/Alc/sdl.c \
+  -o "$OUT/lib/libopenal.so.1" -lrt -ldl -lm
+
 # libSDL_cinema: Palm's video player for a game's movies. A stub that has no movie to play.
 $CC -O2 -shared -fPIC -Wl,-soname,libSDL_cinema.so "$SRC/libcinema/cinema.c" -o "$OUT/lib/libSDL_cinema.so"
 
@@ -363,6 +418,9 @@ The PDK runtime (Docs/pdk.md), built by tools/build-pdk.sh:
   GLES 1.1 headers (SGI Free Software License B); its shell-side half is liblunacygl.so in
   the APK's own libraries. libGLESv2.so likewise from the GLES 2 headers (liblunacygl2.so).
 - libSDL_cinema.so: Lunacy's own stub (LunaRuntimes/pdk/libcinema).
+- libopenal.so.1: OpenAL Soft $AL_VER (LGPL 2), the TouchPad's version, from
+  https://github.com/kcat/openal-soft (tag openal-soft-$AL_VER), with Lunacy's SDL backend
+  (LunaRuntimes/pdk/openal/sdl.c) in place of Palm's.
 - liblunacy-preload.so: Lunacy's own (LunaRuntimes/pdk/libpreload).
 - libogg, libvorbis, libvorbisfile: Xiph.Org (BSD), Debian bookworm armel.
 - libSDL_image-1.2.so.0: SDL_image $IMG_VER (zlib licence); libSDL_ttf-2.0.so.0: SDL_ttf $TTF_VER

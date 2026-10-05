@@ -288,6 +288,10 @@ for abi in armeabi-v7a:armv7a-linux-androideabi21 arm64-v8a:aarch64-linux-androi
   "$BIN/clang" --target="${abi##*:}" -O2 -g -shared -fPIC -DGLES_VERSION=2 -Wl,-soname,liblunacygl2.so -I. -I"$SRC/libgles" "$SRC/libgles/gl_server.c" \
     -lEGL -lGLESv2 -landroid -llog -lm -o "$HERE/local-jni/${abi%%:*}/liblunacygl2.so"
 done
+# libenosys: the native path's guard on Android 10 and later, a bionic program that runs the
+# app as its ptrace child and answers the calls seccomp refuses with -ENOSYS (32-bit build only;
+# named lib*.so so the installer puts it with the native libraries, where it can be exec'd).
+"$BIN/clang" --target=armv7a-linux-androideabi21 -O2 "$SRC/enosys/enosys.c" -o "$HERE/local-jni/armeabi-v7a/libenosys.so"
 # liblunacy-preload: /proc/self/exe as the app's binary, not the loader's (LD_PRELOAD).
 $CC -O2 -shared -fPIC -Wl,-soname,liblunacy-preload.so "$SRC/libpreload/preload.c" -o "$OUT/lib/liblunacy-preload.so" -ldl
 # ---- OpenAL Soft 1.11.753, the version the TouchPad shipped as libopenal.so.1 ----

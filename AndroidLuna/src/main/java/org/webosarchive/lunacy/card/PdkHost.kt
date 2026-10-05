@@ -87,7 +87,10 @@ class PdkHost(
         val dataDir = File(context.filesDir, "pdk/data/$appId").also { it.mkdirs() }
         // A 32-bit CPU runs the binary through the loader; a 64-bit-only one runs it under
         // qemu, which loads the program itself and finds the loader under the runtime folder.
-        val command = if (loader != null) listOf(loader.path, "--library-path", lib.path, binary.path)
+        // From Android 10 a native app runs under libenosys.so, which answers the system calls
+        // the app's seccomp policy refuses glibc with -ENOSYS instead of letting it be killed.
+        val enosys = runtime.enosys?.takeIf { loader != null && android.os.Build.VERSION.SDK_INT >= 29 }
+        val command = if (loader != null) listOfNotNull(enosys?.path, loader.path, "--library-path", lib.path, binary.path)
             else listOf(emulator!!.path, "-L", lib.parentFile!!.path, "-E", "LD_LIBRARY_PATH=/lib",
                 "-E", "LD_PRELOAD=/lib/liblunacy-preload.so", binary.path)
         // In the app's own folder, as LunaSysMgr started a native app; the binary may sit in a
@@ -99,7 +102,8 @@ class PdkHost(
         // The preload (LunaRuntimes/pdk/libpreload): /proc/self/exe as the binary, not the
         // loader (Transformers G1 finds its data from it), and webOS's own paths (/usr/share/fonts,
         // /media/internal...) in the webOS root. Under qemu it goes to the guest by -E above.
-        if (loader != null) pb.environment()["LD_PRELOAD"] = File(lib, "liblunacy-preload.so").path
+        // libenosys is a bionic program, so it hands the preload on to the app itself.
+        if (loader != null) pb.environment()[if (enosys != null) "LUNACY_PDK_PRELOAD" else "LD_PRELOAD"] = File(lib, "liblunacy-preload.so").path
         pb.environment()["LUNACY_PDK_EXE"] = binary.path
         pb.environment()["LUNACY_PDK_ROOT"] = File(context.filesDir, "webos").path
         pb.environment().apply {
@@ -122,7 +126,7 @@ class PdkHost(
         process = try { pb.start() } catch (e: Exception) {
             Log.w(AppServer.TAG, "pdk [$appId]: can't start ${binary.path}: $e"); stop(); return false
         }
-        Log.i(AppServer.TAG, "pdk [$appId]: started ${binary.name} through ${(loader ?: emulator)!!.name}")
+        Log.i(AppServer.TAG, "pdk [$appId]: started ${binary.name} through ${listOfNotNull(enosys, loader ?: emulator).joinToString(" and ") { it.name }}")
         Thread({
             try {
                 process!!.inputStream.bufferedReader().forEachLine { Log.i(AppServer.TAG, "pdk [$appId] $it") }
@@ -335,6 +339,8 @@ class PdkRuntime(private val context: Context, val appsRoot: File, val screenWid
                  val osVersion: String, val deviceName: String, val nduid: String) {
     val loader: File? = File(context.applicationInfo.nativeLibraryDir, "libld-linux.so").takeIf { it.canExecute() }
     val emulator: File? = File(context.applicationInfo.nativeLibraryDir, "libqemu-arm.so").takeIf { it.canExecute() }
+    /** The 32-bit build's guard for the native path on Android 10 and later (LunaRuntimes/pdk/enosys). */
+    val enosys: File? = File(context.applicationInfo.nativeLibraryDir, "libenosys.so").takeIf { it.canExecute() }
     val libDir: File? by lazy { extract() }
     /** The emulator's own libraries, extracted beside the runtime (64-bit build). */
     val qemuLibDir: File? by lazy { libDir?.let { File(it.parentFile, "qemu-lib").takeIf { d -> d.isDirectory } } }

@@ -133,14 +133,26 @@ shell writes to the app from a sender thread, never the main thread.
    ABI details (FILE, pthread types, TLS) make it a long tail; the running-glibc route
    avoids all of it, so this is the fallback if exec is ever closed off.
 
-**On Android 10 and later the 32-bit build can't run a PDK app natively** (measured
-2026-10-05 on Android 12 and 14): Android's app seccomp policy refuses a 32-bit process
-`set_robust_list` (338) and `rseq` (398), both made by glibc's loader as it sets up the first
-thread, and kills it (SIGSYS, exit 159) before the program's first line. Answering them with
--ENOSYS (a ptrace probe in the app's sandbox) lets the loader through, but glibc makes the
-same calls again as each thread starts, with every signal blocked, where no handler in the
-process can catch them. Until that is solved those devices need the 64-bit build, which runs
-PDK apps under qemu.
+**Android 10 and later: the native path under `libenosys.so`** (2026-10-05). Android's app
+seccomp policy refuses a 32-bit process `set_robust_list` (338) and `rseq` (398), and kills it
+for asking (SIGSYS, exit 159). Debian's glibc 2.36 makes both as its loader sets up the first
+thread, before the program's first line, so every PDK app died at once on Android 12 and 14.
+glibc goes on without either when the kernel says it hasn't the call; the trouble is only
+that Android kills instead of saying so. A SIGSYS handler in the preload can't answer for it:
+the loader's calls come before any preload is loaded, and glibc makes `set_robust_list` again
+as each new thread starts, with every signal blocked, where a SIGSYS kills whatever the
+handler (Fieldrunners died that way). Patching the two calls out of the loader got it through
+startup and no further.
+
+So from Android 10 the 32-bit build starts a native app through `libenosys.so`
+(`LunaRuntimes/pdk/enosys/`), a small bionic program that runs it as its ptrace child and
+answers each refused call with -ENOSYS, logging each number once. The kernel stops the app
+only for a refused call, a signal, a new thread or the exec; its other calls run untraced, so
+games keep the TouchPad's 60 frames/s. Measured natively, where qemu had been the only way:
+Tiger Woods, Fieldrunners and Where's My Water at 60 frames/s on a Kyocera tablet (Android 12,
+Adreno 620); Where's My Water on a Galaxy Tab A7 Lite (Android 14) at 60 frames/s, where under
+qemu it played at about 6 and took 20 to 65 s to load each level. Older Android starts the
+loader directly, as before. A debugger can't attach to an app the helper is tracing.
 
 ## 5a. 64-bit-only devices: the emulated path, measured on the Pixel Tablet
 

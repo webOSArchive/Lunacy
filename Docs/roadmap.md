@@ -29,8 +29,9 @@ they were white (Tiger Woods PGA Tour on the HP 10 G2's Mali-450; [pdk.md](pdk.m
 Android's wallpaper can follow webOS's (Screen & Lock's "Use on Android", opt-in). Lunacy has
 a browser: Palm's Web app, unchanged, on a native WebView behind `enyo.WebView` (Enyo patch
 0005), and web links from apps open in it ([architecture.md](architecture.md), "The Web
-app"). Open: Add to Launcher (`addLaunchPoint`), the download manager's history, the
-TouchPad's default bookmarks. Against the TouchPad's Web app the action bar's contents sit
+app"). Add to Launcher works since 2026-10-05: `addLaunchPoint` and its siblings, which also
+make webOS Archive's PWA Installer work (architecture.md, "Launch points"). Open: the
+download manager's history, the TouchPad's default bookmarks. Against the TouchPad's Web app the action bar's contents sit
 3 px low, an engine difference left as it is ([luna-deltas.md](luna-deltas.md) A12).
 Calculator is webOS Archive's 3.2.0, with scientific keys in landscape, and the phone layout's
 fixed viewport fits a phone held either way ([phone.md](phone.md) §4).

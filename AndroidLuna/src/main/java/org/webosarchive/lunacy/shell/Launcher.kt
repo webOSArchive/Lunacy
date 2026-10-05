@@ -291,6 +291,8 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private fun pageFor(app: AppInfo): Int {
         // Proof of concept: Android's apps start on the favorites page, named "android".
         if (app.androidComponent != null) return pages.indexOfFirst { it.designator == "favorites" }.takeIf { it >= 0 } ?: 0
+        // LauncherObject::slotAppAuxiliaryIconAdd: a launch point an app adds goes on Favorites.
+        if (app.launchPoint != null) return pages.indexOfFirst { it.designator == "favorites" }.takeIf { it >= 0 } ?: 0
         val designator = keywordPages[app.category.lowercase()]
             ?: app.keywords.firstNotNullOfOrNull { keywordPages[it.lowercase()] }
             // LauncherObject::pageIndexForAppByPredefinedDesignators: an app the user installed
@@ -319,6 +321,8 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     var dockHeight = 0f
     /** The user confirmed removing an app (the dialog's Remove). */
     var onRemove: (AppInfo) -> Unit = {}
+    /** An app's title by id, for a shortcut's remove dialog. */
+    var appTitle: (String) -> String? = { null }
     /** An icon dragged in edit mode was dropped on the dock, at x in the dock's coordinates. */
     var onDropOnDock: (AppInfo, Float) -> Unit = { _, _ -> }
     /** Edit mode began or ended here (the dock follows it). */
@@ -628,7 +632,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         bmp?.let { c.drawBitmap(it, null, RectF(cx - half, iy - half, cx + half, iy + half), null) }
         val layout = labels.getOrPut(app.id) { twoLineLabel(app.title) }
         c.save(); c.translate(cx - layout.width / 2f, iy + half + luna.px(Params.LABEL_GAP)); layout.draw(c); c.restore()
-        if (editing && app.userInstalled && (dragging as? Tile.App)?.app != app) {
+        if (editing && app.removable && (dragging as? Tile.App)?.app != app) {
             val d = deleteCentre(centre)
             drawDelete(c, d.x, d.y, pressed = pressedDelete == app.id)
         }
@@ -924,8 +928,11 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
 
     private fun dialogLayout(app: AppInfo): DialogLayout {
         val edge = luna.px(Params.DIALOG_EDGE); val margin = luna.px(Params.DIALOG_MARGIN)
-        val title = dialogText("Remove Application?", dialogTitle)
-        val message = dialogText(app.title + " - v." + app.version, dialogMessage)
+        // LauncherObject::appDeleteDecoratorActivated: a launch point an app added is a shortcut.
+        val lp = app.launchPoint
+        val title = dialogText(if (lp != null) "Remove Shortcut?" else "Remove Application?", dialogTitle)
+        val message = dialogText(if (lp != null) app.title + " (" + (appTitle(lp.appId) ?: lp.appId) + ")"
+            else app.title + " - v." + app.version, dialogMessage)
         val bh = luna.px(Params.DIALOG_BUTTON_H)
         val w = luna.px(Params.DIALOG_W)
         val h = title.height + message.height + 2 * bh + 2 * edge + 4 * margin + luna.px(Params.DIALOG_TOP)
@@ -994,7 +1001,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val r = luna.px(Params.DELETE_BOX) / 2 + luna.px(6f)
         return page.tiles.withIndex().firstOrNull { (i, t) ->
             val a = (t as? Tile.App)?.app ?: return@firstOrNull false
-            if (!a.userInstalled) return@firstOrNull false
+            if (!a.removable) return@firstOrNull false
             val d = deleteCentre(cellCentre(i)); abs(x - d.x) < r && abs(y + page.scrollY - d.y) < r
         }?.value?.let { (it as Tile.App).app }
     }

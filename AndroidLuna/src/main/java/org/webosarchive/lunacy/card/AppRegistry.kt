@@ -61,7 +61,32 @@ class AppInfo(
     /** Set for an Android app shown in the launcher (shell/AndroidApps.kt); null for webOS apps. */
     val androidComponent: android.content.ComponentName? = null,
     private val androidIcon: (() -> InputStream?)? = null,
+    /**
+     * Set for a dynamic launch point's tile ([LaunchPoint]): the launcher shows it as an icon
+     * of its own, and it launches [LaunchPoint.appId] with its params. Null for an app.
+     */
+    val launchPoint: LaunchPoint? = null,
 ) {
+    companion object {
+        /** What a dynamic launch point's tile is known by in the launcher and the dock. */
+        const val LAUNCH_POINT_PREFIX = "launchpoint:"
+
+        /** The tile for [lp], an icon for [app] with the launch point's title and icon. */
+        fun forLaunchPoint(app: AppInfo, lp: LaunchPoint, icon: () -> InputStream?) = AppInfo(
+            id = LAUNCH_POINT_PREFIX + lp.launchPointId, dir = app.dir, title = lp.title, main = app.main,
+            icon = lp.icon, noWindow = app.noWindow, type = app.type, version = app.version + ":" + lp.icon,
+            userInstalled = false, visible = true, androidSettings = "", splashIcon = app.splashIcon,
+            uiRevision = app.uiRevision, category = app.category, keywords = app.keywords, appinfo = app.appinfo,
+            files = app.files, androidIcon = icon, launchPoint = lp,
+        )
+    }
+
+    /**
+     * Whether the launcher offers to remove it: an app the user installed, or a launch point
+     * added as removable.
+     */
+    val removable get() = launchPoint?.removable ?: userInstalled
+
     /**
      * Whether this app runs in the phone-sized card a TouchPad gave an app that never said it
      * had been laid out for a tablet - LunaSysMgr's `Window::Type_Emulated_Card`.

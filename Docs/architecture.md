@@ -528,10 +528,24 @@ product; being "close enough" is not the goal.
   downloads it, as measured), and its bookmark thumbnails are served from
   `/var/luna/data/browser`. Its pages are drawn light whatever Android's theme is, and it sends
   the WebView's own user agent: the TouchPad's would get today's sites' unsupported-browser
-  pages, while app cards keep the TouchPad's for the services they talk to. Two things
-  are honest errors: `browserServer/clearCookies`, because Android's WebView has one cookie jar
-  for the whole of Lunacy and clearing it would sign every app out; and
-  `applicationManager/addLaunchPoint` (Add to Launcher), which Lunacy's launcher hasn't got.
+  pages, while app cards keep the TouchPad's for the services they talk to. One thing is
+  an honest error: `browserServer/clearCookies`, because Android's WebView has one cookie jar
+  for the whole of Lunacy and clearing it would sign every app out. Add to Launcher is a
+  launch point (below).
+- **Launch points.** `applicationManager/addLaunchPoint` gives an app a second launcher icon
+  that launches it with params of its own: the Web app's Add to Launcher, and webOS Archive's
+  PWA Installer, which adds one per site for the Web app. Lunacy follows LunaSysMgr's
+  source (`ApplicationManager::addLaunchPoint`, `LaunchPoint.cpp`); it hasn't been measured on
+  the TouchPad. Each is a file in the webOS root's `/var/luna/launchpoints`, named by its
+  random id and holding LunaSysMgr's JSON for it, so it outlives a restart. Any app may add one
+  for any installed app; `id`, `title`, `icon` and `params` are required, and a relative icon
+  is the target app's own file. The icon is squeezed to the launcher's 64 px square, as
+  LunaSysMgr's was. The new icon lands on the Favorites page (`slotAppAuxiliaryIconAdd`), which
+  is Lunacy's "android" tab. Removing it in edit mode asks "Remove Shortcut?" over "title (app)".
+  `removeLaunchPoint` and `updateLaunchPointIcon` (an app may change only its own launch
+  points' icons, by the bus's caller id) are there too, and every change reaches
+  `launchPointChanges`. A launch point whose app is removed is hidden, not deleted, as
+  LunaSysMgr only loaded the ones it had an app for. `card/LaunchPoints.kt`.
 - **System files.** Apps ask for files beyond the framework, e.g.
   `/usr/palm/command-resource-handlers.json`. On a TouchPad most of those requests throw,
   because apps can't read arbitrary local files. Lunacy matches that: it serves the

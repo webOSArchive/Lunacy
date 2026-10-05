@@ -31,6 +31,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     override val bus = Bus()
     private lateinit var luna: Luna
     private lateinit var registry: AppRegistry
+    /** Launch points apps have added (applicationManager/addLaunchPoint). */
+    private lateinit var addedLaunchPoints: org.webosarchive.lunacy.card.LaunchPoints
     private lateinit var packages: Packages
     private lateinit var jsServices: org.webosarchive.lunacy.card.JsServices
     private lateinit var webos: org.webosarchive.lunacy.card.WebosRoot
@@ -62,15 +64,26 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     override fun onStart() { super.onStart(); started = true }
     override fun onStop() { started = false; super.onStop() }
 
-    /** What the launcher shows: webOS apps, then Android's. */
+    /** What the launcher shows: webOS apps, the launch points they added, then Android's. */
     private fun launchPoints(): List<AppInfo> {
         val android = androidApps.list()
         androidById = android.associateBy { it.id }
-        return registry.launchPoints + android
+        return registry.launchPoints + addedTiles() + android
     }
 
-    /** An app by id, webOS or Android: what the dock and Just Type can hold. */
-    private fun appById(id: String): AppInfo? = registry.get(id) ?: androidById[id]
+    /** The tiles of the added launch points whose app is installed, by tile id. */
+    private var addedById: Map<String, AppInfo> = emptyMap()
+
+    private fun addedTiles(): List<AppInfo> {
+        val tiles = addedLaunchPoints.all.mapNotNull { lp ->
+            registry.get(lp.appId)?.let { app -> AppInfo.forLaunchPoint(app, lp) { addedLaunchPoints.open(lp.icon) } }
+        }
+        addedById = tiles.associateBy { it.id }
+        return tiles
+    }
+
+    /** An app by id, webOS or Android, or an added launch point: what the dock and Just Type can hold. */
+    private fun appById(id: String): AppInfo? = registry.get(id) ?: addedById[id] ?: androidById[id]
 
     /**
      * Android's packages coming, going or changing (an update, a component enabled or
@@ -146,6 +159,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         server = AppServer(assets, files, jsServices.root, java.io.File(filesDir, "framework-art"))
         mediaServer = org.webosarchive.lunacy.card.MediaServer(jsServices.root)
         registry = AppRegistry(files)
+        addedLaunchPoints = org.webosarchive.lunacy.card.LaunchPoints(webos.root, files)
         org.webosarchive.lunacy.card.Http.init(assets)
         packages = Packages(files.root, java.io.File(cacheDir, "packages"), webos)
         registerServices()
@@ -182,6 +196,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // The icon glows first; the launch follows a frame later, so the glow is seen.
         launcher = Launcher(this, luna) { app -> launcher.postDelayed({ launch(app.id); closeLauncher() }, LAUNCH_DELAY_MS) }
         launcher.onRemove = { app -> remove(app) }
+        launcher.appTitle = { id -> registry.get(id)?.title }
         launcher.setApps(launchPoints())
         registerReceiver(packageReceiver, android.content.IntentFilter().apply {
             addAction(android.content.Intent.ACTION_PACKAGE_ADDED)
@@ -479,6 +494,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * the dock, and only what it opens for the dock is shown.
      */
     fun launch(appId: String, params: JSONObject? = null, startupCard: Boolean = true) {
+        // An added launch point launches its app with its own params.
+        addedById[appId]?.launchPoint?.let { lp -> launch(lp.appId, lp.paramsObject(), startupCard); return }
         androidById[appId]?.let { a -> if (!androidApps.launch(a)) systemBanner("", "Couldn't open ${a.title}"); return }
         val app = registry.get(appId) ?: run { Log.w(AppServer.TAG, "launch: no app $appId"); return }
         // A shortcut to one of Android's settings screens: no window, no pretending that
@@ -855,6 +872,83 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             .put("title", app.title).put("appmenu", e.optString("appmenu")).put("icon", e.optString("icon"))
             .put("change", change).toString()
         launchPointWatchers.toList().forEach { it.reply(j) }
+    }
+
+    private fun launchPointChanged(lp: org.webosarchive.lunacy.card.LaunchPoint, change: String) {
+        if (launchPointWatchers.isEmpty()) return
+        val j = lp.toJson(registry.get(lp.appId)).put("change", change).toString()
+        launchPointWatchers.toList().forEach { it.reply(j) }
+    }
+
+    /** The launcher, the dock and Just Type after an added launch point came, went or changed. */
+    private fun addedLaunchPointsChanged() {
+        launcher.setApps(launchPoints())
+        showDock()
+    }
+
+    /**
+     * applicationManager/addLaunchPoint, LunaSysMgr's servicecallback_addLaunchPoint: any app
+     * may add a launch point for any installed app. `id`, `title`, `icon` and `params` are
+     * required; a relative icon is the app's own file, and `file://` is taken off. The reply
+     * is `{"returnValue":true,"launchPointId":"…"}`.
+     */
+    private fun addLaunchPoint(p: JSONObject): String {
+        fun fail(text: String) = JSONObject().put("returnValue", false).put("errorText", text).toString()
+        if (!p.has("id") || !p.has("title") || !p.has("icon") || !p.has("params")) return fail("Invalid arguments")
+        val id = p.optString("id")
+        val app = registry.get(id) ?: return fail("Unable to find id: $id")
+        val title = p.optString("title")
+        var icon = p.optString("icon")
+        icon = when {
+            icon.contains("://") -> icon.substringAfter("://")
+            icon.startsWith("/") -> icon
+            else -> "/media/cryptofs/apps/${Packages.APPS}/${app.dir}/$icon"
+        }
+        // json_object_get_string: an object or array as its JSON, a string as itself.
+        val params = when (val v = p.opt("params")) {
+            is JSONObject, is org.json.JSONArray -> v.toString()
+            null, JSONObject.NULL -> null
+            else -> JSONObject.quote(v.toString())
+        }
+        // LunaSysMgr reads the menu name as "appmenu", though its schema spells it appMenu.
+        val appmenu = p.optString("appmenu", title)
+        val lp = addedLaunchPoints.add(app, title, appmenu, icon, params, p.optBoolean("removable", true))
+            ?: return JSONObject().put("returnValue", true).put("errorText", "Failed to save launch point").toString()
+        addedLaunchPointsChanged()
+        launchPointChanged(lp, "added")
+        return JSONObject().put("returnValue", true).put("launchPointId", lp.launchPointId).toString()
+    }
+
+    /** applicationManager/removeLaunchPoint, and the launcher's Remove on a shortcut. Null once removed, else the error's text. */
+    private fun removeLaunchPoint(launchPointId: String): String? {
+        val lp = addedLaunchPoints.get(launchPointId)
+        addedLaunchPoints.remove(launchPointId)?.let { return it }
+        if (lp != null) {
+            luna.forgetIcons(AppInfo.LAUNCH_POINT_PREFIX + launchPointId)
+            addedLaunchPointsChanged()
+            launchPointChanged(lp, "removed")
+        }
+        return null
+    }
+
+    /**
+     * applicationManager/updateLaunchPointIcon: an app may change only its own launch points'
+     * icons - caller identity from the bus, never from the params (rule 10).
+     */
+    private fun updateLaunchPointIcon(caller: String, p: JSONObject): String {
+        val id = p.optString("launchPointId")
+        if (id.isEmpty()) return Bus.error("Must provide launchPointId")
+        if (!p.has("icon")) return Bus.error("Must provide icon path")
+        val lp = addedLaunchPoints.get(id) ?: return Bus.error("launchPointId \"$id\" was not found")
+        if (lp.appId != caller) return Bus.error("Attempted to change another application's launch point icon")
+        val app = registry.get(lp.appId)
+        var icon = p.optString("icon")
+        if (!icon.contains("://") && !icon.startsWith("/") && app != null) icon = "/media/cryptofs/apps/${Packages.APPS}/${app.dir}/$icon"
+        val updated = addedLaunchPoints.updateIcon(lp, app, icon) ?: return Bus.error("Unable to update launch point's icon")
+        luna.forgetIcons(AppInfo.LAUNCH_POINT_PREFIX + id)
+        addedLaunchPointsChanged()
+        launchPointChanged(updated, "updated")
+        return Bus.ok()
     }
 
     override fun removeBanner(window: AppWindow, id: Int) = notifications.removeBanner(window, id)
@@ -1644,6 +1738,16 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             reply(Bus.ok())
         }
         bus.register("com.palm.applicationManager", "launchPointChanges", Bus.CallHandler { launchPointChanges(it) })
+        // Launch points an app adds: the Web app's Add to Launcher, the PWA Installer's shortcuts.
+        bus.register("com.palm.applicationManager", "addLaunchPoint") { _, p, reply -> runOnUiThread { reply(addLaunchPoint(p)) } }
+        bus.register("com.palm.applicationManager", "removeLaunchPoint") { _, p, reply ->
+            runOnUiThread {
+                val id = p.optString("launchPointId")
+                reply(if (id.isEmpty()) Bus.error("Must provide a launchPointId")
+                      else removeLaunchPoint(id)?.let { Bus.error(it) } ?: Bus.ok())
+            }
+        }
+        bus.register("com.palm.applicationManager", "updateLaunchPointIcon") { caller, p, reply -> runOnUiThread { reply(updateLaunchPointIcon(caller, p)) } }
         bus.register("com.palm.applicationManager", "listAllHandlersForMime") { _, p, reply -> reply(handlersForMime(p)) }
         bus.register("com.palm.applicationManager", "getResourceInfo") { _, p, reply -> reply(resourceInfo(p)) }
         org.webosarchive.lunacy.card.UniversalSearch(this).register(bus)
@@ -1716,6 +1820,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      */
     private fun remove(app: AppInfo) {
         if (app.androidComponent != null) { androidApps.uninstall(app); return }
+        app.launchPoint?.let { lp -> removeLaunchPoint(lp.launchPointId); return }
         running[app.id]?.toList()?.forEach { w -> onWindowClosed(w) }
         org.webosarchive.lunacy.card.FixedViewport.forget(this, app.id)
         packages.remove(app.id, app.dir) { error ->
@@ -1907,7 +2012,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun openJustType(initial: String = "") {
         if (cards.maximized != null) return
         if (launcherOpen) closeLauncher()
-        justTypePanel.apps = registry.launchPoints + androidById.values
+        justTypePanel.apps = registry.launchPoints + addedById.values + androidById.values
         justTypePanel.open(initial)
         fade(justType, false); showDock(false)
         statusBar.setMode(StatusBar.Mode.APP)

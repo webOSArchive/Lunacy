@@ -69,9 +69,25 @@ class Luna(private val context: Context) {
      */
     fun appIcon(app: org.webosarchive.lunacy.card.AppInfo): Bitmap? =
         bitmaps.memo("icon:${app.id}:${app.version}") {
-            if (app.androidComponent == null) decode(app.openIcon())
+            if (app.launchPoint != null) launchPointIcon(app)
+            else if (app.androidComponent == null) decode(app.openIcon())
             else try { app.openIcon()?.use { BitmapFactory.decodeStream(it) } } catch (e: Exception) { null }
         }
+
+    /**
+     * A launch point's icon, which can be any size (a site's 512 px icon from the PWA
+     * Installer): squeezed to the launcher's 64 px square as LunaSysMgr's LaunchPoint::icon
+     * did (IgnoreAspectRatio), sampled down first so a big one isn't decoded whole.
+     */
+    private fun launchPointIcon(app: org.webosarchive.lunacy.card.AppInfo): Bitmap? = try {
+        val size = px(64)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        app.openIcon()?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        var sample = 1
+        while (minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= size) sample *= 2
+        app.openIcon()?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) }
+            ?.let { b -> if (b.width == size && b.height == size) b else Bitmap.createScaledBitmap(b, size, size, true).also { if (it !== b) b.recycle() } }
+    } catch (e: Exception) { null } catch (e: OutOfMemoryError) { null }
 
     /** Drops an app's cached icons, for an app that changed without a new version (an Android package). */
     fun forgetIcons(appId: String) {

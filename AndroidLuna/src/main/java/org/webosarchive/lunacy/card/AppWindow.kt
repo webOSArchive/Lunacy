@@ -8,6 +8,7 @@ import android.os.Message
 import android.util.Log
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -234,6 +235,18 @@ open class AppWindow(
                     "+' first '+(b.firstElementChild?b.firstElementChild.className+' '+getComputedStyle(b.firstElementChild).backgroundColor:'');})()") {
                     Log.i(AppServer.TAG, "[$appId] loaded $url viewport $it")
                 }
+            }
+            // The page's renderer has gone: crashed, or ended by Android for memory. From
+            // Android 8 every window shares the one renderer, and WebView takes Lunacy down
+            // with it unless each window answers. A window answers by closing, as it would if
+            // the app had closed it: the view can't draw or run script again. So the shell
+            // stays up and the cards whose pages died go, as webOS took away the card of an
+            // app that had died, rather than everything going at once.
+            @android.annotation.TargetApi(26)
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                Log.w(AppServer.TAG, "[$appId] renderer ${if (detail.didCrash()) "crashed" else "ended by Android"}; closing the window")
+                main.post { if (!destroyed) host.onWindowClosed(this@AppWindow) }
+                return true
             }
         }
         addJavascriptInterface(Native(), "LunacyNative")

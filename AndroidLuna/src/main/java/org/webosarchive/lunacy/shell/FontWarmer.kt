@@ -42,6 +42,11 @@ class FontWarmer(private val context: Context, private val server: AppServer) {
         v.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? =
                 server.serve(req.url)
+            // Answered, or WebView takes Lunacy down with a renderer that dies mid warm-up.
+            @android.annotation.TargetApi(26)
+            override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+                finish(); return true
+            }
         }
         v.webChromeClient = object : WebChromeClient() {
             override fun onReceivedTitle(view: WebView, title: String?) {

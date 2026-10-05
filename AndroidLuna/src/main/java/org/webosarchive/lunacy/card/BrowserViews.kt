@@ -440,6 +440,11 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 titleChanged()
             }
             override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) = titleChanged()
+            // The renderer is the card's too (one per app from Android 8): the card's window
+            // closes when it goes (AppWindow), and this view goes with it. Answering here
+            // keeps WebView from taking Lunacy down meanwhile.
+            @android.annotation.TargetApi(26)
+            override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail) = true
             @Suppress("OVERRIDE_DEPRECATION")
             override fun onReceivedError(view: WebView, errorCode: Int, description: String, failingUrl: String) {
                 owner.send(id, "mainDocumentLoadFailed", "", webosError(errorCode), failingUrl, description)

@@ -395,6 +395,7 @@ def gen_server(protos):
         # framebuffer 0 is the shell's offscreen one, its own size (gl_server.c).
         if name == 'glBindFramebufferOES':
             print('    framebuffer = map_name(&fb_names, framebuffer, 1);')
+            print('    fb_bound = framebuffer;')
         if name in ('glBindRenderbufferOES', 'glFramebufferRenderbufferOES'):
             print('    renderbuffer = map_name(&rb_names, renderbuffer, 1);')
         if name in ('glDeleteFramebuffersOES', 'glDeleteRenderbuffersOES'):

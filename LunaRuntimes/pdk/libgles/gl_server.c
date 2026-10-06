@@ -284,6 +284,10 @@ static GLenum (*fb_status)(GLenum);
 static void (*gen_fb)(GLsizei, GLuint *);
 static void (*gen_rb)(GLsizei, GLuint *);
 static GLuint app_fb, app_depth;   /* the app's framebuffer 0, and its depth buffer */
+/* The framebuffer the app has bound, by its real name, as the replay binds it: the blit puts
+   it back (a query can't say: Tegra 3's GLES 1 refuses GL_FRAMEBUFFER_BINDING_OES). Where's
+   My Water renders into a framebuffer of its own and leaves it bound across the swap. */
+static GLuint fb_bound;
 
 /* The app's names to the driver's: framebuffers and renderbuffers (made when first bound),
    and GLES 2's shaders and programs (made when the app creates one, add_name). */
@@ -317,6 +321,8 @@ static void delete_names(struct names *t, GLsizei n, const GLuint *names, void (
 		for (int i = 0; i < t->n; i++) if (t->app[i] == names[k]) {
 			GLuint real = t->real[i];
 			if (real != app_fb && del) del(1, &real);
+			/* Deleting the bound framebuffer binds 0, which for the app is its own screen. */
+			if (t == &fb_names && real == fb_bound) { fb_bound = app_fb; if (bind_fb) bind_fb(GL_FRAMEBUFFER_OES, app_fb); }
 			t->app[i] = t->app[t->n - 1]; t->real[i] = t->real[t->n - 1]; t->n--;
 			break;
 		}
@@ -577,7 +583,7 @@ static int blit(struct ctx *c, int shown)
 	if (shown) show(c);
 	else { glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT); }
 	int ok = eglSwapBuffers(c->display, c->window_surface);
-	bind_fb(GL_FRAMEBUFFER_OES, app_fb);
+	bind_fb(GL_FRAMEBUFFER_OES, fb_bound ? fb_bound : app_fb);
 	restore_after_blit(&s);
 	return ok;
 }
@@ -806,6 +812,7 @@ static int create_contexts(struct ctx *c)
 	if (c->pbuffer == EGL_NO_SURFACE || c->context == EGL_NO_CONTEXT) { LOGW("pdk gl: no pbuffer or context (0x%x)", err); return 0; }
 	if (!current) { LOGW("pdk gl: make current failed (0x%x)", err); return 0; }
 	if (!make_app_framebuffer(c)) return 0;
+	fb_bound = app_fb;
 	LOGI("pdk gl: GLES %d on %s, the app's framebuffer %d x %d", GLES_VERSION, glGetString(GL_RENDERER), c->game_w, c->game_h);
 	return 1;
 }

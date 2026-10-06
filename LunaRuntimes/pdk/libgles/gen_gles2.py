@@ -240,6 +240,8 @@ def gen_server(protos):
                 if n in MAPPED:
                     make = '1' if name.startswith('glBind') else '0'
                     print(f'    {n} = map_name(&{MAPPED[n]}, {n}, {make});')
+                    if name == 'glBindFramebuffer' and n == 'framebuffer':
+                        print('    fb_bound = framebuffer;')
                 args.append(n)
         for t, n in ps:
             if is_ptr(t) and n in inputs:

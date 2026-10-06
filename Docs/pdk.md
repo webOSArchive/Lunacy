@@ -281,7 +281,10 @@ framebuffer in its own pixels: framebuffer objects (134 apps), `glCopyTexSubImag
   `Workbench/probe/glstateprobe.c` measured it: every state combination fogs right on that
   driver, a surface switch within one context loses nothing, a context switch loses the
   texture. Adreno 620 and Mali-450 keep their state either way, and drew the same before
-  and after.
+  and after. The framebuffer the app has bound is put back too, by the name the replay
+  last bound (a query can't be trusted: Tegra 3's GLES 1 refuses it): Where's My Water
+  renders into a framebuffer of its own and leaves it bound across the swap, and build 181,
+  which bound the app's screen back instead, drew it black (garbled on the HP 10 G2).
 - Pacing: the app waits at a swap while two are unacknowledged, so it runs one frame ahead
   of the screen and no further. Without a window (the card not laid out, a dozing tablet)
   the app keeps drawing into its framebuffer and each swap is acknowledged after a frame's

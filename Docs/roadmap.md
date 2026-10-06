@@ -5,6 +5,14 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-10-06)
 
+**2026-10-06: 0.6.1, a mini release for foldables** (codepoet): One UI asked to restart
+Lunacy ("This app can't be resized while running") when a foldable moved it between its
+screens, because the shell is not resizable. It now declares `android.supports_size_changes`,
+so the move reaches it as a size change and it reflows, as on a rotation; split screen stays
+off. The phone or tablet layout and the shell's scale are still decided at startup, so an
+unfolded phone keeps the layout it started with (codepoet). Not tried on a foldable here;
+the testers who reported it will try it.
+
 **2026-10-06: 0.6.0, released to the community** (codepoet), build 182 from `4baa1a7`; the
 keyboard stays 0.5.0. Before release, Tiger Woods PGA Tour, Where's My Water and Fieldrunners
 were started on six devices with the same build, its version checked on each first: the HP

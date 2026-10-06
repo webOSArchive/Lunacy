@@ -67,7 +67,8 @@ What this target means:
   own level, so this changes nothing there. On Android 6 and later it means: storage and
   `WRITE_SETTINGS` are asked for while the app runs (see those entries below), and the shell
   opts out of split screen (`resizeableActivity="false"`), which a target of 24 turns on by
-  default. Anything that would need a target above 24 is a later step, taken on purpose.
+  default, while saying it takes a size change live (`android.supports_size_changes`), so a
+  foldable moving it between its screens resizes it rather than asking to restart it. Anything that would need a target above 24 is a later step, taken on purpose.
 - **Security is ratcheted, not ignored.** Each shortcut that Android 5 allows (the bridge
   transport, mixed content, how widely the bus is exposed) is listed below, so it can be
   tightened when newer Android versions are targeted.

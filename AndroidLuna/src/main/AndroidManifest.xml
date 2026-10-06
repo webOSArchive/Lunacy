@@ -44,6 +44,12 @@
         <!-- resizeableActivity: from a target of 24, Android runs an app in split screen
              unless it says no. Lunacy is the whole screen, as the shell was on a device;
              Android 5 has no split screen and ignores the attribute. -->
+        <!-- supports_size_changes: a foldable's two screens are still the whole screen, and
+             a non-resizable app moved between them is put in size compat, where One UI asks
+             to restart it ("This app can't be resized while running"). This tells Android
+             the shell takes the new size live (configChanges below), as it does a rotation,
+             while split screen stays off. Android 12 and later; older ones ignore it. -->
+        <meta-data android:name="android.supports_size_changes" android:value="true" />
         <!-- The splash theme is the shell's alone: its windowBackground is what Android
              paints while the process starts. ShellActivity clears it once it has drawn. -->
         <activity android:name=".shell.ShellActivity" android:exported="true"

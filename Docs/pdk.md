@@ -266,9 +266,22 @@ framebuffer in its own pixels: framebuffer objects (134 apps), `glCopyTexSubImag
   framebuffer object in the app's GLES context, which is current on a 1 x 1 pbuffer and
   never on a window. Every call passes through untouched; binding framebuffer 0 binds this
   one. So viewports, scissors, copies, reads and draw-texture mean what they meant.
-- At each swap a second context, sharing the colour texture, draws it into the card's
-  `TextureView`, scaled to fit with black bars and turned (below), as the TouchPad's
-  compositor put an app's buffer on its screen; then the swap is acknowledged.
+- At each swap the app's own context, current on the card's `TextureView` surface once it
+  has one, draws the colour texture into it (framebuffer 0), scaled to fit with black bars
+  and turned (below), as the TouchPad's compositor put an app's buffer on its screen; then
+  the swap is acknowledged. The blit saves the state it touches and puts it back (viewport,
+  matrices, texture units and environment, enables, client arrays, buffer binding, clear
+  colour, colour mask; the program and attribute arrays on GLES 2). Until 2026-10-05 a
+  second context sharing the texture did this, so the app's state was never touched, and
+  that drew Tiger Woods PGA Tour's course white on the Nexus 5: its Adreno 330's GLES 1
+  layer forgets GPU-side state once another context has been current while its own cache
+  still says the state is set, so a texture bound before the switch samples black until it
+  is bound again and what a game sets once per level is lost for good (the game re-binds
+  its textures every frame, so only the course went; with fog disabled it drew).
+  `Workbench/probe/glstateprobe.c` measured it: every state combination fogs right on that
+  driver, a surface switch within one context loses nothing, a context switch loses the
+  texture. Adreno 620 and Mali-450 keep their state either way, and drew the same before
+  and after.
 - Pacing: the app waits at a swap while two are unacknowledged, so it runs one frame ahead
   of the screen and no further. Without a window (the card not laid out, a dozing tablet)
   the app keeps drawing into its framebuffer and each swap is acknowledged after a frame's

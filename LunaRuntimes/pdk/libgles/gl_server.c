@@ -65,10 +65,10 @@
 struct ctx {
 	EGLDisplay display;
 	EGLConfig config;
-	EGLContext context;         /* the app's: current on the pbuffer, drawing into app_fb */
-	EGLContext blit;            /* the card's: shares APP_TEX, current on the window to show it */
-	EGLSurface pbuffer;
+	EGLContext context;         /* the app's, drawing into app_fb; the card is shown from it too (blit) */
+	EGLSurface pbuffer;         /* what the context is current on until the card has a surface */
 	EGLSurface window_surface;  /* EGL_NO_SURFACE until the card's TextureView has one */
+	int on_window;              /* the context is current on window_surface */
 	ANativeWindow *window;
 	int view_w, view_h;         /* the card, in px */
 	int game_w, game_h;         /* the app's screen */
@@ -105,7 +105,8 @@ static uint8_t *index_scratch; static size_t index_cap;   /* a draw's indices, w
 static GLuint element_bound, array_bound;
 static int client_unit;
 #define ARRAYS 10
-struct array { int enabled; GLint size; GLenum type; GLsizei stride; uint32_t offset; uint8_t *data; size_t cap; int fresh; GLboolean normalized; };
+struct array { int enabled; GLint size; GLenum type; GLsizei stride; uint32_t offset; uint8_t *data; size_t cap; int fresh; GLboolean normalized;
+	GLuint buffer;   /* the buffer object the pointer was set with, 0 for an array in the app's memory */ };
 #if GLES_VERSION == 2
 #undef ARRAYS
 #define ARRAYS 16   /* vertex attributes */
@@ -128,7 +129,7 @@ static void take_array(struct reader *r, int attrib)
 		struct array *a = &arrays[s];
 		if (len > a->cap) { a->data = realloc(a->data, len); a->cap = len; }
 		memcpy(a->data, r->p, len);
-		a->size = (GLint)size; a->stride = (GLsizei)stride; a->type = type; a->normalized = (GLboolean)normalized; a->fresh = 1;
+		a->size = (GLint)size; a->stride = (GLsizei)stride; a->type = type; a->normalized = (GLboolean)normalized; a->fresh = 1; a->buffer = 0;
 	}
 	r->p += padded;
 }
@@ -151,7 +152,7 @@ static void remember_pointer(int id, int unit, GLint size, GLenum type, GLsizei 
 {
 	int s = id == 3 ? 3 + unit : (id < 3 ? id : id + 3);
 	struct array *a = &arrays[s];
-	a->size = size; a->type = type; a->stride = stride; a->offset = offset;
+	a->size = size; a->type = type; a->stride = stride; a->offset = offset; a->buffer = array_bound;
 	/* With a VBO bound the offset is the pointer: set it now, as the app did. */
 	if (array_bound) {
 		const GLvoid *p = (const GLvoid *)(uintptr_t)offset;
@@ -385,7 +386,120 @@ static int make_app_framebuffer(struct ctx *c)
 	return 1;
 }
 
-/* The card: the app's picture drawn into the view, scaled to fit and turned. Blit context. */
+/*
+ * ---- showing the frame: from the app's own context ----
+ *
+ * The card was first drawn from a second context sharing APP_TEX, current on the window,
+ * so that the app's state was never touched. That cost the Nexus 5 Tiger Woods PGA Tour's
+ * course, drawn white: its Adreno 330's GLES 1 layer forgets GPU-side state when another
+ * context has been current and its own cache still says the state is set, so a texture
+ * bound before the switch samples black until it is bound again, and whatever that game
+ * sets once per level is lost the same way (Workbench/probe/glstateprobe.c measured both;
+ * a surface switch within one context loses nothing). So the app's context is current on
+ * the window once the card has one, framebuffer 0 is the window and app_fb the app's
+ * screen, and the blit saves the state it touches and puts it back: the picture every
+ * driver draws is the app's own.
+ */
+#if GLES_VERSION == 1
+static const GLenum blit_enables[] = { GL_DEPTH_TEST, GL_BLEND, GL_CULL_FACE, GL_LIGHTING, GL_FOG, GL_ALPHA_TEST, GL_SCISSOR_TEST,
+	GL_STENCIL_TEST, GL_COLOR_LOGIC_OP, GL_SAMPLE_ALPHA_TO_COVERAGE, GL_SAMPLE_COVERAGE };
+#else
+static const GLenum blit_enables[] = { GL_DEPTH_TEST, GL_BLEND, GL_CULL_FACE, GL_SCISSOR_TEST, GL_STENCIL_TEST, GL_SAMPLE_ALPHA_TO_COVERAGE, GL_SAMPLE_COVERAGE };
+#endif
+#define BLIT_ENABLES (sizeof blit_enables / sizeof *blit_enables)
+struct saved {
+	GLint viewport[4], active, tex0;
+	GLfloat clear[4];
+	GLboolean mask[4], en[BLIT_ENABLES];
+#if GLES_VERSION == 1
+	GLint matrix_mode, env0, units;
+	GLfloat proj[16], mv[16], texm[16];
+	GLboolean unit_tex[8];
+#else
+	GLint program;
+#endif
+};
+
+#if GLES_VERSION == 1
+/* The app's vertex or texture coordinate (unit 0) pointer again, as the server last set it. */
+static void repoint(int slot)
+{
+	struct array *a = &arrays[slot];
+	const void *p;
+	if (!a->size) return;
+	if (a->buffer) { glBindBuffer(GL_ARRAY_BUFFER, a->buffer); p = (const void *)(uintptr_t)a->offset; }
+	else if (a->data) { glBindBuffer(GL_ARRAY_BUFFER, 0); p = a->data; }
+	else return;
+	if (slot == 0) glVertexPointer(a->size, a->type, a->stride, p); else glTexCoordPointer(a->size, a->type, a->stride, p);
+}
+#endif
+
+/* Saves what the blit changes and sets the blit's own state: unit 0 active, nothing else on. */
+static void save_for_blit(struct saved *s)
+{
+	glGetIntegerv(GL_VIEWPORT, s->viewport);
+	glGetIntegerv(GL_ACTIVE_TEXTURE, &s->active);
+	glGetFloatv(GL_COLOR_CLEAR_VALUE, s->clear);
+	glGetBooleanv(GL_COLOR_WRITEMASK, s->mask);
+	for (size_t i = 0; i < BLIT_ENABLES; i++) { s->en[i] = glIsEnabled(blit_enables[i]); if (s->en[i]) glDisable(blit_enables[i]); }
+#if GLES_VERSION == 1
+	glGetIntegerv(GL_MATRIX_MODE, &s->matrix_mode);
+	glGetFloatv(GL_PROJECTION_MATRIX, s->proj); glGetFloatv(GL_MODELVIEW_MATRIX, s->mv);
+	GLint units = 1; glGetIntegerv(GL_MAX_TEXTURE_UNITS, &units);
+	s->units = units < 1 ? 1 : units > 8 ? 8 : units;
+	for (int u = s->units - 1; u >= 0; u--) {
+		glActiveTexture(GL_TEXTURE0 + u);
+		s->unit_tex[u] = glIsEnabled(GL_TEXTURE_2D);
+		if (u && s->unit_tex[u]) glDisable(GL_TEXTURE_2D);
+	}
+	/* Unit 0 is active from here. */
+	glGetIntegerv(GL_TEXTURE_BINDING_2D, &s->tex0);
+	glGetTexEnviv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, &s->env0);
+	glMatrixMode(GL_TEXTURE); glGetFloatv(GL_TEXTURE_MATRIX, s->texm); glLoadIdentity();
+	glClientActiveTexture(GL_TEXTURE0);
+	glDisableClientState(GL_NORMAL_ARRAY); glDisableClientState(GL_COLOR_ARRAY); glDisableClientState(GL_POINT_SIZE_ARRAY_OES);
+#else
+	glGetIntegerv(GL_CURRENT_PROGRAM, &s->program);
+	glActiveTexture(GL_TEXTURE0);
+	glGetIntegerv(GL_TEXTURE_BINDING_2D, &s->tex0);
+#endif
+	glColorMask(1, 1, 1, 1);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+/* The app's state again, after the blit. */
+static void restore_after_blit(const struct saved *s)
+{
+#if GLES_VERSION == 1
+	/* Unit 0 and client unit 0 are active. */
+	glMatrixMode(GL_TEXTURE); glLoadMatrixf(s->texm);
+	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, s->env0);
+	glBindTexture(GL_TEXTURE_2D, (GLuint)s->tex0);
+	if (!s->unit_tex[0]) glDisable(GL_TEXTURE_2D);
+	for (int u = 1; u < s->units; u++) if (s->unit_tex[u]) { glActiveTexture(GL_TEXTURE0 + u); glEnable(GL_TEXTURE_2D); }
+	repoint(0); repoint(3);
+	if (!arrays[0].enabled) glDisableClientState(GL_VERTEX_ARRAY);
+	if (!arrays[3].enabled) glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+	if (arrays[1].enabled) glEnableClientState(GL_COLOR_ARRAY);
+	if (arrays[2].enabled) glEnableClientState(GL_NORMAL_ARRAY);
+	if (arrays[7].enabled) glEnableClientState(GL_POINT_SIZE_ARRAY_OES);
+	glClientActiveTexture(GL_TEXTURE0 + client_unit);
+	glMatrixMode(GL_PROJECTION); glLoadMatrixf(s->proj);
+	glMatrixMode(GL_MODELVIEW); glLoadMatrixf(s->mv);
+	glMatrixMode((GLenum)s->matrix_mode);
+#else
+	glBindTexture(GL_TEXTURE_2D, (GLuint)s->tex0);
+	glUseProgram((GLuint)s->program);
+#endif
+	glActiveTexture((GLenum)s->active);
+	glBindBuffer(GL_ARRAY_BUFFER, array_bound);
+	for (size_t i = 0; i < BLIT_ENABLES; i++) if (s->en[i]) glEnable(blit_enables[i]);
+	glViewport(s->viewport[0], s->viewport[1], s->viewport[2], s->viewport[3]);
+	glClearColor(s->clear[0], s->clear[1], s->clear[2], s->clear[3]);
+	glColorMask(s->mask[0], s->mask[1], s->mask[2], s->mask[3]);
+}
+
+/* The card: the app's picture drawn into the window, scaled to fit and turned. Framebuffer 0 is bound. */
 static void show(struct ctx *c)
 {
 	EGLint vw = 0, vh = 0;
@@ -418,13 +532,27 @@ static void show(struct ctx *c)
 		float x = quad[2 * i], y = quad[2 * i + 1];
 		ndc[2 * i] = (x * cs - y * sn) * 2.0f / vw; ndc[2 * i + 1] = (x * sn + y * cs) * 2.0f / vh;
 	}
+	/* The app's two attribute arrays the quad borrows, put back after it. */
+	struct { GLint enabled, size, stride, type, norm, buffer; void *ptr; } at[2];
+	const GLuint idx[2] = { (GLuint)at_pos, (GLuint)at_uv };
+	for (int i = 0; i < 2; i++) {
+		glGetVertexAttribiv(idx[i], GL_VERTEX_ATTRIB_ARRAY_ENABLED, &at[i].enabled); glGetVertexAttribiv(idx[i], GL_VERTEX_ATTRIB_ARRAY_SIZE, &at[i].size);
+		glGetVertexAttribiv(idx[i], GL_VERTEX_ATTRIB_ARRAY_STRIDE, &at[i].stride); glGetVertexAttribiv(idx[i], GL_VERTEX_ATTRIB_ARRAY_TYPE, &at[i].type);
+		glGetVertexAttribiv(idx[i], GL_VERTEX_ATTRIB_ARRAY_NORMALIZED, &at[i].norm); glGetVertexAttribiv(idx[i], GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING, &at[i].buffer);
+		glGetVertexAttribPointerv(idx[i], GL_VERTEX_ATTRIB_ARRAY_POINTER, &at[i].ptr);
+	}
 	glViewport(0, 0, vw, vh);
 	glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
 	glUseProgram(prog);
-	glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, APP_TEX); glUniform1i(un_tex, 0);
+	glBindTexture(GL_TEXTURE_2D, APP_TEX); glUniform1i(un_tex, 0);
 	glEnableVertexAttribArray((GLuint)at_pos); glEnableVertexAttribArray((GLuint)at_uv);
 	glVertexAttribPointer((GLuint)at_pos, 2, GL_FLOAT, GL_FALSE, 0, ndc); glVertexAttribPointer((GLuint)at_uv, 2, GL_FLOAT, GL_FALSE, 0, uv);
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+	for (int i = 0; i < 2; i++) {
+		glBindBuffer(GL_ARRAY_BUFFER, (GLuint)at[i].buffer);
+		glVertexAttribPointer(idx[i], at[i].size, (GLenum)at[i].type, (GLboolean)at[i].norm, at[i].stride, at[i].ptr);
+		if (!at[i].enabled) glDisableVertexAttribArray(idx[i]);
+	}
 #else
 	glViewport(0, 0, vw, vh);
 	glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
@@ -438,6 +566,20 @@ static void show(struct ctx *c)
 	glVertexPointer(2, GL_FLOAT, 0, quad); glTexCoordPointer(2, GL_FLOAT, 0, uv);
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 #endif
+}
+
+/* Shows the frame, or clears the card black (shown false): saved state, framebuffer 0, swap. */
+static int blit(struct ctx *c, int shown)
+{
+	struct saved s;
+	save_for_blit(&s);
+	bind_fb(GL_FRAMEBUFFER_OES, 0);
+	if (shown) show(c);
+	else { glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT); }
+	int ok = eglSwapBuffers(c->display, c->window_surface);
+	bind_fb(GL_FRAMEBUFFER_OES, app_fb);
+	restore_after_blit(&s);
+	return ok;
 }
 
 static uint8_t *replies; static size_t replies_len, replies_cap;
@@ -538,15 +680,13 @@ static void app_swap(struct ctx *c)
 	   65 s under qemu on a Galaxy Tab A7 Lite, drawing nothing), and the card's failures. */
 	if (c->last_swap > 0 && t0 - c->last_swap > 2) LOGI("pdk gl: frame %d came %.1f s after the last", c->frames + 1, t0 - c->last_swap);
 	if (c->window_surface != EGL_NO_SURFACE) {
-		glFlush();
-		if (eglMakeCurrent(c->display, c->window_surface, c->window_surface, c->blit)) {
-			show(c);
-			if (!eglSwapBuffers(c->display, c->window_surface) && c->show_failures++ < 10)
+		if (!c->on_window) c->on_window = eglMakeCurrent(c->display, c->window_surface, c->window_surface, c->context);
+		if (c->on_window) {
+			if (!blit(c, 1) && c->show_failures++ < 10)
 				LOGW("pdk gl: frame %d didn't reach the card (0x%x)", c->frames + 1, eglGetError());
 			double took = now() - t0;
 			if (took > 0.25) LOGW("pdk gl: frame %d took %.0f ms to reach the card", c->frames + 1, took * 1000);
 		} else if (c->show_failures++ < 10) LOGW("pdk gl: frame %d: the card's surface isn't current (0x%x)", c->frames + 1, eglGetError());
-		eglMakeCurrent(c->display, c->pbuffer, c->pbuffer, c->context);
 	}
 	/* The TouchPad's pace: a PDK app's swaps went at 60 a second, each waiting for the
 	   display (Workbench/probe/swapprobe: 60.3 swaps/s, the longest 20 ms). A TextureView's
@@ -655,16 +795,15 @@ static int create_contexts(struct ctx *c)
 	c->pbuffer = eglCreatePbufferSurface(c->display, c->config, pb_attribs);
 	const EGLint ctx_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, GLES_VERSION, EGL_NONE };
 	c->context = eglCreateContext(c->display, c->config, EGL_NO_CONTEXT, ctx_attribs);
-	c->blit = eglCreateContext(c->display, c->config, c->context, ctx_attribs);
 	c->window_surface = EGL_NO_SURFACE;
-	int current = c->pbuffer != EGL_NO_SURFACE && c->context != EGL_NO_CONTEXT && c->blit != EGL_NO_CONTEXT &&
+	int current = c->pbuffer != EGL_NO_SURFACE && c->context != EGL_NO_CONTEXT &&
 		eglMakeCurrent(c->display, c->pbuffer, c->pbuffer, c->context);
 	EGLint err = eglGetError();
 #if GLES_VERSION == 1
 	if (warm != EGL_NO_CONTEXT) eglDestroyContext(c->display, warm);
 	if (warm_pb != EGL_NO_SURFACE) eglDestroySurface(c->display, warm_pb);
 #endif
-	if (c->pbuffer == EGL_NO_SURFACE || c->context == EGL_NO_CONTEXT || c->blit == EGL_NO_CONTEXT) { LOGW("pdk gl: no pbuffer or context (0x%x)", err); return 0; }
+	if (c->pbuffer == EGL_NO_SURFACE || c->context == EGL_NO_CONTEXT) { LOGW("pdk gl: no pbuffer or context (0x%x)", err); return 0; }
 	if (!current) { LOGW("pdk gl: make current failed (0x%x)", err); return 0; }
 	if (!make_app_framebuffer(c)) return 0;
 	LOGI("pdk gl: GLES %d on %s, the app's framebuffer %d x %d", GLES_VERSION, glGetString(GL_RENDERER), c->game_w, c->game_h);
@@ -693,11 +832,10 @@ JNIEXPORT void JNICALL JNI(attach)(JNIEnv *env, jclass cls, jlong handle, jobjec
 	ANativeWindow_setBuffersGeometry(c->window, 0, 0, format);
 	c->window_surface = eglCreateWindowSurface(c->display, c->config, c->window, NULL);
 	if (c->window_surface == EGL_NO_SURFACE) { LOGW("pdk gl: no window surface (0x%x)", eglGetError()); return; }
-	/* The card shows black until the app's first swap. */
-	if (eglMakeCurrent(c->display, c->window_surface, c->window_surface, c->blit)) {
-		glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT); eglSwapBuffers(c->display, c->window_surface);
-	}
-	eglMakeCurrent(c->display, c->pbuffer, c->pbuffer, c->context);
+	/* The app's context moves to the window, and the card shows black until the app's first swap. */
+	c->on_window = eglMakeCurrent(c->display, c->window_surface, c->window_surface, c->context);
+	if (c->on_window) blit(c, 0);
+	else LOGW("pdk gl: the card's surface isn't current (0x%x)", eglGetError());
 }
 
 /* Replays a batch; returns the answers for the app (acknowledgements, pixels), or null. */
@@ -733,7 +871,6 @@ JNIEXPORT void JNICALL JNI(destroy)(JNIEnv *env, jclass cls, jlong handle)
 	struct ctx *c = (struct ctx *)(intptr_t)handle;
 	if (!c) return;
 	eglMakeCurrent(c->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-	if (c->blit != EGL_NO_CONTEXT) eglDestroyContext(c->display, c->blit);
 	if (c->context != EGL_NO_CONTEXT) eglDestroyContext(c->display, c->context);
 	if (c->window_surface != EGL_NO_SURFACE) eglDestroySurface(c->display, c->window_surface);
 	if (c->pbuffer != EGL_NO_SURFACE) eglDestroySurface(c->display, c->pbuffer);

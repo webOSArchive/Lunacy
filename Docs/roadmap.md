@@ -3,7 +3,32 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-10-05)
+## Where things stand (2026-10-06)
+
+**2026-10-06: 0.6.0, released to the community** (codepoet), build 182 from `4baa1a7`; the
+keyboard stays 0.5.0. Before release, Tiger Woods PGA Tour, Where's My Water and Fieldrunners
+were started on six devices with the same build, its version checked on each first: the HP
+10 G2 (Android 5.0.1), Nexus 7 (5.1.1) and Nexus 5 (6), natively; a Galaxy Tab A7 Lite
+(Android 14) and a Kyocera tablet (Android 12), natively too; the Pixel Tablet (17), under
+qemu. What the round turned up, all fixed ([pdk.md](pdk.md)):
+- **Native PDK on Android 10 and later.** Android's app seccomp policy killed every PDK app
+  on the 32-bit build there (glibc's `set_robust_list` and `rseq`, exit 159), so those
+  devices had only qemu. `libenosys.so` runs the app as its ptrace child and answers each
+  refused call with -ENOSYS; games keep 60 frames/s. The 32-bit build is now the one for any
+  device that can run 32-bit code; the 64-bit build only for 64-bit-only devices. Android 14
+  warns once that the 32-bit build isn't compatible (it targets SDK 24); it runs.
+- **GPU drivers.** Tegra 3's GLES 1 (Nexus 7) refuses `GL_FRAMEBUFFER_BINDING_OES`; Adreno
+  620's GLES 1 (Kyocera) wants a GLES 2 context current while GLES 1 contexts are made; Adreno
+  330's GLES 1 (Nexus 5) loses state when another context has been current, which drew Tiger
+  Woods' course white, so the card is now drawn from the app's own context, putting back the
+  state and the framebuffer the app had bound (`Workbench/probe/glstateprobe.c`).
+- **The shell.** A WebView renderer that dies closes its cards instead of taking Lunacy down
+  (the Kyocera's App Catalog); a PDK card not yet focused no longer tells its app it is
+  inactive (Fieldrunners waited on its launching card); the GL server logs failed and slow
+  swaps and long gaps between frames.
+
+Open: a Galaxy Tab A7 Lite on the 64-bit build loads Where's My Water levels for 20 to 65 s
+under qemu (the 32-bit build there is native); the other ten apkenv ports.
 
 **2026-10-05, evening: the Android ports.** Where's My Water, codepoet's first apkenv port,
 plays under Lunacy on the HP 10 G2 and on the Pixel Tablet under qemu, as the webOS package
@@ -29,7 +54,7 @@ Enyo fork is rebased onto the TouchPad's own framework: the GitHub release it pa
 is a different build ([CHANGES.md](../LunaRuntimes/enyo-1.0/CHANGES.md)); ten bundled apps
 drew the same on both bases. SDK 0.4 ships the same Enyo. Open: compare `palm-log` output for
 the Web app's plugin calls with the TouchPad's; Mojo samples don't open in a desktop browser
-(webos-sdk-redux FRAMEWORKS.md); the APK says 0.6.0 (unreleased; the keyboard stays 0.5.0).
+(webos-sdk-redux FRAMEWORKS.md).
 
 ## Where things stood (2026-10-04)
 

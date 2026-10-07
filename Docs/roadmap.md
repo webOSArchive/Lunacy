@@ -27,8 +27,8 @@ it); codepoet: port what's needed, shrink later.
 Open: the compose card closing leaves the card view rather than Email's card (check against the
 TouchPad); attachments; the arm64 build (the services under qemu) and the Android 5 devices
 untried; PmLogLib's levels need PmLogDaemon's shared memory, so only errors are logged unless a
-service is started with `files/pdk/args`; contacts are an empty store; Enyo patch 0006 into
-webos-sdk-redux.
+service is started with `files/pdk/args`; contacts are an empty store. Enyo patch 0006 is in
+webos-sdk-redux too (committed there, not pushed).
 
 ## Where things stood (2026-10-06)
 

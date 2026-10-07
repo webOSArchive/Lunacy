@@ -24,12 +24,17 @@ for patch in ../LunaRuntimes/enyo-1.0/patches/*.patch; do
         { echo "fetch-assets: $patch does not apply to the TouchPad's Enyo" >&2; exit 1; }
     echo "enyo: applied $(basename "$patch")"
 done
+# webOS CE's accounts library, which Contacts and Calendar show on first launch: the
+# community enyo-accounts 1.1.1.1 with "Get started with your webOS account:" (its strings
+# only), from the webOS CE project's system/ (Workbench/vendor/webos-ce).
+cp -r $V/webos-ce/system/usr/palm/frameworks/enyo/0.10/framework/lib/accounts/. $L/fw/enyo/1.0/framework/lib/accounts/
 cat > $L/fw/enyo/1.0/NOTICE <<'NOTICE'
 Enyo 1.0 as it is on the reference TouchPad (webOS CE 3.1.0), /usr/palm/frameworks/enyo/0.10,
 with Lunacy's patches (LunaRuntimes/enyo-1.0/patches in the Lunacy repository). Enyo itself is
 Apache 2.0 (Hewlett-Packard; github.com/enyojs/enyo-1.0). The libraries and localized
 resources HP shipped on the device and never released with the source (lib/networkproxy among
-them) are Palm/HP's, distributed by Lunacy as abandonware, like Mojo.
+them) are Palm/HP's, distributed by Lunacy as abandonware, like Mojo. lib/accounts is the
+webOS CE project's (the community enyo-accounts 1.1.1.1, with CE's strings).
 NOTICE
 cp -r ../Workbench/apps-src/com.ingloriousapps.glimpse/usr/palm/applications/com.ingloriousapps.glimpse $T/apps/
 # Palm's own settings apps that Lunacy ships (Screen & Lock, Help) are committed under
@@ -76,11 +81,15 @@ for patch in ../LunaRuntimes/mojo/patches/*.patch; do
         { echo "fetch-assets: $patch does not apply to the TouchPad's Mojo" >&2; exit 1; }
     echo "mojo: applied $(basename "$patch")"
 done
+# webOS CE's copy of the contacts library's prebuilt builtin, with its AppPrefs fix (the
+# CE project's system/, Workbench/vendor/webos-ce), as for the framework itself below.
+cp $V/webos-ce/system/usr/palm/frameworks/mojo/builtins/palmcontactsVersion1_0.js $L/fw/mojo/builtins/
 cat > $L/fw/mojo/NOTICE <<'NOTICE'
 Palm's Mojo framework, copied from /usr/palm/frameworks/mojo on the reference TouchPad
 (webOS CE 3.1.0): mojo.js, submission 506's assets, and the builtins webOS's own browser
 provided (Prototype 1.6, palmInitFramework506 and palmInitFramework2205 - the Mojo 1 and
-Mojo 2 frameworks - and the libraries MojoLoader hands out).
+Mojo 2 frameworks - and the libraries MojoLoader hands out). builtins/palmcontactsVersion1_0.js
+is webOS CE's copy, with its AppPrefs fix.
 Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence; distributed by
 Lunacy as abandonware: no owner has asserted rights since webOS was discontinued.
 NOTICE
@@ -97,6 +106,9 @@ for f in mojo2 prototype mojo.core underscore foundations globalization mojoload
     cp -r $V/touchpad/$f $L/fw/frameworks/ 2>/dev/null || cp -r $V/touchpad/services-fw/$f $L/fw/frameworks/
 done
 chmod -R u+w $L/fw/frameworks
+# webOS CE's contacts framework: the TouchPad's, with CE's AppPrefs fix (one prefs record, and
+# duplicates healed), from the CE project's system/ (Workbench/vendor/webos-ce).
+cp -r $V/webos-ce/system/usr/palm/frameworks/contacts/. $L/fw/frameworks/contacts/
 # mojo2's images and templates link to ../../../../mojocommon, which on the device is
 # /usr/palm/frameworks/mojocommon, beside it; here mojocommon is served from fw/mojocommon, so
 # a stand-in link lets those links resolve (and goes with the rest, below).
@@ -107,7 +119,7 @@ Palm's frameworks, copied from /usr/palm/frameworks on the reference TouchPad
 (webOS CE 3.1.0): mojo2 (submission 205), prototype, mojo.core, foundations, globalization,
 mojoloader.js, the metascene frameworks the Video Player's scenes come from, the media
 frameworks they and other apps ask MojoLoader for, and contacts (submission 114), which Email
-imports for its address fields, with the foundations.crypto and foundations.io it loads,
+imports for its address fields (webOS CE's copy, with its AppPrefs fix), with the foundations.crypto and foundations.io it loads,
 caja, Google Caja's HTML sanitizer (Apache 2.0), which Email's compose window loads, and
 calendar (submission 42), the events, repeats and time zones library Calendar loads. `media` is /usr/lib/luna/luna-media-shim,
 which the frameworks folder symlinks to.
@@ -172,14 +184,15 @@ done
 # jsservicelauncher, the system's own JS services and the db8 kinds they own, from the
 # reference TouchPad (Workbench/vendor/touchpad/services-fw, os-services and etc-db).
 R=$L/rootfs
-mkdir -p $R/usr/palm/frameworks $R/usr/palm/services $R/usr/palm/public/accounts $R/etc/palm/db/kinds $R/etc/palm/db/permissions $R/etc/palm/tempdb
-for f in foundations foundations.crypto foundations.io foundations.json mojoservice mojoservice.transport underscore globalization mojoloader.js calendar; do
+mkdir -p $R/usr/palm/frameworks $R/usr/palm/services $R/usr/palm/public/accounts $R/etc/palm/db/kinds $R/etc/palm/db/permissions $R/etc/palm/tempdb $R/etc/palm/activities
+for f in foundations foundations.crypto foundations.io foundations.json mojoservice mojoservice.transport underscore globalization mojoloader.js calendar contacts; do
     cp -r $V/touchpad/services-fw/$f $R/usr/palm/frameworks/ 2>/dev/null || cp -r $V/touchpad/$f $R/usr/palm/frameworks/
 done
 cp -r $V/touchpad/services-fw/jsservicelauncher $R/usr/palm/services/
+cp -r $V/webos-ce/system/usr/palm/frameworks/contacts/. $R/usr/palm/frameworks/contacts/
 cat > $R/usr/palm/frameworks/NOTICE <<'NOTICE'
 Palm's JS service frameworks (foundations*, mojoservice*, globalization, underscore,
-mojoloader.js, calendar) and jsservicelauncher, copied from /usr/palm on the reference TouchPad
+mojoloader.js, calendar, contacts - webOS CE's copy, with its AppPrefs fix) and jsservicelauncher, copied from /usr/palm on the reference TouchPad
 (webOS CE 3.1.0). Status: treated as abandonware, like Mojo: no owner has asserted rights
 since webOS was discontinued. underscore is MIT (Jeremy Ashkenas).
 NOTICE
@@ -209,11 +222,36 @@ Palm's calendar reminders service, copied from /usr/palm/services on the referen
 (webOS CE 3.1.0), without its test list. Copyright Palm, Inc. / Hewlett-Packard. Never
 released under an open licence; distributed by Lunacy as abandonware, like Mojo.
 NOTICE
-# The system's own account template, which the accounts service reads.
-cp -r $V/touchpad/os-services/public/accounts/com.palm.palmprofile $R/usr/palm/public/accounts/
+# Contacts' services (Docs/architecture.md, "Contacts"): the contacts service (vCards,
+# favorites, sort order) and the linker, which joins contacts into the people the app lists.
+# The linker is the community's 1.1.0.2, as webOS CE ships it. Their activities, the watches
+# that start them, are the device's /etc/palm/activities files. The linker's plugins (for the
+# phone, messaging and Just Type's smartkey, none of which Lunacy has) are left out; it starts
+# without them, as it is written to.
+for s in com.palm.service.contacts com.palm.service.contacts.linker; do
+    cp -r $V/touchpad/os-services/$s $R/usr/palm/services/
+    cp -r $V/touchpad/etc-activities/$s $R/etc/palm/activities/
+done
+rm -f $R/usr/palm/services/com.palm.service.contacts/run_tests.sh $R/usr/palm/services/com.palm.service.contacts/testSpec.json
+cat > $R/usr/palm/services/com.palm.service.contacts/NOTICE <<'NOTICE'
+Palm's contacts service, copied from /usr/palm/services on the reference TouchPad
+(webOS CE 3.1.0), without its test runner, and its activity file from /etc/palm/activities.
+Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence; distributed by
+Lunacy as abandonware, like Mojo.
+NOTICE
+cat > $R/usr/palm/services/com.palm.service.contacts.linker/NOTICE <<'NOTICE'
+The contacts linker service, copied from /usr/palm/services on the reference TouchPad
+(webOS CE 3.1.0), where it is the community's 1.1.0.2 (Herman van Hazendonk), as webOS CE
+ships it; and its activity file from /etc/palm/activities. Copyright LG Electronics, Inc.;
+Apache 2.0 (see LICENSE).
+NOTICE
+# The system's own account template, which the accounts service reads: webOS CE's, named
+# "webOS Account" (Workbench/vendor/webos-ce, the CE project's system/).
+cp -r $V/webos-ce/system/usr/palm/public/accounts/com.palm.palmprofile $R/usr/palm/public/accounts/
 cat > $R/usr/palm/public/accounts/NOTICE <<'NOTICE'
-The palmprofile account template and its images, from /usr/palm/public/accounts on the
-reference TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. / Hewlett-Packard; abandonware.
+The palmprofile account template and its images, as the webOS CE project ships them (HP's
+from /usr/palm/public/accounts, named "webOS Account"). Copyright Palm, Inc. /
+Hewlett-Packard; abandonware.
 NOTICE
 # db8 kinds and permissions those services own, from /etc/palm on the reference TouchPad.
 for k in com.palm.palmprofile com.palm.account.credentials com.palm.service.accounts \
@@ -228,9 +266,14 @@ for k in com.palm.appcatalog com.palm.appcatalog.editionfile com.palm.appcatalog
     cp $V/touchpad/etc-db/db/kinds/$k $R/etc/palm/db/kinds/
     cp $V/touchpad/etc-db/db/permissions/$k $R/etc/palm/db/permissions/
 done
-# Contacts' person and contact kinds, which a TouchPad always has: Email looks senders up
-# in them (an empty store, with no contacts app or service yet, as on a new device).
-for k in com.palm.person com.palm.contact; do
+# Contacts' kinds: person and contact (which Email looks senders up in, too), the profile
+# account's contacts, the app's preferences, and the linker's own. Also the IM login states
+# (owned by the messaging app, which Lunacy doesn't have): Contacts watches them, as it does
+# the tempdb's buddy statuses, and a TouchPad always has both kinds, empty without an IM
+# account. Without them the watch fails and Enyo retries it every 10 seconds.
+for k in com.palm.person com.palm.contact com.palm.contact.palmprofile com.palm.app.contacts.prefs \
+         com.palm.linker.rev com.palm.manualLink com.palm.manualUnlink \
+         com.palm.person.favoritebackup com.palm.person.speeddialbackup com.palm.imloginstate; do
     cp -r $V/touchpad/etc-db/db/kinds/$k $R/etc/palm/db/kinds/
     cp -r $V/touchpad/etc-db/db/permissions/$k $R/etc/palm/db/permissions/
 done
@@ -248,10 +291,9 @@ done
 # packages, so it lists none.
 mkdir -p $R/usr/palm/ipkgs && echo '[]' > $R/usr/palm/ipkgs/manifest.json
 cp -r $V/touchpad/etc-db/tempdb/kinds $V/touchpad/etc-db/tempdb/permissions $R/etc/palm/tempdb/
-rm -rf $R/etc/palm/tempdb/permissions/com.palm.imbuddystatus
 cat > $R/etc/palm/NOTICE <<'NOTICE'
 db8 kind and permission files for the accounts, palmprofile and calendar reminders services,
-contacts (person and contact), the activity manager, App Catalog and the
+contacts (people, contacts, the app's preferences and the linker's), the activity manager, App Catalog and the
 Web app, from /etc/palm on the reference TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. /
 LG Electronics.
 NOTICE

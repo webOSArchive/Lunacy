@@ -72,7 +72,7 @@ class ServiceProcess(
      * it, /var/log/messages, for palm-log; everything goes to Android's log too.
      */
     private fun log(line: String) {
-        Log.i(AppServer.TAG, "svc [$name] $line")
+        Log.i(AppServer.TAG, "svc [$name] ${Bus.redact(line)}")
         SYSLOG.find(line)?.let { m ->
             SysLog.log(PRIORITIES.getOrElse(m.groupValues[1].toInt()) { "info" }, m.groupValues[2], m.groupValues[3])
         }
@@ -94,7 +94,7 @@ class ServiceProcess(
     }
 
     private fun receive(line: String) {
-        val m = try { JSONObject(line) } catch (e: Exception) { Log.i(AppServer.TAG, "svc [$name] $line"); return }
+        val m = try { JSONObject(line) } catch (e: Exception) { Log.i(AppServer.TAG, "svc [$name] ${Bus.redact(line)}"); return }
         when (m.optString("t")) {
             "response" -> requests[m.optInt("id")]?.let { c ->
                 if (!c.subscribe) requests.remove(m.optInt("id"))

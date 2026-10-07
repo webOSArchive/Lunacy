@@ -123,7 +123,7 @@ class Bus {
         val service = m?.groupValues?.get(1) ?: ""
         val method = m?.groupValues?.get(2) ?: ""
         val h = handlers["$service/$method"] ?: services[service]
-        Log.i(AppServer.TAG, "bus [$appId] $service/$method ${if (h == null) "UNHANDLED" else ""} $params")
+        Log.i(AppServer.TAG, "bus [$appId] $service/$method ${if (h == null) "UNHANDLED" else ""} ${redact(params)}")
         val p = try { JSONObject(params.ifEmpty { "{}" }) } catch (e: Exception) { JSONObject() }
         val call = Call(appId, service, method, p, reply, privateBus || privileged(appId), params.ifEmpty { "{}" })
         if (h == null) {
@@ -147,6 +147,14 @@ class Bus {
          * apps that use the account take com.palm.* ids for exactly this reason.
          */
         fun privileged(appId: String) = appId.startsWith("com.palm.")
+
+        /**
+         * The log's copy of a call's parameters, with passwords and the like blanked: the bus
+         * log is in Android's log on every build, and Email's account checks carry the
+         * account's password. Only the log line changes; the service gets the call as sent.
+         */
+        private val SECRET = Regex("""("(?:password|passwd|pin|secret|token|authToken|accessToken|refreshToken|client_secret)"\s*:\s*)"(?:[^"\\]|\\.)*"""", RegexOption.IGNORE_CASE)
+        fun redact(params: String): String = SECRET.replace(params) { it.groupValues[1] + "\"…\"" }
 
         fun error(text: String, code: Int = -1): String =
             JSONObject(mapOf("returnValue" to false, "errorCode" to code, "errorText" to text)).toString()

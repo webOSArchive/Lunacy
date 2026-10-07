@@ -94,7 +94,6 @@
 		// The shell sets this as cards gain and lose focus; a device always has it.
 		isActivated: false,
 		isMinimal: false,
-		activityId: 1,
 		stageReady: function () { N.stageReady(); },
 		// Mojo's StageController.setWindowOrientation assigns to the property, so the two are
 		// the same thing; see the windowOrientation property below for what webOS did with it.
@@ -221,6 +220,23 @@
 				set: function (o) {
 					PS.specifiedWindowOrientation = String(o);
 					if (N.requestOrientation) { N.requestOrientation(String(o)); }
+				}
+			});
+		} catch (e) {}
+	})();
+
+	// PalmSystem.activityId: the app's own activity, which WebAppManager created for each app
+	// as it started (WebAppBase::createActivity: foreground, named for the app) and which its
+	// windows share. -1 until the activity manager has answered, as a device's page reads it.
+	// Mojo's service requests (and the contacts UI's copy of them) send it as "$activity", so
+	// a service the app calls can adopt the app's activity.
+	(function () {
+		var PS = window.PalmSystem;
+		try {
+			Object.defineProperty(PS, "activityId", {
+				configurable: true, enumerable: false,
+				get: function () {
+					try { return N.activityId ? N.activityId() : -1; } catch (e) { return -1; }
 				}
 			});
 		} catch (e) {}

@@ -10,4 +10,5 @@ object Easing {
     val OutQuart = TimeInterpolator { 1 - (1 - it).pow(4) }   // QEasingCurve 10
     val InOutQuint = TimeInterpolator { if (it < 0.5f) 16 * it.pow(5) else 1 - (-2 * it + 2).pow(5) / 2 }  // QEasingCurve 15
     val InQuad = TimeInterpolator { it * it }                  // QEasingCurve 1
+    val InOutQuad = TimeInterpolator { if (it < 0.5f) 2 * it * it else 1 - (-2 * it + 2).pow(2) / 2 }  // QEasingCurve 3
 }

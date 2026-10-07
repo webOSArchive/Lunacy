@@ -5,6 +5,30 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-10-07)
 
+**2026-10-07: 0.7.0 built for in-house testing** (codepoet). Version 0.7.0, all targets, from
+an uncommitted tree (build 195). codepoet's first round, on a Pixel Tablet updated from a
+2026-10-04 build, found three faults, all fixed and in the rebuilt APKs: Calendar had no
+On-Device calendar (the profile account was stored before db8 gave array objects their
+`_id`; db8 now repairs old records once), Email couldn't start its services on a 64-bit-only
+device (qemu needs the execute bit; IMAP now logs in and idles under qemu), and the bus log
+showed an account's password (secrets are now blanked in the log). Then, on codepoet's design, documents' index answered from the files (luna-deltas A16): Quick
+Office and Adobe Reader list Documents and Download, and a file copied in shows up while the list
+is open. Opening one still needs hybrid apps (their viewers are native plugins). See
+[fix-log.md](fix-log.md). Commit, then rebuild, before release.
+
+**2026-10-07: Contacts, local only** (codepoet: local contacts only for now). webOS CE's
+Contacts 3.2.0 is bundled unchanged, with the TouchPad's contacts and linker services, and the
+CE project's palmprofile template and accounts library. On the A7 Lite: first launch offers "On
+This Device", a contact saves, lists, searches, opens and takes an edit, and survives a restart.
+Built for it, all general: each app's own activity (`PalmSystem.activityId` had been a constant),
+db8's longest-wildcard permissions, the IM kinds a TouchPad always has; and a startup bug in the
+app registry from the Calendar work is fixed. HP's duplicate prefs record (also on the reference
+TouchPad) was written up for the webOS CE project, which fixed it in its `contacts` framework;
+Lunacy ships CE's copy, and the device's two records healed to one. A contact's photo now saves:
+the file picker crops, as Palm's did, and `com.palm.image` (LunaSysService's image service,
+measured on the TouchPad) cuts it. See [architecture.md](architecture.md), "Contacts". Open:
+vCards, favorites; the other devices untried.
+
 **2026-10-07: Calendar, local only** (codepoet: share code with webOS CE's cleaned-up
 Calendar; no syncing in this pass). webOS CE's Calendar 3.2.0 is bundled unchanged, with the
 TouchPad's `calendar` library and its reminders service. On the A7 Lite: first launch offers

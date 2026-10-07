@@ -6,6 +6,9 @@
  *     allowMultiSelect, previewLabel), put there by Enyo from the query string;
  *   - the result goes back through enyo.CrossAppResult as
  *     {result: [{fullPath, iconPath, attachmentType, size}]}, or nothing when cancelled.
+ *   - a single photo asked for with cropWidth or cropHeight (Contacts' photo, for one) is
+ *     cropped first, as Palm's ImagePicker did: tapping it opens enyo.CroppableImage, and
+ *     the result carries its crop parameters as cropInfo.
  *
  * What it lists comes from Lunacy's own service, because Lunacy has no media indexer:
  * palm://org.webosarchive.lunacy/files/list walks the webOS tree instead.
@@ -28,15 +31,19 @@ enyo.kind({
 			]},
 			{name: "empty", kind: "HFlexBox", pack: "center", align: "center", components: [
 				{name: "emptyText", className: "fp-empty"}
-			]}
+			]},
+			{name: "cropView", kind: "VFlexBox"}
 		]},
 		{name: "bottom", kind: "HFlexBox", className: "fp-bottom", components: [
-			{flex: 1, kind: "Button", caption: $L("Cancel"), onclick: "cancel"},
+			{flex: 1, kind: "Button", name: "cancelButton", caption: $L("Cancel"), onclick: "cancel"},
 			{flex: 1, kind: "Button", name: "ok", className: "enyo-button-affirmative", caption: $L("OK"), disabled: true, onclick: "choose"}
 		]},
 		{kind: "CrossAppResult", name: "result"},
 		{kind: "PalmService", service: "palm://org.webosarchive.lunacy/", components: [
 			{name: "list", method: "files/list", onResponse: "gotFiles"}
+		]},
+		{kind: "PalmService", service: "palm://com.palm.image/", components: [
+			{name: "imageInfo", method: "imageInfo", onResponse: "gotImageInfo"}
 		]}
 	],
 	//* Where webOS kept the user's own files; the picker starts there, as Palm's did.
@@ -48,6 +55,8 @@ enyo.kind({
 		this.multi = Boolean(this.params.allowMultiSelect);
 		this.types = this.params.fileTypes || (this.params.fileType ? [this.params.fileType] : null);
 		if (this.types && !(this.types instanceof Array)) { this.types = [this.types]; }
+		this.cropping = !this.multi && Boolean(this.params.cropWidth || this.params.cropHeight) &&
+			Boolean(this.types) && this.types.length === 1 && this.types[0] === "image";
 		this.$.title.setContent(this.params.previewLabel || this.titleFor());
 		this.$.selection.setContent(this.multi ? $L("No Files Selected") : $L("No File Selected"));
 		this.$.pane.selectViewByName("loading");
@@ -123,6 +132,10 @@ enyo.kind({
 	},
 	tapped: function(inSender) {
 		var f = inSender.file;
+		if (this.cropping) {
+			this.openCrop(f);
+			return;
+		}
 		if (this.multi) {
 			var at = -1;
 			for (var i = 0; i < this.selected.length; i++) {
@@ -148,7 +161,61 @@ enyo.kind({
 		this.$.emptyText.setContent(text);
 		this.$.pane.selectViewByName("empty");
 	},
+	//* The crop view, as Palm's ImageCropView: the photo to pan and zoom, titled "Preview".
+	openCrop: function(f) {
+		this.cropFile = f;
+		this.$.cropView.destroyControls();
+		// A scaled copy here too; the crop parameters are put back in the original's pixels.
+		this.$.cropView.createComponent({name: "cropImage", kind: "CroppableImage", flex: 1,
+			src: encodeURI(f.fullPath) + "?__lunacy_thumb=1024", onCrop: "cropped"}, {owner: this});
+		this.$.cropView.render();
+		this.$.pane.selectViewByName("cropView");
+		this.$.title.setContent(this.params.previewLabel || $L("Preview"));
+		this.$.selection.setContent(f.name);
+		this.$.cancelButton.setCaption($L("Back"));
+		this.$.ok.setDisabled(false);
+	},
+	closeCrop: function() {
+		this.cropFile = null;
+		this.$.cropView.destroyControls();
+		this.$.pane.selectViewByName("browser");
+		this.$.title.setContent(this.params.previewLabel || this.titleFor());
+		this.$.selection.setContent($L("No File Selected"));
+		this.$.cancelButton.setCaption($L("Cancel"));
+		this.$.ok.setDisabled(true);
+	},
+	cropped: function(inSender, info) {
+		this.cropInfo = info;
+		this.$.imageInfo.call({src: this.cropFile.fullPath});
+	},
+	/**
+	 * CroppableImage measures in the pixels of the copy it shows; the caller crops the file
+	 * itself (com.palm.image/convert, with scale = its width / suggestedXsize), so the sizes
+	 * go back in the original's pixels. The focus is a fraction of the image either way.
+	 */
+	gotImageInfo: function(inSender, r) {
+		var info = this.cropInfo, f = this.cropFile;
+		if (!info || !f) { return; }
+		var k = (r && r.returnValue && r.width && info.sourceWidth) ? r.width / info.sourceWidth : 1;
+		if (k !== 1) {
+			info.scale = info.scale / k;
+			info.suggestedScale = info.scale * 100;
+			info.suggestedXtop = Math.round(info.suggestedXtop * k);
+			info.suggestedYtop = Math.round(info.suggestedYtop * k);
+			info.suggestedXsize = Math.round(info.suggestedXsize * k);
+			info.suggestedYsize = Math.round(info.suggestedYsize * k);
+			info.sourceWidth = r.width;
+			info.sourceHeight = r.height;
+		}
+		info.sourceImage = f.fullPath;
+		this.$.result.sendResult({result: [{fullPath: f.fullPath, iconPath: f.fullPath,
+			attachmentType: f.attachmentType, size: f.size, cropInfo: info}]});
+	},
 	choose: function() {
+		if (this.cropFile) {
+			this.$.cropImage.getCropParams();
+			return;
+		}
 		var files = [];
 		for (var i = 0; i < this.selected.length; i++) {
 			var f = this.selected[i].file;
@@ -163,6 +230,10 @@ enyo.kind({
 		this.$.result.sendResult({result: files});
 	},
 	cancel: function() {
+		if (this.cropFile) {
+			this.closeCrop();
+			return;
+		}
 		// No "result": enyo.FilePicker closes without firing onPickFile, as on webOS.
 		this.$.result.sendResult({});
 	}

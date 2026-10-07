@@ -730,7 +730,7 @@ Lunacy has it - inside the environment, and as Android's own screen saver.
   device is docked or charging and left alone, which is the same occasion a Touchstone was, so
   Lunacy offers itself as one: Settings > Display > Daydream > **Lunacy Exhibition**. The
   service draws nothing of its own - it starts the shell with `exhibition` set and stands
-  down, so there is one way into the mode and an exhibiting app is a real card with the whole
+  down, so there is one way into the mode and an exhibiting app is a real app with the whole
   bus behind it. The gear beside the entry opens Palm's Exhibition app, because which app
   exhibits is webOS's setting, not an Android one.
   - **The mode outlasts the dream, deliberately.** Android ends a dream at the first touch;
@@ -749,8 +749,40 @@ Lunacy has it - inside the environment, and as Android's own screen saver.
   all read the same two keys, at relaunch as well as launch. Many of these apps are `noWindow`:
   the launch runs a headless dispatcher, which opens its exhibition view as a window with
   `attributes={"window":"dockMode"}`, the same window-type path dashboards and popup alerts
-  take. Leaving the mode closes what entering it opened - webOS's `closeApp` did - while an
-  app its owner already had open keeps its own cards and loses only its dock window.
+  take. An app that isn't headless gets its first window as its dock window, as
+  `ProcessManager::launch` made it one for that `windowType`.
+- **The dock is not the card view.** Dock windows are never cards (codepoet, on the reference
+  TouchPad): they live in a black layer of their own over the cards, launcher and dock, under
+  the status bar, alerts and dashboards, as `DockModeWindowManager` kept them. Changing face
+  crossfades the two (500 ms, InOutQuad: `dockFadeDockAnimationDuration`,
+  `dockFadeAnimationCurve`); the one left stays running out of sight, so coming back to it
+  doesn't launch it again. Leaving the mode closes every dock window (`DockModeCloseAppsOnExit`
+  closed all but the last one used; Lunacy closes that one too, for memory). An app started
+  for the dock ends with its window; one its owner already had open keeps its cards.
+  Since the dock isn't a card, the swipe up from the bottom edge that would minimize one
+  ends the mode instead, as the home button does: in dock mode LunaSysMgr sent both to
+  `enterOrExitDockModeUi(false)`.
+
+### Documents' index
+
+webOS apps find documents in db8, not on disk: Quick Office and Adobe Reader list
+`com.palm.media.misc.file:1`, which filenotifyd kept as a copy of `/media/internal`. Lunacy
+answers the kind from the files themselves (codepoet's design, a deliberate delta:
+[luna-deltas.md](luna-deltas.md) A16).
+
+- **`FileIndex.kt`** walks `/media/internal` as apps see it (Lunacy's own tree and the mapped
+  Android folders), and makes filenotifyd's record for each file that isn't audio, an image or
+  a video, skipping hidden names: `name` and `searchKey` (the file name without its
+  extension), `path`, `extension`, `size`, `modifiedTime` in seconds. It registers the kind as
+  filenotifyd did, with its indexes and consumers, under `com.palm.filenotifyd`.
+- **`Db8.mirror`** makes db8 bring a kind into line with such a source before any operation
+  that could read or change it (at most every 2 s): records are matched by `path`, new files
+  are added, changed ones updated (keeping fields an app added) and gone ones purged, each
+  firing watches as an ordinary write does. While a watch is open the kind is checked every
+  5 s, so a list on the screen picks up a file as it arrives. Ids are kept from one query to
+  the next, so paging and anything an app stores by `_id` keep working.
+- Media kinds (images, audio, video and their albums) are not part of this yet; Android's
+  MediaStore is the obvious source when they are.
 
 ### System UI
 
@@ -771,6 +803,12 @@ it, so the control works in every app without any app being changed.
   Reading them needs `READ_EXTERNAL_STORAGE`, which Android 5 grants at install. From
   Android 6 the shell asks for it once at startup (`ShellActivity.askForStorage`). If it's
   refused, the mapped folders just aren't there.
+- **Cropping.** A caller that asks for a single photo with `cropWidth` or `cropHeight`
+  (Contacts) gets Palm's ImagePicker flow: tapping a photo opens Enyo's `CroppableImage`
+  titled "Preview" (or the caller's `previewLabel`), Cancel becomes Back, and OK returns the
+  photo with its crop parameters as `cropInfo`. The crop view shows a scaled copy, so the
+  picker puts `cropInfo`'s pixel sizes back in the original's pixels (`com.palm.image/imageInfo`):
+  the caller crops the file itself.
 - Thumbnails come from `?__lunacy_thumb=<px>` on an image under `/media/internal`, which the
   card host answers with a scaled JPEG. Full-size photos would not fit in 1 GB of RAM. The
   parameter carries Lunacy's own prefix so no app can stumble into it.
@@ -855,6 +893,9 @@ model, so apps can't tell the difference.
 - **Honesty.** Unknown services or methods return a real error, in webOS's exact form:
   `{"returnValue":false,"errorCode":-1,"errorText":"Service does not exist: <service>."}`. The bus never fakes success.
 - **Coverage log.** Every call is recorded: app, service, method, and whether it was handled.
+  The log is Android's, on every build, so its copy of a call blanks passwords, tokens and the
+  like (`Bus.redact`), as does the relay of the services' own output; the call itself goes
+  through unchanged.
   This shows which services to build next and feeds the per-app compatibility score.
 - **Lunacy-backed services.**
   - `com.palm.applicationManager`: launch/open/listApps, wired to the shell and package manager.
@@ -1155,7 +1196,11 @@ in the ROM from the reference TouchPad.
   files (`/usr/share/dbus-1/system-services/<name>.service`): `Name=` is the bus name, and
   `Exec=` the command line, with its `env` assignments. The first call starts the binary
   through the glibc loader (under libenosys from Android 10, under qemu on a 64-bit-only
-  device). The loader's own variables (`LD_LIBRARY_PATH`, `LD_PRELOAD`) are looked up in the
+  device, where the binary needs its execute bit, which the ROM doesn't give it, so
+  `NativeServices` sets it). Email works both ways: IMAP logs in over SSL and idles under qemu
+  on the arm64 build. The services are on the bus from the start, registered from the webOS
+  root as it stands before the configurator runs, as ls-hubd knew every service file at
+  boot. The loader's own variables (`LD_LIBRARY_PATH`, `LD_PRELOAD`) are looked up in the
   webOS root; every other webOS path the service opens goes through the runtime's preload.
   A service exits on its own idle timer, and the next call starts it again.
 - **The bus.** Lunacy's `liblunaservice.so` (`LunaRuntimes/pdk/liblunaservice`) stands in for
@@ -1217,6 +1262,13 @@ activity runs at a time and two that a user started.
   `firstUseSafe` wait until First Use has run and made the profile account
   (`/var/luna/preferences/ran-first-use` and `first-use-profile-created`). Cancelling a removed
   package's activities isn't built.
+- **App activities.** Every web app gets an activity of its own as it starts, as
+  WebAppManager made one (`WebAppBase::createActivity`): foreground, named for the app, its
+  process id as the description, created in the app's name, and held by a subscription. Its
+  id is `PalmSystem.activityId` in all the app's windows (-1 until it is created, as on a
+  device). Mojo, and the contacts UI's copy of Mojo's service request, send it with every call
+  as `$activity`, and a JS service adopts it. The card's focus focuses and unfocuses it, and it
+  is cancelled when the app ends. `PalmSystem.activityId` was a constant 1 until 2026-10-07.
 - An activity's callback to `applicationManager/launch` or `open` hands the app its
   `$activity` inside the launch params, as webOS's application manager did, and a headless app
   a service launches gets no startup card (nothing showed on webOS until it opened a window).
@@ -1286,6 +1338,47 @@ A change Lunacy needs in the app is made in the webOS CE project. What it uses:
   midnight.
 - **Not yet:** syncing (Exchange, CalDAV), so "Or add a new account" lists nothing; Just Type's
   database search for events.
+
+## Contacts
+
+Contacts is webOS CE's (`com.palm.app.contacts` 3.2.0, from the webOS CE project, like
+Calendar): HP's Contacts opening on contacts kept on the device ("On This Device") instead of
+asking for an HP webOS account. Contacts are local only; nothing syncs. What it uses:
+
+- **The profile account.** A contact the app saves belongs to the palmprofile account
+  (`com.palm.contact.palmprofile:1`), the same account Calendar's local calendar is on. The
+  template and the accounts library's first-launch text are webOS CE's ("webOS Account"),
+  from the CE project's `system/` files.
+- **Two JS services from the TouchPad, in the ROM.** `com.palm.service.contacts.linker` joins
+  contacts into the people (`com.palm.person:1`) the app lists; it is the community's 1.1.0.2,
+  as webOS CE ships it. A new contact goes through its `saveNewPersonAndContacts`, and its
+  `linkerWatch` activity relinks on every contact change. `com.palm.service.contacts` keeps
+  people's sort keys in step with the sort order (`sortOrderWatch`) and does vCards and
+  favorites. Their activities are the device's `/etc/palm/activities` files. The linker's
+  plugins for the phone, messaging and Just Type's smartkey are left out, because Lunacy has
+  none of those; it starts without them.
+- **The libraries:** Enyo's `contactsui` and the `contacts` MojoLoader library (submission
+  114), which Email already used, now also in the services' frameworks. The `contacts` library
+  is webOS CE's copy of the TouchPad's, with CE's `AppPrefs` fix (below), as is Mojo's prebuilt
+  `palmcontactsVersion1_0` builtin.
+- **The app's activity.** The linker adopts the caller's activity before it saves anything, so
+  a save needs a real `PalmSystem.activityId`: see "App activities" under "Activity manager".
+- **IM kinds.** Contacts watches `com.palm.imloginstate:1` (db8) and `com.palm.imbuddystatus:1`
+  (tempdb), which belong to the messaging app. A TouchPad always has both kinds, empty without
+  an IM account, and so does Lunacy; a missing one made Enyo retry the watch every 10 seconds.
+- **HP's duplicate prefs record, fixed by webOS CE.** HP's first launch wrote two
+  `com.palm.app.contacts.prefs:1` records, because two `AppPrefs` objects each created one
+  (the reference TouchPad has both). CE's `AppPrefs` creates one per kind and heals existing
+  duplicates, keeping the one with the default account.
+- **A contact's photo.** Edit opens the file picker with `cropWidth`/`cropHeight`; the picker
+  crops (see "System UI") and returns `cropInfo`, and the contacts library cuts the big and
+  square photos with `com.palm.image/convert` into `/media/internal/.contactphotos`.
+  `com.palm.image` is LunaSysService's image service (`ImageService.kt`): `convert`,
+  `ezResize` and `imageInfo`, to the TouchPad's measured behaviour. Its `convert` keeps the
+  crop window inside the scaled image and cuts a window larger than it down to it, never
+  padding; exactly scale 1 returns the image whole.
+- **Not yet:** syncing (Exchange, CardDAV), so "Or add a new account" lists nothing; vCard import
+  and export and favorites untried; messaging and calling from a contact (no apps).
 
 ## Mojo
 

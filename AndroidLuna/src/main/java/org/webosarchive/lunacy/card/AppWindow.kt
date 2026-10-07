@@ -84,6 +84,10 @@ interface WindowHost {
      * ([FixedViewport]), 0 for the card's own width.
      */
     fun fixedViewportWidth(appId: String): Int
+    /** The app's own activity (PalmSystem.activityId), shared by its windows; -1 until there is one. */
+    fun activityId(window: AppWindow): Int = -1
+    /** The window's stage gained or lost the focus, which its app's activity follows. */
+    fun stageFocused(window: AppWindow, focused: Boolean) {}
 }
 
 /**
@@ -318,6 +322,7 @@ open class AppWindow(
         told = active
         evaluateJavascript("if(window.PalmSystem){PalmSystem.isActivated=$active}", null)
         callMojo(if (active) "stageActivated" else "stageDeactivated")
+        host.stageFocused(this, active)
     }
 
     private fun onPageReady() {
@@ -444,6 +449,7 @@ open class AppWindow(
         @JavascriptInterface fun localeInfo(): String = host.localeInfo()
         /** The process id in PalmSystem.identifier: one per window, as a device gave. */
         @JavascriptInterface fun processId(): Int = pid
+        @JavascriptInterface fun activityId(): Int = host.activityId(this@AppWindow)
         @JavascriptInterface fun mediaBase(): String = host.mediaBase()
         @JavascriptInterface fun activate() { main.post { host.activate(this@AppWindow) } }
         @JavascriptInterface fun keyboard(show: Boolean) { main.post { host.keyboard(this@AppWindow, show) } }

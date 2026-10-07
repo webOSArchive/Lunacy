@@ -141,9 +141,17 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var exhibitionMenu: ExhibitionMenu
     /** The app showing in exhibition mode, if it isn't the shell's own Time face. */
     private var exhibitionApp: String? = null
-    /** What this turn in Exhibition opened, and so what leaving it closes again. */
-    private val exhibitionOpened = LinkedHashSet<String>()
-    private val exhibitionWindows = LinkedHashSet<AppWindow>()
+    /**
+     * LunaSysMgr's DockModeWindowManager: the apps' Exhibition windows, by app, in a layer of
+     * their own over the card view. They are never cards - an app on show in Exhibition is
+     * not in the card view, and choosing another one doesn't add a card (codepoet, measured
+     * on the reference TouchPad). Only the one on show is visible; the rest stay running
+     * behind it, as webOS kept them, until the mode ends.
+     */
+    private lateinit var dockLayer: FrameLayout
+    private val dockWindows = LinkedHashMap<String, AppWindow>()
+    /** What the dock shows: an app's dock window, or the Time face. */
+    private var dockShown: View? = null
     private var exhibitionOn = false
     /** True while what is exhibiting was started by Android's screen saver (ExhibitionDream). */
     private var dreamExhibition = false
@@ -186,6 +194,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         addedLaunchPoints = org.webosarchive.lunacy.card.LaunchPoints(webos.root, files)
         org.webosarchive.lunacy.card.Http.init(assets)
         packages = Packages(files.root, java.io.File(cacheDir, "packages"), webos)
+        // Native services already in the webOS root are on the bus from the start, before the
+        // configurator sends the file cache its types, as ls-hubd knew every service file at
+        // boot and started one on its first call; the root's update below registers what it adds.
+        nativeServices.reload()
         registerServices()
         jsServices.reload()
         Thread({
@@ -296,6 +308,17 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         statusBar = StatusBar(this, luna)
         statusBar.onBatteryFull = { sounds.batteryFull() }
         val popups = PopupLayer(this, luna)
+        exhibition = ExhibitionLayer(this, luna).apply {
+            visibility = View.GONE
+            onExit = { setExhibition(false) }
+        }
+        // The dock: black, as DockModeWindowManager::paint filled it, with the Time face and
+        // the apps' dock windows in it, one on show at a time. It covers the cards, launcher
+        // and dock; alerts, dashboards and the status bar stay over it, as on a device.
+        dockLayer = DockLayer().apply { visibility = View.GONE; setBackgroundColor(android.graphics.Color.BLACK) }
+        dockLayer.addView(exhibition, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        root.addView(dockLayer, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+
         root.addView(popups, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
         menuScrim = View(this).apply {
             visibility = View.GONE
@@ -324,12 +347,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         statusBar.onSystemTap = { toggleSystemMenu() }
         statusBar.onSystemInfoChanged = { systemMenu.batteryPercent = statusBar.batteryPercent }
         root.addView(statusBar, FrameLayout.LayoutParams(MATCH_PARENT, luna.px(StatusBar.HEIGHT)))
-
-        exhibition = ExhibitionLayer(this, luna).apply {
-            visibility = View.GONE
-            onExit = { setExhibition(false) }
-        }
-        root.addView(exhibition, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
 
         exhibitionMenu = ExhibitionMenu(this, luna).apply {
             visibility = View.GONE
@@ -519,7 +536,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * launcher did on webOS. Exhibition's launches didn't (codepoet): the app is started for
      * the dock, and only what it opens for the dock is shown.
      */
-    fun launch(appId: String, params: JSONObject? = null, startupCard: Boolean = true, launcher: String? = null) {
+    fun launch(appId: String, params: JSONObject? = null, startupCard: Boolean = true, launcher: String? = null, dock: Boolean = false) {
         // Who asked, for the card this launch brings (showAsCard): LunaSysMgr's launchingAppId.
         if (launcher != null && launcher != appId) launchers[appId] = launcher else launchers.remove(appId)
         // An added launch point launches its app with its own params.
@@ -541,6 +558,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             return
         }
         val windows = running[appId]
+        // The dock takes web apps' windows only; a native app has no Exhibition view.
+        if (dock && !app.isWeb) { Log.w(AppServer.TAG, "exhibition: $appId is a native app"); return }
         if (!app.isWeb) {
             // A PDK app: its own process, in a card of its own kind (Docs/pdk.md).
             if (windows != null) { cards.cards.firstOrNull { it.window.appId == appId }?.let { cards.maximize(it) }; return }
@@ -559,24 +578,35 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             // itself, LunaSysMgr brings its first card forward.
             windows.first().relaunch(params?.toString() ?: "") { handled ->
                 Log.i(AppServer.TAG, "relaunch $appId $params handled=$handled")
-                if (!handled) cards.cards.firstOrNull { it.window.appId == appId }?.let { cards.maximize(it) }
+                // A relaunch for the dock leaves the card view alone: the app answers it with
+                // a dockMode window, or the dock shows nothing of it, as on a device.
+                if (!handled && !dock) cards.cards.firstOrNull { it.window.appId == appId }?.let { cards.maximize(it) }
             }
             return
         }
         // The emulated card is a tablet's answer to a phone app. A Pre3 ran the same app at
         // its own size, so on a phone - where apps are told they are on a Pre3 - there is
         // nothing to emulate.
-        val emulate = profile == org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD && registry.get(appId)?.emulated == true
+        val emulate = !dock && profile == org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD && registry.get(appId)?.emulated == true
         val t0 = android.os.SystemClock.uptimeMillis()
         val rootWindow = AppWindow(this, appId, this, emulate)
         rootWindow.fixedOrientation = fixedOrientationOf(app)
         running[appId] = mutableListOf(rootWindow)
+        createAppActivity(rootWindow)
         val url = if (params != null) app.url + "?launchParams=" + android.net.Uri.encode(params.toString()) else app.url
         // The startup card first, the page behind it: everything the launch can put off until
         // the card is on the screen waits for it (loadWhenShown). A headless app (Clock) opens
         // its card itself once its page has run, so for it the card is a placeholder with the
         // app's splash, which its first card window fills (onWindowOpened); an app that never
         // opens one loses the placeholder once it is up and running (withdrawPlaceholder).
+        // ProcessManager::launch: an app that wasn't running, launched with windowType
+        // dockModeWindow, gets its first window as a dock window, not a card. A headless app
+        // opens its dock window itself (onWindowOpened).
+        if (dock) {
+            if (app.noWindow) hidden.addView(rootWindow, FrameLayout.LayoutParams(1, 1)) else addDockWindow(rootWindow)
+            rootWindow.loadUrl(url)
+            return
+        }
         if (!startupCard) {
             if (app.noWindow) hidden.addView(rootWindow, FrameLayout.LayoutParams(1, 1)) else showAsCard(rootWindow, splash = false)
             rootWindow.loadUrl(url)
@@ -683,12 +713,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 card.fullScreen = child.fullScreen && !child.emulated
                 if (cards.maximized == card) onMaximized(card)
             } ?: showAsCard(child, parent)
-            // An app's own Exhibition view. webOS's dock mode showed it in place of the card
-            // view, which is where a maximized card already is, so the shell only has to
-            // remember it: it is the window whose closing ends the mode, and the one to close
-            // when the mode ends.
-            // No loading card for the dock's window, as on a device (codepoet).
-            "dockMode" -> { exhibitionWindows += child; showAsCard(child, splash = false) }
+            // An app's own Exhibition view: the dock's, never a card.
+            "dockMode" -> addDockWindow(child)
             else -> showAsCard(child, parent)
         }
     }
@@ -696,13 +722,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     override fun onWindowClosed(window: AppWindow) {
         // Out of the exhibition set first: ending the mode below closes what is left in it,
         // and this window mustn't be closed twice over.
-        exhibitionWindows.remove(window)
+        val docked = dockWindows[window.appId] == window
+        if (docked) dockWindows.remove(window.appId)
         // The app that was exhibiting has gone: so has exhibition mode, or the shell would sit
         // there thinking it is still on and ignore the next press of Start Exhibition.
-        if (exhibitionOn && window.appId == exhibitionApp &&
-            (window.type == "dockMode" || running[window.appId]?.size == 1)) {
-            setExhibition(false)
-        }
+        if (docked && exhibitionOn && window.appId == exhibitionApp) setExhibition(false)
         cards.cards.firstOrNull { it.window == window }?.let { cards.remove(it) }
         // A full-screen card that closes itself while maximized takes the bar's absence with it,
         // and one that had fixed the screen's orientation lets it go.
@@ -1053,6 +1077,43 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         systemMenu.close()
     }
 
+    /** Each running web app's own activity: its id once created, and the call that holds it. */
+    private val appActivities = java.util.concurrent.ConcurrentHashMap<String, Int>()
+    private val appActivityCalls = HashMap<String, Bus.Call>()
+
+    /**
+     * The app's activity, as WebAppManager made one for every app it started
+     * (WebAppBase::createActivity): foreground, named for the app, its process id as the
+     * description, created in the app's name and held by a subscription. Its id is
+     * PalmSystem.activityId for all the app's windows, and Mojo sends it with each service
+     * call as "$activity", which a JS service adopts.
+     */
+    private fun createAppActivity(root: AppWindow) {
+        val appId = root.appId
+        val params = JSONObject().put("activity", JSONObject().put("name", appId)
+            .put("description", root.pid.toString()).put("type", JSONObject().put("foreground", true)))
+            .put("subscribe", true).put("start", true).put("replace", true)
+        appActivityCalls[appId] = bus.call(appId, "palm://com.palm.activitymanager/create", params.toString(), privateBus = true) { reply ->
+            val r = runCatching { JSONObject(reply) }.getOrNull() ?: return@call
+            if (r.optBoolean("returnValue") && r.has("activityId") && !r.has("event")) appActivities[appId] = r.optInt("activityId")
+        }
+    }
+
+    /** The app has ended: WebAppBase::destroyActivity cancels the subscription, and the activity goes with it. */
+    private fun endAppActivity(appId: String) {
+        appActivities.remove(appId)
+        appActivityCalls.remove(appId)?.cancel()
+    }
+
+    override fun activityId(window: AppWindow): Int = appActivities[window.appId] ?: -1
+
+    /** WebAppBase::focusActivity and blurActivity, as the app's card gains and loses the focus. */
+    override fun stageFocused(window: AppWindow, focused: Boolean) {
+        val id = appActivities[window.appId] ?: return
+        bus.call(window.appId, "palm://com.palm.activitymanager/${if (focused) "focus" else "unfocus"}",
+            JSONObject().put("activityId", id).toString(), privateBus = true) {}
+    }
+
     private fun closeWindow(w: AppWindow) {
         pendingLoads.remove(w)
         val list = running[w.appId] ?: return
@@ -1065,8 +1126,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (visible.isEmpty() && (app?.noWindow == true || list.isEmpty())) {
             list.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }
             running.remove(w.appId)
+            endAppActivity(w.appId)
         }
-        if (cards.cards.isEmpty()) onCardView()
+        if (cards.cards.isEmpty() && !exhibitionOn) onCardView()
     }
 
     /**
@@ -1624,63 +1686,138 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         .put("windowType", "dockModeWindow").put("dockMode", true)
 
     /**
-     * Puts an app on show in Exhibition. An app that wasn't already running was started for
-     * the dock, so it is remembered as this turn's, to be closed again when the mode ends -
-     * webOS closed what it had put in the dock (DockModeWindowManager::closeApp). One its
-     * owner already had open keeps its own cards; only the window it opens for the dock goes.
+     * Puts an app on show in Exhibition (DockModeWindowManager::switchApplication). One whose
+     * dock window is already open is simply shown again; otherwise it is launched for the
+     * dock, and its window takes the screen when it opens (addDockWindow).
      */
     private fun exhibit(appId: String) {
-        if (running[appId] == null) exhibitionOpened += appId
-        launch(appId, dockModeParams(), startupCard = false)
         statusBar.title = dockMode.title(appId)
+        dockWindows[appId]?.let { showDockFace(it); return }
+        launch(appId, dockModeParams(), startupCard = false, dock = true)
+    }
+
+    /**
+     * A window for the dock (DockModeWindowManager::addWindow): it fills the positive space,
+     * and is shown if its app is the one on show. An app's second dock window replaces its
+     * first, as LunaSysMgr closed the one already running.
+     */
+    private fun addDockWindow(w: AppWindow) {
+        dockWindows.put(w.appId, w)?.takeIf { it != w }?.let { onWindowClosed(it) }
+        w.alpha = 0f
+        w.visibility = View.INVISIBLE
+        // In the positive space, under the status bar.
+        dockLayer.addView(w, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
+        if (exhibitionOn && w.appId == exhibitionApp) showDockFace(w)
+    }
+
+    /**
+     * The dock's layer. The swipe up from the bottom edge that minimizes a card ends the mode
+     * instead, as the home button does (SystemUiController: in dock mode both go to
+     * enterOrExitDockModeUi(false)). The edge band is the card layer's, dead zone included,
+     * so a swipe up never reaches the app on its way.
+     */
+    private inner class DockLayer : FrameLayout(this@ShellActivity) {
+        private var downY = 0f
+        private var downX = 0f
+        private var edge = false
+
+        override fun onInterceptTouchEvent(e: android.view.MotionEvent): Boolean {
+            when (e.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    downX = e.x; downY = e.y
+                    edge = e.y >= height - 1 - luna.px(CardLayer.Params.EDGE)
+                    return edge
+                }
+                android.view.MotionEvent.ACTION_MOVE -> if (edge && swipedUp(e)) return true
+            }
+            return false
+        }
+
+        @android.annotation.SuppressLint("ClickableViewAccessibility")
+        override fun onTouchEvent(e: android.view.MotionEvent): Boolean {
+            if (!edge) return false
+            if (e.actionMasked == android.view.MotionEvent.ACTION_MOVE && swipedUp(e)) {
+                edge = false
+                setExhibition(false)
+            }
+            return true
+        }
+
+        private fun swipedUp(e: android.view.MotionEvent) =
+            downY - e.y >= luna.px(CardLayer.Params.TRIGGER) && downY - e.y > Math.abs(e.x - downX)
+    }
+
+    /**
+     * Shows [face] - an app's dock window, or the Time face - in place of what the dock was
+     * showing, the one fading out as the other fades in (animateWindowChange). Windows not on
+     * show stay running out of sight; only the one on show has the focus.
+     */
+    private fun showDockFace(face: View) {
+        val old = dockShown
+        dockShown = face
+        dockWindows.values.forEach { it.setStageActive(it == face) }
+        if (face == exhibition && old != exhibition) exhibition.reset()
+        face.animate().cancel()
+        face.visibility = View.VISIBLE
+        if (old == null || old == face) { face.alpha = 1f; return }
+        face.alpha = 0f
+        face.animate().alpha(1f).setDuration(DOCK_FADE_MS).setInterpolator(Easing.InOutQuad).start()
+        old.animate().cancel()
+        old.animate().alpha(0f).setDuration(DOCK_FADE_MS).setInterpolator(Easing.InOutQuad)
+            .withEndAction { if (dockShown != old) old.visibility = if (old == exhibition) View.GONE else View.INVISIBLE }
+            .start()
     }
 
     private fun setExhibition(on: Boolean) {
         // Entering again while it is already on is not a no-op: Palm's Exhibition app sends
-        // this every time its button is pressed, and if the exhibiting app's card has since
-        // been thrown away, or the chosen app has changed, the press has to take effect.
+        // this every time its button is pressed, and if the exhibiting app's window has since
+        // closed, or the chosen app has changed, the press has to take effect.
         // Only leaving is idempotent.
         if (!on && !exhibitionOn) return
         exhibitionOn = on
         if (on) {
             closeMenu()
             if (launcherOpen) closeLauncher()
+            hideKeyboard()
             // The app its owner chose, if any; otherwise the shell's own Time face. webOS
             // launched the chosen app with dockMode set, which is how it knows to show its
             // exhibition view rather than its ordinary one.
-            exhibitionApp = dockMode.enabledApp()
-            val app = exhibitionApp?.let { registry.get(it) }
+            exhibitionApp = dockMode.enabledApp()?.takeIf { registry.get(it) != null }
+            // The dock covers the card view, which goes on underneath, untouched.
+            cards.visibility = View.INVISIBLE
+            cards.cards.forEach { it.window.setStageActive(false) }
+            val app = exhibitionApp
+            // Black until the app's window opens, as the dock was.
+            dockLayer.visibility = View.VISIBLE
             if (app != null) {
-                exhibition.visibility = View.GONE
-                exhibit(app.id)
+                exhibit(app)
             } else {
-                exhibition.reset()
-                exhibition.visibility = View.VISIBLE
-                exhibition.bringToFront()
+                showDockFace(exhibition)
                 statusBar.title = "Time"
             }
-            statusBar.bringToFront()
             statusBar.setMode(StatusBar.Mode.APP)
+            statusBar.slide(false)
+            applyOrientation(null)
             // The screen is meant to stay on while it is exhibiting: that is the point of a dock.
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         } else {
             closeExhibitionMenu()
+            exhibition.animate().cancel()
             exhibition.visibility = View.GONE
             // webOS closed what it had put in the dock when dock mode ended
-            // (DockModeWindowManager::closeApp), so an app's Exhibition view doesn't turn up in
-            // the card view afterwards. An app that was already running keeps its own cards:
-            // only the window it opened for the dock goes.
+            // (DockModeWindowManager::setDockModeState, DockModeCloseAppsOnExit), so an app's
+            // Exhibition view doesn't turn up anywhere afterwards. An app that was started for
+            // the dock ends with its window; one that was already running keeps its cards.
             exhibitionApp = null
-            exhibitionOpened.toList().forEach { id -> running[id]?.toList()?.forEach { w -> onWindowClosed(w) } }
-            exhibitionWindows.toList().forEach { onWindowClosed(it) }
-            exhibitionOpened.clear()
-            exhibitionWindows.clear()
+            dockShown = null
+            dockWindows.values.toList().forEach { onWindowClosed(it) }
+            dockLayer.visibility = View.GONE
+            exhibition.alpha = 1f
+            cards.visibility = View.VISIBLE
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             if (dreamExhibition) endDreamExhibition()
             if (cards.maximized != null) onMaximized(cards.maximized!!) else onCardView()
         }
-        // An app's exhibition view is its own card, shown as it is; the Time face replaces it.
-        cards.visibility = if (on && exhibitionApp == null) View.INVISIBLE else View.VISIBLE
         fade(justType, !on && cards.maximized == null && !launcherOpen)
         showDock(!on && cards.maximized == null)
     }
@@ -1811,8 +1948,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // webOS's downloader, which apps hand every file fetch to: drPodder's episodes and
         // album art, MeTube's "download first". It writes into the webOS tree.
         org.webosarchive.lunacy.card.DownloadManager(jsServices.root).register(bus)
+        org.webosarchive.lunacy.card.ImageService(jsServices.root).register(bus)
         val db8 = org.webosarchive.lunacy.card.Db8("com.palm.db", java.io.File(filesDir, "db8.sqlite")).also { it.register(bus) }
         val tempdb = org.webosarchive.lunacy.card.Db8("com.palm.tempdb", null).also { it.register(bus) }
+        // Documents' index, answered from the folders themselves (FileIndex).
+        org.webosarchive.lunacy.card.FileIndex(jsServices.root).attach(db8)
         // After db8: it reads its persisted activities back as it registers.
         activityManager.register(bus)
         configurator = org.webosarchive.lunacy.card.Configurator(files, db8, tempdb, webos.root, bus)
@@ -2033,15 +2173,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // The app that was exhibiting stops being the one on show; webOS left it running.
         exhibitionApp = appId
         if (appId == null) {
-            exhibition.reset()
-            exhibition.visibility = View.VISIBLE
-            exhibition.bringToFront()
-            statusBar.bringToFront()
+            showDockFace(exhibition)
             statusBar.title = "Time"
-            cards.visibility = View.INVISIBLE
         } else {
-            exhibition.visibility = View.GONE
-            cards.visibility = View.VISIBLE
             exhibit(appId)
         }
     }
@@ -2191,6 +2325,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         const val FADE_MS = 200L       // quickLaunchFadeDuration
         /** Long enough for the launch glow to be drawn before the card work starts. */
         const val LAUNCH_DELAY_MS = 60L
+        /** A change of face in the dock: AnimationSettings' dockFadeDockAnimationDuration. */
+        const val DOCK_FADE_MS = 500L
         /** Android's screen saver asking for Exhibition; see ExhibitionDream. */
         const val EXTRA_EXHIBITION = "exhibition"
         const val MEMORY_CHECK_MS = 10_000L

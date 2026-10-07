@@ -122,8 +122,10 @@ Found by watching the bus log, which names every call and whether it was handled
 - `PalmSystem.enableFullScreenMode(false)` — logged, not implemented.
 
 Mojo wraps its calls with an `$activity` parameter (`{"subscribe": true, "$activity":
-{"activityId": 1}}`); the bus ignores it, as webOS's services did for a call that doesn't
-need one.
+{"activityId": 8}}`): `PalmSystem.activityId`, the app's own activity, which the shell creates
+as webOS's WebAppManager did (architecture.md, "Activity manager"). A service that doesn't need
+it ignores it; a JS service adopts it. Until 2026-10-07 the id was a constant 1, which a service
+that adopts it (the contacts linker) found missing.
 
 ## Self-closing tags
 

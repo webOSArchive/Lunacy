@@ -207,17 +207,18 @@ class AppFiles(private val assets: AssetManager, val root: File, private val sys
 
 /** Installed apps: bundled apps and installed .ipks, reloaded after each install. */
 class AppRegistry(private val files: AppFiles) {
-    @Volatile var apps: List<AppInfo> = load()
-        private set
-
-    fun reload() { apps = load() }
-
     /**
      * Icons apps have given their default launch point (updateLaunchPointIcon on
      * "<id>_default": Calendar shows the day of the month), by app id, relative to the app's
      * folder. Kept until Lunacy stops, as LunaSysMgr kept them until a reboot.
+     * Declared before [apps], whose first load reads it.
      */
     private val iconOverrides = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    @Volatile var apps: List<AppInfo> = load()
+        private set
+
+    fun reload() { apps = load() }
 
     /** The app with its default launch point's icon changed, or null if [icon] isn't one of its files. */
     fun setIcon(id: String, icon: String): AppInfo? {

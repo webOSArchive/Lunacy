@@ -276,6 +276,10 @@ A text button keeps its padding, so its client's margins stay inside it on both 
 
 **Done 2026-10-07 (compat), forced by the engine.** Chromium draws no caret at the start of a line in a contenteditable box when that start falls just past a device pixel on a screen with a fractional pixel ratio. Email's compose body on the Galaxy Tab A7 Lite (1.33) showed no caret on its empty first line until something was typed. Measured over DevTools by moving a box along the line: line starts at 399.03 and 403.02 device px drew no caret; at 400.36, 401.69 and 404.35 they did. The TouchPad drew it everywhere. `textedit.js` moves a focused editable box (not an input or a textarea, and not one the page transforms) with a `translateX` of under half a device pixel, which puts its line starts mid-pixel. Nothing moves by a whole pixel, and screens with a whole-number ratio are left alone. codepoet checked the caret by eye on the A7 Lite.
 
+### A16. Documents' index answered from the files
+
+**A deliberate delta, codepoet's decision, 2026-10-07.** webOS kept `com.palm.media.misc.file:1` (every file under `/media/internal` that isn't audio, an image or a video) as a copy that filenotifyd built and refreshed, often late. Lunacy's db8 brings the kind into line with the folders whenever it is read, and every 5 s while a watch is open (`FileIndex.kt`, `Db8.mirror`), so a document copied into Android's Documents or Download is listed at once rather than after an indexing pass. Everything else is the TouchPad's, measured on it: the records' fields, which files count (hidden ones don't), the kind's indexes and its consumers (Quick Office, Adobe Reader, the system UI, which may read and add to the records; other apps are refused). codepoet: "the file index was one of the worst parts of webOS, and an awkward fit for our Android integration." Media kinds (images, audio, video) are not part of this yet.
+
 ## B. The shell
 
 ### B1. Card view: stacks, reorder, dimming, the angry card

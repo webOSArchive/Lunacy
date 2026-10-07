@@ -26,6 +26,10 @@ class Db8(private val service: String, file: File?) {
     private val kinds = LinkedHashMap<String, Kind>()
     private val cache = HashMap<String, LinkedHashMap<String, JSONObject>>()  // kind -> id -> object
     private val watches = ArrayList<Watch>()
+    /** Kinds whose records are kept in line with a source of truth outside db8; see [mirror]. */
+    private class Mirror(val source: () -> List<JSONObject>) { var synced = 0L }
+    private val mirrors = HashMap<String, Mirror>()
+    private var mirrorTicker: java.util.concurrent.ScheduledExecutorService? = null
     private var rev = 0L
     private var idCounter = 0L
 
@@ -50,12 +54,97 @@ class Db8(private val service: String, file: File?) {
         runCatching { db.execSQL("ALTER TABLE permissions ADD COLUMN ops TEXT") }  // databases from before ops
         db.rawQuery("SELECT spec FROM kinds", null).use { c -> while (c.moveToNext()) parseKind(JSONObject(c.getString(0))).let { kinds[it.id] = it } }
         rev = meta("rev"); idCounter = meta("ids")
+        if (meta(NESTED_IDS) == 0L) giveNestedIds()
+    }
+
+    /**
+     * Records stored before Lunacy's db8 gave array objects their _id (assignIds, 2026-10-07)
+     * get them now, once, as db8 would have given them when they were written. Without them a
+     * profile account from an older Lunacy has capability providers that look disabled, and
+     * Calendar finds no account to keep its On-Device calendar on.
+     */
+    private fun giveNestedIds() {
+        var repaired = 0
+        db.beginTransaction()
+        try {
+            db.rawQuery("SELECT id, json FROM objects", null).use { c ->
+                while (c.moveToNext()) {
+                    val text = c.getString(1)
+                    if (!text.contains('[')) continue
+                    val o = try { JSONObject(text) } catch (e: Exception) { continue }
+                    assignIds(o)
+                    val now = o.toString()
+                    if (now != JSONObject(text).toString()) {
+                        db.update("objects", ContentValues().apply { put("json", now) }, "id = ?", arrayOf(c.getString(0)))
+                        repaired++
+                    }
+                }
+            }
+            setMeta(NESTED_IDS, 1)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        if (repaired > 0) Log.i(AppServer.TAG, "$service: gave $repaired stored records their array objects' _ids")
     }
 
     /** Registers a package's configuration/db files, as webOS's configurator did at install. */
     fun configure(kindFiles: List<JSONObject>, permissionFiles: List<JSONArray>) = worker.execute {
         for (k in kindFiles) try { putKind(CONFIGURATOR, k) } catch (e: Exception) { Log.w(AppServer.TAG, "$service: kind ${k.optString("id")}: ${e.message}") }
         for (p in permissionFiles) try { putPermissions(CONFIGURATOR, JSONObject().put("permissions", p)) } catch (e: Exception) { Log.w(AppServer.TAG, "$service: permissions: ${e.message}") }
+    }
+
+    /**
+     * A kind whose truth is elsewhere (the files under /media/internal, for FileIndex): db8
+     * registers it, and before anything reads or changes it, brings its records into line with
+     * [source], at most every [MIRROR_MS]. Each record is matched to its source by `path`: a new
+     * one is created, a changed one takes the source's properties (keeping anything an app
+     * added), and one whose source has gone is purged, each firing watches as any write does.
+     * While a watch is open on the kind it is checked every [MIRROR_WATCH_MS], so a list that
+     * is on the screen hears about a file as it arrives.
+     */
+    fun mirror(spec: JSONObject, permissions: JSONArray, source: () -> List<JSONObject>) = worker.execute {
+        try {
+            putKind(CONFIGURATOR, spec)
+            putPermissions(CONFIGURATOR, JSONObject().put("permissions", permissions))
+        } catch (e: Exception) { Log.w(AppServer.TAG, "$service: mirror ${spec.optString("id")}: ${e.message}"); return@execute }
+        mirrors[spec.getString("id")] = Mirror(source)
+        if (mirrorTicker == null) mirrorTicker = Executors.newSingleThreadScheduledExecutor().also {
+            it.scheduleWithFixedDelay({
+                worker.execute { for ((k, m) in mirrors) if (watches.any { w -> k in w.kinds }) syncMirror(k, m) }
+            }, MIRROR_WATCH_MS, MIRROR_WATCH_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+        }
+    }
+
+    private fun syncMirror(kind: String, m: Mirror) {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (m.synced != 0L && now - m.synced < MIRROR_MS) return
+        m.synced = now
+        val files = try { m.source() } catch (e: Exception) { Log.w(AppServer.TAG, "$service: mirror $kind: $e"); return }
+        val byPath = LinkedHashMap<String, JSONObject>()
+        for (f in files) byPath[f.optString("path")] = f
+        val current = objects(kind).values.filter { !it.optBoolean("_del") }
+        transaction {
+            for (o in current) {
+                val f = byPath.remove(o.optString("path"))
+                if (f == null) delOne(o, purge = true)
+                else if (f.keys().asSequence().any { k -> valueText(o, k) != valueText(f, k) }) mergeOne(o, f)
+            }
+            for (f in byPath.values) {
+                val o = JSONObject(f.toString()).put("_kind", kind).put("_id", newId()).put("_rev", nextRev())
+                applyRevSets(null, o)
+                store(o)
+                changed(null, o)
+            }
+        }
+    }
+
+    /** What an operation could read or change of a mirrored kind: the one it names, or all of them. */
+    private fun syncMirrorsFor(method: String, p: JSONObject) {
+        if (mirrors.isEmpty() || method !in MIRRORED_OPS) return
+        val from = p.optJSONObject("query")?.optString("from")
+        if (from != null && from.isNotEmpty()) mirrors[from]?.let { syncMirror(from, it) }
+        else for ((k, m) in mirrors) syncMirror(k, m)
     }
 
     fun register(bus: Bus) {
@@ -77,7 +166,12 @@ class Db8(private val service: String, file: File?) {
     }
 
     /** One operation. call is null inside a batch (no watches there). */
-    private fun exec(method: String, caller: String, p: JSONObject, call: Bus.Call?): String = when (method) {
+    private fun exec(method: String, caller: String, p: JSONObject, call: Bus.Call?): String {
+        syncMirrorsFor(method, p)
+        return execOp(method, caller, p, call)
+    }
+
+    private fun execOp(method: String, caller: String, p: JSONObject, call: Bus.Call?): String = when (method) {
         "putKind" -> putKind(caller, p)
         "delKind" -> delKind(caller, p)
         "put" -> put(caller, p)
@@ -180,19 +274,22 @@ class Db8(private val service: String, file: File?) {
 
     /**
      * db8's permission engine (MojDbPermissionEngine::check, MojDbKind::objectPermission): the
-     * caller's own entry for the kind, else the first wildcard entry that matches it, gives the
+     * caller's own entry for the kind, else the longest wildcard entry that matches it (db8
+     * keeps callers longest first, LengthComp, so "com.palm.*" wins over "*"), gives the
      * operation's value; a kind with no value for it takes its first super kind's. So the SMTP
      * service, granted on com.palm.mail.account, may update a com.palm.imap.account, which
      * extends it and grants nothing itself.
      */
     private fun permission(caller: String, k: Kind, op: String, seen: HashSet<String>): String? {
         if (!seen.add(k.id)) return null
-        var exact: String? = null; var wild: String? = null
+        var exact: String? = null; var wild: String? = null; var wildLength = -1
         db.rawQuery("SELECT caller, ops FROM permissions WHERE kind = ?", arrayOf(k.id)).use { c ->
             while (c.moveToNext()) {
                 val who = c.getString(0)
                 if (who == caller) exact = c.getString(1) ?: "{}"
-                else if (wild == null && who.endsWith("*") && caller.startsWith(who.dropLast(1))) wild = c.getString(1) ?: "{}"
+                else if (who.length > wildLength && who.endsWith("*") && caller.startsWith(who.dropLast(1))) {
+                    wild = c.getString(1) ?: "{}"; wildLength = who.length
+                }
             }
         }
         val value = (exact ?: wild)?.let { JSONObject(it).optString(op).ifEmpty { null } }
@@ -692,6 +789,12 @@ class Db8(private val service: String, file: File?) {
     private fun error(code: Int, text: String) = JSONObject().put("errorCode", code).put("errorText", text).put("returnValue", false).toString()
 
     companion object {
+        /** meta: the one-time repair that gave older records' array objects their _ids has run. */
+        private const val NESTED_IDS = "nestedIds"
+        /** How often a mirrored kind is checked against its source while it is being used, and while watched. */
+        private const val MIRROR_MS = 2000L
+        private const val MIRROR_WATCH_MS = 5000L
+        private val MIRRORED_OPS = setOf("find", "search", "watch", "get", "merge", "del")
         /** db8's page size cap. */
         const val MAX_LIMIT = 500
         /** The caller name for package configuration, which may register any kind. */

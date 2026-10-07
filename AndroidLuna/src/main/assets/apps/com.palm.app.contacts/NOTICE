@@ -1,0 +1,11 @@
+HP's Contacts (com.palm.app.contacts), as modernized by webOS Archive for webOS Community
+Edition: version 3.2.0, from the webOS CE project's tree (com.palm.app.contacts_3.2.0_all.ipk).
+It opens on contacts kept on the device ("On This Device") instead of asking people to get
+started with an HP webOS account.
+
+The app was released by LG Electronics under the Apache License 2.0 (see LICENSE); the 3.2.0
+changes are webOS Archive's.
+
+The app's files are here exactly as the package carries them, and Lunacy does not change them
+(rule 5 in CLAUDE.md). A change Lunacy needs in the app is made in the webOS CE project and
+comes here with its next release.

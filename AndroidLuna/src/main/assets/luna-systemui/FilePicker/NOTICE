@@ -9,4 +9,5 @@ works for every app without any app being changed.
 Palm's picker listed what the media indexer had in db8. Lunacy has no media indexer, so this
 one reads the same folders directly, through Lunacy's own service. The code is Lunacy's; the
 contract it keeps (parameters, result shape, path) is webOS's, read from Enyo 1.0's
-FilePicker.js and CrossAppUI.js.
+FilePicker.js and CrossAppUI.js, and its crop step follows Palm's ImagePicker and
+ImageCropView (the reference TouchPad's systemui).

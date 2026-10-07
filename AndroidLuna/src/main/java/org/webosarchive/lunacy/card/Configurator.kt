@@ -14,7 +14,11 @@ import java.io.File
  * Apps are read through [AppFiles], so a bundled app's configuration counts too: Palm's Clock
  * ships its alarm and preference kinds that way, and without them it can't store an alarm.
  */
-class Configurator(private val files: AppFiles, private val db: Db8, private val tempdb: Db8, private val system: File? = null) {
+class Configurator(private val files: AppFiles, private val db: Db8, private val tempdb: Db8, private val system: File? = null,
+                   private val bus: Bus? = null) {
+    /** File cache types already defined in this run of the shell, by name and definition. */
+    private val defined = HashMap<String, String>()
+
     fun run() {
         // The system's own kinds first, as the device's configurator read /etc/palm: those of
         // the services in the webOS root (accounts, palmprofile), in its ROM.
@@ -37,6 +41,15 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
             val kinds = parseFiles(File(system, "etc/palm/db_kinds"), "/etc/palm/db_kinds") { text, _ -> JSONObject(text) }
             if (kinds.isNotEmpty()) db.configure(kinds, emptyList())
         }
+        // The file cache's types, as webOS's configurator defined them at boot ("filecache"):
+        // /etc/palm/filecache_types and packages' configuration/filecache, each file a
+        // DefineType. The mail services keep message bodies in the "email" type.
+        if (system != null) defineTypes(File(system, "etc/palm/filecache_types").listFiles().orEmpty().filter { it.isFile }.mapNotNull { f ->
+            runCatching { f.readText() }.getOrNull()
+        })
+        for (id in files.appIds()) defineTypes(files.list("${Packages.APPS}/$id/configuration/filecache").mapNotNull { name ->
+            files.open("${Packages.APPS}/$id/configuration/filecache/$name")?.use { it.bufferedReader().readText() }
+        })
         // Services come from packages, or from the webOS root's /usr/palm/services.
         (File(files.root, JsServices.SERVICES).listFiles().orEmpty().toList() +
             (system?.let { File(it, JsServices.SERVICES).listFiles() }.orEmpty())).forEach { dir ->
@@ -44,6 +57,24 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
             if (!cfg.isDirectory) return@forEach
             configureFiles(File(cfg, "db"), db, dir.name)
             configureFiles(File(cfg, "tempdb"), tempdb, dir.name)
+        }
+    }
+
+    private fun defineTypes(texts: List<String>) {
+        val bus = bus ?: return
+        for (text in texts) {
+            val t = try { JSONObject(text) } catch (e: Exception) { Log.w(AppServer.TAG, "configurator: file cache type unreadable: $e"); continue }
+            val name = t.optString("typeName")
+            if (name.isEmpty()) continue
+            val spec = t.toString()
+            if (defined[name] == spec) continue
+            bus.call(CONFIGURATOR, "palm://com.palm.filecache/DefineType", spec, privateBus = true) { reply ->
+                // Remembered once the cache has answered: before the webOS root is laid down the
+                // file cache isn't on the bus yet, and the next run defines the type. A type the
+                // cache already has answers that it exists, which is what a reboot did too.
+                if (!reply.contains("Service does not exist")) defined[name] = spec
+                if (!reply.contains("\"returnValue\":true")) Log.i(AppServer.TAG, "configurator: file cache type $name: $reply")
+            }
         }
     }
 
@@ -84,4 +115,6 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
             try { parse(f.readText(), owner) } catch (e: Exception) { Log.w(AppServer.TAG, "configurator: $pkg/${f.name} unreadable: $e"); null }
         }
     }
+
+    private companion object { const val CONFIGURATOR = "com.palm.configurator" }
 }

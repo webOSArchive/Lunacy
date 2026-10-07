@@ -69,6 +69,10 @@ class NativeServices(private val bus: Bus, private val webos: WebosRoot, private
         val original = File(real(spec.exec))
         if (!original.isFile) throw IOException("${spec.exec} isn't in the webOS root")
         val binary = PdkRuntime.withoutExecStack(original)
+        // Development: files/pdk/args/<bus name> holds a command line that replaces the
+        // service file's arguments (mojomail's own logging to stdout at debug level, which
+        // reaches /var/log/messages: '-c {"log":{"appender":{"type":"stdout"},…}}').
+        val args = File(rt.libDir!!.parentFile, "args/${spec.name}").takeIf { it.isFile }?.readText()?.trim()?.let { split(it) } ?: spec.args
         // The loader's search: the service's own folders first (ssl11mail for the mail
         // services), then the runtime's glibc and liblunaservice, then the root's libraries.
         val own = spec.env["LD_LIBRARY_PATH"]?.split(':')?.filter { it.isNotEmpty() }?.map { real(it) }.orEmpty()
@@ -76,9 +80,9 @@ class NativeServices(private val bus: Bus, private val webos: WebosRoot, private
         val preload = (listOf(File(lib, "liblunacy-preload.so").path) +
             spec.env["LD_PRELOAD"]?.split(':', ' ')?.filter { it.isNotEmpty() }?.map { real(it) }.orEmpty()).joinToString(":")
         val enosys = rt.enosys?.takeIf { loader != null && android.os.Build.VERSION.SDK_INT >= 29 }
-        val command = if (loader != null) listOfNotNull(enosys?.path, loader.path, "--library-path", libraryPath, binary.path) + spec.args
+        val command = if (loader != null) listOfNotNull(enosys?.path, loader.path, "--library-path", libraryPath, binary.path) + args
             else listOf(emulator!!.path, "-L", lib.parentFile!!.path, "-E", "LD_LIBRARY_PATH=$libraryPath", "-E", "LD_PRELOAD=$preload") +
-                (if (spec.env["LD_BIND_NOW"] != null) listOf("-E", "LD_BIND_NOW=1") else emptyList()) + listOf(binary.path) + spec.args
+                (if (spec.env["LD_BIND_NOW"] != null) listOf("-E", "LD_BIND_NOW=1") else emptyList()) + listOf(binary.path) + args
         val pb = ProcessBuilder(command).directory(File(root, "home/root").also { it.mkdirs() })
         pb.environment().apply {
             putAll(webos.environment(spec.name))
@@ -90,7 +94,7 @@ class NativeServices(private val bus: Bus, private val webos: WebosRoot, private
             // liblunaservice takes stdin and stdout as the bus link.
             put("LUNACY_BUS_STDIO", "1")
         }
-        Log.i(AppServer.TAG, "native service ${spec.name}: ${spec.exec} ${spec.args.joinToString(" ")}")
+        Log.i(AppServer.TAG, "native service ${spec.name}: ${spec.exec} ${args.joinToString(" ")}")
         return pb.start()
     }
 
@@ -116,7 +120,7 @@ class NativeServices(private val bus: Bus, private val webos: WebosRoot, private
         }
 
         /** A command line's words, with sh's single and double quotes. */
-        private fun split(line: String): List<String> {
+        fun split(line: String): List<String> {
             val out = ArrayList<String>(); val w = StringBuilder(); var quote = 0.toChar(); var any = false
             var i = 0
             while (i < line.length) {

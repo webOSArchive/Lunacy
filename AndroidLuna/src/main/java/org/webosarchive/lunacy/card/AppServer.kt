@@ -29,6 +29,8 @@ class AppServer(
         const val APPS = CRYPTOFS + Packages.APPS + "/"
         const val MEDIA_INTERNAL = "media/internal/"
         const val IPKGS = "usr/palm/ipkgs/"
+        /** webOS-root trees pages may read, as a TouchPad's WebKit read them through file://. */
+        private val ROOT_READABLE = listOf("usr/palm/", "var/file-cache/")
 
         /** An app's page: its origin is its id, and its path is in its folder ([AppInfo.dir]). */
         fun appUrl(id: String, main: String = "index.html", dir: String = id) = "https://$id$HOST_SUFFIX/$APPS$dir/$main"
@@ -129,7 +131,10 @@ class AppServer(
     fun serve(uri: Uri): WebResourceResponse? {
         val host = uri.host ?: return null
         if (!host.endsWith(HOST_SUFFIX)) return null  // real network
-        val path = uri.path.orEmpty().trimStart('/')
+        // A run of slashes is one, as the TouchPad's filesystem read a file:// path: Email
+        // opens its card at "<app dir>/" + "/mail/index.html", and the page's relative URLs
+        // carry the doubled slash on.
+        val path = uri.path.orEmpty().replace(Regex("/{2,}"), "/").trimStart('/')
         // The thumbnailer's paths carry the source's slashes as %2F, and a decoded path would
         // lose the difference between those and the ones in the route itself.
         val encodedPath = uri.encodedPath.orEmpty().trimStart('/')
@@ -164,6 +169,12 @@ class AppServer(
             // reads as the apps it can revert to their shipped version.
             path.startsWith(IPKGS) -> java.io.File(webosRoot, path).takeIf { it.isFile && it.canonicalPath.startsWith(java.io.File(webosRoot, IPKGS).canonicalPath + java.io.File.separator) }
                 ?.let { respond(it.inputStream(), path, resource, app) }
+            // The rest of the webOS root that pages read by path on a device: the system's
+            // files under /usr/palm (command-resource-handlers.json, account templates' icons)
+            // and the file cache (Email's bodies and attachments, which mojomail writes there).
+            ROOT_READABLE.any { path.startsWith(it) } -> java.io.File(webosRoot, path).takeIf { f ->
+                f.isFile && ROOT_READABLE.any { f.canonicalPath.startsWith(java.io.File(webosRoot, it).canonicalPath + java.io.File.separator) }
+            }?.let { respond(it.inputStream(), path, resource, app) }
             encodedPath.startsWith(EXTRACTFS) ->
                 extractfs(Uri.decode(encodedPath.removePrefix(EXTRACTFS)))
             path.startsWith(CRYPTOFS) -> files.open(path.removePrefix(CRYPTOFS))?.let { respond(it, path, resource, app) }

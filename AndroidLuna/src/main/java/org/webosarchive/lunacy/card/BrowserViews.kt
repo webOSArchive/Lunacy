@@ -262,8 +262,9 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
 
         fun command(method: String, a: JSONArray) {
             when (method) {
-                "openURL" -> a.optString(0).takeIf { it.isNotEmpty() }?.let { loadUrl(withScheme(it)) }
-                "setHTML" -> loadDataWithBaseURL(a.optString(0).ifEmpty { null }, a.optString(1), "text/html", "utf-8", null)
+                "openURL" -> a.optString(0).takeIf { it.isNotEmpty() }?.let { lastDoc = null; loadUrl(withScheme(it)) }
+                "setHTML" -> setHtml(a.optString(0).ifEmpty { null }, a.optString(1))
+                "setHeaderHeight" -> a.optDouble(0, 0.0).coerceAtLeast(0.0).let { if (it != headerCss) { headerCss = it; applyHeader() } }
                 "reloadPage" -> reload()
                 "stopLoad" -> stopLoading()
                 "goBack" -> if (canGoBack()) goBack()
@@ -286,7 +287,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 // What browserserver did that a WebView does for itself, or that Lunacy places
                 // and sizes from the page instead: nothing to do.
                 "interrogateClicks", "setShowClickedLink", "setPageIdentifier", "connectBrowserServer",
-                "disconnectBrowserServer", "setVisibleSize", "setHeaderHeight", "ignoreMetaTags",
+                "disconnectBrowserServer", "setVisibleSize", "ignoreMetaTags",
                 "setNetworkInterface", "setDNSServers", "selectPopupMenuItem", "handleFlick" -> {}
                 else -> Log.i(TAG, "enyo.WebView.$method isn't supported by Lunacy's browser view")
             }
@@ -401,6 +402,105 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
             return true
         }
 
+        // ---- the header strip, and the email object ----
+
+        /**
+         * setHeaderHeight: the plugin kept that much of the top of the page for the app's own
+         * header, which the page draws under it (Email's sender, recipients and subject), and
+         * told the app where it had scrolled (scrolledTo) so the header moves with the content.
+         * Here the document gets that much room at its top, the view is clipped away over it so
+         * the card's header shows and is touched there, and scrolledTo goes as the view scrolls.
+         * In the card's CSS px, as the page measured it.
+         */
+        private var headerCss = 0.0
+
+        private fun headerPx() = Math.round((headerCss * scale).toFloat())
+        private fun clipTop() = (headerPx() - scrollY).coerceAtLeast(0)
+
+        /**
+         * The room at the top of the document, as a style. In vw, so it is the header's height
+         * in this view's pixels whatever the page's own scale (an email wider than the pane is
+         * shown zoomed out), with no script needed: Email turns JavaScript off for its message
+         * view, so the room is written into the document it is given ([setHtml]), and a change
+         * of header height loads that document again with the new room.
+         */
+        private fun roomStyle(): String {
+            if (headerCss <= 0 || width <= 0) return ""
+            return "<style id=\"__lunacy_header\">html{padding-top:${headerPx() * 100.0 / width}vw !important}</style>"
+        }
+
+        /** The document setHtml made, without its room, and the base it was loaded with. */
+        private var lastDoc: String? = null
+        private var lastBase: String? = null
+
+        private fun applyHeader() {
+            clipBounds = if (headerCss > 0) Rect(0, clipTop(), width, height) else null
+            val doc = lastDoc ?: return
+            if (settings.javaScriptEnabled) {
+                val room = if (headerCss > 0 && width > 0) "${headerPx() * 100.0 / width}vw" else "0"
+                evaluateJavascript("(function(){var s=document.getElementById('__lunacy_header');if(!s){s=document.createElement('style');" +
+                    "s.id='__lunacy_header';(document.head||document.documentElement).appendChild(s);}" +
+                    "s.textContent='html{padding-top:$room !important}';})()", null)
+            } else loadDoc(doc)
+        }
+
+        private fun loadDoc(doc: String) =
+            loadDataWithBaseURL(lastBase, insertAfter(doc, "<head[^>]*>", roomStyle()) ?: (roomStyle() + doc), "text/html", "utf-8", null)
+
+        override fun onScrollChanged(l: Int, t: Int, oldl: Int, oldt: Int) {
+            super.onScrollChanged(l, t, oldl, oldt)
+            if (headerCss > 0) clipBounds = Rect(0, clipTop(), width, height)
+            owner.send(id, "scrolledTo", -l / scale, -t / scale)
+        }
+
+        override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
+            super.onSizeChanged(w, h, ow, oh)
+            if (headerCss > 0) { clipBounds = Rect(0, clipTop(), w, h); if (w != ow) applyHeader() }
+        }
+
+        /** Over the header strip a touch is the card's: it falls through to the page beneath. */
+        private var passing = false
+        override fun dispatchTouchEvent(e: MotionEvent): Boolean {
+            if (e.actionMasked == MotionEvent.ACTION_DOWN) passing = headerCss > 0 && e.y < clipTop()
+            if (passing) { if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL) passing = false; return false }
+            return super.dispatchTouchEvent(e)
+        }
+
+        /**
+         * setHTML. webOS's browser drew an `<object type="application/x-palm-email">` itself:
+         * Email's message view is one, naming the message body in the file cache ("path"), its
+         * type, markup for the document's head and the top of its body (the printed header),
+         * and its inline images by content id ("cids"). Here that object becomes the document
+         * it stood for; any other HTML is loaded as given.
+         */
+        private fun setHtml(base: String?, html: String) {
+            val obj = Regex("<object\\s[^>]*type=\"application/x-palm-email\"[^>]*>", RegexOption.IGNORE_CASE).find(html)
+            lastBase = base
+            if (obj == null) { lastDoc = html; loadDoc(html); return }
+            fun attr(name: String) = Regex("\\s$name=\"([^\"]*)\"", RegexOption.IGNORE_CASE).find(obj.value)?.groupValues?.get(1)?.let { unescape(it) }.orEmpty()
+            val path = attr("path"); val type = attr("contentmimetype").lowercase()
+            val head = attr("headprefix"); val top = attr("bodyprefix")
+            val cids = runCatching { JSONObject(attr("cids").ifEmpty { "{}" }) }.getOrDefault(JSONObject())
+            val file = owner.webosFile(path)
+            worker.execute {
+                val text = runCatching { file?.readText() }.getOrNull().orEmpty()
+                var doc = if (type == "text/plain") "<html><head></head><body><div style=\"white-space:pre-wrap;word-wrap:break-word\">" +
+                    linkify(escape(text)) + "</div></body></html>" else text.ifEmpty { "<html><head></head><body></body></html>" }
+                for (k in cids.keys()) doc = doc.replace(k, "file://" + cids.optString(k))
+                doc = insertAfter(doc, "<head[^>]*>", head) ?: "<head>$head</head>$doc"
+                doc = insertAfter(doc, "<body[^>]*>", top) ?: "$top$doc"
+                main.post { lastDoc = doc; loadDoc(doc) }
+            }
+        }
+
+        private fun insertAfter(doc: String, tag: String, what: String): String? =
+            Regex(tag, RegexOption.IGNORE_CASE).find(doc)?.let { m -> doc.substring(0, m.range.last + 1) + what + doc.substring(m.range.last + 1) }
+
+        private fun escape(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        private fun unescape(s: String) = s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
+            .replace(Regex("&#(\\d+);")) { it.groupValues[1].toInt().toChar().toString() }.replace("&amp;", "&")
+        private fun linkify(s: String) = s.replace(Regex("\\b(https?://[^\\s<>\"]+)")) { "<a href=\"${it.value}\">${it.value}</a>" }
+
         // ---- callbacks ----
 
         private var told = ""
@@ -414,8 +514,21 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
 
         inner class Client : WebViewClient() {
             // An app's own pages, on its origin, come from Lunacy's server as its card's do.
-            override fun shouldInterceptRequest(view: WebView, req: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? =
-                if (req.url.host.orEmpty().endsWith(AppServer.HOST_SUFFIX)) owner.server.serve(req.url) else null
+            override fun shouldInterceptRequest(view: WebView, req: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {
+                if (req.url.host.orEmpty().endsWith(AppServer.HOST_SUFFIX)) return owner.server.serve(req.url)
+                // The file cache and user storage by their webOS paths (an email's inline images).
+                if (req.url.scheme == "file") {
+                    val p = req.url.path.orEmpty()
+                    if (p.startsWith("/var/file-cache/") || p.startsWith("/media/internal/")) {
+                        val f = owner.webosFile(p)?.takeIf { it.isFile }
+                        val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(f?.extension?.lowercase().orEmpty()) ?: "application/octet-stream"
+                        return if (f != null) android.webkit.WebResourceResponse(mime, null, f.inputStream())
+                            else android.webkit.WebResourceResponse("text/plain", null, 404, "Not Found", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0)))
+                    }
+                }
+                return null
+            }
+
             @Suppress("OVERRIDE_DEPRECATION")
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
                 val scheme = Uri.parse(url).scheme?.lowercase().orEmpty()

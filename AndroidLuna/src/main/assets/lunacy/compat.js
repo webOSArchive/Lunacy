@@ -429,6 +429,33 @@ window.__lunacyFileUrl = function (u, media) {
 	return media && N && N.mediaBase ? N.mediaBase() + u.slice(7) : u.slice(7);
 };
 
+// Pages that put a file:// URL in a frame or an image, as webOS pages could: an app's own or
+// another app's files (Enyo's CrossAppUI loads an app's UI from the file:// base path the
+// application manager gives, as Email does its account wizard), the system's files under
+// /usr/palm, and the file cache, where the mail services keep message bodies and attachments.
+// An app's files are on that app's origin; the rest are on every origin.
+window.__lunacyPageUrl = function (u) {
+	if (typeof u !== "string" || u.slice(0, 8).toLowerCase() !== "file:///") { return u; }
+	var app = /^file:\/\/\/media\/cryptofs\/apps\/usr\/palm\/applications\/([^\/?#]+)(.*)$/i.exec(u);
+	if (app) { return "https://" + app[1] + ".media.cryptofs.apps" + u.slice(7); }
+	if (/^file:\/\/\/(usr\/palm|var\/file-cache|media\/internal)\//i.test(u)) { return u.slice(7); }
+	return u;
+};
+(function () {
+	[window.HTMLIFrameElement, window.HTMLImageElement].forEach(function (E) {
+		var P = E && E.prototype, d = P && Object.getOwnPropertyDescriptor(P, "src");
+		if (!d || !d.set) { return; }
+		Object.defineProperty(P, "src", {
+			configurable: true, enumerable: d.enumerable, get: d.get,
+			set: function (v) { d.set.call(this, __lunacyPageUrl(v)); }
+		});
+		var set = P.setAttribute;
+		P.setAttribute = function (name, value) {
+			return set.call(this, name, String(name).toLowerCase() === "src" ? __lunacyPageUrl(value) : value);
+		};
+	});
+})();
+
 // The same for URLs given to new Audio(url) and to setAttribute("src") on media elements, as
 // SoundManager2 does.
 (function () {

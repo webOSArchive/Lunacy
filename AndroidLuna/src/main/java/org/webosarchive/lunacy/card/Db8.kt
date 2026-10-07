@@ -29,7 +29,7 @@ class Db8(private val service: String, file: File?) {
     private var rev = 0L
     private var idCounter = 0L
 
-    private class IndexProp(val name: String, val collate: String?)
+    private class IndexProp(val name: String, val collate: String?, val default: Any? = null)
     private class Index(val name: String, val props: List<IndexProp>)
     /** A revision set: [name] holds the _rev at which any of [props] last changed. */
     private class RevSet(val name: String, val props: List<String>)
@@ -115,14 +115,16 @@ class Db8(private val service: String, file: File?) {
     }
 
     private fun parseKind(p: JSONObject): Kind {
-        val indexes = ArrayList<Index>()
+        // Every kind has db8's own _id index (MojDbKind::IdIndexJson), which includes deleted
+        // objects: Email's facade finds an email by "_id" = its id, with a watch.
+        val indexes = arrayListOf(Index("_id", listOf(IndexProp("_del", null), IndexProp("_id", null))))
         p.optJSONArray("indexes")?.let { a ->
             for (i in 0 until a.length()) {
                 val ix = a.getJSONObject(i)
                 val props = ArrayList<IndexProp>()
                 // An index that includes deleted objects leads with _del, as db8's did.
                 if (ix.optBoolean("incDel")) props += IndexProp("_del", null)
-                ix.optJSONArray("props")?.let { pa -> for (j in 0 until pa.length()) pa.getJSONObject(j).let { props += IndexProp(it.getString("name"), it.optString("collate").ifEmpty { null }) } }
+                ix.optJSONArray("props")?.let { pa -> for (j in 0 until pa.length()) pa.getJSONObject(j).let { props += IndexProp(it.getString("name"), it.optString("collate").ifEmpty { null }, it.opt("default")) } }
                 indexes += Index(ix.optString("name"), props)
             }
         }
@@ -164,14 +166,28 @@ class Db8(private val service: String, file: File?) {
      */
     private fun allowed(caller: String, k: Kind, op: String): Boolean {
         if (related(caller, k.owner)) return true
+        return permission(caller, k, op, HashSet()) == "allow"
+    }
+
+    /**
+     * db8's permission engine (MojDbPermissionEngine::check, MojDbKind::objectPermission): the
+     * caller's own entry for the kind, else the first wildcard entry that matches it, gives the
+     * operation's value; a kind with no value for it takes its first super kind's. So the SMTP
+     * service, granted on com.palm.mail.account, may update a com.palm.imap.account, which
+     * extends it and grants nothing itself.
+     */
+    private fun permission(caller: String, k: Kind, op: String, seen: HashSet<String>): String? {
+        if (!seen.add(k.id)) return null
+        var exact: String? = null; var wild: String? = null
         db.rawQuery("SELECT caller, ops FROM permissions WHERE kind = ?", arrayOf(k.id)).use { c ->
             while (c.moveToNext()) {
                 val who = c.getString(0)
-                val match = who == caller || (who.endsWith("*") && caller.startsWith(who.dropLast(1)))
-                if (match && JSONObject(c.getString(1) ?: "{}").optString(op) == "allow") return true
+                if (who == caller) exact = c.getString(1) ?: "{}"
+                else if (wild == null && who.endsWith("*") && caller.startsWith(who.dropLast(1))) wild = c.getString(1) ?: "{}"
             }
         }
-        return false
+        val value = (exact ?: wild)?.let { JSONObject(it).optString(op).ifEmpty { null } }
+        return value ?: k.extends.firstOrNull()?.let { kinds[it] }?.let { permission(caller, it, op, seen) }
     }
 
     private fun checkAccess(caller: String, kindId: String, op: String = "read") {
@@ -229,6 +245,22 @@ class Db8(private val service: String, file: File?) {
         }
     }
 
+    /**
+     * db8 (MojDb::assignIds) gives every object inside an array that has no _id one of its own,
+     * the next number of the revision counter in hex: on the reference TouchPad an account's
+     * capability provider is {"_id":"44e",...} beside the account's _rev 1101. The accounts
+     * service tells an enabled capability by that _id, and calls its transport's onEnabled.
+     */
+    private fun assignIds(o: JSONObject) {
+        for (k in o.keys()) when (val v = o.get(k)) {
+            is JSONArray -> for (i in 0 until v.length()) (v.opt(i) as? JSONObject)?.let { e ->
+                if (!e.has("_id")) e.put("_id", java.lang.Long.toHexString(nextRev()))
+                assignIds(e)
+            }
+            is JSONObject -> assignIds(v)
+        }
+    }
+
     private fun valueText(o: JSONObject, path: String): String? = value(o, path)?.toString()
 
     private fun store(o: JSONObject) {
@@ -261,6 +293,7 @@ class Db8(private val service: String, file: File?) {
             for ((old, o) in prepared) {
                 if (!o.has("_id")) o.put("_id", newId())
                 o.put("_rev", nextRev())
+                assignIds(o)
                 applyRevSets(old, o)
                 if (old != null && old.optString("_kind") != o.optString("_kind")) purge(old)
                 store(o)
@@ -306,6 +339,7 @@ class Db8(private val service: String, file: File?) {
                         ?: throw DbError(-3950, "db: object not found")
                     checkAccess(caller, kindId, "create")
                     val o = JSONObject(patch.toString()).put("_rev", nextRev())
+                    assignIds(o)
                     applyRevSets(null, o)
                     store(o)
                     changed(null, o)
@@ -326,6 +360,7 @@ class Db8(private val service: String, file: File?) {
         val o = JSONObject(old.toString())
         deepMerge(o, props)
         o.put("_id", old.getString("_id")).put("_kind", old.getString("_kind")).put("_rev", nextRev())
+        assignIds(o)
         applyRevSets(old, o)
         store(o)
         changed(old, o)
@@ -417,7 +452,7 @@ class Db8(private val service: String, file: File?) {
         val list = family.flatMap { objects(it).values }
             .filter { o -> (incDel || !o.optBoolean("_del")) && where.all { matches(o, it) } && filter.all { matches(o, it) } }
             .sortedWith(Comparator { a, b ->
-                val c = if (orderBy == null) 0 else compare(value(a, orderBy), value(b, orderBy), collate)
+                val c = if (orderBy == null) 0 else compare(indexed(a, orderBy), indexed(b, orderBy), collate)
                 if (c != 0) c else a.getString("_id").compareTo(b.getString("_id"))
             })
         return (if (q.optBoolean("desc")) list.reversed() else list) to family
@@ -455,14 +490,50 @@ class Db8(private val service: String, file: File?) {
     private fun value(o: JSONObject, path: String): Any? {
         // Every object is deleted or not: db8 indexed a live one as _del false.
         if (path == "_del") return o.optBoolean("_del")
-        var cur: Any? = o
-        for (part in path.split('.')) cur = (cur as? JSONObject)?.opt(part) ?: return null
-        return if (cur == JSONObject.NULL) null else cur
+        return walk(o, path.split('.'), 0)
+    }
+
+    /**
+     * A dotted path's value. Through an array of objects it is every element's value, as db8
+     * indexed it (MojDbIndex: a prop under an array has one index entry per element): Email
+     * finds its accounts by "capabilityProviders.capability", inside the account's array.
+     */
+    private fun walk(cur: Any?, parts: List<String>, i: Int): Any? {
+        if (cur == null || cur == JSONObject.NULL) return null
+        if (i == parts.size) return cur
+        return when (cur) {
+            is JSONObject -> walk(cur.opt(parts[i]), parts, i + 1)
+            is JSONArray -> {
+                val out = JSONArray()
+                for (j in 0 until cur.length()) when (val v = walk(cur.opt(j), parts, i)) {
+                    null -> {}
+                    is JSONArray -> for (k in 0 until v.length()) out.put(v.opt(k))
+                    else -> out.put(v)
+                }
+                if (out.length() == 0) null else out
+            }
+            else -> null
+        }
     }
 
     /** A clause matches when any of the prop's values (arrays count element by element) matches any given value. */
+    /**
+     * A prop as db8's indexes held it: an object without the prop is indexed under the
+     * index's "default" for it, so it is found by that value (Email's kind gives
+     * "flags.visible" the default true, and the mail services never set it on a new message).
+     */
+    private fun indexed(o: JSONObject, prop: String): Any? = value(o, prop) ?: defaultOf(o.optString("_kind"), prop, HashSet())
+
+    private fun defaultOf(kindId: String, prop: String, seen: HashSet<String>): Any? {
+        val k = kinds[kindId] ?: return null
+        if (!seen.add(kindId)) return null
+        for (ix in k.indexes) for (p in ix.props) if (p.name == prop && p.default != null && p.default != JSONObject.NULL) return p.default
+        for (e in k.extends) defaultOf(e, prop, seen)?.let { return it }
+        return null
+    }
+
     private fun matches(o: JSONObject, c: Clause): Boolean {
-        val v = value(o, c.prop)
+        val v = indexed(o, c.prop)
         val have: List<Any?> = if (v is JSONArray) (0 until v.length()).map { v.opt(it) } else listOf(v)
         val want: List<Any?> = if (c.op == "=" && c.value is JSONArray) (c.value as JSONArray).let { a -> (0 until a.length()).map { a.opt(it) } } else listOf(c.value)
         return have.any { h -> want.any { w -> test(h, c.op, w) } }

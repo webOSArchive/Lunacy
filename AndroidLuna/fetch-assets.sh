@@ -92,8 +92,9 @@ NOTICE
 mkdir -p $L/fw/frameworks
 for f in mojo2 prototype mojo.core underscore foundations globalization mojoloader.js \
          metascene.base metascene.videos metascene.videos.share \
-         mediastream mediaextension mediacapture imagethumbnail mojodbshim media; do
-    cp -r $V/touchpad/$f $L/fw/frameworks/
+         mediastream mediaextension mediacapture imagethumbnail mojodbshim media contacts \
+         foundations.crypto foundations.io; do
+    cp -r $V/touchpad/$f $L/fw/frameworks/ 2>/dev/null || cp -r $V/touchpad/services-fw/$f $L/fw/frameworks/
 done
 chmod -R u+w $L/fw/frameworks
 # mojo2's images and templates link to ../../../../mojocommon, which on the device is
@@ -104,8 +105,9 @@ links $L/fw $L/fw.links
 cat > $L/fw/frameworks/NOTICE <<'NOTICE'
 Palm's frameworks, copied from /usr/palm/frameworks on the reference TouchPad
 (webOS CE 3.1.0): mojo2 (submission 205), prototype, mojo.core, foundations, globalization,
-mojoloader.js, the metascene frameworks the Video Player's scenes come from, and the media
-frameworks they and other apps ask MojoLoader for. `media` is /usr/lib/luna/luna-media-shim,
+mojoloader.js, the metascene frameworks the Video Player's scenes come from, the media
+frameworks they and other apps ask MojoLoader for, and contacts (submission 114), which Email
+imports for its address fields, with the foundations.crypto and foundations.io it loads. `media` is /usr/lib/luna/luna-media-shim,
 which the frameworks folder symlinks to.
 Copyright Palm, Inc. / Hewlett-Packard, except underscore, which is MIT (Jeremy Ashkenas),
 and prototype, which is MIT (Sam Stephenson). Palm's own is never released under an open
@@ -214,6 +216,12 @@ for k in com.palm.appcatalog com.palm.appcatalog.editionfile com.palm.appcatalog
     cp $V/touchpad/etc-db/db/kinds/$k $R/etc/palm/db/kinds/
     cp $V/touchpad/etc-db/db/permissions/$k $R/etc/palm/db/permissions/
 done
+# Contacts' person and contact kinds, which a TouchPad always has: Email looks senders up
+# in them (an empty store, with no contacts app or service yet, as on a new device).
+for k in com.palm.person com.palm.contact; do
+    cp -r $V/touchpad/etc-db/db/kinds/$k $R/etc/palm/db/kinds/
+    cp -r $V/touchpad/etc-db/db/permissions/$k $R/etc/palm/db/permissions/
+done
 # The activity manager's own kind, where it keeps persistent activities across restarts.
 cp $V/touchpad/etc-db/db/kinds/com.palm.activity $R/etc/palm/db/kinds/
 cp $V/touchpad/etc-db/db/permissions/com.palm.activitymanager $R/etc/palm/db/permissions/
@@ -230,7 +238,8 @@ mkdir -p $R/usr/palm/ipkgs && echo '[]' > $R/usr/palm/ipkgs/manifest.json
 cp -r $V/touchpad/etc-db/tempdb/kinds $V/touchpad/etc-db/tempdb/permissions $R/etc/palm/tempdb/
 rm -rf $R/etc/palm/tempdb/permissions/com.palm.imbuddystatus
 cat > $R/etc/palm/NOTICE <<'NOTICE'
-db8 kind and permission files for the accounts and palmprofile services, App Catalog and the
+db8 kind and permission files for the accounts and palmprofile services, contacts (person and
+contact), the activity manager, App Catalog and the
 Web app, from /etc/palm on the reference TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. /
 LG Electronics.
 NOTICE
@@ -270,10 +279,15 @@ cp $E/etc/palm/db_kinds/com.palm.imap.* $R/etc/palm/db_kinds/
 cp $E/etc/palm/FileCache.conf $R/etc/palm/
 cp $E/etc/palm/filecache_types/* $R/etc/palm/filecache_types/
 cp -r $E/usr/palm/public/accounts/com.palm.imap $R/usr/palm/public/accounts/
+# The "Email Account" template Email offers for any IMAP account, and the list of which app
+# handles which resource, which Email reads.
+cp -r $E/usr/palm/public/accounts/com.palm.othermail $R/usr/palm/public/accounts/
+cp $V/touchpad/command-resource-handlers.json $R/usr/palm/
 cat > $R/usr/bin/NOTICE.mail <<'NOTICE'
 mojomail-imap, mojomail-smtp and filecache, the D-Bus service files that start them, and the
 libraries under /usr/lib they link (libmojo*, libemail-common, libpalmsocket, libPmLogLib,
-libPmStateMachineEngine), with the IMAP account template and the kinds under
+libPmStateMachineEngine), with the IMAP and "Email Account" (othermail) templates,
+/usr/palm/command-resource-handlers.json and the kinds under
 /etc/palm/db_kinds, copied from the reference TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. /
 Hewlett-Packard; LG Electronics later released mojomail, db8 and filecache's predecessors
 under the Apache 2.0 licence (https://github.com/openwebos). Distributed by Lunacy as they

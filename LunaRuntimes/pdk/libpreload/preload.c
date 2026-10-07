@@ -82,10 +82,9 @@ int __xstat64(int, const char *, struct stat64 *); int __lxstat64(int, const cha
 
 ssize_t readlink(const char *path, char *buf, size_t len)
 {
-	REAL(readlink);
 	if (is_self_exe(path)) { ssize_t r = answer(buf, len); if (r >= 0) return r; }
 	MAPPED(path);
-	return real_readlink(mp_, buf, len);
+	return readlinkat(AT_FDCWD, mp_, buf, len);
 }
 
 ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t len)
@@ -160,19 +159,26 @@ int __lxstat(int v, const char *path, struct stat *st) { REAL(__lxstat); MAPPED(
 int __xstat64(int v, const char *path, struct stat64 *st) { REAL(__xstat64); MAPPED(path); return real___xstat64(v, mp_, st); }
 int __lxstat64(int v, const char *path, struct stat64 *st) { REAL(__lxstat64); MAPPED(path); return real___lxstat64(v, mp_, st); }
 
-int access(const char *path, int how) { REAL(access); MAPPED(path); return real_access(mp_, how); }
+/* These go through the *at calls: glibc makes ARM's legacy calls for them (chmod 15, rmdir
+   40...), which Android's app seccomp policy refuses, and the TouchPad's file cache could make
+   no file. The *at forms are the calls bionic itself uses. */
+int access(const char *path, int how) { MAPPED(path); return faccessat(AT_FDCWD, mp_, how, 0); }
 DIR *opendir(const char *path) { REAL(opendir); MAPPED(path); return real_opendir(mp_); }
-int mkdir(const char *path, mode_t mode) { REAL(mkdir); MAPPED(path); return real_mkdir(mp_, mode); }
-int rmdir(const char *path) { REAL(rmdir); MAPPED(path); return real_rmdir(mp_); }
-int unlink(const char *path) { REAL(unlink); MAPPED(path); return real_unlink(mp_); }
+int mkdir(const char *path, mode_t mode) { MAPPED(path); return mkdirat(AT_FDCWD, mp_, mode); }
+int rmdir(const char *path) { MAPPED(path); return unlinkat(AT_FDCWD, mp_, AT_REMOVEDIR); }
+int unlink(const char *path) { MAPPED(path); return unlinkat(AT_FDCWD, mp_, 0); }
+int chmod(const char *path, mode_t mode) { MAPPED(path); return fchmodat(AT_FDCWD, mp_, mode, 0); }
+int chown(const char *path, uid_t u, gid_t g) { MAPPED(path); return fchownat(AT_FDCWD, mp_, u, g, 0); }
+int lchown(const char *path, uid_t u, gid_t g) { MAPPED(path); return fchownat(AT_FDCWD, mp_, u, g, AT_SYMLINK_NOFOLLOW); }
+int link(const char *from, const char *to) { char b1[PATH_MAX], b2[PATH_MAX]; return linkat(AT_FDCWD, map(from, b1), AT_FDCWD, map(to, b2), 0); }
+int symlink(const char *target, const char *path) { MAPPED(path); return symlinkat(target, AT_FDCWD, mp_); }
 int remove(const char *path) { REAL(remove); MAPPED(path); return real_remove(mp_); }
 int chdir(const char *path) { REAL(chdir); MAPPED(path); return real_chdir(mp_); }
 int truncate(const char *path, off_t len) { REAL(truncate); MAPPED(path); return real_truncate(mp_, len); }
 int rename(const char *from, const char *to)
 {
-	REAL(rename);
 	char b1[PATH_MAX], b2[PATH_MAX];
-	return real_rename(map(from, b1), map(to, b2));
+	return renameat(AT_FDCWD, map(from, b1), AT_FDCWD, map(to, b2));
 }
 
 /* ---- nothrow new, as GCC 4.3's libstdc++ had it ----
@@ -257,3 +263,63 @@ void __vsyslog_chk(int priority, int flag, const char *format, va_list ap) { vsy
 ssize_t send(int fd, const void *buf, size_t len, int flags) { return sendto(fd, buf, len, flags, NULL, 0); }
 ssize_t recv(int fd, void *buf, size_t len, int flags) { return recvfrom(fd, buf, len, flags, NULL, NULL); }
 int accept(int fd, struct sockaddr *addr, socklen_t *len) { return accept4(fd, addr, len, 0); }
+
+/* ---- more webOS paths: extended attributes, file systems, times, tree walks ----
+   The TouchPad's file cache keeps each object's name and type in extended attributes
+   (setxattr, getxattr), sizes its cache with statvfs and walks it with nftw; GIO and
+   boost::filesystem do the rest. */
+#include <ftw.h>
+#include <sys/statfs.h>
+#include <sys/statvfs.h>
+#include <sys/time.h>
+#include <sys/xattr.h>
+#include <utime.h>
+ssize_t getxattr(const char *p, const char *n, void *v, size_t s) { REAL(getxattr); MAPPED(p); return real_getxattr(mp_, n, v, s); }
+ssize_t lgetxattr(const char *p, const char *n, void *v, size_t s) { REAL(lgetxattr); MAPPED(p); return real_lgetxattr(mp_, n, v, s); }
+int setxattr(const char *p, const char *n, const void *v, size_t s, int f) { REAL(setxattr); MAPPED(p); return real_setxattr(mp_, n, v, s, f); }
+int lsetxattr(const char *p, const char *n, const void *v, size_t s, int f) { REAL(lsetxattr); MAPPED(p); return real_lsetxattr(mp_, n, v, s, f); }
+ssize_t listxattr(const char *p, char *l, size_t s) { REAL(listxattr); MAPPED(p); return real_listxattr(mp_, l, s); }
+ssize_t llistxattr(const char *p, char *l, size_t s) { REAL(llistxattr); MAPPED(p); return real_llistxattr(mp_, l, s); }
+int removexattr(const char *p, const char *n) { REAL(removexattr); MAPPED(p); return real_removexattr(mp_, n); }
+int lremovexattr(const char *p, const char *n) { REAL(lremovexattr); MAPPED(p); return real_lremovexattr(mp_, n); }
+int statvfs(const char *p, struct statvfs *b) { REAL(statvfs); MAPPED(p); return real_statvfs(mp_, b); }
+int statvfs64(const char *p, struct statvfs64 *b) { REAL(statvfs64); MAPPED(p); return real_statvfs64(mp_, b); }
+int statfs(const char *p, struct statfs *b) { REAL(statfs); MAPPED(p); return real_statfs(mp_, b); }
+int statfs64(const char *p, struct statfs64 *b) { REAL(statfs64); MAPPED(p); return real_statfs64(mp_, b); }
+int utime(const char *p, const struct utimbuf *t)
+{
+	MAPPED(p);
+	struct timespec ts[2];
+	if (!t) return utimensat(AT_FDCWD, mp_, NULL, 0);
+	ts[0].tv_sec = t->actime; ts[0].tv_nsec = 0; ts[1].tv_sec = t->modtime; ts[1].tv_nsec = 0;
+	return utimensat(AT_FDCWD, mp_, ts, 0);
+}
+int utimes(const char *p, const struct timeval t[2])
+{
+	MAPPED(p);
+	struct timespec ts[2];
+	if (!t) return utimensat(AT_FDCWD, mp_, NULL, 0);
+	for (int i = 0; i < 2; i++) { ts[i].tv_sec = t[i].tv_sec; ts[i].tv_nsec = t[i].tv_usec * 1000; }
+	return utimensat(AT_FDCWD, mp_, ts, 0);
+}
+
+/* nftw walks the real tree; the callback is given the paths under the webOS name it asked
+   for, as a device gave them. One walk at a time per thread. */
+static __thread int (*nftw_fn)(const char *, const struct stat *, int, struct FTW *);
+static __thread size_t nftw_cut;
+static int nftw_back(const char *path, const struct stat *st, int flag, struct FTW *f)
+{
+	return nftw_fn(path + nftw_cut, st, flag, f);
+}
+int nftw(const char *dir, int (*fn)(const char *, const struct stat *, int, struct FTW *), int fds, int flags)
+{
+	REAL(nftw);
+	MAPPED(dir);
+	if (mp_ == dir) return real_nftw(dir, fn, fds, flags);
+	int (*saved_fn)(const char *, const struct stat *, int, struct FTW *) = nftw_fn;
+	size_t saved_cut = nftw_cut;
+	nftw_fn = fn; nftw_cut = strlen(mp_) - strlen(dir);
+	int r = real_nftw(mp_, nftw_back, fds, flags);
+	nftw_fn = saved_fn; nftw_cut = saved_cut;
+	return r;
+}

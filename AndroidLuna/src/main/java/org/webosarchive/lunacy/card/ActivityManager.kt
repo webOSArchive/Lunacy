@@ -665,8 +665,13 @@ class ActivityManager(private val context: Context) {
 
     private fun setRequirement(a: Activity, name: String, v: Any) {
         when (name) {
-            "internet", "wifi", "wan", "charging", "docked", "bootup", "never" ->
+            // false asks for nothing, and is dropped: measured on the reference TouchPad, where
+            // the mail services ask {"internet":false} and the activity has no requirements;
+            // anything else but true is refused with this text.
+            "internet", "wifi", "wan", "charging", "docked", "bootup", "never" -> {
+                if (v == false) { a.requirements.remove(name); return }
                 if (v != true) throw SpecError("If an '$name' requirement is specified, the only legal value is 'true'")
+            }
             "internetConfidence", "wifiConfidence", "wanConfidence" ->
                 if (v !is String || v !in CONFIDENCE) throw SpecError("Invalid connection confidence level specified")
             "battery" -> if (v !is Int || v !in 0..100) throw SpecError("A \"battery\" requirement must specify a value between 0 and 100")

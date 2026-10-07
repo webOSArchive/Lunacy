@@ -22,6 +22,7 @@
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <errno.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -54,7 +55,7 @@ static ssize_t answer(char *buf, size_t len)
 
 /* ---- webOS paths ---- */
 
-static const char *const webos_dirs[] = { "/usr/", "/media/", "/var/", "/etc/palm/", "/etc/openal/", "/home/root/", "/system/", "/vendor/", NULL };
+static const char *const webos_dirs[] = { "/usr/", "/media/", "/var/", "/etc/palm/", "/etc/openal/", "/etc/ssl/", "/etc/resolv.conf/", "/etc/hosts/", "/home/root/", "/system/", "/vendor/", NULL };
 
 /* The path to use for `path`: in the webOS root if it is a webOS path, else itself. */
 static const char *map(const char *path, char *buf)
@@ -173,3 +174,86 @@ int rename(const char *from, const char *to)
 	char b1[PATH_MAX], b2[PATH_MAX];
 	return real_rename(map(from, b1), map(to, b2));
 }
+
+/* ---- nothrow new, as GCC 4.3's libstdc++ had it ----
+   The TouchPad's libstdc++ (GCC 4.3) made `new (std::nothrow)` call malloc; today's makes it
+   call the throwing `operator new` inside a try. A library that defines the throwing one by
+   calling the nothrow one - Palm's libmojocore does, under every native system service -
+   then recurses until the stack runs out. Answered as the device's library did: malloc, with
+   the new-handler given its chance, and NULL when nothing is left. The throwing forms are
+   left to libstdc++ (or to whichever library replaced them). */
+typedef void (*new_handler_fn)(void);
+extern new_handler_fn _ZSt15get_new_handlerv(void) __attribute__((weak));
+static void *nothrow_new(size_t n)
+{
+	if (n == 0) n = 1;
+	for (;;) {
+		void *p = malloc(n);
+		if (p) return p;
+		new_handler_fn h = _ZSt15get_new_handlerv ? _ZSt15get_new_handlerv() : NULL;
+		if (!h) return NULL;
+		h();   /* a handler that can't free memory throws or aborts, as the device's did */
+	}
+}
+void *_ZnwjRKSt9nothrow_t(size_t n, const void *nt) { return nothrow_new(n); }
+void *_ZnajRKSt9nothrow_t(size_t n, const void *nt) { return nothrow_new(n); }
+
+/* ---- pthread_atfork ----
+   glibc has kept pthread_atfork out of its shared libraries since 2.28 (it lives in the static
+   libc_nonshared.a, linked into each program), so a 2011 library that imports it from the
+   shared one - the TouchPad's libjemalloc_mt.so, under its mail services - can't be bound.
+   It is what the static stub is: glibc's exported __register_atfork, with no DSO handle (the
+   handlers stay registered for the life of the process). */
+extern int __register_atfork(void (*prepare)(void), void (*parent)(void), void (*child)(void), void *dso);
+int pthread_atfork(void (*prepare)(void), void (*parent)(void), void (*child)(void))
+{
+	return __register_atfork(prepare, parent, child, NULL);
+}
+
+/* ---- syslog ----
+   webOS's services logged through syslog (PmLogLib, libmojocore), to syslogd's /dev/log, and
+   that is where palm-log read them. Android has no /dev/log for an app, so the messages went
+   nowhere. They go to stderr instead, as "<priority>ident: message" lines, which the shell
+   reads and puts in the webOS root's /var/log/messages (SysLog.kt) and Android's log. */
+#include <syslog.h>
+static char syslog_ident[64];
+void openlog(const char *ident, int option, int facility)
+{
+	snprintf(syslog_ident, sizeof syslog_ident, "%s", ident ? ident : "");
+}
+void closelog(void) {}
+void vsyslog(int priority, const char *format, va_list ap)
+{
+	char msg[2048];
+	int saved = errno;
+	if (!syslog_ident[0]) {
+		const char *exe = getenv("LUNACY_PDK_EXE");
+		const char *slash = exe ? strrchr(exe, '/') : NULL;
+		snprintf(syslog_ident, sizeof syslog_ident, "%s", slash ? slash + 1 : exe ? exe : "native");
+	}
+	errno = saved;   /* %m names the caller's errno */
+	int n = vsnprintf(msg, sizeof msg, format, ap);
+	if (n < 0) return;
+	for (char *p = msg; *p; p++) if (*p == '\n') *p = ' ';
+	dprintf(2, "<%d>%s: %s\n", priority & 7, syslog_ident, msg);
+}
+void syslog(int priority, const char *format, ...)
+{
+	va_list ap; va_start(ap, format); vsyslog(priority, format, ap); va_end(ap);
+}
+void __syslog_chk(int priority, int flag, const char *format, ...)
+{
+	va_list ap; va_start(ap, format); vsyslog(priority, format, ap); va_end(ap);
+}
+void __vsyslog_chk(int priority, int flag, const char *format, va_list ap) { vsyslog(priority, format, ap); }
+
+/* ---- socket calls Android's seccomp policy refuses ----
+   glibc makes send(), recv() and accept() with ARM's own system calls for them (289, 291,
+   285), which bionic never uses and Android's app policy doesn't list: under libenosys they
+   came back ENOSYS, so c-ares couldn't send a DNS query and the mail services found no host.
+   Each is the general call it is a case of, which the policy allows. Only callers outside
+   glibc see these, which is where the TouchPad's libraries call from. */
+#include <sys/socket.h>
+ssize_t send(int fd, const void *buf, size_t len, int flags) { return sendto(fd, buf, len, flags, NULL, 0); }
+ssize_t recv(int fd, void *buf, size_t len, int flags) { return recvfrom(fd, buf, len, flags, NULL, NULL); }
+int accept(int fd, struct sockaddr *addr, socklen_t *len) { return accept4(fd, addr, len, 0); }

@@ -294,6 +294,10 @@ done
 "$BIN/clang" --target=armv7a-linux-androideabi21 -O2 "$SRC/enosys/enosys.c" -o "$HERE/local-jni/armeabi-v7a/libenosys.so"
 # liblunacy-preload: /proc/self/exe as the app's binary, not the loader's (LD_PRELOAD).
 $CC -O2 -shared -fPIC -Wl,-soname,liblunacy-preload.so "$SRC/libpreload/preload.c" -o "$OUT/lib/liblunacy-preload.so" -ldl
+# liblunaservice: the Luna bus client library native system services link (the TouchPad's
+# mail services and file cache), carrying the bus over the link the shell gives them. Its
+# glib calls resolve against the TouchPad's glib the services load with it.
+$CC -O2 -shared -fPIC -Wl,-soname,liblunaservice.so "$SRC/liblunaservice/lunaservice.c" -o "$OUT/lib/liblunaservice.so" -lpthread
 # ---- OpenAL Soft 1.11.753, the version the TouchPad shipped as libopenal.so.1 ----
 # Palm built it with two backends, an SDL one of its own (Alc/sdl.c, which webOS games
 # played through) and the wave writer; Lunacy's sdl.c is written again from what the
@@ -436,6 +440,8 @@ The PDK runtime (Docs/pdk.md), built by tools/build-pdk.sh:
   https://github.com/kcat/openal-soft (tag openal-soft-$AL_VER), with Lunacy's SDL backend
   (LunaRuntimes/pdk/openal/sdl.c) in place of Palm's.
 - liblunacy-preload.so: Lunacy's own (LunaRuntimes/pdk/libpreload).
+- liblunaservice.so: Lunacy's own (LunaRuntimes/pdk/liblunaservice), for webOS's Luna
+  service bus API; its structures follow Open webOS's luna-service2 header (Apache 2.0).
 - libogg, libvorbis, libvorbisfile: Xiph.Org (BSD), Debian bookworm armel.
 - libSDL_image-1.2.so.0: SDL_image $IMG_VER (zlib licence); libSDL_ttf-2.0.so.0: SDL_ttf $TTF_VER
   (zlib licence); libSDL_net-1.2.so.0: SDL_net $NET_VER (zlib licence). From libsdl.org.

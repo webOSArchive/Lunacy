@@ -214,6 +214,9 @@ for k in com.palm.appcatalog com.palm.appcatalog.editionfile com.palm.appcatalog
     cp $V/touchpad/etc-db/db/kinds/$k $R/etc/palm/db/kinds/
     cp $V/touchpad/etc-db/db/permissions/$k $R/etc/palm/db/permissions/
 done
+# The activity manager's own kind, where it keeps persistent activities across restarts.
+cp $V/touchpad/etc-db/db/kinds/com.palm.activity $R/etc/palm/db/kinds/
+cp $V/touchpad/etc-db/db/permissions/com.palm.activitymanager $R/etc/palm/db/permissions/
 # The Web app's bookmark, history and preference kinds, owned on the device by the system
 # rather than the app (Lunacy ships Palm's app; see its NOTICE).
 for k in com.palm.browserbookmarks com.palm.browserhistory com.palm.browserpreferences; do
@@ -230,6 +233,57 @@ cat > $R/etc/palm/NOTICE <<'NOTICE'
 db8 kind and permission files for the accounts and palmprofile services, App Catalog and the
 Web app, from /etc/palm on the reference TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. /
 LG Electronics.
+NOTICE
+
+# The TouchPad's native mail services and the file cache (Docs/architecture.md, "Native
+# services"): Palm's own mojomail-imap, mojomail-smtp and filecache binaries and the libraries
+# they link, run as they shipped under the PDK's glibc runtime. Lunacy's liblunaservice.so
+# (the PDK runtime) stands in for the device's, which spoke to ls-hubd, so the device's isn't
+# copied. Their bus names and command lines are the device's D-Bus service files. The mail
+# services link OpenSSL 1.1 through webOS CE's ssl11mail shim (TLS 1.2), as the reference
+# TouchPad runs them; the old curl, OpenSSL 0.9.8 and libWebOsProxy it reaches only through
+# that shim's path are left out. From Workbench/vendor/touchpad/email.
+E=$V/touchpad/email
+mkdir -p $R/usr/bin $R/usr/lib $R/usr/share/dbus-1/system-services $R/etc/palm/db_kinds $R/etc/palm/filecache_types
+cp $E/usr/bin/mojomail-imap $E/usr/bin/mojomail-smtp $E/usr/bin/filecache $R/usr/bin/
+for l in libmojocore.so libmojoluna.so libmojodb.so libemail-common.so libpalmsocket.so libPmLogLib.so \
+         libPmStateMachineEngine.so libglib-2.0.so.0 libgthread-2.0.so.0 libgio-2.0.so.0 libgobject-2.0.so.0 \
+         libgmodule-2.0.so.0 libglibmm-2.4.so.1 libgiomm-2.4.so.1 libsigc-2.0.so.0 libboost_regex.so.1.39.0 \
+         libboost_system.so.1.39.0 libboost_filesystem.so.1.39.0 libicuuc.so.36 libicui18n.so.36 libicutu.so.36 \
+         libicudata.so.36 libjemalloc.so libjemalloc_mt.so libcares.so.2 libcjson.so libmjson.so libgoodfork.so.0; do
+    cp $E/sysroot/usr/lib/$l $R/usr/lib/
+done
+# ssl11mail's links name /usr/lib/ssl11 by its absolute path on the device; here they are
+# relative, because the glibc loader reads LD_LIBRARY_PATH in Android's own filesystem.
+cp -r $E/usr/lib/ssl11 $R/usr/lib/
+mkdir -p $R/usr/lib/ssl11mail
+cp $E/usr/lib/ssl11mail/libssl_compat.so $E/usr/lib/ssl11mail/libcurl.so.4.5.0 $E/usr/lib/ssl11mail/mailssl.cnf $R/usr/lib/ssl11mail/
+for l in libcrypto.so.0.9.8 libcrypto.so.1.1; do ln -sfn ../ssl11/libcrypto.so.1.1 $R/usr/lib/ssl11mail/$l; done
+for l in libssl.so.0.9.8 libssl.so.1.1; do ln -sfn ../ssl11/libssl.so.1.1 $R/usr/lib/ssl11mail/$l; done
+ln -sfn libcurl.so.4.5.0 $R/usr/lib/ssl11mail/libcurl.so.4
+for s in com.palm.imap com.palm.smtp com.palm.filecache; do
+    cp $E/usr/share/dbus-1/system-services/$s.service $R/usr/share/dbus-1/system-services/
+done
+# Their db8 kinds (db_kinds is the configurator's other kind folder on the device), the file
+# cache's configuration and types, and the IMAP account template.
+cp $E/etc/palm/db_kinds/com.palm.imap.* $R/etc/palm/db_kinds/
+cp $E/etc/palm/FileCache.conf $R/etc/palm/
+cp $E/etc/palm/filecache_types/* $R/etc/palm/filecache_types/
+cp -r $E/usr/palm/public/accounts/com.palm.imap $R/usr/palm/public/accounts/
+cat > $R/usr/bin/NOTICE.mail <<'NOTICE'
+mojomail-imap, mojomail-smtp and filecache, the D-Bus service files that start them, and the
+libraries under /usr/lib they link (libmojo*, libemail-common, libpalmsocket, libPmLogLib,
+libPmStateMachineEngine), with the IMAP account template and the kinds under
+/etc/palm/db_kinds, copied from the reference TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. /
+Hewlett-Packard; LG Electronics later released mojomail, db8 and filecache's predecessors
+under the Apache 2.0 licence (https://github.com/openwebos). Distributed by Lunacy as they
+shipped, as abandonware.
+Third-party libraries from the same device, each under its own licence: GLib, GIO, GObject,
+GModule, GThread, glibmm, giomm and libsigc++ (LGPL 2.1), Boost 1.39 (Boost Software
+Licence), ICU 3.6 (ICU licence), jemalloc (BSD), c-ares (MIT), cJSON / mjson (MIT).
+/usr/lib/ssl11 and /usr/lib/ssl11mail: OpenSSL 1.1 (OpenSSL / SSLeay licence), curl 4.5.0
+(curl licence) and the webOS CE community's libssl_compat shim and mailssl.cnf, from the
+reference TouchPad, where webOS CE runs the mail services on them for TLS 1.2.
 NOTICE
 
 # OpenAL's configuration, as the TouchPad had it: its OpenAL Soft 1.11 (the PDK runtime's

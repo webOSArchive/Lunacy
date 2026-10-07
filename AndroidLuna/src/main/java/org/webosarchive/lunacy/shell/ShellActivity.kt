@@ -35,6 +35,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var addedLaunchPoints: org.webosarchive.lunacy.card.LaunchPoints
     private lateinit var packages: Packages
     private lateinit var jsServices: org.webosarchive.lunacy.card.JsServices
+    /** The TouchPad's native system services (mail, the file cache), from the webOS root. */
+    private lateinit var nativeServices: org.webosarchive.lunacy.card.NativeServices
+    private val activityManager by lazy { org.webosarchive.lunacy.card.ActivityManager(this) }
     private lateinit var webos: org.webosarchive.lunacy.card.WebosRoot
     private lateinit var mediaServer: org.webosarchive.lunacy.card.MediaServer
     private lateinit var configurator: org.webosarchive.lunacy.card.Configurator
@@ -151,11 +154,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // (again after an update) off the main thread, below; a service's first call and a
         // package script wait for it (WebosRoot.prepare is synchronized).
         webos = org.webosarchive.lunacy.card.WebosRoot(this, bus, installed).apply { lunaSend.start() }
+        // Its /etc/resolv.conf and CA bundle, from Android's network and trust store.
+        org.webosarchive.lunacy.card.HostNetwork(this, webos.root).start()
         // What webOS's syslogd kept, and novacomd's device side: the SDK's tools over adb.
         org.webosarchive.lunacy.card.SysLog.start(webos.root)
         org.webosarchive.lunacy.card.Novacom(webos) { org.webosarchive.lunacy.card.DeviceProfile.nduid(this) }.start()
         files = AppFiles(assets, installed, webos.root, java.io.File(applicationInfo.sourceDir))
         jsServices = org.webosarchive.lunacy.card.JsServices(bus, files.root, webos)
+        nativeServices = org.webosarchive.lunacy.card.NativeServices(bus, webos) { pdkRuntime }
         server = AppServer(assets, files, jsServices.root, java.io.File(filesDir, "framework-art"))
         mediaServer = org.webosarchive.lunacy.card.MediaServer(jsServices.root)
         registry = AppRegistry(files)
@@ -170,7 +176,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             files.warm()
             Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "webOS root ready in ${System.currentTimeMillis() - t} ms")
             // What the ROM brought: its services and their db8 kinds, and any system apps.
-            runOnUiThread { jsServices.reload(); appsChanged(); FontWarmer(this, server).warmWhenIdle() }
+            // The persisted activities come back once the kinds are registered (appsChanged
+            // runs the configurator, whose db8 work is queued before the activity manager's find).
+            runOnUiThread { jsServices.reload(); nativeServices.reload(); appsChanged(); activityManager.restore(); FontWarmer(this, server).warmWhenIdle() }
         }, "webos-root").start()
 
         // The dock draws an icon being dragged out of it above its own bounds.
@@ -355,6 +363,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         for (w in running.values.flatten()) { (w.parent as? android.view.ViewGroup)?.removeView(w); w.destroy() }
         running.clear()
         if (::jsServices.isInitialized) jsServices.stopAll()
+        if (::nativeServices.isInitialized) nativeServices.stopAll()
         if (::webos.isInitialized) webos.lunaSend.stop()
         if (::audio.isInitialized) audio.close()
         sounds.release()
@@ -1718,7 +1727,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // Secrets, where the accounts service keeps each account's credentials.
         org.webosarchive.lunacy.card.KeyManager(java.io.File(filesDir, "keymanager.json")).register(bus)
         org.webosarchive.lunacy.card.DeviceProfileService(this, profile).register(bus)
-        org.webosarchive.lunacy.card.ActivityManager().register(bus)
+        activityManager.register(bus)
         // webOS's downloader, which apps hand every file fetch to: drPodder's episodes and
         // album art, MeTube's "download first". It writes into the webOS tree.
         org.webosarchive.lunacy.card.DownloadManager(jsServices.root).register(bus)

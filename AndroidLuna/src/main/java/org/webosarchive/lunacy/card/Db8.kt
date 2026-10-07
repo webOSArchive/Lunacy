@@ -31,7 +31,9 @@ class Db8(private val service: String, file: File?) {
 
     private class IndexProp(val name: String, val collate: String?)
     private class Index(val name: String, val props: List<IndexProp>)
-    private class Kind(val id: String, val owner: String, val extends: List<String>, val indexes: List<Index>, val spec: JSONObject)
+    /** A revision set: [name] holds the _rev at which any of [props] last changed. */
+    private class RevSet(val name: String, val props: List<String>)
+    private class Kind(val id: String, val owner: String, val extends: List<String>, val indexes: List<Index>, val revSets: List<RevSet>, val spec: JSONObject)
     private class Clause(val prop: String, val op: String, val value: Any?)
     private class Watch(val call: Bus.Call, val kinds: Set<String>, val where: List<Clause>)
     /** A reply with its db8 error, thrown from deep inside an operation. */
@@ -118,13 +120,23 @@ class Db8(private val service: String, file: File?) {
             for (i in 0 until a.length()) {
                 val ix = a.getJSONObject(i)
                 val props = ArrayList<IndexProp>()
+                // An index that includes deleted objects leads with _del, as db8's did.
+                if (ix.optBoolean("incDel")) props += IndexProp("_del", null)
                 ix.optJSONArray("props")?.let { pa -> for (j in 0 until pa.length()) pa.getJSONObject(j).let { props += IndexProp(it.getString("name"), it.optString("collate").ifEmpty { null }) } }
                 indexes += Index(ix.optString("name"), props)
             }
         }
         val ext = ArrayList<String>()
         p.optJSONArray("extends")?.let { a -> for (i in 0 until a.length()) ext += a.getString(i) }
-        return Kind(p.getString("id"), p.optString("owner"), ext, indexes, p)
+        val revSets = ArrayList<RevSet>()
+        p.optJSONArray("revSets")?.let { a ->
+            for (i in 0 until a.length()) {
+                val rs = a.getJSONObject(i)
+                val props = rs.optJSONArray("props")?.let { pa -> (0 until pa.length()).map { pa.getJSONObject(it).getString("name") } }.orEmpty()
+                revSets += RevSet(rs.getString("name"), props)
+            }
+        }
+        return Kind(p.getString("id"), p.optString("owner"), ext, indexes, revSets, p)
     }
 
     private fun kind(id: String) = kinds[id] ?: throw DbError(-3970, "kind not registered: '$id'")
@@ -198,6 +210,27 @@ class Db8(private val service: String, file: File?) {
         return if (kind != null && kind in kinds) objects(kind)[id] else null
     }
 
+    /**
+     * db8's revision sets (MojDbRevisionSet), for the kind and every kind it extends: a new
+     * object, or one where any prop of a set changed, gets that set's prop set to its new
+     * _rev; otherwise the prop keeps whatever the object carries. The mail services watch
+     * these (ImapConfigRev, UpsyncRev, _revSmtp) to hear of changes they must act on.
+     */
+    private fun applyRevSets(old: JSONObject?, o: JSONObject) {
+        val seen = HashSet<String>()
+        val todo = ArrayDeque<String>().apply { add(o.optString("_kind")) }
+        while (todo.isNotEmpty()) {
+            val k = kinds[todo.removeFirst()] ?: continue
+            if (!seen.add(k.id)) continue
+            todo.addAll(k.extends)
+            for (rs in k.revSets) {
+                if (old == null || rs.props.any { p -> valueText(old, p) != valueText(o, p) }) o.put(rs.name, o.getLong("_rev"))
+            }
+        }
+    }
+
+    private fun valueText(o: JSONObject, path: String): String? = value(o, path)?.toString()
+
     private fun store(o: JSONObject) {
         val id = o.getString("_id"); val kind = o.getString("_kind")
         db.insertWithOnConflict("objects", null, ContentValues().apply { put("id", id); put("kind", kind); put("json", o.toString()) }, SQLiteDatabase.CONFLICT_REPLACE)
@@ -228,6 +261,7 @@ class Db8(private val service: String, file: File?) {
             for ((old, o) in prepared) {
                 if (!o.has("_id")) o.put("_id", newId())
                 o.put("_rev", nextRev())
+                applyRevSets(old, o)
                 if (old != null && old.optString("_kind") != o.optString("_kind")) purge(old)
                 store(o)
                 results.put(JSONObject().put("id", o.getString("_id")).put("rev", o.getLong("_rev")))
@@ -272,6 +306,7 @@ class Db8(private val service: String, file: File?) {
                         ?: throw DbError(-3950, "db: object not found")
                     checkAccess(caller, kindId, "create")
                     val o = JSONObject(patch.toString()).put("_rev", nextRev())
+                    applyRevSets(null, o)
                     store(o)
                     changed(null, o)
                     results.put(JSONObject().put("id", o.getString("_id")).put("rev", o.getLong("_rev")))
@@ -291,6 +326,7 @@ class Db8(private val service: String, file: File?) {
         val o = JSONObject(old.toString())
         deepMerge(o, props)
         o.put("_id", old.getString("_id")).put("_kind", old.getString("_kind")).put("_rev", nextRev())
+        applyRevSets(old, o)
         store(o)
         changed(old, o)
         return o
@@ -330,6 +366,7 @@ class Db8(private val service: String, file: File?) {
     private fun delOne(old: JSONObject, purge: Boolean): JSONObject? {
         if (purge) { purge(old); changed(old, null); return null }
         val o = JSONObject(old.toString()).put("_del", true).put("_rev", nextRev())
+        applyRevSets(old, o)
         store(o)
         changed(old, o)
         return o
@@ -369,9 +406,10 @@ class Db8(private val service: String, file: File?) {
         val where = clauses(q.optJSONArray("where"))
         val filter = clauses(q.optJSONArray("filter"))
         val orderBy = q.optString("orderBy").ifEmpty { null }
-        val incDel = q.optBoolean("incDel")
+        // A query that names _del (an index that includes deleted objects) gets them as it asks.
+        val incDel = q.optBoolean("incDel") || (where + filter).any { it.prop == "_del" }
         if (validate) {
-            if (incDel && orderBy != null) throw DbError(-3978, "db: query order not compatible with where clause")
+            if (q.optBoolean("incDel") && orderBy != null) throw DbError(-3978, "db: query order not compatible with where clause")
             if (!indexed(k, where, orderBy)) throw DbError(-3965, "db: no index for query")
         }
         val family = family(from)
@@ -396,7 +434,9 @@ class Db8(private val service: String, file: File?) {
         val range = where.filter { it.op != "=" }.map { it.prop }.toSet()
         if (range.size > 1) return false
         return k.indexes.any { ix ->
-            val props = ix.props.map { it.name }
+            // An index leading with _del serves a query that doesn't name it, which db8 asks
+            // of it as _del = false.
+            val props = ix.props.map { it.name }.let { if (it.firstOrNull() == "_del" && "_del" !in eq && "_del" !in range) it.drop(1) else it }
             if (props.size < eq.size || props.take(eq.size).toSet() != eq) return@any false
             val next = props.getOrNull(eq.size)
             when {
@@ -413,6 +453,8 @@ class Db8(private val service: String, file: File?) {
     }
 
     private fun value(o: JSONObject, path: String): Any? {
+        // Every object is deleted or not: db8 indexed a live one as _del false.
+        if (path == "_del") return o.optBoolean("_del")
         var cur: Any? = o
         for (part in path.split('.')) cur = (cur as? JSONObject)?.opt(part) ?: return null
         return if (cur == JSONObject.NULL) null else cur

@@ -1,12 +1,9 @@
 package org.webosarchive.lunacy.card
 
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
-import java.io.OutputStream
 import java.util.concurrent.Executors
 
 /**
@@ -20,7 +17,6 @@ import java.util.concurrent.Executors
 class JsServices(private val bus: Bus, private val installed: File, private val webos: WebosRoot) {
     /** Lunacy's copy of the webOS filesystem that services see (frameworks, /media/internal, curl). */
     val root get() = webos.root
-    private val main = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
     /** Bus name to its package's directory, as a webOS path. Main thread. */
     private val names = HashMap<String, String>()
@@ -86,105 +82,22 @@ class JsServices(private val bus: Bus, private val installed: File, private val 
         p.request(call)
     }
 
-    /** One service package's Node process. Its stdin and stdout carry the bus, one JSON object per line. */
-    private inner class Proc(val dir: String, val name: String) {
-        private var process: Process? = null
-        private var stdin: OutputStream? = null
-        private var ended = false
-        private val queue = ArrayList<String>()           // lines waiting for the process to start
-        private val requests = HashMap<Int, Bus.Call>()    // calls into the service, by id
-        private val outgoing = HashMap<String, Bus.Call>() // the service's own calls, by its id
-        private var nextId = 1
-
-        init { worker.execute { start() } }
-
-        private fun start() {
-            try {
-                webos.prepare()
-                if (!webos.node.isFile) throw IOException("no Node runtime in this build (${webos.node.path})")
-                val pb = ProcessBuilder(webos.node.path, File(webos.host, "host.js").path, root.path, dir).directory(root)
-                pb.environment().apply {
-                    // Its own luna-send calls, and its child processes', come from the service.
-                    putAll(webos.environment(name))
-                    put("LD_LIBRARY_PATH", webos.nativeDir)
-                }
-                val p = pb.start()
-                Log.i(AppServer.TAG, "js service $name started ($dir)")
-                Thread({ p.errorStream.bufferedReader().forEachLine { Log.i(AppServer.TAG, "svc [$name] $it") } }, "svc-err").start()
-                Thread({
-                    p.inputStream.bufferedReader().forEachLine { line -> main.post { receive(line) } }
-                    val code = try { p.waitFor() } catch (e: InterruptedException) { -1 }
-                    main.post { exited("exit $code") }
-                }, "svc-out").start()
-                main.post {
-                    // Stopped while it was still starting: the process must not be left running.
-                    if (ended) { p.destroy(); return@post }
-                    process = p; stdin = p.outputStream
-                    queue.forEach { write(it) }; queue.clear()
-                }
-            } catch (e: Exception) {
-                Log.w(AppServer.TAG, "js service $name can't start: $e")
-                main.post { exited("can't start: ${e.message}") }
+    /** One service package's Node process (ServiceProcess carries its bus). */
+    private inner class Proc(val dir: String, name: String) {
+        private val link = ServiceProcess(bus, name, "js service", worker, start = {
+            webos.prepare()
+            if (!webos.node.isFile) throw IOException("no Node runtime in this build (${webos.node.path})")
+            val pb = ProcessBuilder(webos.node.path, File(webos.host, "host.js").path, root.path, dir).directory(root)
+            pb.environment().apply {
+                // Its own luna-send calls, and its child processes', come from the service.
+                putAll(webos.environment(name))
+                put("LD_LIBRARY_PATH", webos.nativeDir)
             }
-        }
+            pb.start()
+        }, onEnded = { if (running[dir] == this) running.remove(dir) })
 
-        fun request(call: Bus.Call) {
-            if (ended) return call.reply(Bus.error("Service does not exist: ${call.service}."))
-            val id = nextId++
-            requests[id] = call
-            val slash = call.method.lastIndexOf('/')
-            val category = if (slash > 0) "/" + call.method.substring(0, slash) else "/"
-            send(JSONObject().put("t", "request").put("id", id).put("service", call.service)
-                .put("category", category).put("method", call.method.substring(slash + 1))
-                .put("payload", call.params.toString()).put("sender", call.appId)
-                .put("subscribe", call.subscribe).put("outside", !call.privateBus))
-            call.onCancel { if (requests.remove(id) != null) send(JSONObject().put("t", "cancel").put("id", id)) }
-        }
-
-        private fun receive(line: String) {
-            val m = try { JSONObject(line) } catch (e: Exception) { Log.i(AppServer.TAG, "svc [$name] $line"); return }
-            when (m.optString("t")) {
-                "response" -> requests[m.optInt("id")]?.let { c ->
-                    if (!c.subscribe) requests.remove(m.optInt("id"))
-                    c.reply(m.optString("payload"))
-                }
-                // The service calls the bus itself (PalmCall): as its own caller, by its service name.
-                "call" -> {
-                    val id = m.optString("id")
-                    val sub = m.optBoolean("subscribe")
-                    val c = bus.call(name, m.optString("url"), m.optString("payload"), privateBus = true) { reply ->
-                        send(JSONObject().put("t", "callResponse").put("id", id).put("payload", reply).put("subscribe", sub).put("sender", ""))
-                    }
-                    if (sub && !c.cancelled) outgoing[id] = c
-                }
-                "cancelCall" -> outgoing.remove(m.optString("id"))?.cancel()
-                "ready" -> Log.i(AppServer.TAG, "js service $name ready")
-            }
-        }
-
-        private fun send(m: JSONObject) {
-            val line = m.toString()
-            if (stdin == null) queue += line else write(line)
-        }
-
-        private fun write(line: String) = try {
-            stdin?.apply { write((line + "\n").toByteArray()); flush() }
-        } catch (e: IOException) { Log.w(AppServer.TAG, "js service $name: $e") }
-
-        fun stop() = exited("stopped")
-
-        /** The process is gone (or is to go): open calls get an error, the service's own calls end. */
-        private fun exited(why: String) {
-            if (ended) return
-            ended = true
-            try { stdin?.close() } catch (e: IOException) {}
-            process?.destroy()
-            if (running[dir] == this) running.remove(dir)
-            Log.i(AppServer.TAG, "js service $name ended: $why")
-            requests.values.toList().also { requests.clear() }.forEach { it.reply(Bus.error("Service exited: ${it.service}.")) }
-            outgoing.values.toList().also { outgoing.clear() }.forEach { it.cancel() }
-            queue.clear()
-        }
+        fun request(call: Bus.Call) = link.request(call)
+        fun stop() = link.stop()
     }
 
     companion object { const val SERVICES = "usr/palm/services" }

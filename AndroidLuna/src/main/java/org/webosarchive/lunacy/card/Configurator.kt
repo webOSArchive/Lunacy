@@ -29,6 +29,14 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
                 Log.i(AppServer.TAG, "configurator: $id has ${it.size} activities, not supported yet")
             }
         }
+        // /etc/palm/db_kinds, the device's other kind folder: kind files with no folder for
+        // permissions, which the native services own (the mail transports' kinds). After the
+        // apps, since they extend kinds an app owns (com.palm.imap.account extends the Email
+        // app's com.palm.mail.account).
+        if (system != null) {
+            val kinds = parseFiles(File(system, "etc/palm/db_kinds"), "/etc/palm/db_kinds") { text, _ -> JSONObject(text) }
+            if (kinds.isNotEmpty()) db.configure(kinds, emptyList())
+        }
         // Services come from packages, or from the webOS root's /usr/palm/services.
         (File(files.root, JsServices.SERVICES).listFiles().orEmpty().toList() +
             (system?.let { File(it, JsServices.SERVICES).listFiles() }.orEmpty())).forEach { dir ->

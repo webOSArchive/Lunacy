@@ -75,7 +75,10 @@ class ConnectionManager(private val context: Context) {
                 .put("bssid", info.bssid.orEmpty().uppercase())
                 .put("networkConfidenceLevel", when (WifiManager.calculateSignalLevel(info.rssi, 3)) { 2 -> "excellent"; 1 -> "fair"; else -> "poor" })
                 .put("onInternet", "yes")
-                .put("isWakeOnWifiEnabled", false)
+                // The reference TouchPad answers true (measured 2026-10-07), and Android keeps
+                // Wi-Fi connected while the screen is off, so it is true here too. The mail
+                // services hold an IMAP IDLE (push) only over an interface that says so.
+                .put("isWakeOnWifiEnabled", true)
         } else down
         val wan = if (active?.isConnected == true && active.type == ConnectivityManager.TYPE_MOBILE)
             JSONObject().put("state", "connected").put("onInternet", "yes") else JSONObject().put("state", "disconnected")

@@ -79,7 +79,16 @@ class ActivityManager(private val context: Context) {
     private val activities = LinkedHashMap<Int, Activity>()
     private val byName = HashMap<String, Activity>()
     private var nextId = 1
-    /** Activities only run once the persisted ones are back: webOS waited for boot and the configurator. */
+    /**
+     * Two steps, as webOS's activity manager took them. It read its persisted activities
+     * before it went on the bus, so an id it handed out never clashed with one it was about to
+     * restore: here calls wait until they are read ([loaded]). And it ran none until boot had
+     * finished and the configurator had run: here until the webOS root and its native
+     * services are up ([enable]), or a restored callback to a service not yet on the bus
+     * would fail for good.
+     */
+    private var loaded = false
+    private val held = ArrayList<() -> Unit>()
     private var enabled = false
     private val waitingForEnable = ArrayList<Activity>()
 
@@ -95,12 +104,13 @@ class ActivityManager(private val context: Context) {
             "focus" to ::focus, "unfocus" to ::unfocus, "addFocus" to ::addFocus,
             "list" to ::list, "getDetails" to ::getDetails,
             "enable" to { c -> c.reply(Bus.ok()) }, "disable" to { c -> c.reply(Bus.ok()) },
-        )) bus.register(SERVICE, m, Bus.CallHandler { h(it) })
+        )) bus.register(SERVICE, m, Bus.CallHandler { c -> if (loaded) h(c) else held += { h(c) } })
         for (m in listOf("associateApp", "associateService", "associateProcess", "associateNetworkFlow",
                 "dissociateApp", "dissociateService", "dissociateProcess", "dissociateNetworkFlow", "unmapProcess"))
             bus.register(SERVICE, m, Bus.CallHandler { it.reply(Bus.ok()) })
         watchNetwork()
         watchBattery()
+        load()
     }
 
     // ---- identity and lookup ----
@@ -878,12 +888,19 @@ class ActivityManager(private val context: Context) {
     }
 
     /**
-     * Brings back the persisted activities, with their ids, and then lets activities run: called
-     * once the webOS root's kinds are registered. Each is started, so its trigger and schedule
-     * are armed again; with no subscribers, its callback is how its service hears of it.
+     * Lets activities run: called once the webOS root's services are on the bus. Each
+     * restored activity is started, so its trigger and schedule are armed again; with no
+     * subscribers, its callback is how its service hears of it.
      */
-    fun restore() {
+    fun enable() {
         if (enabled) return
+        enabled = true
+        Log.i(AppServer.TAG, "activities: running")
+        waitingForEnable.toList().also { waitingForEnable.clear() }.forEach { if (activities[it.id] === it) start(it) }
+    }
+
+    /** Reads the persisted activities back, with their ids, then answers the calls held meanwhile. */
+    private fun load() {
         val found = ArrayList<JSONObject>()
         fun page(token: String?) {
             val q = JSONObject().put("from", KIND)
@@ -917,9 +934,9 @@ class ActivityManager(private val context: Context) {
             waitingForEnable += a
             n++
         }
-        enabled = true
+        loaded = true
         Log.i(AppServer.TAG, "activities: $n restored")
-        waitingForEnable.toList().also { waitingForEnable.clear() }.forEach { if (activities[it.id] === it) start(it) }
+        held.toList().also { held.clear() }.forEach { it() }
     }
 
     private fun error(code: Int, text: String) =

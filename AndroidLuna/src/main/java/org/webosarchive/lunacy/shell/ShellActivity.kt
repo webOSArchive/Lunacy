@@ -176,9 +176,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             files.warm()
             Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "webOS root ready in ${System.currentTimeMillis() - t} ms")
             // What the ROM brought: its services and their db8 kinds, and any system apps.
-            // The persisted activities come back once the kinds are registered (appsChanged
-            // runs the configurator, whose db8 work is queued before the activity manager's find).
-            runOnUiThread { jsServices.reload(); nativeServices.reload(); appsChanged(); activityManager.restore(); FontWarmer(this, server).warmWhenIdle() }
+            // Activities run once the root's services are on the bus, as webOS's waited for boot.
+            runOnUiThread { jsServices.reload(); nativeServices.reload(); appsChanged(); activityManager.enable(); FontWarmer(this, server).warmWhenIdle() }
         }, "webos-root").start()
 
         // The dock draws an icon being dragged out of it above its own bounds.
@@ -1733,13 +1732,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // Secrets, where the accounts service keeps each account's credentials.
         org.webosarchive.lunacy.card.KeyManager(java.io.File(filesDir, "keymanager.json")).register(bus)
         org.webosarchive.lunacy.card.DeviceProfileService(this, profile).register(bus)
-        activityManager.register(bus)
         org.webosarchive.lunacy.card.NetTools(this).register(bus)
         // webOS's downloader, which apps hand every file fetch to: drPodder's episodes and
         // album art, MeTube's "download first". It writes into the webOS tree.
         org.webosarchive.lunacy.card.DownloadManager(jsServices.root).register(bus)
         val db8 = org.webosarchive.lunacy.card.Db8("com.palm.db", java.io.File(filesDir, "db8.sqlite")).also { it.register(bus) }
         val tempdb = org.webosarchive.lunacy.card.Db8("com.palm.tempdb", null).also { it.register(bus) }
+        // After db8: it reads its persisted activities back as it registers.
+        activityManager.register(bus)
         configurator = org.webosarchive.lunacy.card.Configurator(files, db8, tempdb, webos.root, bus)
         configurator.run()
         bus.register("com.palm.applicationManager", "launch", launchHandler)

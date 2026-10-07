@@ -24,8 +24,10 @@ Android, and the preload's seccomp and old-glibc answers. Every fix is in
 [fix-log.md](fix-log.md). The mail stack adds about 8 to 10 MB to the APK (ICU's data is 9 MB of
 it); codepoet: port what's needed, shrink later.
 
-Open: the compose card closing leaves the card view rather than Email's card (check against the
-TouchPad); attachments; the arm64 build (the services under qemu) and the Android 5 devices
+A card closed while it is up now goes back to the card it joined, as LunaSysMgr's
+`m_cardToRestoreToMaximized` did (codepoet watched compose return to the inbox on the TouchPad),
+and a bare target an installed app claims in `command-resource-handlers.json` opens there
+(`mailto:` in Email). Open: attachments; the arm64 build (the services under qemu) and the Android 5 devices
 untried; PmLogLib's levels need PmLogDaemon's shared memory, so only errors are logged unless a
 service is started with `files/pdk/args`; contacts are an empty store. Enyo patch 0006 is in
 webos-sdk-redux too (committed there, not pushed).

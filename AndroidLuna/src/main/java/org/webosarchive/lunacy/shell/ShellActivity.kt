@@ -37,6 +37,24 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var jsServices: org.webosarchive.lunacy.card.JsServices
     /** The TouchPad's native system services (mail, the file cache), from the webOS root. */
     private lateinit var nativeServices: org.webosarchive.lunacy.card.NativeServices
+    /**
+     * The app /usr/palm/command-resource-handlers.json (the reference TouchPad's, in the ROM)
+     * redirects a URL to, by its "redirects" patterns, or null.
+     */
+    private fun handlerFor(target: String): String? {
+        if (target.isEmpty()) return null
+        val f = java.io.File(webos.root, "usr/palm/command-resource-handlers.json")
+        val list = runCatching { JSONObject(f.readText()).optJSONArray("redirects") }.getOrNull() ?: return null
+        for (i in 0 until list.length()) {
+            val r = list.optJSONObject(i) ?: continue
+            val re = runCatching { Regex(r.optString("url"), RegexOption.IGNORE_CASE) }.getOrNull() ?: continue
+            if (re.containsMatchIn(target)) return r.optString("appId").ifEmpty { null }
+        }
+        return null
+    }
+
+    /** The app that launched each app, until that launch's card is shown (showAsCard). */
+    private val launchers = HashMap<String, String>()
     private val activityManager by lazy { org.webosarchive.lunacy.card.ActivityManager(this) }
     private lateinit var webos: org.webosarchive.lunacy.card.WebosRoot
     private lateinit var mediaServer: org.webosarchive.lunacy.card.MediaServer
@@ -501,7 +519,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * launcher did on webOS. Exhibition's launches didn't (codepoet): the app is started for
      * the dock, and only what it opens for the dock is shown.
      */
-    fun launch(appId: String, params: JSONObject? = null, startupCard: Boolean = true) {
+    fun launch(appId: String, params: JSONObject? = null, startupCard: Boolean = true, launcher: String? = null) {
+        // Who asked, for the card this launch brings (showAsCard): LunaSysMgr's launchingAppId.
+        if (launcher != null && launcher != appId) launchers[appId] = launcher else launchers.remove(appId)
         // An added launch point launches its app with its own params.
         addedById[appId]?.launchPoint?.let { lp -> launch(lp.appId, lp.paramsObject(), startupCard); return }
         androidById[appId]?.let { a -> if (!androidApps.launch(a)) systemBanner("", "Couldn't open ${a.title}"); return }
@@ -634,10 +654,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
         card.fullScreen = w.fullScreen && !w.emulated
         card.awaitingWindow = placeholder
-        // A card an app opens while its own card is up joins that card's group
+        // A card an app opens while its own card is up joins that card's group, and so does
+        // one an app opens for another app that launched it while that app's card was up
         // (CardWindowManager::prepareAddWindowSibling: the active card is focused and the
-        // launch came from the same app).
-        val up = cards.maximized?.takeIf { parent != null && it.window.appId == w.appId }
+        // window's launching app is its app). Closing it then comes back to that card.
+        val launcher = launchers.remove(w.appId)
+        val up = cards.maximized?.takeIf { (parent != null && it.window.appId == w.appId) || (launcher != null && it.window.appId == launcher) }
         cards.add(card, up)
         cards.openLaunching(card)
     }
@@ -1679,6 +1701,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 reply(Bus.ok(mapOf("processId" to "success")))
                 return@Handler
             }
+            // A bare target an installed app claims in the system's command-resource-handlers
+            // (mailto: is Email's), opened in that app, as webOS's application manager did.
+            handlerFor(p.optString("target"))?.takeIf { id.isEmpty() && registry.get(it) != null }?.let { app ->
+                launch(app, JSONObject().put("target", p.optString("target")), launcher = caller)
+                reply(Bus.ok(mapOf("processId" to "success")))
+                return@Handler
+            }
             // A link, an email, a phone number, a map: webOS's own apps owned these and Lunacy
             // doesn't have them, so Android's answer instead. See WebosLinks.
             val link = org.webosarchive.lunacy.card.WebosLinks.intentFor(id, params, p.optString("target"))
@@ -1701,7 +1730,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 reply(if (pdkRuntime.available) Bus.ok(mapOf("processId" to "success"))
                     else Bus.error("${registry.get(id)?.title} is a native app; this build of Lunacy can't run it"))
             }
-            else { launch(id, params); reply(Bus.ok(mapOf("processId" to "success"))) }
+            else { launch(id, params, launcher = caller); reply(Bus.ok(mapOf("processId" to "success"))) }
         }
         SystemProperties(this).register(bus)
         // webOS's preference and wallpaper store, and the two display settings Android lets

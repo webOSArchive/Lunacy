@@ -112,9 +112,16 @@ product; being "close enough" is not the goal.
 
 - **Card view.** Live cards that can be thrown away with a swipe up, stacked in groups the
   way LunaSysMgr grouped an app's cards, and reordered with a tap-and-hold.
-  - A card an app opens while its own card is up joins that card's group; anything else starts
-    a group just right of the active one. The active group fans; the others collapse to a
-    10 px stagger. A card dims to 0.8 when it stops being the active one.
+  - A card an app opens while its own card is up joins that card's group, and so does the card
+    of an app launched by the app whose card is up (LunaSysMgr's `launchingAppId`: the caller
+    of `applicationManager/open` or `launch`); anything else starts a group just right of the
+    active one. When a card that joined a group is closed while it is up, the shell goes to
+    the card view and, once that has settled, maximizes the card it joined again
+    (`m_cardToRestoreToMaximized`): Email's compose card closing after Send lands back on the
+    inbox, or on the app that asked for it (codepoet, on the reference TouchPad, 2026-10-07).
+    Minimizing, switching cards or another card arriving forgets it. The active group fans;
+    the others collapse to a 10 px stagger. A card dims to 0.8 when it stops being the active
+    one.
   - Chromium 37's WebView draws nothing when its view is turned by a negative angle or has an
     alpha below 1, so a tilted or see-through card is drawn from a hardware layer.
   - A card pulled off the bottom closes like one thrown off the top.

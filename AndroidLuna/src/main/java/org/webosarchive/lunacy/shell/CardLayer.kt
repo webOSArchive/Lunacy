@@ -704,6 +704,9 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
      * (CardWindowManager::prepareAddWindowSibling). Either way it becomes the active card.
      */
     fun add(card: Card, sibling: Card? = null) {
+        // The card it joins is the one to come back to when it goes (m_cardToRestoreToMaximized).
+        restoreTo = sibling?.takeIf { it.group != null }
+        restoreAfter = if (restoreTo != null) card else null
         val g = sibling?.group ?: Group().also { groups.add(activeGroup?.let { groups.indexOf(it) + 1 } ?: groups.size, it) }
         g.cards += card
         card.group = g
@@ -713,7 +716,21 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         setActiveGroup(g)
     }
 
+    /**
+     * LunaSysMgr's m_cardToRestoreToMaximized: a card that joined the focused card's group (its
+     * own app's, or one the focused app launched) remembers that card, and if it is closed while
+     * it is up, the shell goes to the card view and, once that has settled, maximizes the
+     * remembered card again (MinimizeState::animationsFinished). Email's compose card closing
+     * after Send lands back on the inbox that opened it, or on the app that asked for it
+     * (codepoet, on the reference TouchPad). Minimizing, switching cards or another card
+     * arriving forgets it.
+     */
+    private var restoreTo: Card? = null
+    private var restoreAfter: Card? = null
+
     fun remove(card: Card) {
+        val back = restoreTo?.takeIf { card == restoreAfter }
+        if (card == restoreAfter || card == restoreTo) { restoreTo = null; restoreAfter = null }
         val g = card.group ?: return
         val i = g.cards.indexOf(card)
         val activeIndex = g.cards.indexOf(g.active)
@@ -735,12 +752,15 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         // and everything slides to its place. A card that goes while it is up takes the shell
         // back to the card view (removeCardFromGroupMaximized).
         setActiveGroup(if (g.cards.isNotEmpty() && g == activeGroup) g else closestGroup())
-        if (wasUp) { if (cards.isNotEmpty()) showCardView() }
+        if (wasUp) {
+            if (cards.isNotEmpty()) showCardView { if (back?.group != null && maximized == null && activating == null) maximize(back) }
+        }
         else if (maximized == null && activating == null) slide()
     }
 
     fun maximize(card: Card) {
         val g = card.group ?: return
+        if (card != restoreAfter) { restoreTo = null; restoreAfter = null }
         maximized?.takeIf { it != card }?.chromeShown = false
         launching.remove(card)
         g.active = card
@@ -758,14 +778,15 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         }
     }
 
-    fun showCardView() {
+    fun showCardView(then: () -> Unit = {}) {
+        restoreTo = null; restoreAfter = null
         maximized?.chromeShown = false
         maximized = null
         activating = null
         topCard = null
         cards.forEach { it.visibility = View.VISIBLE }
         restack()
-        slide()
+        slide(done = then)
         listener.onCardView()
     }
 

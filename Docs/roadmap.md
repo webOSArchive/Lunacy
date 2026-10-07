@@ -3,7 +3,34 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-10-06)
+## Where things stand (2026-10-07)
+
+**2026-10-07: Email, on IMAP and SMTP** (codepoet: "get email ported", IMAP and SMTP only for
+now). Palm's Email (3.0.13600) is bundled, and the TouchPad's own native mail services run in
+Lunacy as they shipped: `mojomail-imap`, `mojomail-smtp` and `filecache`, under the PDK's glibc
+runtime with Lunacy's `liblunaservice.so` carrying the Luna bus ([architecture.md](architecture.md),
+"Native services"). On the Galaxy Tab A7 Lite (Android 14, natively under libenosys), with
+codepoet's Fastmail test account: Email's own wizard adds the account (Manual Setup, as on a
+TouchPad for a domain it can't guess), the inbox syncs, a message opens with its header over its
+body as on the reference TouchPad, a message composed in Email is sent and comes back, and new
+mail arrives by IMAP IDLE within a second with Email's new-mail icon. Built for it, all general:
+a native service host (D-Bus service files), the activity manager rebuilt to webOS's
+(triggers, schedules, callbacks, requirements, adopt/complete, persistence), much of db8
+(revSets, built-in `_id` and `incDel` indexes, index defaults, nested ids, permission
+inheritance), the file cache's types, `com.palm.nettools/findMxRecords`, the browser plugin's
+email object, header strip and `scrolledTo`, Enyo patch 0006 (a percentage height inside a
+flexed child is 0 px, as WebKit 534 had it), the root's `resolv.conf` and CA bundle from
+Android, and the preload's seccomp and old-glibc answers. Every fix is in
+[fix-log.md](fix-log.md). The mail stack adds about 8 to 10 MB to the APK (ICU's data is 9 MB of
+it); codepoet: port what's needed, shrink later.
+
+Open: the compose card closing leaves the card view rather than Email's card (check against the
+TouchPad); attachments; the arm64 build (the services under qemu) and the Android 5 devices
+untried; PmLogLib's levels need PmLogDaemon's shared memory, so only errors are logged unless a
+service is started with `files/pdk/args`; contacts are an empty store; Enyo patch 0006 into
+webos-sdk-redux.
+
+## Where things stood (2026-10-06)
 
 **2026-10-06: 0.6.1, a mini release for foldables** (codepoet): One UI asked to restart
 Lunacy ("This app can't be resized while running") when a foldable moved it between its

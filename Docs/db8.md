@@ -69,6 +69,33 @@ apart from ids, revisions and page tokens.
 - The `watch {query}` method replies `{"returnValue":true}`, then fires the same way.
 - Watches are one-shot: apps query again after `fired`.
 
+## What the mail services needed (2026-10-07)
+
+From Open webOS's db8 source (LG's release of HP's), and measured where marked:
+
+- **Every kind has db8's own `_id` index** (`MojDbKind::IdIndexJson`, `incDel`), so a query on
+  `_id` is always served.
+- **`incDel` indexes** lead with `_del`, and a query that doesn't name `_del` is served by
+  them as `_del = false`. A query that names `_del` (the mail services watch `_del` in
+  `[false, true]`) gets deleted objects too; a live object counts as `_del: false`.
+- **Revision sets** (`revSets`, `MojDbRevisionSet`): for the kind and the kinds it extends, a
+  new object, or one where any prop of a set changed, gets the set's prop set to its new
+  `_rev`; otherwise the prop keeps what the object carries. `ImapConfigRev`, `UpsyncRev`,
+  `_revSmtp` and `EmailProcessorRev` are how the mail services and Email hear of changes.
+- **Objects inside arrays get an `_id`** (`MojDb::assignIds`): the next number of the revision
+  counter, in hex. Measured: an account's capability provider is `{"_id": "44e", ...}` beside
+  the account's `_rev` 1101.
+- **A prop under an array of objects** is every element's value
+  (`capabilityProviders.capability`).
+- **An index prop's `default`** stands for a missing prop: Email finds its messages by
+  `flags.visible = true`, which is the default and never set.
+- **Permissions inherit:** a kind with no entry for the caller (exact, then the first matching
+  wildcard) takes its first super kind's answer (`MojDbKind::objectPermission`).
+- **merge creates** an object it doesn't find, with or without an `_id`, when it names a
+  `_kind` (`MojDb::putImpl` with the merge flag).
+- **search sorts what it finds** itself, so its `orderBy` needn't follow the index serving its
+  `where`, as `find`'s must.
+
 ## Not yet
 
 `getProperties` doesn't exist on the TouchPad either. Not built: `compact`, `dump` and

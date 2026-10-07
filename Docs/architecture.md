@@ -1126,17 +1126,112 @@ webOS apps could ship JS services (`usr/palm/services/<id>/`, with `services.jso
   - **Loopback server (ratchet item).** Other apps on the device could read `/media/internal`
     through it if they learned the port and token. Later targets can hand media players a
     content provider URI instead.
-- **Activity manager.** mojoservice wraps every command in a foreground activity, so
-  `com.palm.activitymanager` answers `create`, `start`, `complete`, `cancel` and `stop` with the
-  TouchPad's replies and events. Scheduled, triggered and callback activities return an error
-  until they're built.
+- **Activity manager.** mojoservice wraps every command in a foreground activity; see
+  "Activity manager" below for the whole service.
 - **System services.** The webOS root's own `/usr/palm/services` (the ROM's, or a package
   script's) register alongside installed packages'. A page's call reaches a service's private
   methods only if the app's id is privileged (`com.palm.*`, measured); services' own calls and
   `luna-send` are private, as on webOS.
-- **Not yet:** services in Mojo apps' own frameworks, db8 (next), `activitymanager` background
-  work, and a jail: services run with Lunacy's own permissions
-  (ratchet item).
+- **Not yet:** services in Mojo apps' own frameworks, and a jail: services run with Lunacy's
+  own permissions (ratchet item).
+
+## Native services
+
+The TouchPad's own C++ system services run as they shipped, under the PDK's glibc runtime
+([pdk.md](pdk.md)): today `mojomail-imap`, `mojomail-smtp` and `filecache`, with the libraries
+they link (libmojocore, libmojoluna, libmojodb, libemail-common, libpalmsocket, GLib, Boost,
+ICU 3.6, jemalloc, c-ares) and webOS CE's OpenSSL 1.1 shim for mail (`ssl11mail`, TLS 1.2), all
+in the ROM from the reference TouchPad.
+
+- **Started as ls-hubd started them.** `NativeServices` reads the webOS root's D-Bus service
+  files (`/usr/share/dbus-1/system-services/<name>.service`): `Name=` is the bus name, and
+  `Exec=` the command line, with its `env` assignments. The first call starts the binary
+  through the glibc loader (under libenosys from Android 10, under qemu on a 64-bit-only
+  device). The loader's own variables (`LD_LIBRARY_PATH`, `LD_PRELOAD`) are looked up in the
+  webOS root; every other webOS path the service opens goes through the runtime's preload.
+  A service exits on its own idle timer, and the next call starts it again.
+- **The bus.** Lunacy's `liblunaservice.so` (`LunaRuntimes/pdk/liblunaservice`) stands in for
+  the device's, which spoke to ls-hubd. It has the LS2 calls libmojoluna and filecache use
+  (`LSRegister`, `LSRegisterPalmService`, categories, `LSCall`/`LSCallOneReply`/
+  `LSCallFromApplication`, `LSMessage*`, subscriptions and their cancel function,
+  `LSGmainAttach`), with the TouchPad's structure layouts, and carries them over stdin and
+  stdout in the line protocol JS services speak (`ServiceProcess`, shared with `JsServices`).
+  A public method is on both connections and a private one on the private connection only,
+  as `LSPalmServiceRegisterCategory` registered them. `LSCallFromApplication` (a system
+  service calling on an app's behalf) is honoured.
+- **Logs.** The preload turns `syslog` into stderr lines, which the shell puts in
+  `/var/log/messages` (`palm-log`) and Android's log. PmLogLib finds no PmLogDaemon shared
+  memory and says so once (`sem_open error`); its own levels then leave only errors.
+  Development: `files/pdk/args/<bus name>` (in Lunacy's data, written with `run-as`) replaces a
+  service's arguments, e.g. `-c '{"log":{"appender":{"type":"stdout"},"levels":{"default":"debug"}}}'`.
+- **The network** is Android's: `HostNetwork` writes the root's `/etc/resolv.conf` from the
+  active network's DNS servers (and again when they change), and
+  `/etc/ssl/certs/ca-certificates.crt` from Android's trust store, the system's roots and the
+  user's.
+- **The file cache** (`com.palm.filecache`) keeps its objects under `/var/file-cache` in the
+  webOS root; the configurator defines its types at boot, as webOS's did, from
+  `/etc/palm/filecache_types` and packages' `configuration/filecache`. Pages read
+  `/var/file-cache/...` by path, as they did through `file://`.
+- **Ratchet item:** the services run with Lunacy's own permissions and see all of its data
+  directory, where a TouchPad ran them as root in a rootfs of their own.
+
+## Activity manager
+
+`palm://com.palm.activitymanager` (`ActivityManager.kt`) is webOS's scheduler of background
+work, built to Open webOS's activity manager (LG's Apache 2.0 release of HP's) and to the
+reference TouchPad where measured. An activity runs when its **trigger** has fired (a bus
+subscription, nearly always a db8 watch, matched by `key`, `compare` or `where`), its
+**schedule** is due (a start time, a smart or precise interval) and its **requirements** are
+met (`internet`, `wifi`, `wan`, their `*Confidence` levels from the connection manager;
+`charging` and `battery` from Android); running, it tells its subscribers `start` and calls its
+**callback** with `$activity`. Whoever handles it `adopt`s and `complete`s it, perhaps with
+`restart`, which arms it again (with an updated trigger, schedule or callback). `explicit` and
+`persist` activities re-arm when they end without a command to end them. One background
+activity runs at a time and two that a user started.
+
+- **Persistence.** `persist` activities are kept in db8 (`com.palm.activity:1`). They are read
+  back, with their ids, as the service registers, and calls wait until they are, as webOS's
+  read them before going on the bus; they run once the webOS root's services are up
+  (`enable`), as webOS's waited for boot. Restored activities have no subscribers: their
+  callbacks are how their services hear of them.
+- **Measured on the TouchPad:** create's `{"activityId","returnValue":true}`; events
+  `{"activityId","event","returnValue":true}`; `list`'s activity objects; an unknown id's
+  errorCode 2; and a `false` boolean requirement asks for nothing (the mail services ask
+  `{"internet": false}`), while any other value but `true` is refused.
+- Lunacy has one bus, so `type.bus` is kept but not enforced. Power locks (`type.power`) are
+  accepted and do nothing: the shell keeps Android awake its own way.
+
+## Email
+
+Palm's Email (`com.palm.app.email` 3.0.13600) is bundled, with IMAP and SMTP accounts through
+the TouchPad's own mail services. What it uses, and where Lunacy answers:
+
+- **Accounts.** Email's wizard adds an "Email Account" (the `com.palm.othermail` template)
+  through `com.palm.service.accounts` (the TouchPad's JS service): it asks
+  `com.palm.nettools/findMxRecords` (Lunacy's, a DNS query to Android's resolvers), validates
+  with `com.palm.imap/validateAccount` and `com.palm.smtp/validateAccount`, and the accounts
+  service creates the account, keeps the password in the key manager and calls the
+  transports' `accountCreated` and `accountEnabled`. The wizard is another page of Email's
+  shown by Enyo's `CrossAppUI` from the `file://` base path the application manager gives,
+  which the compat layer maps to the app's origin.
+- **Sync.** mojomail-imap lists the folders, fetches headers into db8 (`com.palm.imap.email`,
+  extending Email's `com.palm.email`), arms its watches and schedules as activities, and holds
+  an IMAP IDLE on the inbox for push when Wi-Fi is a persistent interface
+  (`isWakeOnWifiEnabled`, true as on the TouchPad). Email's own processor sets each message's
+  sort keys and inbox flags. Bodies are downloaded on demand into the file cache.
+- **Reading.** Email puts an `<object type="application/x-palm-email">` naming the body file into
+  its `enyo.WebView`, which webOS's browser drew itself. Lunacy's browser view (`BrowserViews`,
+  under Enyo patch 0005) builds the document it stood for (the body, the head and body
+  prefixes, inline images by content id), keeps the room `setHeaderHeight` asks for at its
+  top, clipped so the app's own header shows through and takes touches, and sends
+  `scrolledTo` so the header moves with the content. Email turns JavaScript off for the
+  message, so the room is part of the document. The header floats over the WebView only
+  because the TouchPad sized the WebView to 0 (Enyo patch 0006).
+- **Sending.** The compose window saves the message to the outbox; mojomail-smtp's outbox watch
+  fires, it sends (TLS, `AUTH LOGIN`) and moves the message to Sent, and mojomail-imap appends
+  it on the server.
+- **Not yet:** POP and Exchange (codepoet: IMAP and SMTP only for now); contacts (Email looks
+  up `com.palm.person`, which is there and empty); attachments haven't been tried.
 
 ## Mojo
 

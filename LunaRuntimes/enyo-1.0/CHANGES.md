@@ -210,9 +210,13 @@ whole pane and pushed the header out of sight below it.
 
 `enyo.FlexLayout.percentOfFlexed()` checks the engine once, on a hidden box: a child with
 `height: 100%` inside a flexed child of a 100 px vertical box. Where it comes out taller than
-0, `flowExtent` gives an in-flow child (not `absolute` or `fixed`) with a percentage height,
-inside a child it has flexed vertically, `height: 0px`, which is what the TouchPad computed.
-Engines that answer 0 are untouched.
+0, `flowExtent` gives a child with a percentage height, inside a child it has flexed
+vertically, `height: 0px`, which is what the TouchPad computed - once it is drawn, and only if
+it is in the flow. An absolutely placed child takes its percentage from its positioned
+container, after layout, on every engine; `enyo.Pane`'s views are absolute by their
+`enyo-view` class, which Pane adds after the flex pass, so the position is read from the drawn
+box rather than the control's own styles (Email's empty message pane lost its toolbar when it
+wasn't). Engines that answer 0 are untouched.
 
 Measured on 2026-10-07 with `Workbench/probe`'s webviewprobe (Email's pane, reduced): on the
 reference TouchPad the WebView is 1024 x 0 and its view 1024 x 700 at the pane's top, with the

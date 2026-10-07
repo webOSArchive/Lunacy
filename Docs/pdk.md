@@ -377,6 +377,17 @@ access, opendir, mkdir, unlink, rename and the rest. The runtime extraction lays
 fonts into the root's `usr/share/fonts`. Stock SDL's software pointer is hidden from the
 start, as webOS's SDL drew none.
 
+**The preload, for system services too** (2026-10-07, [architecture.md](architecture.md)
+"Native services"). The same preload carries what the TouchPad's 2011 system binaries assume of
+glibc and the kernel: nothrow `operator new` as GCC 4.3's libstdc++ had it (`malloc`; Palm's
+libmojocore defines the throwing one by calling it, and today's calls back); `pthread_atfork`,
+which glibc no longer exports; `send`, `recv` and `accept` as `sendto`, `recvfrom` and
+`accept4`, and the path calls (`mkdir`, `rmdir`, `unlink`, `chmod`, `chown`, `link`,
+`symlink`, `rename`, `access`, `readlink`) through their `*at` forms, since glibc makes ARM's
+legacy system calls for them and Android's app seccomp policy refuses those; `syslog` to
+stderr; and the webOS root for extended attributes, `statvfs`/`statfs`, `utime(s)`, `nftw`,
+`/etc/ssl`, `/etc/resolv.conf` and `/etc/hosts`.
+
 Dev tools: `LUNACY_GL_TRACE=1` in `files/pdk/env` logs every call's name from the app's
 side; `touch files/pdk/gldump` (as the app, `run-as`) logs one frame's commands with
 their first arguments from the shell's side; the first 20 GL errors are logged with the

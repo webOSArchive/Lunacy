@@ -268,6 +268,14 @@ A text button keeps its padding, so its client's margins stay inside it on both 
 
 **A deliberate delta, codepoet's decision, 2026-10-04 ("i like it").** On the reference TouchPad, holding on a web page's text in the Web app selects the word, shows both handles and a "Copy" popup over it, all at once (`Workbench/results/tp-sel-6-landscape.png`). In Lunacy the page is drawn by Android's own WebView (Enyo patch 0005), and holding on its text gives Android's selection: its teardrop handles and its floating toolbar. Fields - the Web app's address bar included, and every field in an app - behave as the TouchPad's (architecture.md, "Text editing"). The community's patch that adds a menu for holding on a page's white space is not reproduced either; the stock browser had none.
 
+### A14. Email's default signature
+
+**A deliberate delta, codepoet's decision, 2026-10-07 ("please break rule 0").** New mail from Palm's Email ends "-- Sent from Lunacy", where the TouchPad's said "-- Sent from my HP TouchPad". Email itself is unchanged: it takes its default signature from a `com.palm.app.email.carrier_defaults:1` record when there is one (`Launch._hookupCarrierSettings`, `AccountPreferences.getSignature`), which on webOS the customization service (`com.palm.service.customization`, the only writer the kind grants besides Email) wrote for a carrier's build. The TouchPad's customization data has no such record, so the TouchPad shows Palm's string. Lunacy's `Configurator.carrierDefaults` writes the record under the customization service's name at startup and after each install, the same object each time. A signature set on an account still wins, as it did over a carrier's.
+
+### A15. Editable boxes moved under half a device pixel
+
+**Done 2026-10-07 (compat), forced by the engine.** Chromium draws no caret at the start of a line in a contenteditable box when that start falls just past a device pixel on a screen with a fractional pixel ratio. Email's compose body on the Galaxy Tab A7 Lite (1.33) showed no caret on its empty first line until something was typed. Measured over DevTools by moving a box along the line: line starts at 399.03 and 403.02 device px drew no caret; at 400.36, 401.69 and 404.35 they did. The TouchPad drew it everywhere. `textedit.js` moves a focused editable box (not an input or a textarea, and not one the page transforms) with a `translateX` of under half a device pixel, which puts its line starts mid-pixel. Nothing moves by a whole pixel, and screens with a whole-number ratio are left alone. codepoet checked the caret by eye on the A7 Lite.
+
 ## B. The shell
 
 ### B1. Card view: stacks, reorder, dimming, the angry card

@@ -58,6 +58,11 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
 
     companion object {
         private const val TAG = "LunacyWeb"
+        /** The Prelude fonts, as every card has them (AppServer, tools/gen-fonts-css.py). */
+        private const val FONTS_LINK = "<link rel=\"stylesheet\" href=\"https://lunacy-fonts${AppServer.HOST_SUFFIX}/__lunacy/fonts.css\">"
+        /** Fonts the reference TouchPad had besides Prelude (/usr/share/fonts), by the names pages use. */
+        private val DEVICE_FONTS = setOf("arial", "verdana", "georgia", "times new roman", "times", "courier new", "courier",
+            "lucida console", "monospace")
         private var nextId = 1
         private var nextPage = 1
         /** Windows a page has opened, waiting for the card that will show them; by identifier. */
@@ -487,10 +492,37 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 var doc = if (type == "text/plain") "<html><head></head><body><div style=\"white-space:pre-wrap;word-wrap:break-word\">" +
                     linkify(escape(text)) + "</div></body></html>" else text.ifEmpty { "<html><head></head><body></body></html>" }
                 for (k in cids.keys()) doc = doc.replace(k, "file://" + cids.optString(k))
-                doc = insertAfter(doc, "<head[^>]*>", head) ?: "<head>$head</head>$doc"
+                doc = touchpadFonts(doc)
+                doc = insertAfter(doc, "<head[^>]*>", FONTS_LINK + head) ?: "<head>$FONTS_LINK$head</head>$doc"
                 doc = insertAfter(doc, "<body[^>]*>", top) ?: "$top$doc"
                 main.post { lastDoc = doc; loadDoc(doc) }
             }
+        }
+
+        /**
+         * The fonts an email names, as the TouchPad's QtWebKit drew them: only the first family
+         * of a list counts, and a name the device hasn't got - or a generic one, or a system-ui
+         * that WebKit 534 didn't know - draws Prelude (tools/gen-fonts-css.py, rule 3). Fastmail's
+         * "'Proxima Nova', system-ui, ..., Arial, sans-serif" is Prelude on the reference
+         * TouchPad, and was Android's Roboto here. Fonts the device had (Arial, Verdana,
+         * Georgia, Times, Courier, Lucida Console) keep their names, drawn by Android's own
+         * stand-ins for them. Prelude itself comes from fonts.css, which the document links.
+         */
+        private fun touchpadFonts(doc: String): String {
+            fun resolve(list: String): String {
+                val important = Regex("\\s*!important\\s*$", RegexOption.IGNORE_CASE).find(list)?.value.orEmpty()
+                val first = list.removeSuffix(important).split(',').firstOrNull()?.trim()?.trim('\'', '"').orEmpty()
+                val keep = first.lowercase().let { f -> f.startsWith("prelude") || f in DEVICE_FONTS }
+                return (if (keep) "'$first'" else "Prelude") + important
+            }
+            var out = Regex("(font-family\\s*:\\s*)([^;}\"<>]+)", RegexOption.IGNORE_CASE).replace(doc) { m ->
+                m.groupValues[1] + resolve(m.groupValues[2])
+            }
+            // The shorthand: the families follow the size (and line height).
+            out = Regex("(font\\s*:\\s*[^;}\"<>]*?\\d[\\w.%]*(?:\\s*/\\s*[\\d.]+[\\w%]*)?\\s+)([^;}\"<>]+)", RegexOption.IGNORE_CASE).replace(out) { m ->
+                m.groupValues[1] + resolve(m.groupValues[2])
+            }
+            return out
         }
 
         private fun insertAfter(doc: String, tag: String, what: String): String? =

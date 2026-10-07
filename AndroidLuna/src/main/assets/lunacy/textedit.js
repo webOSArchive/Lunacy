@@ -90,6 +90,35 @@
 	}
 	function plain(f) { return f.tagName === "INPUT" || f.tagName === "TEXTAREA"; }
 
+	// Chromium drops the caret at the start of a line in an editable box whose left edge
+	// falls just past a device pixel, on a screen with a fractional pixel ratio: Email's
+	// compose body (on the Galaxy Tab A7 Lite, 1.33) showed no caret on its empty first line,
+	// though typing worked, and showed it again 0.25 px further right. Measured 2026-10-07:
+	// line starts at 399.03 and 403.02 device px drew no caret; 400.36, 401.69 and 404.35 did.
+	// The TouchPad drew it everywhere. So a focused editable box is moved by under half a
+	// device pixel, putting its line starts mid-pixel; nothing on screen moves by a whole one.
+	// Not for a box the page itself transforms.
+	var gridded = null;
+	function alignToGrid(f) {
+		var ratio = window.devicePixelRatio || 1;
+		if (ratio === Math.round(ratio) || plain(f)) { return; }
+		if (gridded !== f) {
+			if (gridded) { gridded.style.webkitTransform = ""; }
+			gridded = null;
+			if (getComputedStyle(f).webkitTransform !== "none") { return; }
+		}
+		f.style.webkitTransform = "";
+		var cs = getComputedStyle(f);
+		var left = (f.getBoundingClientRect().left + parseFloat(cs.borderLeftWidth) + parseFloat(cs.paddingLeft)) * ratio;
+		var shift = 0.5 - (left - Math.floor(left));
+		f.style.webkitTransform = "translateX(" + (shift / ratio) + "px)";
+		gridded = f;
+	}
+	document.addEventListener("focusin", function (ev) {
+		var f = editableOf(ev.target);
+		if (f) { alignToGrid(f); }
+	}, true);
+
 	// An input or a textarea keeps its text where the page can't measure it, so a copy of it
 	// is laid over it for a moment - same box, same font, same scroll - and measured instead.
 	var PROPS = ["borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth",

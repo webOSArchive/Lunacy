@@ -29,8 +29,14 @@ A card closed while it is up now goes back to the card it joined, as LunaSysMgr'
 and a bare target an installed app claims in `command-resource-handlers.json` opens there
 (`mailto:` in Email). Open: attachments; the arm64 build (the services under qemu) and the Android 5 devices
 untried; PmLogLib's levels need PmLogDaemon's shared memory, so only errors are logged unless a
-service is started with `files/pdk/args`; contacts are an empty store. Enyo patch 0006 is in
-webos-sdk-redux too (committed there, not pushed).
+service is started with `files/pdk/args`; contacts are an empty store. Enyo patches 0006 and
+0007 are in webos-sdk-redux too (committed there, not pushed).
+
+codepoet's first look (2026-10-07), all fixed and checked by codepoet: a message's fonts are
+now the TouchPad's (Prelude for names it lacked), compose's "Subject:" label stays over the
+focused field (Enyo patch 0007, paint order), the compose body shows its caret on an empty
+line (a Chromium caret bug at fractional pixel ratios; luna-deltas A15), and new mail is
+signed "-- Sent from Lunacy" (luna-deltas A14).
 
 ## Where things stood (2026-10-06)
 

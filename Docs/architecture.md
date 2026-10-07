@@ -1234,6 +1234,11 @@ the TouchPad's own mail services. What it uses, and where Lunacy answers:
   `scrolledTo` so the header moves with the content. Email turns JavaScript off for the
   message, so the room is part of the document. The header floats over the WebView only
   because the TouchPad sized the WebView to 0 (Enyo patch 0006).
+  The document's fonts are resolved as the TouchPad's WebKit resolved them: a list's first
+  family, and Prelude for a name the device didn't have (Fastmail's mail is Prelude there).
+- **Composing.** The default signature is Lunacy's ("-- Sent from Lunacy", codepoet's rule 0
+  exception): the configurator writes Email's carrier-defaults record, as webOS's
+  customization service did for a carrier (luna-deltas A14).
 - **Sending.** The compose window saves the message to the outbox; mojomail-smtp's outbox watch
   fires, it sends (TLS, `AUTH LOGIN`) and moves the message to Sent, and mojomail-imap appends
   it on the server.

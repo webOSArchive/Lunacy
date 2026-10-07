@@ -226,6 +226,28 @@ the header at the pane's top.
 
 Files: `framework/source/base/layout/FlexLayout.js`, `framework/build/enyo-build.js`.
 
+### 0007-flex-overlap-paint-order.patch
+
+An item of a flexed box that a later item is pulled back over by a negative margin is painted
+over that item, as on the TouchPad.
+
+Email's compose view lays out its "Subject:" label and then the subject `Input`, whose
+`margin-left: -74px` takes it under the label, with padding to keep its text clear. The
+TouchPad's WebKit painted the items of an old `-webkit-box` as ordinary blocks, every
+background first and then every text, so the label's text stayed over the Input's background.
+Chromium paints each item whole, like an inline block, in order. The focused Input fills its
+box white from its border image (`input-focus.png`), and it covered the label until the field
+lost focus.
+
+After a flex layout flows its container, `enyo.FlexLayout.liftOverlapped` looks at the drawn
+items. An earlier, statically placed item that an item with a negative leading margin overlaps
+gets `position: relative`, which paints it over items in the flow on every engine. It gets no
+z-index, so nothing else is reordered. On an engine that paints the old way, the only change is
+that the lifted item's own background paints over the later item's too; the label has none.
+Checked by codepoet on the Galaxy Tab A7 Lite, 2026-10-07.
+
+Files: `framework/source/base/layout/FlexLayout.js`, `framework/build/enyo-build.js`.
+
 ## Added
 
 Nothing, since the rebase. `lib/networkproxy` (HP's network-proxy settings library, which the

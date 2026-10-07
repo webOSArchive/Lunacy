@@ -52,6 +52,12 @@ for prefix, italic, family, faces, regular in FAMILIES:
     for weight, n in ((400, regular), (700, "Bold")):
         face(family, weight, "normal", f"{prefix}-{n}.ttf")
         face(family, weight, "italic", f"{prefix}-{n}{italic}.ttf")
+    # A semibold 600 draws Prelude's Medium on the device, where Chromium would pick the Bold
+    # face: Fastmail's headings and <strong> (font-weight:600) came out Medium on the reference
+    # TouchPad (2026-10-07, Email's message view). Measured for Prelude only.
+    if family == "Prelude":
+        face(family, 600, "normal", f"{prefix}-{regular}.ttf")
+        face(family, 600, "italic", f"{prefix}-{regular}{italic}.ttf")
     # 1. Each face's full name, with a space or a hyphen, pins that face at every weight.
     #    The bold rule names the same file, so the WebView doesn't embolden it either.
     for n in faces:
@@ -66,7 +72,7 @@ UNKNOWN += [f"{fam}{sep}{n}" for fam in ("PreludeCondWGL", "PreludeCompWGL") for
             for n in ("Light", "Medium", "Bold", "Black")]
 UNKNOWN += ["Prelude Condensed Medium", "Prelude Condensed Bold", "Prelude-CondensedMedium", "Prelude-CondensedBold"]
 for alias in UNKNOWN:
-    for weight, n in ((400, "Medium"), (700, "Bold")):
+    for weight, n in ((400, "Medium"), (600, "Medium"), (700, "Bold")):
         face(alias, weight, "normal", f"Prelude-{n}.ttf")
         face(alias, weight, "italic", f"Prelude-{n}Oblique.ttf")
 

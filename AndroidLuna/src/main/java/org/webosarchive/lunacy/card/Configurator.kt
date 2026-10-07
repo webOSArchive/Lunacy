@@ -50,6 +50,7 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
         for (id in files.appIds()) defineTypes(files.list("${Packages.APPS}/$id/configuration/filecache").mapNotNull { name ->
             files.open("${Packages.APPS}/$id/configuration/filecache/$name")?.use { it.bufferedReader().readText() }
         })
+        carrierDefaults()
         // Services come from packages, or from the webOS root's /usr/palm/services.
         (File(files.root, JsServices.SERVICES).listFiles().orEmpty().toList() +
             (system?.let { File(it, JsServices.SERVICES).listFiles() }.orEmpty())).forEach { dir ->
@@ -116,5 +117,27 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
         }
     }
 
-    private companion object { const val CONFIGURATOR = "com.palm.configurator" }
+    /**
+     * Email's carrier defaults, which webOS's customization service wrote for a carrier's
+     * build (the kind grants it alone besides Email): Email takes its default signature from
+     * the record, and "-- Sent from my HP TouchPad" only when there is none. Lunacy's says
+     * Lunacy: codepoet's exception to rule 0 (2026-10-07, Docs/luna-deltas.md). Written as the
+     * customization service, once Email's kind is registered; the same record each time.
+     */
+    private fun carrierDefaults() {
+        val bus = bus ?: return
+        if (EMAIL !in files.appIds()) return
+        val sig = JSONObject().put("_id", "lunacy-email-carrier-defaults").put("_kind", "$EMAIL.carrier_defaults:1")
+            .put("defaultSignature", "-- Sent from Lunacy")
+        bus.call(CUSTOMIZATION, "palm://com.palm.db/merge", JSONObject().put("objects", JSONArray().put(sig)).toString(),
+            privateBus = true) { reply ->
+            if (!reply.contains("\"returnValue\":true")) Log.w(AppServer.TAG, "configurator: carrier defaults: $reply")
+        }
+    }
+
+    private companion object {
+        const val CONFIGURATOR = "com.palm.configurator"
+        const val CUSTOMIZATION = "com.palm.service.customization"
+        const val EMAIL = "com.palm.app.email"
+    }
 }

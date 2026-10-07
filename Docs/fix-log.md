@@ -208,6 +208,8 @@ fixed-viewport fallback is allowed).
 | 2026-10-07 | Compose: `Cannot read properties of undefined (reading 'wallpaperFile')` | Email's compose window | a device always has a `wallpaper` preference; Lunacy had one only once picked | bus (systemservice answers Lunacy's default wallpaper) |
 | 2026-10-07 | Push never starts: `can't push; no persistent interface` | mojomail-imap | Lunacy said `isWakeOnWifiEnabled: false`; the reference TouchPad says true | bus (connectionmanager, measured) |
 | 2026-10-07 | Persisted activities vanish after a restart | mojomail's "IMAP idle setup" | activities created before the restore took ids the restore then found taken, and dropped | bus (the activity manager reads its store before answering, and runs activities once the services are up) |
+| 2026-10-07 | Sending a mail leaves the card view where the TouchPad goes back to the inbox | Email's compose card (any card an app opens over its own, or one an app launches) | LunaSysMgr remembered the card a sibling card joined and maximized it again when that card closed (`m_cardToRestoreToMaximized`); Lunacy only went to the card view (codepoet, on the reference TouchPad) | shell (CardLayer, and the launching app carried with a launch) |
+| 2026-10-07 | A `mailto:` link opens Android's mail app though Email is installed | any app opening a bare `mailto:` target | webOS's application manager resolved bare targets through `/usr/palm/command-resource-handlers.json` | bus (applicationManager/open consults the ROM's handlers before Android) |
 
 ## Known gaps, by the layer they belong to
 

@@ -5,6 +5,20 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-10-07)
 
+**2026-10-07: Calendar, local only** (codepoet: share code with webOS CE's cleaned-up
+Calendar; no syncing in this pass). webOS CE's Calendar 3.2.0 is bundled unchanged, with the
+TouchPad's `calendar` library and its reminders service. On the A7 Lite: first launch offers
+"On This Device", the day view draws, an event saves, its reminder fires on time with the
+TouchPad's alert (Snooze, Dismiss), and the icon shows the date. Built for it, all general: the
+profile account webOS's boot job made, `configuration/activities`, boot activities that run once,
+`$activity` in launch params, the default launch point's icon, `getTimeZoneRules`, db8's `multi`
+props; see [architecture.md](architecture.md), "Calendar", and [fix-log.md](fix-log.md). The half-hour
+dividers were a fixed 965 px, the TouchPad's width; webOS CE's Calendar now runs them to the
+day's edge on any screen (checked on both). Saving an event scrolled the day view back to midnight,
+HP's bug (the hours scroller re-measured itself while hidden); the webOS CE project fixed it and
+Lunacy carries the fix. The reminder alert now sits inset from the corner, as on the TouchPad.
+Open: repeats, snooze, and the other devices untried (week and month views draw).
+
 **2026-10-07: Email, on IMAP and SMTP** (codepoet: "get email ported", IMAP and SMTP only for
 now). Palm's Email (3.0.13600) is bundled, and the TouchPad's own native mail services run in
 Lunacy as they shipped: `mojomail-imap`, `mojomail-smtp` and `filecache`, under the PDK's glibc

@@ -195,7 +195,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "webOS root ready in ${System.currentTimeMillis() - t} ms")
             // What the ROM brought: its services and their db8 kinds, and any system apps.
             // Activities run once the root's services are on the bus, as webOS's waited for boot.
-            runOnUiThread { jsServices.reload(); nativeServices.reload(); appsChanged(); activityManager.enable(); FontWarmer(this, server).warmWhenIdle() }
+            runOnUiThread { jsServices.reload(); nativeServices.reload(); appsChanged(); activityManager.enable(); afterFirstUse(); FontWarmer(this, server).warmWhenIdle() }
         }, "webos-root").start()
 
         // The dock draws an icon being dragged out of it above its own bounds.
@@ -792,6 +792,26 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             onDone(r)
         }
     }
+    /**
+     * What a webOS device did at each boot once First Use had run. First Use left
+     * /var/luna/preferences/ran-first-use, which the configurator reads (Configurator's
+     * activities), and the upstart job firstuse-createDefaultAccount, finding no
+     * first-use-profile-created beside it, asked the palmprofile service for the profile
+     * account sign-in would have made: a local one, "webOS User" in webOS CE's service, which
+     * Calendar keeps its on-device calendar on. The service makes the flag, and makes no
+     * account when one exists (a sign-in during First Use). Called once the webOS root's
+     * services are up, and when First Use finishes, where the device would reboot.
+     */
+    private fun afterFirstUse() {
+        if (!org.webosarchive.lunacy.card.LunacyService.firstUseDone(this) || !::webos.isInitialized) return
+        val prefs = java.io.File(webos.root, "var/luna/preferences")
+        runCatching { prefs.mkdirs(); java.io.File(prefs, "ran-first-use").createNewFile() }
+        if (java.io.File(prefs, "first-use-profile-created").exists()) return
+        bus.call("", "palm://com.palm.accountservices/createNovaAccount", "{\"createDefaultAccount\":true}", privateBus = true) { r ->
+            Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "firstuse-createDefaultAccount: $r")
+        }
+    }
+
     /** The installed apps changed (an install, a removal, a script's rescan): the launcher hears it. */
     private fun appsChanged() {
         val start = System.currentTimeMillis()
@@ -969,6 +989,19 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val id = p.optString("launchPointId")
         if (id.isEmpty()) return Bus.error("Must provide launchPointId")
         if (!p.has("icon")) return Bus.error("Must provide icon path")
+        // The app's own icon, its default launch point.
+        registry.get(id.removeSuffix("_default"))?.takeIf { id.endsWith("_default") }?.let { app ->
+            if (app.id != caller) return Bus.error("Attempted to change another application's launch point icon")
+            val base = "/media/cryptofs/apps/${Packages.APPS}/${app.dir}/"
+            val icon = p.optString("icon").removePrefix("file://").removePrefix(base)
+            val updated = (if (icon.startsWith("/")) null else registry.setIcon(app.id, icon))
+                ?: return Bus.error("Unable to update launch point's icon")
+            luna.forgetIcons(app.id)
+            launcher.setApps(launchPoints())
+            showDock()
+            launchPointChanged(updated, "updated")
+            return Bus.ok()
+        }
         val lp = addedLaunchPoints.get(id) ?: return Bus.error("launchPointId \"$id\" was not found")
         if (lp.appId != caller) return Bus.error("Attempted to change another application's launch point icon")
         val app = registry.get(lp.appId)
@@ -1693,7 +1726,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun registerServices() {
         val launchHandler = Bus.Handler { caller, p, reply ->
             val id = p.optString("id")
-            val params = p.optJSONObject("params")
+            // An activity's callback carries "$activity" beside the params, and the application
+            // manager put it into the params the app gets (luna-sysmgr's
+            // ApplicationManagerService): Calendar completes its boot activity with it.
+            val params = p.optJSONObject("params").let { pb ->
+                val act = p.opt("\$activity") ?: return@let pb
+                (pb ?: JSONObject()).put("\$activity", act)
+            }
             // A web page is the Web app's, as webOS's command-resource-handlers said (^https?: and
             // ^data: to com.palm.app.browser): a card of its own for each.
             if (id.isEmpty() && isWebUrl(p.optString("target")) && registry.get(BROWSER) != null) {
@@ -1730,7 +1769,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 reply(if (pdkRuntime.available) Bus.ok(mapOf("processId" to "success"))
                     else Bus.error("${registry.get(id)?.title} is a native app; this build of Lunacy can't run it"))
             }
-            else { launch(id, params, launcher = caller); reply(Bus.ok(mapOf("processId" to "success"))) }
+            else {
+                // A headless app a service launches (an activity's callback at boot: Calendar
+                // and Clock re-arm themselves) gets no startup card: on webOS nothing showed
+                // until the app opened a card window, and its own loading card came with that
+                // window. Lunacy's placeholder stands in for the tap that launched an app.
+                val unseen = registry.get(id)?.noWindow == true && bus.has(caller)
+                launch(id, params, startupCard = !unseen, launcher = caller); reply(Bus.ok(mapOf("processId" to "success")))
+            }
         }
         SystemProperties(this).register(bus)
         // webOS's preference and wallpaper store, and the two display settings Android lets
@@ -1756,7 +1802,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // Android's settings screens for the settings Android owns.
         org.webosarchive.lunacy.card.LunacyService(this, registry, jsServices, jsServices.root, { displayInfo() }, ::askPermissions,
             { intent -> runCatching { startActivityForResult(intent, 200) }.isSuccess }, onLayoutChanged = { recreate() },
-            wallpaper = ::wallpaperSource).register(bus)
+            wallpaper = ::wallpaperSource, onFirstUseDone = ::afterFirstUse).register(bus)
         org.webosarchive.lunacy.card.ConnectionManager(this).register(bus)
         // Secrets, where the accounts service keeps each account's credentials.
         org.webosarchive.lunacy.card.KeyManager(java.io.File(filesDir, "keymanager.json")).register(bus)

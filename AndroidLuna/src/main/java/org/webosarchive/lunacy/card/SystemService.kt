@@ -34,6 +34,7 @@ class SystemService(private val webosRoot: File, private val store: File) {
 
     fun register(bus: Bus) {
         bus.register(SERVICE, "time/getSystemTime", Bus.CallHandler { systemTime(it) })
+        bus.register(SERVICE, "timezone/getTimeZoneRules", Bus.CallHandler { it.reply(timeZoneRules(it.raw)) })
         bus.register(SERVICE, "getPreferences", Bus.CallHandler { getPreferences(it) })
         bus.register(SERVICE, "setPreferences", Bus.CallHandler { setPreferences(it) })
         bus.register(SERVICE, "wallpaper/importWallpaper", Bus.CallHandler { importWallpaper(it) })
@@ -84,6 +85,75 @@ class SystemService(private val webosRoot: File, private val store: File) {
             .put("TZ", zone.getDisplayName(zone.inDaylightTime(now.time), java.util.TimeZone.SHORT))
             .put("timeZoneFile", "/var/luna/preferences/localtime")
             .toString()
+    }
+
+    /**
+     * palm://com.palm.systemservice/timezone/getTimeZoneRules: each zone's offsets and daylight
+     * saving dates for the years asked, which Calendar's library converts event times with.
+     * The payload is an array, [{"tz":"America/New_York","years":[2026,2027]}, …], and each year
+     * of each zone answers {tz, year, hasDstChange, utcOffset, dstOffset, dstStart, dstEnd}:
+     * offsets in seconds east of UTC, the two changes as the instants they happen, and -1 for
+     * all three when the year has none, with utcOffset then the offset in force (London's is
+     * 3600 in 1969). No years means this year. The replies and errors are the reference
+     * TouchPad's, measured with luna-send; Lunacy fills them from Android's zone data. One
+     * difference: the TouchPad's zone data stopped at 2037, and it answered no daylight saving
+     * for any later year, where Lunacy answers the rules.
+     */
+    private fun timeZoneRules(raw: String): String {
+        val fail = { text: String -> JSONObject().put("returnValue", false).put("errorText", text).toString() }
+        val asked = try { org.json.JSONArray(raw) } catch (e: Exception) { return fail("json root needs to be an array") }
+        if (asked.length() == 0) return fail(NO_RULES)
+        val known = zoneIds
+        val results = org.json.JSONArray()
+        for (i in 0 until asked.length()) {
+            val entry = asked.optJSONObject(i) ?: return fail("Missing tz entry")
+            val id = entry.opt("tz") as? String ?: return fail("Missing tz entry")
+            if (id !in known) return fail(NO_RULES)
+            val zone = java.util.TimeZone.getTimeZone(id)
+            val years = entry.optJSONArray("years")
+            val list = if (years == null || years.length() == 0) listOf(java.util.Calendar.getInstance().get(java.util.Calendar.YEAR))
+                       else (0 until years.length()).map { years.optInt(it) }
+            for (y in list) results.put(yearRules(zone, id, y))
+        }
+        return JSONObject().put("returnValue", true).put("results", results).toString()
+    }
+
+    private val zoneIds by lazy { java.util.TimeZone.getAvailableIDs().toHashSet() }
+
+    /** One zone's year: its changes found by stepping a day at a time, each then narrowed to the second. */
+    private fun yearRules(zone: java.util.TimeZone, id: String, year: Int): JSONObject {
+        val utc = java.util.TimeZone.getTimeZone("UTC")
+        val cal = java.util.Calendar.getInstance(utc).apply { clear(); set(year, 0, 1) }
+        // The year as the zone sees it: from its own midnight on 1 January to the next.
+        val from = cal.timeInMillis - zone.getOffset(cal.timeInMillis)
+        cal.set(year + 1, 0, 1)
+        val to = cal.timeInMillis - zone.getOffset(cal.timeInMillis)
+        val out = JSONObject().put("tz", id).put("year", year)
+        var dstStart = -1L; var dstEnd = -1L; var dstOffset = -1; var stdOffset = zone.getOffset(from) / 1000
+        val day = 86_400_000L
+        var t = from
+        while (t < to) {
+            val next = minOf(t + day, to)
+            if (zone.getOffset(t) != zone.getOffset(next) || zone.inDaylightTime(java.util.Date(t)) != zone.inDaylightTime(java.util.Date(next))) {
+                // The last second of the old rule is lo; the change happens at hi.
+                var lo = t / 1000; var hi = next / 1000
+                while (hi - lo > 1) {
+                    val mid = (lo + hi) / 2
+                    if (zone.getOffset(mid * 1000) == zone.getOffset(t) && zone.inDaylightTime(java.util.Date(mid * 1000)) == zone.inDaylightTime(java.util.Date(t))) lo = mid else hi = mid
+                }
+                val into = zone.inDaylightTime(java.util.Date(hi * 1000))
+                if (into && dstStart < 0) { dstStart = hi; dstOffset = zone.getOffset(hi * 1000) / 1000 }
+                if (!into && dstEnd < 0) { dstEnd = hi; stdOffset = zone.getOffset(hi * 1000) / 1000 }
+            }
+            t = next
+        }
+        if (dstStart < 0 || dstEnd < 0) {
+            // No change into daylight saving and out again: the offset in force all year.
+            return out.put("hasDstChange", false).put("utcOffset", zone.getOffset(from) / 1000)
+                .put("dstOffset", -1).put("dstStart", -1).put("dstEnd", -1)
+        }
+        return out.put("hasDstChange", true).put("utcOffset", stdOffset).put("dstOffset", dstOffset)
+            .put("dstStart", dstStart).put("dstEnd", dstEnd)
     }
 
     // ---- preferences ----
@@ -244,5 +314,6 @@ class SystemService(private val webosRoot: File, private val store: File) {
     companion object {
         const val SERVICE = "com.palm.systemservice"
         private const val THUMB = 160
+        private const val NO_RULES = "Failed to retrieve results for specified timezones"
     }
 }

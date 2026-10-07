@@ -43,6 +43,8 @@ class LunacyService(
     private val onLayoutChanged: () -> Unit = {},
     /** How to read the wallpaper the shell shows, for [HostWallpaper]; asked on the main thread. */
     private val wallpaper: () -> () -> java.io.InputStream = { { throw java.io.FileNotFoundException("no wallpaper") } },
+    /** First Use has just finished: what a webOS device did at the next boot follows (ShellActivity.afterFirstUse). */
+    private val onFirstUseDone: () -> Unit = {},
 ) {
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     /** The two answers that take real time - Node's version is asked of Node, and a listing walks a folder - come from here. */
@@ -165,6 +167,7 @@ class LunacyService(
     private fun firstUseDone(caller: String): String {
         if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can finish First Use (asked by $caller)", -1)
         setFirstUseDone(context)
+        onFirstUseDone()
         return Bus.ok()
     }
 

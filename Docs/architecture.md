@@ -619,7 +619,8 @@ Following LunaCE's tablet mode (Docs/luna-shell-reference.md §4 and §5):
   - Dashboard layer icons are 48 × 48 (Enyo's `.palm-dashboard-icon`).
   - While the drop-down is open, the notification group sits on
     `status-bar-menu-dropdown-tab.png`.
-- **Popup alerts** sit 320 px wide in `popup-bg.png`, 5 px from the top right.
+- **Popup alerts** sit 320 px wide in `popup-bg.png`, the frame 5 px from the top right of the
+  space below the status bar (the visible body 15 px in, as measured on the TouchPad).
 - **Transparent pages.** Dashboard and popup pages are transparent over Luna's dark frames.
   The WebView background is reset to transparent after each load, because the
   `window.open` transport resets it.
@@ -1205,6 +1206,20 @@ activity runs at a time and two that a user started.
   `{"activityId","event","returnValue":true}`; `list`'s activity objects; an unknown id's
   errorCode 2; and a `false` boolean requirement asks for nothing (the mail services ask
   `{"internet": false}`), while any other value but `true` is refused.
+- **Boot activities.** A `bootup` requirement is met once a boot (Open webOS trips each one
+  when boot finishes, once). An activity that needs it runs once and is over: it doesn't
+  re-arm, persistent or not, and leaves db8. Measured on the TouchPad: Calendar's
+  `calendar.startreminders` and `calendar.firstrun` are neither listed nor stored once run.
+- **Apps' and services' activity files.** The configurator creates each
+  `configuration/activities/<creator>/<file>` at every start, as Open webOS's
+  ActivityConfigurator did at every boot: the file is `create`'s parameters, the creator is
+  the folder (an app id under an app, a service id otherwise), and files not marked
+  `firstUseSafe` wait until First Use has run and made the profile account
+  (`/var/luna/preferences/ran-first-use` and `first-use-profile-created`). Cancelling a removed
+  package's activities isn't built.
+- An activity's callback to `applicationManager/launch` or `open` hands the app its
+  `$activity` inside the launch params, as webOS's application manager did, and a headless app
+  a service launches gets no startup card (nothing showed on webOS until it opened a window).
 - Lunacy has one bus, so `type.bus` is kept but not enforced. Power locks (`type.power`) are
   accepted and do nothing: the shell keeps Android awake its own way.
 
@@ -1244,6 +1259,33 @@ the TouchPad's own mail services. What it uses, and where Lunacy answers:
   it on the server.
 - **Not yet:** POP and Exchange (codepoet: IMAP and SMTP only for now); contacts (Email looks
   up `com.palm.person`, which is there and empty); attachments haven't been tried.
+
+## Calendar
+
+Calendar is webOS CE's (`com.palm.app.calendar` 3.2.0, from the webOS CE project, which
+Lunacy shares it with): HP's Calendar opening on a calendar kept on the device, "On This
+Device", instead of asking for an HP account. Calendars are local only for now; nothing syncs.
+A change Lunacy needs in the app is made in the webOS CE project. What it uses:
+
+- **The profile account.** The local calendar belongs to the palmprofile account. On webOS
+  the boot job `firstuse-createDefaultAccount` asked the palmprofile service for one once First
+  Use had run and nobody had signed in; Lunacy runs the same request at startup and when First
+  Use finishes, and webOS CE's service names the account "webOS User". Calendar creates its
+  calendar on it at first launch.
+- **The `calendar` library** (MojoLoader, submission 42): events, repeats and time zones, served
+  to the page and to services. It converts times with
+  `systemservice/timezone/getTimeZoneRules`, answered from Android's zone data in the
+  TouchPad's measured shape. The TouchPad's zone data stopped at 2037 and it reports no
+  daylight saving after; Lunacy reports the rules.
+- **Reminders.** The TouchPad's `com.palm.service.calendar.reminders` (a JS service, in the
+  ROM) starts from Calendar's boot activity, watches the event kind, and schedules a
+  `calendar.reminders.wake` activity for the next reminder and an `autoclose` one; at the time
+  it opens Calendar with the reminder, which shows its alert window with Snooze and Dismiss.
+- **The icon.** Calendar's boot activity launches it headless with `dayChange`; it sets its
+  default launch point's icon to the day of the month and schedules the next change for
+  midnight.
+- **Not yet:** syncing (Exchange, CalDAV), so "Or add a new account" lists nothing; Just Type's
+  database search for events.
 
 ## Mojo
 

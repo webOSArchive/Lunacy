@@ -21,7 +21,9 @@ class Bus {
      */
     class Call(val appId: String, val service: String, val method: String, val params: JSONObject, private val send: (String) -> Unit,
                /** Sent on the private bus: see [privileged]. */
-               val privateBus: Boolean = false) {
+               val privateBus: Boolean = false,
+               /** The payload as sent: params is {} when it isn't an object (systemservice's getTimeZoneRules takes an array). */
+               val raw: String = params.toString()) {
         /** Stays open: "subscribe": true, or a db8 watch ("watch": true on find, or the watch method). */
         val subscribe get() = params.optBoolean("subscribe", false) || params.optBoolean("watch", false) || method == "watch"
         @Volatile var cancelled = false
@@ -123,7 +125,7 @@ class Bus {
         val h = handlers["$service/$method"] ?: services[service]
         Log.i(AppServer.TAG, "bus [$appId] $service/$method ${if (h == null) "UNHANDLED" else ""} $params")
         val p = try { JSONObject(params.ifEmpty { "{}" }) } catch (e: Exception) { JSONObject() }
-        val call = Call(appId, service, method, p, reply, privateBus || privileged(appId))
+        val call = Call(appId, service, method, p, reply, privateBus || privileged(appId), params.ifEmpty { "{}" })
         if (h == null) {
             // webOS names the category the method sits in: a call to
             // com.palm.systemservice/wallpaper/listWallpapers is unknown "for category

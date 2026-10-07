@@ -212,6 +212,24 @@ class AppRegistry(private val files: AppFiles) {
 
     fun reload() { apps = load() }
 
+    /**
+     * Icons apps have given their default launch point (updateLaunchPointIcon on
+     * "<id>_default": Calendar shows the day of the month), by app id, relative to the app's
+     * folder. Kept until Lunacy stops, as LunaSysMgr kept them until a reboot.
+     */
+    private val iconOverrides = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** The app with its default launch point's icon changed, or null if [icon] isn't one of its files. */
+    fun setIcon(id: String, icon: String): AppInfo? {
+        val app = get(id) ?: return null
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        files.open("${Packages.APPS}/${app.dir}/$icon")?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0) return null
+        iconOverrides[id] = icon
+        apps = apps.map { if (it.id == id) read(it.dir) ?: it else it }
+        return get(id)
+    }
+
     fun get(id: String) = apps.firstOrNull { it.id == id }
 
     /** The app in a folder under /usr/palm/applications, as a package unpacked it. */
@@ -233,7 +251,7 @@ class AppRegistry(private val files: AppFiles) {
             dir = dir,
             title = j.optString("title", dir),
             main = j.optString("main", "index.html"),
-            icon = j.optString("icon", "icon.png"),
+            icon = iconOverrides[j.optString("id").ifEmpty { dir }] ?: j.optString("icon", "icon.png"),
             noWindow = j.optBoolean("noWindow", false),
             type = j.optString("type", "web"),
             version = j.optString("version", ""),

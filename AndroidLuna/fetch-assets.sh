@@ -93,7 +93,7 @@ mkdir -p $L/fw/frameworks
 for f in mojo2 prototype mojo.core underscore foundations globalization mojoloader.js \
          metascene.base metascene.videos metascene.videos.share \
          mediastream mediaextension mediacapture imagethumbnail mojodbshim media contacts \
-         foundations.crypto foundations.io caja; do
+         foundations.crypto foundations.io caja calendar; do
     cp -r $V/touchpad/$f $L/fw/frameworks/ 2>/dev/null || cp -r $V/touchpad/services-fw/$f $L/fw/frameworks/
 done
 chmod -R u+w $L/fw/frameworks
@@ -107,8 +107,9 @@ Palm's frameworks, copied from /usr/palm/frameworks on the reference TouchPad
 (webOS CE 3.1.0): mojo2 (submission 205), prototype, mojo.core, foundations, globalization,
 mojoloader.js, the metascene frameworks the Video Player's scenes come from, the media
 frameworks they and other apps ask MojoLoader for, and contacts (submission 114), which Email
-imports for its address fields, with the foundations.crypto and foundations.io it loads, and
-caja, Google Caja's HTML sanitizer (Apache 2.0), which Email's compose window loads. `media` is /usr/lib/luna/luna-media-shim,
+imports for its address fields, with the foundations.crypto and foundations.io it loads,
+caja, Google Caja's HTML sanitizer (Apache 2.0), which Email's compose window loads, and
+calendar (submission 42), the events, repeats and time zones library Calendar loads. `media` is /usr/lib/luna/luna-media-shim,
 which the frameworks folder symlinks to.
 Copyright Palm, Inc. / Hewlett-Packard, except underscore, which is MIT (Jeremy Ashkenas),
 and prototype, which is MIT (Sam Stephenson). Palm's own is never released under an open
@@ -172,13 +173,13 @@ done
 # reference TouchPad (Workbench/vendor/touchpad/services-fw, os-services and etc-db).
 R=$L/rootfs
 mkdir -p $R/usr/palm/frameworks $R/usr/palm/services $R/usr/palm/public/accounts $R/etc/palm/db/kinds $R/etc/palm/db/permissions $R/etc/palm/tempdb
-for f in foundations foundations.crypto foundations.io foundations.json mojoservice mojoservice.transport underscore globalization mojoloader.js; do
+for f in foundations foundations.crypto foundations.io foundations.json mojoservice mojoservice.transport underscore globalization mojoloader.js calendar; do
     cp -r $V/touchpad/services-fw/$f $R/usr/palm/frameworks/ 2>/dev/null || cp -r $V/touchpad/$f $R/usr/palm/frameworks/
 done
 cp -r $V/touchpad/services-fw/jsservicelauncher $R/usr/palm/services/
 cat > $R/usr/palm/frameworks/NOTICE <<'NOTICE'
 Palm's JS service frameworks (foundations*, mojoservice*, globalization, underscore,
-mojoloader.js) and jsservicelauncher, copied from /usr/palm on the reference TouchPad
+mojoloader.js, calendar) and jsservicelauncher, copied from /usr/palm on the reference TouchPad
 (webOS CE 3.1.0). Status: treated as abandonware, like Mojo: no owner has asserted rights
 since webOS was discontinued. underscore is MIT (Jeremy Ashkenas).
 NOTICE
@@ -199,6 +200,15 @@ with the files the webOS Community Account Manager patches restored from the sto
 keeps. Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence;
 distributed by Lunacy as abandonware, like Mojo.
 NOTICE
+# Calendar's reminders service, which schedules each event's reminder as an activity and
+# shows it through the app (Docs/architecture.md, "Calendar").
+cp -r $V/touchpad/os-services/com.palm.service.calendar.reminders $R/usr/palm/services/
+rm -f $R/usr/palm/services/com.palm.service.calendar.reminders/all-tests.json
+cat > $R/usr/palm/services/com.palm.service.calendar.reminders/NOTICE <<'NOTICE'
+Palm's calendar reminders service, copied from /usr/palm/services on the reference TouchPad
+(webOS CE 3.1.0), without its test list. Copyright Palm, Inc. / Hewlett-Packard. Never
+released under an open licence; distributed by Lunacy as abandonware, like Mojo.
+NOTICE
 # The system's own account template, which the accounts service reads.
 cp -r $V/touchpad/os-services/public/accounts/com.palm.palmprofile $R/usr/palm/public/accounts/
 cat > $R/usr/palm/public/accounts/NOTICE <<'NOTICE'
@@ -206,7 +216,8 @@ The palmprofile account template and its images, from /usr/palm/public/accounts 
 reference TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. / Hewlett-Packard; abandonware.
 NOTICE
 # db8 kinds and permissions those services own, from /etc/palm on the reference TouchPad.
-for k in com.palm.palmprofile com.palm.account.credentials com.palm.service.accounts; do
+for k in com.palm.palmprofile com.palm.account.credentials com.palm.service.accounts \
+         com.palm.service.calendar.reminders com.palm.service.calendar.remindersstatus; do
     cp -r $V/touchpad/etc-db/db/kinds/$k $R/etc/palm/db/kinds/
 done
 cp -r $V/touchpad/etc-db/db/permissions/com.palm.service.accounts $R/etc/palm/db/permissions/
@@ -239,8 +250,8 @@ mkdir -p $R/usr/palm/ipkgs && echo '[]' > $R/usr/palm/ipkgs/manifest.json
 cp -r $V/touchpad/etc-db/tempdb/kinds $V/touchpad/etc-db/tempdb/permissions $R/etc/palm/tempdb/
 rm -rf $R/etc/palm/tempdb/permissions/com.palm.imbuddystatus
 cat > $R/etc/palm/NOTICE <<'NOTICE'
-db8 kind and permission files for the accounts and palmprofile services, contacts (person and
-contact), the activity manager, App Catalog and the
+db8 kind and permission files for the accounts, palmprofile and calendar reminders services,
+contacts (person and contact), the activity manager, App Catalog and the
 Web app, from /etc/palm on the reference TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. /
 LG Electronics.
 NOTICE

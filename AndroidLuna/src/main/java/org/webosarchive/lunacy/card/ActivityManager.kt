@@ -483,7 +483,12 @@ class ActivityManager(private val context: Context) {
         val wasRunning = a.running
         a.running = false
         a.schedule?.let { if (it.interval != null) it.lastFinished = System.currentTimeMillis() }
-        val again = a.callback != null && !a.terminate &&
+        // A bootup requirement is met once a boot (Open webOS's SystemManagerProxy trips each
+        // one when boot finishes, and never again): an activity that needed it and has run is
+        // over until the next start. Measured on the reference TouchPad: Calendar's
+        // calendar.startreminders and calendar.firstrun, persistent, are neither listed nor in
+        // db8 once they have run; the configurator creates them again at the next boot.
+        val again = a.callback != null && !a.terminate && !a.requirements.has("bootup") &&
             (a.restart || a.persist || a.explicit || (a.schedule?.let { it.interval != null && !it.past() } == true))
         if (again) {
             a.ending = null; a.restart = false; a.initialized = false; a.paused = false
@@ -491,6 +496,7 @@ class ActivityManager(private val context: Context) {
             start(a)
         } else {
             disarm(a)
+            if (a.requirements.has("bootup")) { a.dbId?.let { dbDel(it) }; a.dbId = null }
             activities.remove(a.id)
             if (byName[a.key] === a) byName.remove(a.key)
             waitingForEnable.remove(a)

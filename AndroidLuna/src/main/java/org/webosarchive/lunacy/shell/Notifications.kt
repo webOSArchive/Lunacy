@@ -336,7 +336,12 @@ class DashboardMenu(context: Context, private val luna: Luna, private val onDism
     }
 }
 
-/** Popup alerts (window: "popupalert"): 320 px wide in popup-bg.png (20 px frame), 5 px from the top right. */
+/**
+ * Popup alerts (window: "popupalert"): 320 px wide in popup-bg.png (20 px frame), the frame 5 px
+ * from the top right of the space below the status bar (DashboardWindowManager places the alert
+ * container, frame and all, kTabletAlertWindowPadding in). Measured on the reference TouchPad: a
+ * calendar reminder's dark body ends 15 px from the right edge and starts 15 px below the bar.
+ */
 @SuppressLint("ViewConstructor")
 class PopupLayer(context: Context, private val luna: Luna) : FrameLayout(context) {
     companion object { const val WIDTH = 320; const val FRAME = 20; const val INSET = 5 }
@@ -351,7 +356,7 @@ class PopupLayer(context: Context, private val luna: Luna) : FrameLayout(context
         frame.addView(w, LayoutParams(luna.px(WIDTH), luna.px(height)).apply { setMargins(luna.px(FRAME), luna.px(FRAME), luna.px(FRAME), luna.px(FRAME)) })
         addView(frame, LayoutParams(luna.px(WIDTH + 2 * FRAME), luna.px(height + 2 * FRAME)).apply {
             gravity = android.view.Gravity.END or android.view.Gravity.TOP
-            topMargin = luna.px(INSET) - luna.px(FRAME); rightMargin = luna.px(INSET) - luna.px(FRAME)
+            topMargin = luna.px(INSET); rightMargin = luna.px(INSET)
         })
         frames[w] = frame
     }

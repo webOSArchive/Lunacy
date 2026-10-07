@@ -29,7 +29,9 @@ class Db8(private val service: String, file: File?) {
     private var rev = 0L
     private var idCounter = 0L
 
-    private class IndexProp(val name: String, val collate: String?, val default: Any? = null)
+    private class IndexProp(val name: String, val collate: String?, val default: Any? = null,
+                            /** A "multi" prop's included props: it stands for all their values. */
+                            val include: List<String>? = null)
     private class Index(val name: String, val props: List<IndexProp>)
     /** A revision set: [name] holds the _rev at which any of [props] last changed. */
     private class RevSet(val name: String, val props: List<String>)
@@ -120,11 +122,18 @@ class Db8(private val service: String, file: File?) {
         val indexes = arrayListOf(Index("_id", listOf(IndexProp("_del", null), IndexProp("_id", null))))
         p.optJSONArray("indexes")?.let { a ->
             for (i in 0 until a.length()) {
-                val ix = a.getJSONObject(i)
+                // A trailing comma (Calendar's event kind ends its list with one) is a null
+                // here; webOS's JSON parser took the list as if it weren't there.
+                val ix = a.optJSONObject(i) ?: continue
                 val props = ArrayList<IndexProp>()
                 // An index that includes deleted objects leads with _del, as db8's did.
                 if (ix.optBoolean("incDel")) props += IndexProp("_del", null)
-                ix.optJSONArray("props")?.let { pa -> for (j in 0 until pa.length()) pa.getJSONObject(j).let { props += IndexProp(it.getString("name"), it.optString("collate").ifEmpty { null }, it.opt("default")) } }
+                ix.optJSONArray("props")?.let { pa -> for (j in 0 until pa.length()) pa.getJSONObject(j).let {
+                    val include = if (it.optString("type") == "multi") it.optJSONArray("include")?.let { inc ->
+                        (0 until inc.length()).mapNotNull { n -> inc.optJSONObject(n)?.optString("name")?.takeIf { x -> x.isNotEmpty() } }
+                    } else null
+                    props += IndexProp(it.getString("name"), it.optString("collate").ifEmpty { null }, it.opt("default"), include)
+                } }
                 indexes += Index(ix.optString("name"), props)
             }
         }
@@ -528,7 +537,32 @@ class Db8(private val service: String, file: File?) {
      * index's "default" for it, so it is found by that value (Email's kind gives
      * "flags.visible" the default true, and the mail services never set it on a new message).
      */
-    private fun indexed(o: JSONObject, prop: String): Any? = value(o, prop) ?: defaultOf(o.optString("_kind"), prop, HashSet())
+    private fun indexed(o: JSONObject, prop: String): Any? =
+        value(o, prop) ?: multi(o, prop) ?: defaultOf(o.optString("_kind"), prop, HashSet())
+
+    /**
+     * A "multi" prop (MojDbMultiExtractor): not in the object, but the words of the props it
+     * includes, as db8 indexed each of them. Calendar's events are found by "searchText",
+     * which includes their subject, location and note: every word asked ("?") must start one
+     * of theirs, from any of the three.
+     */
+    private fun multi(o: JSONObject, prop: String): Any? {
+        val include = includeOf(o.optString("_kind"), prop, HashSet()) ?: return null
+        val out = ArrayList<String>()
+        for (name in include) when (val v = value(o, name)) {
+            is String -> out += v
+            is JSONArray -> for (k in 0 until v.length()) (v.opt(k) as? String)?.let { out += it }
+        }
+        return if (out.isEmpty()) null else out.joinToString(" ")
+    }
+
+    private fun includeOf(kindId: String, prop: String, seen: HashSet<String>): List<String>? {
+        val k = kinds[kindId] ?: return null
+        if (!seen.add(kindId)) return null
+        for (ix in k.indexes) for (p in ix.props) if (p.name == prop && p.include != null) return p.include
+        for (e in k.extends) includeOf(e, prop, seen)?.let { return it }
+        return null
+    }
 
     private fun defaultOf(kindId: String, prop: String, seen: HashSet<String>): Any? {
         val k = kinds[kindId] ?: return null

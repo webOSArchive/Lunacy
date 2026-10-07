@@ -1,0 +1,16 @@
+HP's Calendar (com.palm.app.calendar), as modernized by webOS Archive for webOS Community
+Edition: version 3.2.0, "Calendar (webOS CE)", from the WOSA Modernize feed
+(com.palm.app.calendar_3.2.0_all.ipk), built from the webOS CE project's tree. It opens on a
+calendar kept on the device ("On This Device") instead of asking for an HP account, and keeps
+that calendar when the account it belongs to is replaced, and its half-hour dividers reach the
+edge of a screen wider than the TouchPad's, and saving an event no longer scrolls the day back
+to midnight.
+
+The original is copyright Palm, Inc. / Hewlett-Packard, never released under an open licence;
+distributed by Lunacy as abandonware, like Mojo, the Prelude fonts and the TouchPad wallpapers:
+no owner has asserted rights since webOS was discontinued. The 3.2.0 changes are webOS
+Archive's.
+
+The app's files are here exactly as the package carries them, and Lunacy does not change them
+(rule 5 in CLAUDE.md). A change Lunacy needs in the app is made in the webOS CE project and
+comes here with its next release.

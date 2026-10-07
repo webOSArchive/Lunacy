@@ -46,9 +46,11 @@ class ServiceProcess(
         try {
             val p = start()
             Log.i(AppServer.TAG, "$kind $name started")
-            Thread({ p.errorStream.bufferedReader().forEachLine { line -> log(line) } }, "svc-err").start()
+            // Ending the process closes its streams under these readers: that is the end of the
+            // log or the link, not an error.
+            Thread({ try { p.errorStream.bufferedReader().forEachLine { line -> log(line) } } catch (e: IOException) {} }, "svc-err").start()
             Thread({
-                p.inputStream.bufferedReader().forEachLine { line -> main.post { receive(line) } }
+                try { p.inputStream.bufferedReader().forEachLine { line -> main.post { receive(line) } } } catch (e: IOException) {}
                 val code = try { p.waitFor() } catch (e: InterruptedException) { -1 }
                 main.post { exited("exit $code") }
             }, "svc-out").start()

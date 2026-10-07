@@ -329,16 +329,19 @@ class Db8(private val service: String, file: File?) {
         transaction {
             for (i in 0 until objs.length()) {
                 val patch = objs.getJSONObject(i)
-                val old = byId(patch.optString("_id"))
+                val old = patch.optString("_id").takeIf { it.isNotEmpty() }?.let { byId(it) }
                 // A new id with a kind is created, as a put would: measured on the reference
                 // TouchPad (merge of "probe.fixed.id" into an empty kind returned its id and rev,
                 // and get found it). palmprofile keeps its token that way, merging into
                 // "com.palm.palmprofile.token" from the first sign-in on.
+                // So is one with no _id at all, as db8's put with the merge flag does (MojDb::putImpl):
+                // the SMTP service saves a new outgoing message that way.
                 if (old == null) {
-                    val kindId = patch.optString("_kind").takeIf { it.isNotEmpty() && patch.optString("_id").isNotEmpty() }
+                    val kindId = patch.optString("_kind").takeIf { it.isNotEmpty() }
                         ?: throw DbError(-3950, "db: object not found")
                     checkAccess(caller, kindId, "create")
                     val o = JSONObject(patch.toString()).put("_rev", nextRev())
+                    if (!o.has("_id")) o.put("_id", newId())
                     assignIds(o)
                     applyRevSets(null, o)
                     store(o)
@@ -445,7 +448,10 @@ class Db8(private val service: String, file: File?) {
         val incDel = q.optBoolean("incDel") || (where + filter).any { it.prop == "_del" }
         if (validate) {
             if (q.optBoolean("incDel") && orderBy != null) throw DbError(-3978, "db: query order not compatible with where clause")
-            if (!indexed(k, where, orderBy)) throw DbError(-3965, "db: no index for query")
+            // search sorts what it finds itself (MojDbSearchCursor), so only find's order has
+            // to be the index's: Email's address field searches people by searchProperty and
+            // orders them by sortKey.
+            if (!indexed(k, where, if (search) null else orderBy)) throw DbError(-3965, "db: no index for query")
         }
         val family = family(from)
         val collate = orderBy?.let { ob -> k.indexes.flatMap { it.props }.firstOrNull { it.name == ob }?.collate }

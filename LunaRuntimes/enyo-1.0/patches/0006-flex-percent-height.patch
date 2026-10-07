@@ -12,7 +12,7 @@
  				// Mozilla doesn't seem to 'stretch' correctly on this axis
  				if (enyo.isMoz && inExtent == "height" && this.align == "stretch") {
  					s.width = "100%";
-@@ -270,3 +275,40 @@
+@@ -270,3 +275,46 @@
  	if (l instanceof enyo.VFlexLayout) { return (p.align || l.align) != "stretch"; }
  	return false;
  };
@@ -44,18 +44,24 @@
 +	}
 +	return Boolean(f._percentOfFlexed);
 +};
++// Only a child in the flow: an absolutely placed one (enyo.Pane's views, by their enyo-view
++// class) takes its percentage from its positioned container, after layout, on every engine.
++// Its position is known once it is drawn, and a class may arrive after the flex pass (Pane
++// adds enyo-view as it lays its own views out), so the children are looked at just after.
 +enyo.FlexLayout.collapsePercentChildren = function(inControl) {
-+	var kids = inControl.children || [];
-+	for (var i = 0, k, h; (k = kids[i]); i++) {
-+		h = k.domStyles && k.domStyles.height;
-+		if (h && /%$/.test(String(h)) && !/^(absolute|fixed)$/.test(k.domStyles.position || "")) {
-+			k.applyStyle("height", "0px");
++	setTimeout(function() {
++		var kids = inControl.children || [];
++		for (var i = 0, k, h, n, p; (k = kids[i]); i++) {
++			h = k.domStyles && k.domStyles.height;
++			if (!h || !/%$/.test(String(h)) || !(n = k.hasNode())) { continue; }
++			p = window.getComputedStyle(n).position;
++			if (p != "absolute" && p != "fixed") { k.applyStyle("height", "0px"); }
 +		}
-+	}
++	}, 0);
 +};
 --- a/framework/build/enyo-build.js
 +++ b/framework/build/enyo-build.js
-@@ -13295,6 +13295,63 @@
+@@ -13295,6 +13295,69 @@
  })();
  
  // ---------------------------------------------------------------------------
@@ -94,14 +100,20 @@
 +		}
 +		return Boolean(f._percentOfFlexed);
 +	};
++	// Only a child in the flow: an absolutely placed one (enyo.Pane's views, by their enyo-view
++	// class) takes its percentage from its positioned container, after layout, on every engine.
++	// Its position is known once it is drawn, and a class may arrive after the flex pass (Pane
++	// adds enyo-view as it lays its own views out), so the children are looked at just after.
 +	enyo.FlexLayout.collapsePercentChildren = function(inControl) {
-+		var kids = inControl.children || [];
-+		for (var i = 0, k, h; (k = kids[i]); i++) {
-+			h = k.domStyles && k.domStyles.height;
-+			if (h && /%$/.test(String(h)) && !/^(absolute|fixed)$/.test(k.domStyles.position || "")) {
-+				k.applyStyle("height", "0px");
++		setTimeout(function() {
++			var kids = inControl.children || [];
++			for (var i = 0, k, h, n, p; (k = kids[i]); i++) {
++				h = k.domStyles && k.domStyles.height;
++				if (!h || !/%$/.test(String(h)) || !(n = k.hasNode())) { continue; }
++				p = window.getComputedStyle(n).position;
++				if (p != "absolute" && p != "fixed") { k.applyStyle("height", "0px"); }
 +			}
-+		}
++		}, 0);
 +	};
 +	var flowExtent = enyo.FlexLayout.prototype.flowExtent;
 +	enyo.FlexLayout.prototype.flowExtent = function (inControls, inExtent, inExtentNick) {

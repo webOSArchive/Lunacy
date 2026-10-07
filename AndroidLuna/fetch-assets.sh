@@ -93,7 +93,7 @@ mkdir -p $L/fw/frameworks
 for f in mojo2 prototype mojo.core underscore foundations globalization mojoloader.js \
          metascene.base metascene.videos metascene.videos.share \
          mediastream mediaextension mediacapture imagethumbnail mojodbshim media contacts \
-         foundations.crypto foundations.io; do
+         foundations.crypto foundations.io caja; do
     cp -r $V/touchpad/$f $L/fw/frameworks/ 2>/dev/null || cp -r $V/touchpad/services-fw/$f $L/fw/frameworks/
 done
 chmod -R u+w $L/fw/frameworks
@@ -107,7 +107,8 @@ Palm's frameworks, copied from /usr/palm/frameworks on the reference TouchPad
 (webOS CE 3.1.0): mojo2 (submission 205), prototype, mojo.core, foundations, globalization,
 mojoloader.js, the metascene frameworks the Video Player's scenes come from, the media
 frameworks they and other apps ask MojoLoader for, and contacts (submission 114), which Email
-imports for its address fields, with the foundations.crypto and foundations.io it loads. `media` is /usr/lib/luna/luna-media-shim,
+imports for its address fields, with the foundations.crypto and foundations.io it loads, and
+caja, Google Caja's HTML sanitizer (Apache 2.0), which Email's compose window loads. `media` is /usr/lib/luna/luna-media-shim,
 which the frameworks folder symlinks to.
 Copyright Palm, Inc. / Hewlett-Packard, except underscore, which is MIT (Jeremy Ashkenas),
 and prototype, which is MIT (Sam Stephenson). Palm's own is never released under an open

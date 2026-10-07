@@ -1297,6 +1297,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             "region" -> region
             "timeFormat" -> if (android.text.format.DateFormat.is24HourFormat(this)) "HH24" else "HH12"
             "x_palm_carrier" -> profile.carrierCode
+            // A device always has a wallpaper preference: its factory default until one is
+            // picked, in this shape with no thumbnail (/etc/palm/defaultPreferences.txt on the
+            // reference TouchPad). Lunacy's default is the one it shows, which it ships into
+            // /media/internal/wallpapers. Email's compose window draws it behind the message.
+            "wallpaper" -> JSONObject().put("wallpaperName", Luna.DEFAULT_WALLPAPER)
+                .put("wallpaperFile", "/media/internal/wallpapers/${Luna.DEFAULT_WALLPAPER}").put("wallpaperThumbFile", "")
             else -> null
         }
     }

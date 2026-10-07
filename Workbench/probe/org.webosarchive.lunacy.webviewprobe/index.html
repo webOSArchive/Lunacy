@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+<head>
+<title>WebView Probe</title>
+<script src="/usr/palm/frameworks/enyo/0.10/framework/enyo.js" type="text/javascript"></script>
+</head>
+<body>
+<script type="text/javascript">
+// Email's message view, reduced: a pane (enyo.Control, overflow hidden, position relative)
+// holding an enyo.WebView at flex 1 and height 100%, then a header "in order to float over the
+// webview", which follows the view's scrolledTo with translateY. Logs WVPROBE lines: where the
+// pane, the view and the header are, each scrolledTo, and the header after each.
+function L(s) { console.error("WVPROBE " + s); }
+function C(c) { var n = c.hasNode(); if (!n) { return "-"; } var cs = getComputedStyle(n); return "pos=" + cs.position + " h=" + cs.height + " disp=" + cs.display + " oh=" + n.offsetHeight + " parent=" + (n.offsetParent ? n.offsetParent.id || n.offsetParent.tagName : "-"); }
+function R(c) { var n = c.hasNode(); if (!n) { return "-"; } var r = n.getBoundingClientRect(); return Math.round(r.left) + "," + Math.round(r.top) + " " + Math.round(r.width) + "x" + Math.round(r.height); }
+enyo.kind({
+	name: "Probe", kind: enyo.VFlexBox, className: "enyo-fit", components: [
+		{name: "top", content: "WebView probe", style: "height: 40px; background: #ccc"},
+		{name: "pane", kind: enyo.Control, flex: 1, style: "overflow: hidden; position: relative; background: #eee;", components: [
+			{name: "body", kind: "WebView", flex: 1, style: "width: 100%; height: 100%; background-color: white;",
+			 onScrolledTo: "scrolled", enableJavascript: false, ignoreMetaTags: true, autoFit: false, fitRender: true},
+			{name: "header", style: "height: 200px; background: #fc6; font-size: 30px", content: "HEADER"}
+		]}
+	],
+	rendered: function() {
+		this.inherited(arguments);
+		var self = this;
+		L("inner " + window.innerWidth + "x" + window.innerHeight);
+		L("rendered pane=" + R(this.$.pane) + " body=" + R(this.$.body) + " view=" + R(this.$.body.$.view) + " header=" + R(this.$.header));
+		setTimeout(function() {
+			var hb = self.$.header.getBounds(), vb = self.$.body.getBounds();
+			L("bounds header=" + JSON.stringify(hb) + " body=" + JSON.stringify(vb));
+			// What Email's headerResized does.
+			self.$.body.applyStyle("width", vb.width + "px");
+			self.$.body.applyStyle("top", vb.top + "px");
+			self.$.body.setHeaderHeight(hb.height);
+			self.$.body.$.view.applyStyle("min-height", (hb.height + 300) + "px");
+			var lines = [];
+			for (var i = 1; i <= 120; i++) { lines.push("<p>Line " + i + " of the probe's page.</p>"); }
+			self.$.body.setHTML("file:///probe-content.html", "<html><body style='margin:0'><h1>TOP OF CONTENT</h1>" + lines.join("") + "</body></html>");
+			L("after setHTML pane=" + R(self.$.pane) + " body=" + R(self.$.body) + " view=" + R(self.$.body.$.view) + " header=" + R(self.$.header));
+		}, 2000);
+		setTimeout(function() {
+			L("css pane: " + C(self.$.pane));
+			L("css body: " + C(self.$.body) + " style=" + self.$.body.node.getAttribute("style"));
+			L("css view: " + C(self.$.body.$.view) + " style=" + self.$.body.$.view.node.getAttribute("style"));
+			L("css header: " + C(self.$.header));
+			L("box " + JSON.stringify(enyo.fetchControlSize(self.$.body.$.view)));
+		}, 4000);
+		var n = 0, t = setInterval(function() {
+			L("t" + n + " body=" + R(self.$.body) + " view=" + R(self.$.body.$.view) + " header=" + R(self.$.header) + " transform=" + (self.$.header.hasNode() ? self.$.header.node.style.webkitTransform : ""));
+			if (++n >= 6) { clearInterval(t); }
+		}, 1500);
+	},
+	scrolled: function(inSender, x, y) {
+		var h = this.$.header;
+		if (h.hasNode()) { h.node.style.webkitTransform = "translateY(" + y + "px)"; }
+		L("scrolledTo " + x + "," + y + " header=" + R(h));
+	}
+});
+new Probe().renderInto(document.body);
+</script>
+</body>
+</html>

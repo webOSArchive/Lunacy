@@ -1,0 +1,2 @@
+A Lunacy probe app (Workbench/probe), written for Lunacy. It measures how webOS laid out an
+enyo.WebView with a header floated over it, as Email's message view has one.

@@ -188,6 +188,40 @@ Its `_callBrowserAdapter` logs each call first, as the device's does (see 0002).
 
 Files: `framework/source/palm/controls/BasicWebView.js`, `framework/build/enyo-build.js`.
 
+The native view also does what the plugin did for a page set with `setHTML`, which Email's
+message view relies on (BrowserViews.kt): an `<object type="application/x-palm-email">` in the
+HTML is drawn as the message it names in the file cache; `setHeaderHeight` keeps that much room
+at the top of the document and clips the view away over it, so the app's own header shows
+through and takes touches there; and `scrolledTo` is sent as the view scrolls, which the app
+follows with its header. That is Android's side; this patch carries the calls as before.
+
+### 0006-flex-percent-height.patch
+
+A percentage height inside a child Enyo flexes vertically comes out 0 px, as it did on the
+TouchPad.
+
+Enyo gives a vertically flexed child `height: 0px` and lets `-webkit-box` stretch it. The
+TouchPad's WebKit worked a percentage height inside that child out against the 0 px, before the
+box stretched it, and never again: `height: 100%` there was 0 and the content overflowed.
+Email's message view is laid out on it: its `WebView` is `height: 100%` inside a flexed pane,
+and the header placed after it "floats over the webview" because the WebView takes no room.
+Today's Chromium resolves the percentage against the stretched height, so the WebView took the
+whole pane and pushed the header out of sight below it.
+
+`enyo.FlexLayout.percentOfFlexed()` checks the engine once, on a hidden box: a child with
+`height: 100%` inside a flexed child of a 100 px vertical box. Where it comes out taller than
+0, `flowExtent` gives an in-flow child (not `absolute` or `fixed`) with a percentage height,
+inside a child it has flexed vertically, `height: 0px`, which is what the TouchPad computed.
+Engines that answer 0 are untouched.
+
+Measured on 2026-10-07 with `Workbench/probe`'s webviewprobe (Email's pane, reduced): on the
+reference TouchPad the WebView is 1024 x 0 and its view 1024 x 700 at the pane's top, with the
+header at the pane's top; in Lunacy on the Galaxy Tab A7 Lite (Android 14) the WebView was 800 x
+1272 and the header at 1312, and with this patch the WebView is 800 x 0, the view 800 x 1272 and
+the header at the pane's top.
+
+Files: `framework/source/base/layout/FlexLayout.js`, `framework/build/enyo-build.js`.
+
 ## Added
 
 Nothing, since the rebase. `lib/networkproxy` (HP's network-proxy settings library, which the

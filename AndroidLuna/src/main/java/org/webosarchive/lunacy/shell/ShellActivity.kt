@@ -853,6 +853,29 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val after = registry.launchPoints.associateBy { it.id }
         for ((id, app) in after) if (id !in before) launchPointChanged(app, "added")
         for ((id, app) in before) if (id !in after) launchPointChanged(app, "removed")
+        accountTemplatesChanged()
+    }
+
+    /** The account templates installed packages carry, as last seen: see [accountTemplatesChanged]. */
+    private var accountTemplates: String? = null
+
+    /**
+     * The accounts service reads the account templates (/usr/palm/public/accounts, and
+     * /media/cryptofs/apps/usr/palm/accounts for installed packages) when it starts, and again
+     * only when told an app was installed or removed (its appsChanged). webOS told it; without
+     * that, a Synergy connector installed while it ran (webCal Sync, on the Pixel Tablet) wasn't
+     * in Accounts' list until Lunacy restarted. It is told when the installed templates differ
+     * from the last look, so a start that installs nothing doesn't wake it.
+     */
+    private fun accountTemplatesChanged() {
+        val dir = java.io.File(filesDir, "cryptofs/apps/usr/palm/accounts")
+        val now = dir.walkTopDown().filter { it.isFile }.map { "${it.path}:${it.length()}:${it.lastModified()}" }.sorted().joinToString("\n")
+        val was = accountTemplates
+        accountTemplates = now
+        if (was == null || was == now) return
+        bus.call("com.palm.appinstaller", "palm://com.palm.service.accounts/appsChanged", "{}", privateBus = true) { r ->
+            Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "accounts: templates changed, appsChanged: $r")
+        }
     }
 
     /**

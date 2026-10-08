@@ -144,6 +144,9 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
     fun destroy(id: Int) { main.post { views.remove(id)?.let { window.removeView(it); it.destroy() } } }
 
     /** The card's window is going: every view with it. */
+    /** A touch the card dispatched (AppWindow.dispatchTouchEvent): a view whose header strip it began on may scroll by it. */
+    fun touched(e: MotionEvent) { for (b in views.values) b.headerTouch(e) }
+
     fun destroyAll() {
         views.values.forEach { window.removeView(it); it.destroy() }
         views.clear()
@@ -422,7 +425,21 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         private var headerCss = 0.0
 
         private fun headerPx() = Math.round((headerCss * scale).toFloat())
-        private fun clipTop() = (headerPx() - scrollY).coerceAtLeast(0)
+        // No lower than the view: a header taller than the view (a phone in landscape) clips all
+        // of it, where an upside-down rect clipped nothing and the view hid the header.
+        private fun clipTop() = (headerPx() - scrollY).coerceIn(0, Math.max(0, height))
+
+        /**
+         * The view below the header strip only. A header that covers the whole view (a phone in
+         * landscape) leaves nothing to draw, and Android takes an empty clip as no clip, so then
+         * the view is drawn transparent instead.
+         */
+        private fun clip() {
+            if (headerCss <= 0) { clipBounds = null; alpha = 1f; return }
+            val top = clipTop()
+            clipBounds = Rect(0, top, width, height)
+            alpha = if (top >= height) 0f else 1f
+        }
 
         /**
          * The room at the top of the document, as a style. In vw, so it is the header's height
@@ -467,7 +484,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         private var lastBase: String? = null
 
         private fun applyHeader() {
-            clipBounds = if (headerCss > 0) Rect(0, clipTop(), width, height) else null
+            clip()
             val doc = lastDoc ?: return
             if (settings.javaScriptEnabled) {
                 val room = room().ifEmpty { "0" }
@@ -482,17 +499,60 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
 
         override fun onScrollChanged(l: Int, t: Int, oldl: Int, oldt: Int) {
             super.onScrollChanged(l, t, oldl, oldt)
-            if (headerCss > 0) clipBounds = Rect(0, clipTop(), width, height)
+            if (headerCss > 0) clip()
             owner.send(id, "scrolledTo", -l / scale, -t / scale)
         }
 
         override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
             super.onSizeChanged(w, h, ow, oh)
-            if (headerCss > 0) { clipBounds = Rect(0, clipTop(), w, h); if (w != ow) applyHeader() }
+            if (headerCss > 0) { clip(); if (w != ow) applyHeader() }
         }
 
         /** Over the header strip a touch is the card's: it falls through to the page beneath. */
         private var passing = false
+
+        /**
+         * A vertical drag that begins on the header strip scrolls the message, as on webOS, where
+         * Email handed such a drag to the browser plugin; this view never sees the rest of a
+         * touch it declined, so the card reports it ([touched]). Without it a header taller than
+         * the view (a phone in landscape) left the message out of reach. A tap is still the page's.
+         */
+        private var headerDrag: android.view.VelocityTracker? = null
+        private var headerY = 0f
+        private var headerX = 0f
+        private var headerScrolling = false
+
+        fun headerTouch(e: MotionEvent) {
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    headerDrag?.recycle(); headerDrag = null
+                    if (!passing) return
+                    headerDrag = android.view.VelocityTracker.obtain().also { it.addMovement(e) }
+                    headerY = e.y; headerX = e.x; headerScrolling = false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val t = headerDrag ?: return
+                    t.addMovement(e)
+                    val dy = e.y - headerY
+                    if (!headerScrolling) {
+                        val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
+                        if (Math.abs(dy) < slop || Math.abs(dy) < Math.abs(e.x - headerX)) return
+                        headerScrolling = true
+                    }
+                    scrollBy(0, Math.round(-dy))
+                    headerY = e.y
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    val t = headerDrag ?: return
+                    t.addMovement(e)
+                    if (headerScrolling && e.actionMasked == MotionEvent.ACTION_UP) {
+                        t.computeCurrentVelocity(1000)
+                        flingScroll(0, Math.round(-t.yVelocity))
+                    }
+                    t.recycle(); headerDrag = null; headerScrolling = false; passing = false
+                }
+            }
+        }
         override fun dispatchTouchEvent(e: MotionEvent): Boolean {
             if (e.actionMasked == MotionEvent.ACTION_DOWN) passing = headerCss > 0 && e.y < clipTop()
             if (passing) { if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL) passing = false; return false }

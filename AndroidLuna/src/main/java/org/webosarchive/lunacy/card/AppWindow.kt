@@ -2,6 +2,7 @@ package org.webosarchive.lunacy.card
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.view.MotionEvent
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
@@ -262,6 +263,13 @@ open class AppWindow(
             }
         }
         addJavascriptInterface(Native(), "LunacyNative")
+    }
+
+    /** The browser views over the page see every touch, after it is dispatched (BrowserViews.touched). */
+    override fun dispatchTouchEvent(e: MotionEvent): Boolean {
+        val handled = super.dispatchTouchEvent(e)
+        if (hasBrowserViews) browserViews.touched(e)
+        return handled
     }
 
     override fun destroy() {

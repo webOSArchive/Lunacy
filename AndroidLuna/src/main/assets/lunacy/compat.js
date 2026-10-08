@@ -1167,3 +1167,20 @@ window.__lunacyPageUrl = function (u) {
 		return add.apply(this, arguments);
 	};
 })();
+
+// Palm's centred column fits a phone's card.
+//
+// Palm's Enyo apps put a settings or welcome screen in one centred column, `.box-center`,
+// 500 px wide: the accounts library's first-launch view (Calendar, Contacts, Email and
+// Photos' Welcome screens), the Accounts app, and Exhibition and Email's own copies of the
+// same rule. On a TouchPad that is a column in the middle of a 1024 px card; on a 360 px
+// phone card it runs off the side and the page scrolls sideways. Under 540 px the column takes
+// the card's width less 12 px each side, as Lunacy's own Screen & Lock and Sounds & Alerts do
+// (codepoet, 2026-10-03). Nothing changes on a tablet, where no card is that narrow. `html`
+// lifts the rule above every app's own `.box-center`, whichever loads last; an inline style
+// still wins, as it would have on the device.
+(function () {
+	var s = document.createElement("style");
+	s.textContent = "@media (max-width: 540px) { html .box-center { width: auto; margin-left: 12px; margin-right: 12px; } }";
+	(document.head || document.documentElement).appendChild(s);
+})();

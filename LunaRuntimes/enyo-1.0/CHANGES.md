@@ -290,6 +290,33 @@ appended to it could run.
 
 Files: `framework/source/palm/system/windows/manager.js`, `framework/build/enyo-build.js`.
 
+### 0010-sliding-pane-single-view.patch
+
+A `SlidingPane` narrower than its `multiViewMinWidth` stacks its views at the card's width, so
+the next view slides over the one before, as Enyo means it to.
+
+Under that width `applySingleViewLayout` gives every view the pane's whole width and no flex,
+and selecting a view slides it over the others: Enyo's phone layout. It sets each view's `flex`
+to 0 but never flows the pane again, so a view flexed in the wide layout kept its
+`-webkit-box-flex: 1` beside a sibling already as wide as the box, and was squeezed to nothing.
+Writing the flow's styles through wasn't enough on its own: an old `-webkit-box` keeps the width
+it last gave a flexed child after the flex is gone, and the view stayed 0 px wide until its box
+was rebuilt. Photos & Videos is the case: in portrait on a phone, picking an album slides the
+album view over the libraries (HP's own "phonification" call), and the album came out 0 px wide
+under the libraries panel with its toolbar showing through.
+
+Both layouts now end with `_reflowViews`: the pane's flow, each view's styles written to its
+node, and each view's box rebuilt (`display: none`, a layout read, the display put back). It
+runs only when the layout changes, which is at start and when a turn crosses the width.
+
+Measured on 2026-10-08 on the Nexus 5 (WebView 44, a 360 px card): the album view was 0 px wide
+at the libraries' left edge, and is now 360 px and slides over them; dragging it right brings
+the libraries back. Turned to landscape (640 px) the pane is two views again, 280 and 360 px,
+and back in portrait it is stacked. No TouchPad card was ever narrower than 540 px, so the
+device never drew this layout.
+
+Files: `framework/source/palm/containers/SlidingPane.js`, `framework/build/enyo-build.js`.
+
 ## Added
 
 Nothing, since the rebase. `lib/networkproxy` (HP's network-proxy settings library, which the

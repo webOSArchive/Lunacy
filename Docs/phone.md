@@ -155,7 +155,22 @@ focus, or Ctrl, Alt or Meta is held. Both form factors; checked on the Nexus 5 w
 `adb shell input keyevent KEYCODE_T` from the launcher (codepoet, 2026-10-02; done
 2026-10-03).
 
-## 6. Not yet measured
+## 6. Palm's apps on a phone's card
+
+Two general fixes, nothing per app; neither changes a tablet.
+
+- **The centred column.** Palm's settings and Welcome screens sit in one `.box-center` column
+  500 px wide (the accounts library's first-launch view, the Accounts app, Exhibition, Email's
+  settings). Under 540 px it takes the card's width less 12 px each side, Lunacy-wide, from
+  `compat.js` (codepoet, 2026-10-08) - the rule Lunacy's own Screen & Lock and Sounds & Alerts
+  carried in their stylesheets.
+- **Enyo's phone layout.** A `SlidingPane` under its `multiViewMinWidth` stacks its views at the
+  card's width and slides the selected one over the rest; Enyo patch 0010 makes that layout
+  work (it never had on a modern engine). Photos & Videos uses it for albums: tap one and its
+  pictures slide over the libraries, drag them right to go back. A library (All Photos &
+  Videos) doesn't slide over, because HP's phone code covers only albums.
+
+## 7. Not yet measured
 
 - Nothing here has been put beside a Pre3 or a TouchPad in the same state; the TouchPad in
   portrait was at its lock screen when the first screenshots were taken.

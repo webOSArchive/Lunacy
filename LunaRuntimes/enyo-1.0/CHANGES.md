@@ -268,6 +268,28 @@ text). Checked on the Pixel Tablet over DevTools, 2026-10-08.
 
 Files: `framework/source/palm/themes/Onyx/css/CheckBox.css`, `framework/build/enyo-build.css`.
 
+### 0009-unreachable-root-window.patch
+
+A window from another origin is one Enyo can't reach, as it was on the TouchPad, rather than
+an exception.
+
+`enyo.windows.manager.getRootWindow` takes the opener, `rootWindow` or `top` as the root window
+and checks it has `setTimeout`, using its own window instead "if we don't have access to the
+real root", and `getWindowName` reads a window's `name` "when the window is cross-domain and we
+cannot read the name directly" (Palm's comments). On the TouchPad's WebKit a read from another
+origin's window answered `undefined`, so both fell back as written. Chromium throws a
+SecurityError. On webOS every page was `file://`, so a cross-app frame was rarely another
+origin; on Lunacy each app has its own, and the Accounts app showing Email's account wizard (an
+`enyo.CrossAppUI` frame from Email's origin) stopped inside `enyo-build.js` as it loaded: no
+`enyo.palmServices`, no Toolbar, a blank wizard. Both reads now count a thrown read as no
+access (`_readName` for the name).
+
+The built file's half changes the minified functions in place, unlike the other patches' added
+overrides: `getRootWindow` is called while `enyo-build.js` is still loading, before anything
+appended to it could run.
+
+Files: `framework/source/palm/system/windows/manager.js`, `framework/build/enyo-build.js`.
+
 ## Added
 
 Nothing, since the rebase. `lib/networkproxy` (HP's network-proxy settings library, which the

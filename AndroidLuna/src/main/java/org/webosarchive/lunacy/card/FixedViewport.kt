@@ -24,11 +24,13 @@ object FixedViewport {
      * Palm's own TouchPad apps that Lunacy ships and that draw a fixed 1024 x 768 screen:
      * Clock's 514 px face, Calculator's 500 x 690 panel, Memos' 943 px grid; and the two whose
      * chrome was laid out for a TouchPad's width - the Web app's action bar has no room left
-     * for the address on a 360 px card, and App Catalog's (codepoet, 2026-10-04). A shipped
-     * default for the user's switch, not a code path: the apps themselves are untouched.
+     * for the address on a 360 px card, and App Catalog's (codepoet, 2026-10-04); and Calendar
+     * and Contacts, laid out for a tablet without the sliding panels Enyo stacks on a phone,
+     * until they get a phone layout of their own (codepoet, 2026-10-08). A shipped default for
+     * the user's switch, not a code path: the apps themselves are untouched.
      */
     val DEFAULT_ON = setOf("com.palm.app.clock", "com.palm.calculator", "com.palm.app.notes",
-        "com.palm.app.browser", "com.palm.app.enyo-findapps")
+        "com.palm.app.browser", "com.palm.app.enyo-findapps", "com.palm.app.calendar", "com.palm.app.contacts")
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 

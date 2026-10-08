@@ -114,7 +114,9 @@ every app written for the Pre3 wants: the SDK had it declare its viewport
 
 **Defaults.** Off, except the bundled Palm apps known to draw a fixed screen - Clock,
 Calculator and Memos - and the two whose chrome is a TouchPad's width, the Web app (its
-action bar left no room for the address) and App Catalog (codepoet, 2026-10-04)
+action bar left no room for the address) and App Catalog (codepoet, 2026-10-04), and
+Calendar and Contacts, laid out for a tablet without sliding panels to stack, until they are
+given a phone layout of their own (codepoet, 2026-10-08)
 (`FixedViewport.DEFAULT_ON`, a shipped default for the user's switch; the apps themselves are
 untouched). An app's switch is forgotten when the app is removed.
 

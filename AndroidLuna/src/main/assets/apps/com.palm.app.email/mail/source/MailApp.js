@@ -519,7 +519,59 @@ enyo.kind({
 			this.$.mail.selectMessage(message._id);
 		}
 		
+		// [Lunacy] On a phone the three panels are stacked (the SlidingPane under its
+		// multiViewMinWidth), and the message loaded off the right of the screen: the step above
+		// brings the list over the folders, and nothing brought the message over the list. A
+		// message tapped there now comes over the list. codepoet, 2026-10-08.
+		if (userActivated && message && !this.$.slidingPane.multiView) {
+			this.$.slidingPane.selectView(this.$.bodySliding);
+		}
+		
 		//this.$.bodySliding.setShowing(!!message);
+	},
+	
+	// [Lunacy] On a phone, a leftward swipe that starts at the right edge of the panel showing
+	// (the right 64 px) drags the next panel in over it, the way a panel already in view is
+	// dragged on a tablet; letting go brings it over, or puts it back. The outer 15 px are the
+	// system's gesture dead zone and never reach the app, so 49 px of it take a swipe. Taken in
+	// the capture phase so a message row's swipe-to-delete doesn't get it first. codepoet,
+	// 2026-10-08.
+	edgeSwipeWidth: 64,
+	captureDomEvent: function(e) {
+		var pane = this.$.slidingPane;
+		if (!pane || pane.multiView || !pane.view || !pane.hasNode()) {
+			return;
+		}
+		if (e.type == "dragstart") {
+			return this.edgeSwipeStart(pane, e);
+		}
+		if (this.edgeSwiping && (e.type == "drag" || e.type == "dragfinish")) {
+			if (e.type == "drag") {
+				pane.dragHandler(pane, e);
+			} else {
+				this.edgeSwiping = false;
+				pane.dragfinishHandler(pane, e);
+			}
+			return true;
+		}
+	},
+	edgeSwipeStart: function(pane, e) {
+		var next = pane.view.getNextSibling();
+		if (!next || !next.showing || !e.horizontal || e.dx >= 0) {
+			return;
+		}
+		var r = pane.node.getBoundingClientRect();
+		var x0 = e.pageX - e.dx - window.pageXOffset;
+		if (x0 < r.right - this.edgeSwipeWidth || !next.canDrag(e.dx)) {
+			return;
+		}
+		pane.stopAnimation();
+		pane.resetOverSliding();
+		pane.dragStartSliding = next;
+		pane.dx0 = e.dx;
+		pane.dragSliding(next, e, 0);
+		this.edgeSwiping = true;
+		return true;
 	},
 	
 	messageDeleted: function(inSender, inMessage) {
@@ -539,7 +591,10 @@ enyo.kind({
 		if (!node) {
 			return;
 		}
-		if (window.innerWidth < window.innerHeight && this.$.slidingPane.view === this.$.folderSliding) {
+		// [Lunacy] Only side by side: the 448 px keeps a TouchPad's portrait message readable
+		// beside the list, and on a phone, where the panels are stacked, it pushed the message
+		// off the right of the screen. codepoet, 2026-10-08.
+		if (this.$.slidingPane.multiView && window.innerWidth < window.innerHeight && this.$.slidingPane.view === this.$.folderSliding) {
 			if (!this.ismin) {
 				this.ismin = true;
 				this.$.bodySliding.setMinWidth("448px");
@@ -605,6 +660,12 @@ enyo.kind({
 		this._arisePanelArise(this.$.bodySliding);
 	},
 	_arisePanelArise: function(toSlide) {
+		// [Lunacy] On a phone (the panels stacked), a folder tapped brings its messages over the
+		// folders; the call was here but its body left commented out. codepoet, 2026-10-08.
+		if (!this.$.slidingPane.multiView) {
+			this.$.slidingPane.selectView(toSlide);
+			return;
+		}
 		if (toSlide.showing) {
 			return;
 		}

@@ -169,6 +169,14 @@ Two general fixes, nothing per app; neither changes a tablet.
   work (it never had on a modern engine). Photos & Videos uses it for albums: tap one and its
   pictures slide over the libraries, drag them right to go back. A library (All Photos &
   Videos) doesn't slide over, because HP's phone code covers only albums.
+- **Email** finishes HP's phone layout in the app itself (codepoet's exception to rule 5,
+  2026-10-08; its NOTICE lists the changes): a tapped folder or message brings its panel over,
+  and a swipe in from the right edge (the right 64 px; the outer 15 are the gesture dead zone)
+  brings the next panel over; the grab handle in the message's toolbar takes it back.
+  **Kept in mind:** the swipe from the edge and "a tap that changes the next panel brings it
+  over" could be made Enyo's own for every stacked `SlidingPane` (a version was written as
+  an Enyo patch and withdrawn the same day). codepoet expects most apps already bring their
+  panels on themselves; Email and Photos were HP's unfinished ones.
 
 ## 7. Not yet measured
 

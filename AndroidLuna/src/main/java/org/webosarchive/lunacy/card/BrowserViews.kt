@@ -59,6 +59,8 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
     companion object {
         private const val TAG = "LunacyWeb"
         /** The Prelude fonts, as every card has them (AppServer, tools/gen-fonts-css.py). */
+        /** An email's document is as wide as its view (setHtml). */
+        private const val VIEWPORT = "<meta name=\"viewport\" content=\"width=device-width\">"
         private const val FONTS_LINK = "<link rel=\"stylesheet\" href=\"https://lunacy-fonts${AppServer.HOST_SUFFIX}/__lunacy/fonts.css\">"
         /** Fonts the reference TouchPad had besides Prelude (/usr/share/fonts), by the names pages use. */
         private val DEVICE_FONTS = setOf("arial", "verdana", "georgia", "times new roman", "times", "courier new", "courier",
@@ -430,8 +432,34 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
          * of header height loads that document again with the new room.
          */
         private fun roomStyle(): String {
-            if (headerCss <= 0 || width <= 0) return ""
-            return "<style id=\"__lunacy_header\">html{padding-top:${headerPx() * 100.0 / width}vw !important}</style>"
+            val room = room()
+            if (room.isEmpty()) return ""
+            return "<style id=\"__lunacy_header\">html{padding-top:$room !important}</style>"
+        }
+
+        /**
+         * The page's zoom (device px per CSS px) once the engine has said it ([Client.onScaleChanged]),
+         * else 0. An older engine (WebView 44) zooms a wide email out to fit while its vw still
+         * counts from the pane's width, so a room in vw came out short and the email sat under
+         * the header; with the zoom known the room is said in the page's own px.
+         */
+        private var pageScale = 0f
+
+        private fun room(): String = when {
+            headerCss <= 0 || width <= 0 -> ""
+            pageScale > 0 -> "${headerPx() / pageScale}px"
+            else -> "${headerPx() * 100.0 / width}vw"
+        }
+
+        /** The engine zoomed the page: the room follows, if it would change. */
+        fun scaleChanged(newScale: Float) {
+            if (newScale <= 0 || newScale == pageScale) return
+            // Unzoomed, the vw the page was given is the same room: nothing to load again.
+            val density = resources.displayMetrics.density
+            if (pageScale == 0f && Math.abs(newScale - density) < density * 0.01f) { pageScale = newScale; return }
+            val before = room()
+            pageScale = newScale
+            if (room() != before && headerCss > 0) applyHeader()
         }
 
         /** The document setHtml made, without its room, and the base it was loaded with. */
@@ -442,7 +470,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
             clipBounds = if (headerCss > 0) Rect(0, clipTop(), width, height) else null
             val doc = lastDoc ?: return
             if (settings.javaScriptEnabled) {
-                val room = if (headerCss > 0 && width > 0) "${headerPx() * 100.0 / width}vw" else "0"
+                val room = room().ifEmpty { "0" }
                 evaluateJavascript("(function(){var s=document.getElementById('__lunacy_header');if(!s){s=document.createElement('style');" +
                     "s.id='__lunacy_header';(document.head||document.documentElement).appendChild(s);}" +
                     "s.textContent='html{padding-top:$room !important}';})()", null)
@@ -494,8 +522,14 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 for (k in cids.keys()) doc = doc.replace(k, "file://" + cids.optString(k))
                 doc = touchpadFonts(doc)
                 doc = insertAfter(doc, "<head[^>]*>", FONTS_LINK + head) ?: "<head>$FONTS_LINK$head</head>$doc"
+                // The message is laid out at the view's own width, as webOS's message view did
+                // and a current WebView does by itself. Without a viewport an older engine (the
+                // Nexus 5's WebView 44) lays the document out 980 px wide and shrinks it to the
+                // pane, text and all; an email wider than the pane is still zoomed out to fit.
+                if (!Regex("<meta[^>]+name=[\"']?viewport", RegexOption.IGNORE_CASE).containsMatchIn(doc))
+                    doc = insertAfter(doc, "<head[^>]*>", VIEWPORT) ?: doc
                 doc = insertAfter(doc, "<body[^>]*>", top) ?: "$top$doc"
-                main.post { lastDoc = doc; loadDoc(doc) }
+                main.post { lastDoc = doc; pageScale = 0f; loadDoc(doc) }
             }
         }
 
@@ -545,6 +579,11 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         }
 
         inner class Client : WebViewClient() {
+            override fun onScaleChanged(view: WebView, oldScale: Float, newScale: Float) {
+                super.onScaleChanged(view, oldScale, newScale)
+                scaleChanged(newScale)
+            }
+
             // An app's own pages, on its origin, come from Lunacy's server as its card's do.
             override fun shouldInterceptRequest(view: WebView, req: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {
                 if (req.url.host.orEmpty().endsWith(AppServer.HOST_SUFFIX)) return owner.server.serve(req.url)
@@ -579,6 +618,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 titleChanged()
             }
             override fun onPageFinished(view: WebView, url: String) {
+                @Suppress("DEPRECATION") scaleChanged(view.getScale())
                 owner.send(id, "loadProgressChanged", 100)
                 owner.send(id, "loadStopped")
                 owner.send(id, "documentLoadFinished")

@@ -5,7 +5,13 @@ Lunacy as abandonware, like Mojo, the Prelude fonts and the TouchPad wallpapers:
 asserted rights since webOS was discontinued.
 
 Copied from the reference TouchPad, where it is pre-installed but lives in the user area of
-the filesystem (/media/cryptofs/apps). The app is here exactly as it was packaged, and Lunacy
-does not change it (rule 5 in CLAUDE.md). The build scripts and specs that shipped beside it
+the filesystem (/media/cryptofs/apps). The app is here as it was packaged, with Lunacy's changes
+for a phone's card, codepoet's exception to rule 5 in CLAUDE.md (2026-10-08): HP laid Email out
+for a TouchPad and left its phone layout unfinished. Each is marked [Lunacy] in its source:
+in mail/source/MailApp.js, a tapped folder brings its messages over the folders and a tapped
+message brings it over the list, a swipe in from the right edge brings the next panel over,
+and the message panel's 448 px minimum applies only side by side; in
+mail/source/MessageDisplay.js, the message view is no taller than its room, so it no longer
+covers the toolbar and its grab handle. A tablet's layout is unchanged. The build scripts and specs that shipped beside it
 (Rakefile, Gemfile, Gemfile.lock, ci_build.sh, build-ignore, jasminerunner.html, spec/) are
 left out; nothing else is.

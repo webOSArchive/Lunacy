@@ -855,6 +855,14 @@ enyo.kind({
 			// 300 is from the max height of the recipients list.
 			// somehow that isn't accounted for, and this makes it all happy
 			var minHeight = hb.height + 300;
+			// [Lunacy] No taller than the room the message has: on a phone's card the header
+			// and the 300 came to more than the space above the toolbar, and the message was
+			// drawn over the toolbar and its grab handle. A TouchPad's room is larger, and is
+			// unchanged by this. codepoet, 2026-10-08.
+			var room = this.getBounds().height - vb.top;
+			if (room > 0) {
+				minHeight = Math.min(minHeight, room);
+			}
 			view.$.view.applyStyle("min-height", minHeight + "px");
 		}
 	},

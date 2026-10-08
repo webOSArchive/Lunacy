@@ -88,6 +88,8 @@ interface WindowHost {
     fun activityId(window: AppWindow): Int = -1
     /** The window's stage gained or lost the focus, which its app's activity follows. */
     fun stageFocused(window: AppWindow, focused: Boolean) {}
+    /** A hybrid app's plugins for this window (Docs/pdk.md, "Hybrid apps"); null where there is no PDK runtime. */
+    fun hybridPlugins(window: AppWindow): HybridPlugins? = null
 }
 
 /**
@@ -159,6 +161,10 @@ open class AppWindow(
     /** enyo.WebView's native views in this window, made when a page first asks for one. */
     private val browserViews by lazy { BrowserViews(this, host.server.webosRoot, host.server) }
     private var hasBrowserViews = false
+    /** The page's hybrid plugins, made when it first embeds one. */
+    @Volatile private var plugins: HybridPlugins? = null
+    private val pluginsLock = Any()
+    private fun plugins(): HybridPlugins? = plugins ?: synchronized(pluginsLock) { plugins ?: host.hybridPlugins(this).also { plugins = it } }
 
     init {
         settings.apply {
@@ -224,6 +230,7 @@ open class AppWindow(
                 page++; net.reset(); sql.reset(); endCalls()
                 // A new page: the old one's native web views go with it.
                 if (hasBrowserViews) browserViews.destroyAll()
+                plugins?.stopAll()
                 pageReady = false; told = null
             }
             override fun onPageFinished(view: WebView, url: String) {
@@ -259,6 +266,7 @@ open class AppWindow(
     override fun destroy() {
         destroyed = true
         if (hasBrowserViews) browserViews.destroyAll()
+        plugins?.stopAll()
         net.reset()
         sql.close()
         endCalls()
@@ -469,6 +477,13 @@ open class AppWindow(
         @JavascriptInterface fun webViewPlace(id: Int, place: String) = browserViews.place(id, place)
         @JavascriptInterface fun webViewCovered(id: Int, generation: Int) = browserViews.covered(id, generation)
         @JavascriptInterface fun webViewDestroy(id: Int) = browserViews.destroy(id)
+
+        // Hybrid plugins (HybridPlugins, and "Plugins" in bridge.js).
+        @JavascriptInterface fun pluginStart(exe: String): Int = plugins()?.start(exe) ?: -1
+        /** Synchronous, as a plugin's methods were: the page's script waits for the answer. */
+        @JavascriptInterface fun pluginCall(id: Int, method: String, args: String): String =
+            plugins()?.call(id, method, args) ?: "{\"exception\":\"plugin not connected\"}"
+        @JavascriptInterface fun pluginStop(id: Int) { plugins?.stop(id) }
 
         @JavascriptInterface fun log(msg: String) { Log.i(AppServer.TAG, "[$appId] palm $msg") }
 

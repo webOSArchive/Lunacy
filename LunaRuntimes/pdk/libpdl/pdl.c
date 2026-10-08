@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <poll.h>
+#include <pthread.h>
 
 #include "PDL.h"
 #include "lunacy_protocol.h"
@@ -57,11 +58,13 @@ static PDL_Err copy_out(char *buffer, int bufferLen, const char *value)
 
 /* ---- lifecycle ---- */
 
-PDL_Err PDL_Init(unsigned int flags) { inited = 1; return PDL_NOERROR; }
+static int js_link(void);
+PDL_Err PDL_Init(unsigned int flags) { inited = 1; if (getenv("LUNACY_PDK_PLUGIN")) js_link(); return PDL_NOERROR; }
 void PDL_Quit(void) { inited = 0; }
 const char *PDL_GetError(void) { return last_error; }
 int PDL_GetPDKVersion(void) { return 300; }   /* the TouchPad's PDK, 3.0.x */
-PDL_bool PDL_IsPlugin(void) { return PDL_FALSE; }
+/* A hybrid app's plugin: the shell started it for a page (LUNACY_PDK_PLUGIN). */
+PDL_bool PDL_IsPlugin(void) { return getenv("LUNACY_PDK_PLUGIN") ? PDL_TRUE : PDL_FALSE; }
 PDL_bool PDL_IsFullscreenPlugin(void) { return PDL_FALSE; }
 
 /* ---- the device, from what the shell put in the environment ---- */
@@ -197,21 +200,240 @@ PDL_Err PDL_EnableSensor(PDL_SensorType sensor, PDL_bool bEnable) { return PDL_N
 PDL_Err PDL_PollSensor(PDL_SensorType sensor, PDL_SensorEvent *event) { return PDL_NOTALLOWED; }
 PDL_Err PDL_PollActiveSensors(PDL_SensorEvent *event) { return PDL_NOTALLOWED; }
 
-/* ---- the JS side of a hybrid app: none here, these are plain PDK apps ---- */
+/* ---- the JS side of a hybrid app (Docs/pdk.md, "Hybrid apps") ----
+ *
+ * A plugin is a PDK binary a web page embeds as <object type="application/x-palm-remote">.
+ * The shell starts it for the page and it opens a link of its own, greeting 'J'. Its
+ * handlers' names go to the shell when registration is complete, and become methods on the
+ * page's object; a call from the page arrives here, runs the handler and goes back with what
+ * the handler replied, while the page's script waits, as it waited on webOS. As the PDK's
+ * PDL_JS.h has it, a handler registered with PDL_RegisterJSHandler runs at once on this
+ * library's own thread, and one registered with PDL_RegisterPollingJSHandler waits in a
+ * queue for the app's PDL_HandleJSCalls, announced by an SDL_USEREVENT with code
+ * PDL_PENDING_JS. PDL_CallJS calls a function the page set on the object.
+ */
 
-PDL_Err PDL_RegisterJSHandler(const char *functionName, PDL_JSHandlerFunc function) { return PDL_NOTALLOWED; }
-PDL_Err PDL_RegisterPollingJSHandler(const char *functionName, PDL_JSHandlerFunc function) { return PDL_NOTALLOWED; }
-PDL_Err PDL_JSRegistrationComplete(void) { return PDL_NOERROR; }
-int PDL_HandleJSCalls(void) { return 0; }
-const char *PDL_GetJSFunctionName(PDL_JSParameters *parms) { return ""; }
-PDL_bool PDL_IsPoller(PDL_JSParameters *parms) { return PDL_FALSE; }
-int PDL_GetNumJSParams(PDL_JSParameters *parms) { return 0; }
-const char *PDL_GetJSParamString(PDL_JSParameters *parms, int paramNum) { return ""; }
-int PDL_GetJSParamInt(PDL_JSParameters *parms, int paramNum) { return 0; }
-double PDL_GetJSParamDouble(PDL_JSParameters *parms, int paramNum) { return 0; }
-PDL_Err PDL_JSReply(PDL_JSParameters *parms, const char *reply) { return PDL_NOTALLOWED; }
-PDL_Err PDL_JSException(PDL_JSParameters *parms, const char *reply) { return PDL_NOTALLOWED; }
-PDL_Err PDL_CallJS(const char *functionName, const char **params, int numParams) { return PDL_NOTALLOWED; }
+struct PDL_JSParameters {
+	uint32_t id;
+	const char *name;
+	int argc;
+	const char **argv;
+	char *buf;             /* the call's payload, which name and argv point into */
+	int kind;              /* 0 replied, 1 an exception, 2 nothing yet */
+	char *reply;
+	int poller;
+	PDL_JSHandlerFunc fn;
+	struct PDL_JSParameters *next;
+};
+
+struct js_handler { char *name; PDL_JSHandlerFunc fn; int poller; };
+static struct js_handler *js_handlers;
+static int js_count, js_complete;
+static int js_sock = -1;
+static pthread_mutex_t js_send_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t js_queue_lock = PTHREAD_MUTEX_INITIALIZER;
+static struct PDL_JSParameters *js_queue, *js_queue_tail;
+
+/* The JS link, opened when the plugin starts (PDL_Init) or first needs it. */
+static int js_link(void)
+{
+	if (js_sock < 0 && getenv("LUNACY_PDK_PLUGIN") && !getenv("LUNACY_PDK_NOSHELL")) js_sock = LUNACY_Connect("J");
+	return js_sock;
+}
+
+static int js_send(uint32_t type, uint32_t a, const void *payload, uint32_t len)
+{
+	int r;
+	pthread_mutex_lock(&js_send_lock);
+	r = LUNACY_Send(js_link(), type, a, payload, len);
+	pthread_mutex_unlock(&js_send_lock);
+	return r;
+}
+
+static PDL_Err js_register(const char *functionName, PDL_JSHandlerFunc function, int poller)
+{
+	struct js_handler *h;
+	if (!functionName || !*functionName || !function) return PDL_INVALIDINPUT;
+	if (js_complete) return fail("PDL_JSRegistrationComplete has been called");
+	h = realloc(js_handlers, (js_count + 1) * sizeof *h);
+	if (!h) return PDL_EMEMORY;
+	js_handlers = h;
+	js_handlers[js_count].name = strdup(functionName);
+	js_handlers[js_count].fn = function;
+	js_handlers[js_count].poller = poller;
+	js_count++;
+	return PDL_NOERROR;
+}
+
+PDL_Err PDL_RegisterJSHandler(const char *functionName, PDL_JSHandlerFunc function) { return js_register(functionName, function, 0); }
+PDL_Err PDL_RegisterPollingJSHandler(const char *functionName, PDL_JSHandlerFunc function) { return js_register(functionName, function, 1); }
+
+/* Sends what the handler answered, and frees the call. */
+static void js_finish(struct PDL_JSParameters *p)
+{
+	size_t n = p->reply ? strlen(p->reply) : 0;
+	char *out = malloc(n + 1);
+	if (out) {
+		out[0] = (char)p->kind;
+		if (n) memcpy(out + 1, p->reply, n);
+		js_send(LPDK_JS_REPLY, p->id, out, n + 1);
+		free(out);
+	}
+	free(p->reply); free(p->argv); free(p->buf); free(p);
+}
+
+static void js_call(uint32_t id, char *buf, uint32_t len)
+{
+	struct PDL_JSParameters *p = calloc(1, sizeof *p);
+	int i, n = 0;
+	uint32_t at;
+	if (!p) { free(buf); return; }
+	p->id = id; p->buf = buf; p->kind = 2;
+	for (at = 0; at < len; at++) if (!buf[at]) n++;
+	p->name = buf;
+	p->argc = n > 0 ? n - 1 : 0;
+	p->argv = calloc(p->argc + 1, sizeof *p->argv);
+	for (at = strlen(buf) + 1, i = 0; i < p->argc && at < len; i++) { p->argv[i] = buf + at; at += strlen(buf + at) + 1; }
+	for (i = 0; i < js_count; i++) if (!strcmp(js_handlers[i].name, p->name)) break;
+	if (i == js_count) {
+		p->kind = 1; p->reply = strdup("no such method");
+		js_finish(p);
+		return;
+	}
+	p->fn = js_handlers[i].fn;
+	p->poller = js_handlers[i].poller;
+	if (!p->poller) {
+		p->fn(p);
+		js_finish(p);
+		return;
+	}
+	pthread_mutex_lock(&js_queue_lock);
+	if (js_queue_tail) js_queue_tail->next = p; else js_queue = p;
+	js_queue_tail = p;
+	pthread_mutex_unlock(&js_queue_lock);
+	{
+		SDL_Event e;
+		memset(&e, 0, sizeof e);
+		e.type = SDL_USEREVENT;
+		e.user.code = PDL_PENDING_JS;
+		SDL_PushEvent(&e);
+	}
+}
+
+static int read_all(int fd, void *p, size_t n)
+{
+	char *c = p;
+	while (n) {
+		ssize_t r = read(fd, c, n);
+		if (r < 0 && errno == EINTR) continue;
+		if (r <= 0) return -1;
+		c += r; n -= r;
+	}
+	return 0;
+}
+
+/* The link's reader: the page's calls, until the shell closes it. */
+static void *js_reader(void *unused)
+{
+	for (;;) {
+		uint32_t h[3];
+		char *buf;
+		if (read_all(js_sock, h, sizeof h) < 0) break;
+		buf = malloc(h[2] + 1);
+		if (!buf) break;
+		if (h[2] && read_all(js_sock, buf, h[2]) < 0) { free(buf); break; }
+		buf[h[2]] = 0;
+		if (h[0] == LPDK_JS_CALL) js_call(h[1], buf, h[2]); else free(buf);
+	}
+	/* The page has gone: the plugin goes with it, as it did when webOS took the object away. */
+	{
+		SDL_Event e;
+		memset(&e, 0, sizeof e);
+		e.type = SDL_QUIT;
+		SDL_PushEvent(&e);
+	}
+	return NULL;
+}
+
+PDL_Err PDL_JSRegistrationComplete(void)
+{
+	size_t len = 0, at = 0;
+	char *names;
+	int i;
+	pthread_t t;
+	if (js_complete) return PDL_NOERROR;
+	js_complete = 1;
+	/* A plain PDK app has no page to answer: done, as before there were plugins. */
+	if (!getenv("LUNACY_PDK_PLUGIN") || getenv("LUNACY_PDK_NOSHELL")) return PDL_NOERROR;
+	if (js_link() < 0) return fail("the page went away");
+	for (i = 0; i < js_count; i++) len += strlen(js_handlers[i].name) + 1;
+	names = malloc(len + 1);
+	if (!names) return PDL_EMEMORY;
+	for (i = 0; i < js_count; i++) { strcpy(names + at, js_handlers[i].name); at += strlen(js_handlers[i].name) + 1; }
+	js_send(LPDK_JS_READY, 0, names, len);
+	free(names);
+	if (pthread_create(&t, NULL, js_reader, NULL) == 0) pthread_detach(t);
+	return PDL_NOERROR;
+}
+
+int PDL_HandleJSCalls(void)
+{
+	int n = 0;
+	for (;;) {
+		struct PDL_JSParameters *p;
+		pthread_mutex_lock(&js_queue_lock);
+		p = js_queue;
+		if (p) { js_queue = p->next; if (!js_queue) js_queue_tail = NULL; }
+		pthread_mutex_unlock(&js_queue_lock);
+		if (!p) break;
+		p->fn(p);
+		js_finish(p);
+		n++;
+	}
+	return n;
+}
+
+const char *PDL_GetJSFunctionName(PDL_JSParameters *parms) { return parms && parms->name ? parms->name : ""; }
+PDL_bool PDL_IsPoller(PDL_JSParameters *parms) { return parms && parms->poller ? PDL_TRUE : PDL_FALSE; }
+int PDL_GetNumJSParams(PDL_JSParameters *parms) { return parms ? parms->argc : 0; }
+const char *PDL_GetJSParamString(PDL_JSParameters *parms, int paramNum)
+{
+	return parms && paramNum >= 0 && paramNum < parms->argc ? parms->argv[paramNum] : "";
+}
+int PDL_GetJSParamInt(PDL_JSParameters *parms, int paramNum) { return atoi(PDL_GetJSParamString(parms, paramNum)); }
+double PDL_GetJSParamDouble(PDL_JSParameters *parms, int paramNum) { return atof(PDL_GetJSParamString(parms, paramNum)); }
+
+static PDL_Err js_answer(PDL_JSParameters *parms, const char *reply, int kind)
+{
+	if (!parms) return PDL_INVALIDINPUT;
+	free(parms->reply);
+	parms->reply = strdup(reply ? reply : "");
+	parms->kind = kind;
+	return PDL_NOERROR;
+}
+PDL_Err PDL_JSReply(PDL_JSParameters *parms, const char *reply) { return js_answer(parms, reply, 0); }
+PDL_Err PDL_JSException(PDL_JSParameters *parms, const char *reply) { return js_answer(parms, reply, 1); }
+
+PDL_Err PDL_CallJS(const char *functionName, const char **params, int numParams)
+{
+	size_t len, at;
+	char *buf;
+	int i;
+	if (!functionName || !*functionName || numParams < 0) return PDL_INVALIDINPUT;
+	if (!getenv("LUNACY_PDK_PLUGIN")) return PDL_NOTALLOWED;   /* no page to call */
+	if (getenv("LUNACY_PDK_NOSHELL")) return PDL_NOERROR;
+	if (js_link() < 0) return fail("the page went away");
+	len = strlen(functionName) + 1;
+	for (i = 0; i < numParams; i++) len += strlen(params[i] ? params[i] : "") + 1;
+	buf = malloc(len);
+	if (!buf) return PDL_EMEMORY;
+	strcpy(buf, functionName); at = strlen(functionName) + 1;
+	for (i = 0; i < numParams; i++) { const char *v = params[i] ? params[i] : ""; strcpy(buf + at, v); at += strlen(v) + 1; }
+	i = js_send(LPDK_CALL_JS, 0, buf, len);
+	free(buf);
+	return i < 0 ? fail("the page went away") : PDL_NOERROR;
+}
+
 PDL_Err PDL_DismissFullscreen(void) { return PDL_NOERROR; }
 
 /* ---- purchases: the catalog is gone ---- */

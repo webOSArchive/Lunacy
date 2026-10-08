@@ -1107,6 +1107,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     override fun activityId(window: AppWindow): Int = appActivities[window.appId] ?: -1
 
+    /** Called on the bridge's thread, the first time the page embeds a plugin. */
+    override fun hybridPlugins(window: AppWindow): org.webosarchive.lunacy.card.HybridPlugins? {
+        val app = registry.get(window.appId) ?: return null
+        return org.webosarchive.lunacy.card.HybridPlugins(window, app, pdkRuntime) { webos.prepare() }
+    }
+
     /** WebAppBase::focusActivity and blurActivity, as the app's card gains and loses the focus. */
     override fun stageFocused(window: AppWindow, focused: Boolean) {
         val id = appActivities[window.appId] ?: return

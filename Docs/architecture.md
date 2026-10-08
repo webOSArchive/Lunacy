@@ -1080,9 +1080,13 @@ no `openDatabase` at all, and Lunacy provides it in JS instead:
   - `/var/log/messages` (`SysLog.kt`) has every app's console output as LunaSysMgr logged it
     (`… user.notice LunaSysMgr: {LunaSysMgrJS}: <appid>: <message>, <file>:<line>`), with
     `lunacy` in the machine field, kept under 1 MB by moving it to `messages.0`.
-- **Hybrid apps.** Some web apps declare `"plug-ins": true` and ship native PDK plugins
-  (Kindle does). They can run only as far as their web side goes until the PDK layer
-  exists, and the compatibility score says so.
+- **Hybrid apps.** Some web apps declare `"plug-ins": true` and embed a native PDK plugin
+  as `<object type="application/x-palm-remote" exe="…">` (Kindle, Quick Office, Adobe
+  Reader). The bridge finds the object, the shell runs the binary through the PDK runtime
+  (`HybridPlugins.kt`, `PdkHost`'s plugin mode), and the plugin's handlers become the
+  object's methods, synchronous as on webOS, with its `PDL_CallJS` calls and status changes
+  delivered back to the page. Measured against the TouchPad's RemoteAdapter; see
+  [pdk.md](pdk.md), §6c. A plugin's picture isn't drawn into the page yet.
 - **App Museum: the real app, not a client.** The [App Museum](https://appcatalog.webosarchive.org)
   is itself an Enyo app that already runs in modern Safari, and webOS Archive owns its
   [catalog service](https://github.com/webOSArchive/webos-catalog-service). Lunacy bundles

@@ -93,7 +93,8 @@ it through an `AudioTrack`. The socket's buffering paces the app.
 answers from the environment the shell set (screen metrics, OS version, device name,
 nduid, language, the app's paths) and sends the rest as JSON to the host: orientation
 (`PDL_SetOrientation` turns the card), vibration, gestures, the screen timeout. Not yet
-carried: `PDL_ServiceCall` (the bus), sensors, the JS side of hybrid apps, purchases.
+carried: `PDL_ServiceCall` (the bus), sensors, purchases. The JS side of a hybrid app is in
+§6c.
 
 **The card.** `PdkWindow` is an `AppWindow` that never loads a page, with the frame view as
 its child, so the card layer sizes, scales, thumbnails and closes it as any card. The
@@ -105,8 +106,9 @@ In `LunaRuntimes/pdk/sdl-lunacy/lunacy_protocol.h`, mirrored in `PdkHost`. Every
 three little-endian uint32s, type, a, length, then the payload. Connections on one
 abstract Unix socket, told apart by a first byte: `V` for video, input and PDL, `A` for
 audio, `P` for libpdl's own requests, `G` for the GL stream (blocking, with the shell's
-answers coming back on it: swap acknowledgements, read pixels, GLES 2 query results). The
-shell writes to the app from a sender thread, never the main thread.
+answers coming back on it: swap acknowledgements, read pixels, GLES 2 query results), `J` for
+a hybrid app's plugin's JS link (§6c). The shell writes to the app from a sender thread,
+never the main thread.
 
 ## 5. Approaches for the rest, none ruled out
 
@@ -447,8 +449,7 @@ splash between about 3 and 8 seconds, then waits for taps on a black sky. Neithe
 Lunacy fault. On the phone profile, a TouchPad-only app sees a Pre3's screen, as it would have
 on a Pre3.
 
-Open: hybrid apps, web apps that embed a PDK plugin (the chess app tried here is one);
-OpenSSL 0.9.8 and curl (about 50 apps); the accelerometer's x sign; PDL_ServiceCall to the bus.
+Open (since done: hybrid apps, §6c): OpenSSL 0.9.8 and curl (about 50 apps); the accelerometer's x sign; PDL_ServiceCall to the bus.
 
 ## 6. Seen on the Nexus 5, 2026-10-02
 
@@ -583,7 +584,98 @@ for the GLES version there, and stock SDL dereferences its video device before o
 (the game quit at once, exit 1). libEGL now reads the version the SDL driver keeps. Open: `eglSwapInterval` is not measured beyond killing the probe; the other ten ports are
 untried.
 
+## 6c. Hybrid apps: Adobe Reader and Quick Office, 2026-10-07
+
+A hybrid app is a web app that embeds a PDK binary in its page as
+`<object type="application/x-palm-remote" exe="<path in the app>">` and declares
+`"plug-ins": true` in appinfo.json (Enyo 1 wraps the object as `enyo.Hybrid`). Quick Office
+2.2.247 and Adobe Reader 10.3.492 are hybrid apps whose document engines are plugins:
+`import/qoservice/qoservice` (ICU 3.6, SDL, GLES 2) and `import/arx/arxservice` (SDL alone).
+Both are 1 px or 0 px objects that draw nothing on the page: they render documents into
+files (Adobe Reader's pages, Quick Office's slides as PNGs) or send them as JSON (Quick
+Office's word-processing and spreadsheet model, which its QOWT library lays out in HTML).
+
+**What a device did, measured on the reference TouchPad.** The browser's RemoteAdapter plugin
+started the binary when the object went into the page: by its absolute path, no arguments, in
+the app's folder (which was also `HOME`), with one socket back to the browser, and its data in
+`/media/internal/appdata/<app id>` (`PDL_GetDataFilePath`), where the page then reads what it
+rendered. The object's `__PDL_PluginStatusChange__` heard `connected` and then, after the
+plugin's own first `PDL_CallJS`, `ready` (Adobe Reader's log: CONNECTED, VERSION, READY). The
+handlers the plugin registered became the object's methods, synchronous: the page's script
+waited for the handler's `PDL_JSReply`, and `PDL_JSException` threw. An argument left
+`undefined` reached the plugin as nothing (Adobe Reader names its pages `page-0000-152`, no
+suffix).
+
+**How Lunacy does it.**
+
+- The page side is the bridge (`assets/lunacy/bridge.js`, "Plugins"): a MutationObserver
+  finds the objects as they go in and out of the page, asks the shell to start or end each
+  one, and turns the plugin's handlers into methods once it is ready. A call is
+  `LunacyNative.pluginCall`, synchronous like the device's; the plugin's `PDL_CallJS` and the
+  status changes come back through `evaluateJavascript`, in order.
+- The shell side is `HybridPlugins.kt`, one per window: each object's binary runs through
+  `PdkHost` in its plugin mode, which is the PDK app's process as above with the TouchPad's
+  plugin environment (`LUNACY_PDK_PLUGIN`, `HOME` the app's folder, the data folder under
+  `/media/internal/appdata`). Only an app that declares `"plug-ins": true` gets one, as Palm's
+  hybrid documentation required. A binary the package hasn't got never connects (Adobe
+  Reader's page also embeds Quick Office's plugin, from code the two share). The plugin ends
+  when its object leaves the page or the page goes; a call in progress then throws.
+- libpdl's JS calls (`LunaRuntimes/pdk/libpdl/pdl.c`) open the `J` connection at `PDL_Init`:
+  `PDL_JSRegistrationComplete` sends the handlers' names (`LPDK_JS_READY`); a call arrives as
+  `LPDK_JS_CALL` (the name, then each argument, NUL-terminated) and runs on libpdl's own
+  thread, or for a polling handler waits for `PDL_HandleJSCalls`, announced by an
+  `SDL_USEREVENT` with `PDL_PENDING_JS`, as PDL_JS.h describes; the answer goes back as
+  `LPDK_JS_REPLY`. `PDL_CallJS` is `LPDK_CALL_JS`.
+- A plugin's OpenGL ES is replayed offscreen as a PDK card's is (`PdkGl`, no view): Quick
+  Office draws a presentation's slides with GLES 2 and reads them back, so it waits on the
+  replay's answers. What a visible plugin draws isn't shown yet.
+
+**What the plugins needed from the machine.** All general, for every PDK binary:
+
+- **/etc/mtab.** Adobe Reader's engine opens a document only while `/media/internal` is
+  mounted (a device in USB drive mode turned it away: "no document"). The webOS root has the
+  TouchPad's mounts, less each app's jail (`fetch-assets.sh`), and the preload maps
+  `/etc/mtab` there.
+- **/tmp.** Quick Office's engine works in a folder it makes under `/tmp` ("uex" from its
+  open request without one). The preload maps `/tmp` into the root, which has one.
+- **Shell commands.** Adobe Reader names a document's page cache by
+  `ls -l "<document>" | awk … | md5sum`, checks the cache with `ls`, and moves each page into
+  place with `mv`, all through `popen` and `system`. glibc runs those through `/bin/sh` from
+  inside itself, where a preload can't reach, and Android's own `sh` was then handed the glibc
+  preload and refused to start. The preload replaces `popen`, `pclose` and `system`: the
+  command runs in the webOS root's busybox, started with `posix_spawn` (whose child makes no
+  call Android's seccomp policy refuses before the exec), with its webOS paths pointed into
+  the root by the rule package scripts get (`WebosRoot.mapPaths`), and an environment without
+  the glibc loader's variables. `LUNACY_PDK_TRACE_COMMANDS=1` in `files/pdk/env` logs each one.
+- **Android's folders.** A document in Android's Documents is `/media/internal/documents/…`
+  to the app (`UserFiles`). The shell names those folders to the preload
+  (`LUNACY_PDK_MEDIA`), which resolves them as UserFiles does, Lunacy's own tree first.
+- **ICU 3.6.** Quick Office's plugin links `libicuio`, `libicule` and `libiculx` besides the
+  four the mail services brought; they are the TouchPad's, in the root's `/usr/lib`, which is
+  now on every PDK process's library path after the runtime's own.
+- **truncate.** Not the plugins' need but found checking for regressions: glibc's
+  `ftruncate` is ARM's legacy call, which Android 10's seccomp policy refuses, so a 2D game
+  (Commander Keen) couldn't size its framebuffer under libenosys. The preload makes it
+  `ftruncate64`, and `truncate` `truncate64`.
+- **qemu.** Under Termux's qemu, glibc's loader marked the sysroot's `/lib` as missing once
+  a library wasn't in it, and Quick Office's plugin, whose first libraries are ICU's, then
+  couldn't find `libpdl.so`. The runtime's folder goes by its real path instead, as it already
+  did for native services.
+
+The page needed one thing of the engine too: Quick Office's spreadsheet grid calls
+`table.children(i)` and `row.cells(i)`, which the TouchPad's WebKit allowed (compat.js,
+"Collections are callable"; Docs/luna-deltas.md A17).
+
+**Seen on the A7 Lite (2026-10-07), natively and under qemu:** Adobe Reader opens PDFs from
+its list and from `applicationManager/open`, Android's Documents and Download included, and
+pages through them; Quick Office opens .doc, .docx, .xls, .xlsx, .ppt, .pptx and .txt. The
+desk harness `Workbench/probe/plugin-desk.py` runs a plugin under `qemu-arm-static` and calls
+its handlers as a page would, which is how the plugins' needs above were found.
+
 ## 7. Still to do on the first path
+
+- A visible hybrid plugin's picture, drawn over its object in the page (no app needing it
+  has turned up yet).
 
 - The bus for `PDL_ServiceCall` through the host, as JS services have it.
 - A keyboard for apps that want one (`PDL_SetKeyboardState`).

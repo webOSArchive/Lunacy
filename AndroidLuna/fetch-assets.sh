@@ -354,6 +354,40 @@ Licence), ICU 3.6 (ICU licence), jemalloc (BSD), c-ares (MIT), cJSON / mjson (MI
 reference TouchPad, where webOS CE runs the mail services on them for TLS 1.2.
 NOTICE
 
+# Hybrid apps' plugins (Docs/pdk.md, "Hybrid apps"). Quick Office's links the rest of the
+# TouchPad's ICU 3.6 (its io, layout and paragraph-layout libraries), beside the four the mail
+# services brought. From Workbench/vendor/touchpad/icu.
+cp $V/touchpad/icu/usr/lib/libicuio.so.36 $V/touchpad/icu/usr/lib/libicule.so.36 $V/touchpad/icu/usr/lib/libiculx.so.36 $R/usr/lib/
+cat > $R/usr/lib/NOTICE.icu <<'NOTICE'
+libicuio.so.36, libicule.so.36 and libiculx.so.36: ICU 3.6 (ICU licence,
+https://github.com/unicode-org/icu/blob/main/LICENSE), as the reference TouchPad (webOS CE
+3.1.0) ships them in /usr/lib.
+NOTICE
+# /etc/mtab, the mounts as the TouchPad's /proc/mounts listed them (measured, less each app's
+# jail): Adobe Reader's plugin opens a document only while /media/internal is mounted, which
+# was how a device in USB drive mode turned it away. Native code reads it through the preload.
+mkdir -p $R/etc
+cat > $R/etc/mtab <<'MTAB'
+rootfs / rootfs rw 0 0
+/dev/root /boot ext3 ro,relatime,errors=continue,barrier=0,data=writeback 0 0
+/dev/mapper/store-root / ext3 ro,relatime,errors=continue,barrier=0,data=writeback 0 0
+proc /proc proc rw,relatime 0 0
+sysfs /sys sysfs rw,relatime 0 0
+tmpfs /dev tmpfs rw,relatime,size=2048k,mode=755 0 0
+devpts /dev/pts devpts rw,relatime,gid=5,mode=620 0 0
+/dev/mapper/store-var /var ext3 rw,noatime,errors=continue,barrier=0,data=writeback 0 0
+tmpfs /tmp tmpfs rw,relatime,size=40960k 0 0
+tmpfs /var/run tmpfs rw,relatime,size=16384k 0 0
+tmpfs /var/tmp tmpfs rw,relatime,size=32768k 0 0
+tmpfs /media/ram tmpfs rw,relatime 0 0
+/dev/mapper/store-log /var/log ext3 rw,noatime,errors=continue,barrier=0,data=writeback 0 0
+cryptofs /media/cryptofs fuse.cryptofs rw,nosuid,nodev,relatime,user_id=0,group_id=0,allow_other 0 0
+/dev/mapper/store-cryptodb /var/db ext3 rw,noatime,errors=continue,barrier=0,data=ordered 0 0
+/dev/mapper/store-cryptofilecache /var/file-cache ext3 rw,noatime,errors=continue,user_xattr,barrier=0,data=writeback 0 0
+extractfs /var/luna/data/extractfs fuse.extractfs rw,nosuid,nodev,relatime,user_id=0,group_id=0 0 0
+/dev/mapper/store-media /media/internal vfat rw,relatime,fmask=0000,dmask=0000,allow_utime=0022,codepage=cp437,iocharset=iso8859-1,shortname=mixed,utf8,errors=remount-ro 0 0
+MTAB
+
 # OpenAL's configuration, as the TouchPad had it: its OpenAL Soft 1.11 (the PDK runtime's
 # libopenal.so.1) plays through SDL with these settings. PDK apps read /etc/openal through
 # the preload (LunaRuntimes/pdk/libpreload), which looks it up here.

@@ -402,6 +402,51 @@
 	}, true);
 })();
 
+// Collections are callable, as they were in the reference TouchPad's WebKit (534.6): there
+// coll(i) was coll[i], a numeric string counted as an index, an index out of range gave null,
+// and a name found the element by id (Workbench/probe jsprobe 0.0.2: children, cells, rows,
+// tBodies, childNodes, getElementsByTagName's results and document.forms all answered).
+// Quick Office's spreadsheet grid calls table.children(i) and row.cells(i), and Chromium threw
+// "is not a function" before a cell was drawn. children, cells, rows and tBodies come back as
+// a Proxy over the live collection that can also be called; everything else it answers from
+// the collection itself, its prototype and its toString tag included, so a framework's type
+// check still sees an HTMLCollection (typeof says "function" where the TouchPad said "object":
+// Docs/luna-deltas.md). A new one at each read, as the TouchPad gave a new collection each
+// time. childNodes and the getElementsBy* results, which frameworks walk in hot loops, are left
+// as they are. An engine without Proxy (Chromium 37) keeps its own collections.
+(function () {
+	if (typeof Proxy !== "function" || typeof Reflect !== "object") { return; }
+	function callable(coll) {
+		var target = (function () {}).bind(null);
+		return new Proxy(target, {
+			apply: function (t, self, args) {
+				var k = args.length ? args[0] : 0, v;
+				if (typeof k === "number" || /^\d+$/.test(String(k))) { v = coll[Number(k)]; return v === undefined ? null : v; }
+				return coll.namedItem ? coll.namedItem(String(k)) : null;
+			},
+			get: function (t, name) { var v = coll[name]; return typeof v === "function" ? v.bind(coll) : v; },
+			set: function (t, name, v) { coll[name] = v; return true; },
+			has: function (t, name) { return name in coll; },
+			ownKeys: function () { return Reflect.ownKeys(coll); },
+			getOwnPropertyDescriptor: function (t, name) {
+				var d = Reflect.getOwnPropertyDescriptor(coll, name);
+				if (d) { d.configurable = true; }
+				return d;
+			},
+			getPrototypeOf: function () { return Object.getPrototypeOf(coll); }
+		});
+	}
+	[[window.Element, "children"], [window.HTMLTableRowElement, "cells"], [window.HTMLTableElement, "rows"],
+	 [window.HTMLTableElement, "tBodies"], [window.HTMLTableSectionElement, "rows"]].forEach(function (p) {
+		var proto = p[0] && p[0].prototype, d = proto && Object.getOwnPropertyDescriptor(proto, p[1]);
+		if (!d || !d.get || !d.configurable) { return; }
+		Object.defineProperty(proto, p[1], {
+			configurable: true, enumerable: d.enumerable,
+			get: function () { var c = d.get.call(this); return c ? callable(c) : c; }
+		});
+	});
+})();
+
 // No service workers: the TouchPad's WebKit had none, and apps written to run on the web too
 // register one when navigator.serviceWorker exists. It can't work on Lunacy's served origins.
 (function () {

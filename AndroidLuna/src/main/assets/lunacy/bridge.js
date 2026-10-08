@@ -416,4 +416,81 @@
 			define(PalmSystem, name, function () { N.log("PalmSystem." + name + " (not implemented)"); });
 		}
 	});
+	// Plugins: a hybrid app's <object type="application/x-palm-remote" exe="..."> (Docs/pdk.md,
+	// "Hybrid apps"). On webOS the browser's RemoteAdapter plugin started the exe when the object
+	// went into the page and ended it when the object left. Once the plugin had registered its
+	// handlers they were the object's methods, synchronous, answering with the string the
+	// handler replied or throwing what it threw; PDL_CallJS called a function the page had put
+	// on the object; and the object's __PDL_PluginStatusChange__ heard "connected", "ready" and
+	// "disconnected". The shell runs the exe (HybridPlugins.kt); this side finds the objects.
+	// Only the main frame's: the shell's events reach that one.
+	(function () {
+		if (!N.pluginStart || window.top !== window || !window.MutationObserver) { return; }
+		var TYPE = "application/x-palm-remote", objects = {};
+		function isPlugin(n) {
+			return n.nodeType === 1 && n.tagName === "OBJECT" && String(n.getAttribute("type")).toLowerCase() === TYPE;
+		}
+		function each(n, fn) {
+			if (n.nodeType !== 1) { return; }
+			if (isPlugin(n)) { fn(n); }
+			var list = n.getElementsByTagName ? n.getElementsByTagName("object") : [];
+			for (var i = 0; i < list.length; i++) { if (isPlugin(list[i])) { fn(list[i]); } }
+		}
+		function start(o) {
+			if (o.__lunacyPlugin || !document.documentElement.contains(o)) { return; }
+			var id = N.pluginStart(String(o.getAttribute("exe") || ""));
+			if (id < 0) { return; }
+			o.__lunacyPlugin = id;
+			objects[id] = o;
+		}
+		function stop(o) {
+			var id = o.__lunacyPlugin;
+			if (!id || document.documentElement.contains(o)) { return; }
+			delete objects[id];
+			o.__lunacyPlugin = 0;
+			N.pluginStop(id);
+		}
+		// An argument goes to the plugin as a string; one left undefined goes as nothing, which
+		// is how Adobe Reader's render calls name their pages (measured: "page-0000-152").
+		function text(v) {
+			if (v === undefined || v === null) { return ""; }
+			return typeof v === "object" ? JSON.stringify(v) : String(v);
+		}
+		function method(id, name) {
+			return function () {
+				var args = [];
+				for (var i = 0; i < arguments.length; i++) { args.push(text(arguments[i])); }
+				while (args.length && arguments[args.length - 1] === undefined) { args.pop(); }
+				var r = JSON.parse(N.pluginCall(id, name, JSON.stringify(args)));
+				if (r.exception !== undefined) { throw new Error(r.exception); }
+				return r.value;
+			};
+		}
+		function status(o, s) {
+			if (typeof o.__PDL_PluginStatusChange__ === "function") { o.__PDL_PluginStatusChange__(s); }
+		}
+		window.__lunacyPlugin = function (id, kind, a, b) {
+			var o = objects[id];
+			if (!o) { return; }
+			if (kind === "status") {
+				if (a === "disconnected") { delete objects[id]; }
+				status(o, a);
+			} else if (kind === "ready") {
+				for (var i = 0; i < a.length; i++) { o[a[i]] = method(id, a[i]); }
+				status(o, "ready");
+			} else if (kind === "call") {
+				if (typeof o[a] === "function") { o[a].apply(o, b); }
+				else { console.warn("plugin called " + a + ", which the page hasn't set"); }
+			}
+		};
+		new MutationObserver(function (records) {
+			for (var i = 0; i < records.length; i++) {
+				var r = records[i], j;
+				if (r.type === "attributes") { if (isPlugin(r.target)) { start(r.target); } continue; }
+				for (j = 0; j < r.removedNodes.length; j++) { each(r.removedNodes[j], stop); }
+				for (j = 0; j < r.addedNodes.length; j++) { each(r.addedNodes[j], start); }
+			}
+		}).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["type"] });
+		document.addEventListener("DOMContentLoaded", function () { each(document.documentElement, start); });
+	})();
 })();

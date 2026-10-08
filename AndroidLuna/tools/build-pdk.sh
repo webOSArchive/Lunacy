@@ -90,7 +90,7 @@ cp sdl-out/lib/libSDL-1.2.so.0.11.4 "$OUT/lib/libSDL-1.2.so.0"
 # ---- libpdl, against Palm's own headers ----
 PDK_INC=${PDK_INC:-/opt/PalmPDK/include}
 $CC -O2 -shared -fPIC -Wl,-soname,libpdl.so -I"$PDK_INC" -I"$PDK_INC/SDL" -I$WORK/sdl-out/include/SDL -I$SRC/sdl-lunacy \
-  $SRC/libpdl/pdl.c -o "$OUT/lib/libpdl.so" -L"$OUT/lib" -l:libSDL-1.2.so.0
+  $SRC/libpdl/pdl.c -o "$OUT/lib/libpdl.so" -L"$OUT/lib" -l:libSDL-1.2.so.0 -lpthread
 # ---- SDL_mixer 1.2, with Ogg Vorbis (the format webOS games shipped their music in) ----
 MIX_VER=1.2.12
 if [ ! -d SDL_mixer-$MIX_VER ]; then
@@ -293,7 +293,7 @@ done
 # named lib*.so so the installer puts it with the native libraries, where it can be exec'd).
 "$BIN/clang" --target=armv7a-linux-androideabi21 -O2 "$SRC/enosys/enosys.c" -o "$HERE/local-jni/armeabi-v7a/libenosys.so"
 # liblunacy-preload: /proc/self/exe as the app's binary, not the loader's (LD_PRELOAD).
-$CC -O2 -shared -fPIC -Wl,-soname,liblunacy-preload.so "$SRC/libpreload/preload.c" -o "$OUT/lib/liblunacy-preload.so" -ldl
+$CC -O2 -shared -fPIC -Wl,-soname,liblunacy-preload.so "$SRC/libpreload/preload.c" -o "$OUT/lib/liblunacy-preload.so" -ldl -lpthread
 # liblunaservice: the Luna bus client library native system services link (the TouchPad's
 # mail services and file cache), carrying the bus over the link the shell gives them. Its
 # glib calls resolve against the TouchPad's glib the services load with it.

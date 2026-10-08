@@ -36,7 +36,28 @@ class PdkHost(
     private val app: AppInfo,
     private val runtime: PdkRuntime,
     private val listener: Listener,
+    /** Set when this is a hybrid app's plugin rather than a PDK app's card. */
+    private val plugin: Plugin? = null,
 ) {
+    /**
+     * A hybrid app's plugin (Docs/pdk.md, "Hybrid apps"): the binary its page names in an
+     * `<object type="application/x-palm-remote" exe="…">`, relative to the app's folder, and
+     * the page's end of libpdl's JS link.
+     */
+    class Plugin(val exe: String, val link: JsLink)
+
+    /** The page's end of a plugin's JS link. Every call is on the link's reader thread. */
+    interface JsLink {
+        /** The plugin has connected (PDL_Init). */
+        fun onConnected()
+        /** PDL_JSRegistrationComplete, with the names its handlers answer to. */
+        fun onReady(names: List<String>)
+        /** The answer to [jsCall] number [id]: kind 0 a reply, 1 an exception, 2 none. */
+        fun onReply(id: Int, kind: Int, value: String)
+        /** PDL_CallJS. */
+        fun onCallJs(name: String, args: List<String>)
+    }
+
     interface Listener {
         /** The app set its screen size; the frame bitmap is this size from now on. gl: an OpenGL ES mode, no bitmap. */
         fun onMode(width: Int, height: Int, gl: Boolean)
@@ -53,7 +74,8 @@ class PdkHost(
 
     private val main = Handler(Looper.getMainLooper())
     private val socketName = "lunacy-pdk-$appId-${System.nanoTime()}"
-    private val fbFile = File(context.filesDir, "pdk/fb/$appId").also { it.parentFile?.mkdirs() }
+    // A plugin's own: an app can have several at once.
+    private val fbFile = File(context.filesDir, "pdk/fb/$appId" + if (plugin != null) "-plugin-${System.nanoTime()}" else "").also { it.parentFile?.mkdirs() }
     private var server: LocalServerSocket? = null
     private var process: Process? = null
     private var control: OutputStream? = null
@@ -79,19 +101,27 @@ class PdkHost(
         }
         fbFile.delete()
         RandomAccessFile(fbFile, "rw").use { }
-        val original = File(app.dir.let { File(runtime.appsRoot, it) }, app.main)
+        val original = File(app.dir.let { File(runtime.appsRoot, it) }, plugin?.exe ?: app.main)
         // The installer keeps a package's files as they came; a PDK binary wants its
         // execute bit back (the loader runs it, qemu checks it).
         original.setExecutable(true, false)
         val binary = PdkRuntime.withoutExecStack(original)
         val dataDir = File(context.filesDir, "pdk/data/$appId").also { it.mkdirs() }
+        val webosRoot = File(context.filesDir, "webos")
         // A 32-bit CPU runs the binary through the loader; a 64-bit-only one runs it under
         // qemu, which loads the program itself and finds the loader under the runtime folder.
         // From Android 10 a native app runs under libenosys.so, which answers the system calls
         // the app's seccomp policy refuses glibc with -ENOSYS instead of letting it be killed.
         val enosys = runtime.enosys?.takeIf { loader != null && android.os.Build.VERSION.SDK_INT >= 29 }
-        val command = if (loader != null) listOfNotNull(enosys?.path, loader.path, "--library-path", lib.path, binary.path)
-            else listOf(emulator!!.path, "-L", lib.parentFile!!.path, "-E", "LD_LIBRARY_PATH=/lib",
+        // The runtime's libraries, then the webOS root's: the TouchPad's own that an app may link
+        // by name and the runtime hasn't got (Quick Office's plugin: ICU 3.6, as the mail services).
+        val libraryPath = "${lib.path}:${File(webosRoot, "usr/lib").path}"
+        val command = if (loader != null) listOfNotNull(enosys?.path, loader.path, "--library-path", libraryPath, binary.path)
+            // Under qemu the folders go by their real paths, as for native services: Termux's
+            // qemu let glibc's loader decide the sysroot's "/lib" didn't exist once a library
+            // wasn't in it, and Quick Office's plugin, whose first libraries are ICU's, then
+            // couldn't find libpdl.so (2026-10-07).
+            else listOf(emulator!!.path, "-L", lib.parentFile!!.path, "-E", "LD_LIBRARY_PATH=$libraryPath",
                 "-E", "LD_PRELOAD=/lib/liblunacy-preload.so", binary.path)
         // In the app's own folder, as LunaSysMgr started a native app; the binary may sit in a
         // subfolder (Transformers: transg1/transg1.exe) and still read its data from the top.
@@ -116,6 +146,17 @@ class PdkHost(
             put("LUNACY_PDK_NDUID", runtime.nduid)
             put("LUNACY_PDK_APPINFO_id", app.id); put("LUNACY_PDK_APPINFO_title", app.title); put("LUNACY_PDK_APPINFO_version", app.version)
             put("HOME", dataDir.path); put("TMPDIR", context.cacheDir.path)
+            // /media/internal's folders that are Android's (UserFiles), for the preload.
+            put("LUNACY_PDK_MEDIA", UserFiles.mappedFolders().joinToString(":") { (name, dir) -> "$name=${dir.path}" })
+            // A plugin, as the reference TouchPad's RemoteAdapter started Adobe Reader's
+            // (measured 2026-10-07): in the app's folder, which is its HOME too, and keeping its
+            // data in /media/internal/appdata/<app id>, where the page reads what it writes.
+            if (plugin != null) {
+                put("LUNACY_PDK_PLUGIN", "1")
+                put("HOME", appDir.path)
+                put("LUNACY_PDK_DATA_DIR", "/media/internal/appdata/$appId")
+                File(UserFiles.own(webosRoot), "appdata/$appId").mkdirs()
+            }
             // Development: `files/pdk/env` holds KEY=VALUE lines added to every PDK process
             // (LD_DEBUG=bindings is how a game's calls into the runtime are seen in order).
             File(context.filesDir, "pdk/env").takeIf { it.isFile }?.readLines()?.forEach { l ->
@@ -155,6 +196,7 @@ class PdkHost(
                 'P'.code -> readControl(input)   // libpdl's own: requests only, no input goes back down it
                 'A'.code -> readAudio(input)
                 'G'.code -> { glOut = c.outputStream; readGl(input) }   // libGLES_CM's own (PdkGl)
+                'J'.code -> plugin?.link?.let { link -> jsOut = c.outputStream; link.onConnected(); readJs(input, link) } ?: c.close()
                 else -> c.close()
             }
         } catch (e: Exception) {
@@ -163,6 +205,38 @@ class PdkHost(
     }
 
     @Volatile private var glOut: java.io.OutputStream? = null
+    @Volatile private var jsOut: java.io.OutputStream? = null
+
+    /** A plugin's JS link: what the plugin says to its page. */
+    private fun readJs(input: DataInputStream, link: JsLink) {
+        while (!stopped) {
+            val (type, a, len) = readHeader(input)
+            val payload = ByteArray(len); input.readFully(payload)
+            when (type) {
+                JS_READY -> link.onReady(strings(payload))
+                JS_REPLY -> link.onReply(a, if (len > 0) payload[0].toInt() else 2, if (len > 1) String(payload, 1, len - 1) else "")
+                CALL_JS -> strings(payload).let { if (it.isNotEmpty()) link.onCallJs(it[0], it.drop(1)) }
+            }
+        }
+    }
+
+    /** NUL-terminated strings, one after another. */
+    private fun strings(b: ByteArray): List<String> {
+        val out = ArrayList<String>(); var start = 0
+        for (i in b.indices) if (b[i] == 0.toByte()) { out += String(b, start, i - start); start = i + 1 }
+        return out
+    }
+
+    /** Calls a plugin's handler; the answer comes to [JsLink.onReply]. False if the plugin isn't connected. */
+    fun jsCall(id: Int, name: String, args: List<String>): Boolean {
+        val out = jsOut ?: return false
+        val body = java.io.ByteArrayOutputStream()
+        for (s in listOf(name) + args) { body.write(s.toByteArray()); body.write(0) }
+        val payload = body.toByteArray()
+        val b = ByteBuffer.allocate(12 + payload.size).order(ByteOrder.LITTLE_ENDIAN)
+        b.putInt(JS_CALL).putInt(id).putInt(payload.size).put(payload)
+        return try { synchronized(out) { out.write(b.array()) }; true } catch (e: Exception) { false }
+    }
 
     private fun readGl(input: DataInputStream) {
         while (!stopped) {
@@ -322,6 +396,7 @@ class PdkHost(
         const val VIDEO_MODE = 1; const val FRAME = 2; const val CAPTION = 3; const val PDL = 4; const val GL = 6
         const val AUDIO_OPEN = 10; const val AUDIO_DATA = 11; const val AUDIO_CLOSE = 12
         const val TOUCH = 20; const val KEY = 21; const val QUIT = 22; const val ACTIVE = 23; const val PDL_REPLY = 24; const val ACCEL = 25
+        const val JS_READY = 30; const val JS_CALL = 31; const val JS_REPLY = 32; const val CALL_JS = 33
         /** SDL 1.2 keysyms the shell sends. */
         const val SDLK_ESCAPE = 27
     }

@@ -5,6 +5,19 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-10-07)
 
+**2026-10-07, evening: hybrid apps open their documents** (codepoet: "work autonomously until
+the hybrid apps can open their respective document types"). A web app's
+`<object type="application/x-palm-remote">` now runs its PDK plugin through the PDK runtime,
+its handlers called synchronously from the page and its `PDL_CallJS` calls delivered back, as
+the reference TouchPad's RemoteAdapter did (measured there). On the A7 Lite, natively and
+under qemu: Adobe Reader opens PDFs, and Quick Office opens .doc, .docx, .xls, .xlsx, .ppt,
+.pptx and .txt, from their own lists and from Android's Documents and Download. Built for it,
+all general: libpdl's JS calls, the plugin's GL replayed offscreen, a webOS `/etc/mtab` and
+`/tmp` for native code, `popen` and `system` run in the root's busybox, Android's folders for
+the preload, the TouchPad's other ICU libraries, qemu finding the runtime by its real path,
+and callable DOM collections in the compat layer (luna-deltas A17). See [pdk.md](pdk.md),
+§6c. Open: a visible plugin's picture; callable collections on Chromium 37.
+
 **2026-10-07: 0.7.0 built for in-house testing** (codepoet). Version 0.7.0, all targets, from
 an uncommitted tree (build 195). codepoet's first round, on a Pixel Tablet updated from a
 2026-10-04 build, found three faults, all fixed and in the rebuilt APKs: Calendar had no
@@ -13,8 +26,8 @@ On-Device calendar (the profile account was stored before db8 gave array objects
 device (qemu needs the execute bit; IMAP now logs in and idles under qemu), and the bus log
 showed an account's password (secrets are now blanked in the log). Then, on codepoet's design, documents' index answered from the files (luna-deltas A16): Quick
 Office and Adobe Reader list Documents and Download, and a file copied in shows up while the list
-is open. Opening one still needs hybrid apps (their viewers are native plugins). See
-[fix-log.md](fix-log.md). Commit, then rebuild, before release.
+is open. Opening one needed hybrid apps, since done (above). See [fix-log.md](fix-log.md).
+Committed as 0f75be8 (build 196), not pushed.
 
 **2026-10-07: Contacts, local only** (codepoet: local contacts only for now). webOS CE's
 Contacts 3.2.0 is bundled unchanged, with the TouchPad's contacts and linker services, and the
@@ -197,7 +210,7 @@ the Nexus 5 and under qemu on the Pixel Tablet. SDL_image, SDL_ttf, SDL_net and 
 image and font libraries apps link by name are built, and webOS's paths resolve in the
 webOS root. A GLES 2 stream runs the shader apps (Dice, ThermalPad), and the accelerometer
 is SDL joystick 0 as on webOS (measured on the TouchPad). Next: hybrid apps (web apps with a
-PDK plugin), OpenSSL 0.9.8 and curl. All in [pdk.md](pdk.md).
+PDK plugin; since done, 2026-10-07), OpenSSL 0.9.8 and curl. All in [pdk.md](pdk.md).
 
 **2026-10-02, afternoon: a phone layout.** `FormFactor` decides phone or tablet from the
 screen (short side in dp, diagonal in inches, shape as the tie-breaker) or the owner's
@@ -872,9 +885,10 @@ per-app code.
   buffer, measured on it; the accelerometer as SDL joystick 0; qemu for 64-bit-only devices,
   inside the arm64 APK. Codepoet's first tests passed.
 - **Next:**
-  - **Hybrid apps**: web apps that embed a PDK plugin (`<object type="application/x-palm-remote">`),
-    the plugin drawing into a region of the page and called from JavaScript. The chess app
-    tried on 2026-10-02 is one.
+  - ~~**Hybrid apps**: web apps that embed a PDK plugin (`<object type="application/x-palm-remote">`),
+    called from JavaScript.~~ Done 2026-10-07 for plugins that draw nothing on the page (Quick
+    Office, Adobe Reader; [pdk.md](pdk.md) §6c). Still to do: a plugin drawing into a region of
+    the page, as the chess app tried on 2026-10-02 may.
   - **OpenSSL 0.9.8 and curl**: about 50 apps link `libcrypto.so.0.9.8`, `libssl.so.0.9.8`
     or `libcurl.so.4`, which the runtime doesn't provide yet.
   - **`PDL_ServiceCall` to the bus**, as JS services have it.

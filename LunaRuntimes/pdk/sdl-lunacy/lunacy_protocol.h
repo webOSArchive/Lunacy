@@ -33,6 +33,13 @@
 #define LPDK_ACCEL        25  /* payload: int32 x, y, z, the accelerometer as webOS's joystick axes (1 g = 32768, the device's frame) */
 #define LPDK_PDL_REPLY    24  /* a = request id; payload: JSON */
 
+/* A hybrid app's plugin (Docs/pdk.md, "Hybrid apps"): libpdl's JS link, greeting 'J'.
+   Strings in a payload are each NUL-terminated, one after another. */
+#define LPDK_JS_READY     30  /* to the shell: PDL_JSRegistrationComplete; payload: the handlers' names */
+#define LPDK_JS_CALL      31  /* to the app: a = call id; payload: the method's name, then each argument */
+#define LPDK_JS_REPLY     32  /* to the shell: a = call id; payload: one byte (0 a reply, 1 an exception, 2 none), then the string */
+#define LPDK_CALL_JS      33  /* to the shell: PDL_CallJS; payload: the function's name, then each argument */
+
 #define LPDK_HEADER 12
 
 #endif

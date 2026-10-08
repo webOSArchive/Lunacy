@@ -305,6 +305,11 @@ was rebuilt. Photos & Videos is the case: in portrait on a phone, picking an alb
 album view over the libraries (HP's own "phonification" call), and the album came out 0 px wide
 under the libraries panel with its toolbar showing through.
 
+On an engine that honours `flex-basis` inside a `-webkit-box` (WebView 149 and later), patch
+0003 says a flexed child's share as `flex-basis: 0px`, and a flow that stopped flexing the child
+left that in place, so the view stayed 0 px wide there too. A flow now clears it from a child it
+no longer flexes (`FlexLayout.flowExtent`); only Lunacy ever set it.
+
 Both layouts now end with `_reflowViews`: the pane's flow, each view's styles written to its
 node, and each view's box rebuilt (`display: none`, a layout read, the display put back). It
 runs only when the layout changes, which is at start and when a turn crosses the width.
@@ -312,10 +317,13 @@ runs only when the layout changes, which is at start and when a turn crosses the
 Measured on 2026-10-08 on the Nexus 5 (WebView 44, a 360 px card): the album view was 0 px wide
 at the libraries' left edge, and is now 360 px and slides over them; dragging it right brings
 the libraries back. Turned to landscape (640 px) the pane is two views again, 280 and 360 px,
-and back in portrait it is stacked. No TouchPad card was ever narrower than 540 px, so the
+and back in portrait it is stacked. On the Kyocera A101BM (WebView 153, a 384 px card) the
+album view was 0 px wide with `flex-basis: 0px` left on it, and with the flow clearing it is
+384 px and slides over. No TouchPad card was ever narrower than 540 px, so the
 device never drew this layout.
 
-Files: `framework/source/palm/containers/SlidingPane.js`, `framework/build/enyo-build.js`.
+Files: `framework/source/palm/containers/SlidingPane.js`,
+`framework/source/base/layout/FlexLayout.js`, `framework/build/enyo-build.js`.
 
 ## Added
 

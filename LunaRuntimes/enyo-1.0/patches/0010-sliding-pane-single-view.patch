@@ -37,6 +37,19 @@
  	},
  	cacheSliding: function(inSliding, inIndex) {
  		this.slidingCache[inIndex] = {
+--- a/framework/source/base/layout/FlexLayout.js
++++ b/framework/source/base/layout/FlexLayout.js
+@@ -97,6 +97,10 @@
+ 				if (enyo.isMoz && inExtent == "height" && this.align == "stretch") {
+ 					s.width = "100%";
+ 				}
++			} else if (s["flex-basis"]) {
++				// Lunacy (patch 0010): a child no longer flexed loses the share it was given,
++				// or an engine that honours flex-basis keeps it 0 px wide.
++				delete s["flex-basis"];
+ 			}
+ 		}
+ 	},
 --- a/framework/build/enyo-build.js
 +++ b/framework/build/enyo-build.js
 @@ -11015,10 +11015,23 @@
@@ -64,3 +77,24 @@
  },
  cacheSliding: function(a, b) {
  this.slidingCache[b] = {
+@@ -13607,3 +13620,20 @@
+ 		}
+ 	};
+ })();
++
++// ---------------------------------------------------------------------------
++// Lunacy: a child no longer flexed loses the flex-basis it was given as its share (patch 0010).
++//
++// The same change as in framework/source/base/layout/FlexLayout.js, over the overrides above.
++// ---------------------------------------------------------------------------
++(function () {
++	if (!window.enyo || !enyo.FlexLayout) { return; }
++	var flowExtent = enyo.FlexLayout.prototype.flowExtent;
++	enyo.FlexLayout.prototype.flowExtent = function (inControls, inExtent, inExtentNick) {
++		flowExtent.apply(this, arguments);
++		for (var i = 0, c, s; (c = inControls[i]); i++) {
++			s = c.domStyles;
++			if (!s[this.prefix + "-box-flex"] && s["flex-basis"]) { delete s["flex-basis"]; }
++		}
++	};
++})();

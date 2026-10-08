@@ -1,0 +1,30 @@
+--- a/framework/source/palm/themes/Onyx/css/CheckBox.css
++++ b/framework/source/palm/themes/Onyx/css/CheckBox.css
+@@ -12,6 +12,12 @@
+ 	.enyo-checkbox {
+ 		background-image: url(../images-1.5/checkbox.png);
+ 		background-size: 32px 128px;
++		/* Lunacy (patch 0008): this sprite's rows are the other way up from images/checkbox.png -
++		   ticked first - so the positions below swap with it, or every box shows its opposite. */
++		background-position: -1px -33px;
++	}
++	.enyo-checkbox.enyo-checkbox-checked {
++		background-position: -1px -1px;
+ 	}
+ }
+ 
+--- a/framework/build/enyo-build.css
++++ b/framework/build/enyo-build.css
+@@ -384,6 +384,12 @@
+ 	.enyo-checkbox {
+ 		background-image: url(palm/themes/Onyx/images-1.5/checkbox.png);
+ 		background-size: 32px 128px;
++		/* Lunacy (patch 0008): this sprite's rows are the other way up from images/checkbox.png -
++		   ticked first - so the positions below swap with it, or every box shows its opposite. */
++		background-position: -1px -33px;
++	}
++	.enyo-checkbox.enyo-checkbox-checked {
++		background-position: -1px -1px;
+ 	}
+ }
+ 

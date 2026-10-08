@@ -248,6 +248,26 @@ Checked by codepoet on the Galaxy Tab A7 Lite, 2026-10-07.
 
 Files: `framework/source/base/layout/FlexLayout.js`, `framework/build/enyo-build.js`.
 
+### 0008-checkbox-hidpi-sprite.patch
+
+A check box shows its state on a screen of pixel ratio 1.5 or more.
+
+Onyx's `CheckBox.css` draws the box from a sprite, unchecked at `-1px -1px` and checked at
+`-1px -33px`, and swaps in `images-1.5/checkbox.png` at 1.5x. The TouchPad's copy of that image
+has its rows the other way up from the 1x one: checked first, then unchecked (and the same for
+the pale disabled pair). A TouchPad has a pixel ratio of 1 and never loads it, so it never
+showed there. At 1.5x and above every box showed the opposite of its state - on the Pixel
+Tablet (ratio 2), Palm's Exhibition app ticked the apps that were off, and its own always-on
+Time entry looked unticked. Upstream Enyo
+([enyojs/enyo-1.0](https://github.com/enyojs/enyo-1.0)) later shipped the sprite the right way
+up; of the 69 images in the TouchPad's `images-1.5`, it is the only one whose pixels differ.
+
+The patch swaps the two positions inside the 1.5 media rule, with `.enyo-checkbox.enyo-checkbox-checked`
+so it outranks the 1x rule that follows. The image is the device's, unchanged (the series is
+text). Checked on the Pixel Tablet over DevTools, 2026-10-08.
+
+Files: `framework/source/palm/themes/Onyx/css/CheckBox.css`, `framework/build/enyo-build.css`.
+
 ## Added
 
 Nothing, since the rebase. `lib/networkproxy` (HP's network-proxy settings library, which the

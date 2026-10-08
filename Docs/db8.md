@@ -99,9 +99,41 @@ From Open webOS's db8 source (LG's release of HP's), and measured where marked:
 - **search sorts what it finds** itself, so its `orderBy` needn't follow the index serving its
   `where`, as `find`'s must.
 
+## Deleted objects and the purge
+
+A deleted object is kept whole, marked `_del` with a new `_rev`, so watches and syncs see the
+deletion (`MojDb::delObj` keeps the object and adds the flag). db8 removes deleted objects for
+good once they have been deleted longer than its purge window. Built 2026-10-08 from Open
+webOS's `MojDb::purge`/`purgeImpl` and measured on the reference TouchPad:
+
+- **The window** is 7 days on the device (`/etc/palm/mojodb.conf` `"purgeWindow": 7`; the
+  source's default is 14).
+- **How it counts.** Each purge notes the revision the database is at, with the time (a
+  RevTimestamp record), takes the newest note at least a window old, permanently removes every
+  deleted object at or below that revision, remembers that revision, and drops the older
+  notes. So nothing goes until purges have run for a window, and an object goes a window after
+  the purge that followed its deletion.
+- **When.** The `mojodbpurge` activity, the device's own file
+  (`/etc/palm/activities/com.palm.db/com.palm.db.purge.json`: every 24 h, background,
+  persistent, power), calls `com.palm.db/internal/scheduledPurge`; db8 answers at once,
+  adopts the activity, purges, and completes it with `restart`. The device lists it with
+  interval `1d`, local time. Its 5-minute space check is not built (no quotas), and tempdb has
+  no scheduled purge on the device either.
+- **`purgeStatus {}`**, open to anyone: `{"returnValue":true,"rev":-1}` until a purge has
+  removed something, then the last purged revision. Sync engines compare it with their own
+  last-synced revision to learn they missed deletions.
+- **`purge {window}`** is for db8's admin callers only (the configurator, backup, migration
+  and spacecadet services in `mojodb.conf`); anyone else gets
+  `-3963 "db: permission denied"`, as `luna-send` from the device's root shell does. A window
+  that isn't an integer: `22 "invalid parameters: caller='…' error='invalid type for property
+  'window''"`. It answers `{"returnValue":true,"count":n}`. A debuggable Lunacy also lets the
+  SDK's relay (`novacomd`) purge, so a window of 0 can be tried without waiting a week:
+  after removing the webCal test account, `purge {"window":0}` removed 245 deleted objects
+  (its 28 events among them) and left the live ones.
+
 ## Not yet
 
 `getProperties` doesn't exist on the TouchPad either. Not built: `compact`, `dump` and
-`load`, quotas, `purge` by window, `putPermissions` for types other than `db.kind`, db8's
+`load`, quotas, the space check, `putPermissions` for types other than `db.kind`, db8's
 collation beyond Java's `Collator`, and the system kinds other services fill (the media
 indexer's `com.palm.media.*`, which Papyrus reads before its file picker).

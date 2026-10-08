@@ -22,6 +22,9 @@ class JsServices(private val bus: Bus, private val installed: File, private val 
     private val names = HashMap<String, String>()
     /** Running packages, by directory. Main thread. */
     private val running = HashMap<String, Proc>()
+    /** Where services' extractfs reads are made ([extractfs]). */
+    private val thumbnailer = Executors.newSingleThreadExecutor()
+    private var extracted = 0
 
     /** What each package's files came to at the last reload, by directory: a change means a restart. */
     private val signatures = HashMap<String, String>()
@@ -84,7 +87,7 @@ class JsServices(private val bus: Bus, private val installed: File, private val 
 
     /** One service package's Node process (ServiceProcess carries its bus). */
     private inner class Proc(val dir: String, name: String) {
-        private val link = ServiceProcess(bus, name, "js service", worker, start = {
+        private val link = ServiceProcess(bus, name, "js service", worker, extractfs = ::extractfs, start = {
             webos.prepare()
             if (!webos.node.isFile) throw IOException("no Node runtime in this build (${webos.node.path})")
             val pb = ProcessBuilder(webos.node.path, File(webos.host, "host.js").path, root.path, dir).directory(root)
@@ -92,12 +95,41 @@ class JsServices(private val bus: Bus, private val installed: File, private val 
                 // Its own luna-send calls, and its child processes', come from the service.
                 putAll(webos.environment(name))
                 put("LD_LIBRARY_PATH", webos.nativeDir)
+                // /media/internal's folders that are Android's (UserFiles), as PDK apps get them.
+                put("LUNACY_MEDIA", UserFiles.mappedFolders().joinToString(":") { (name, dir) -> "$name=${dir.path}" })
             }
             pb.start()
         }, onEnded = { if (running[dir] == this) running.remove(dir) })
 
         fun request(call: Bus.Call) = link.request(call)
         fun stop() = link.stop()
+    }
+
+    /**
+     * A service reads extractfs ([Extractfs]), which on webOS was a filesystem it could cp from
+     * or stream: host.js asks for the file first, and is given a webOS path where it now is. A
+     * few are kept, each overwriting the oldest, since each is read once, straight away.
+     * Replies on the main thread, with null where the device's read failed.
+     */
+    private fun extractfs(spec: String, reply: (String?) -> Unit) = thumbnailer.execute {
+        val result = Extractfs.read(spec, Extractfs.Opener(::openWebos))
+        if (result == null) Log.i(AppServer.TAG, "extractfs: no image for $spec")
+        val path = result?.let {
+            val rel = "tmp/extractfs/${extracted++ % 16}"
+            runCatching { File(root, rel).apply { parentFile?.mkdirs() }.writeBytes(it.bytes); "/$rel" }.getOrNull()
+        }
+        android.os.Handler(android.os.Looper.getMainLooper()).post { reply(path) }
+    }
+
+    /** An absolute webOS path as services see it: user storage (with Android's folders), installed packages, the rest of the tree. */
+    private fun openWebos(path: String): (() -> java.io.InputStream?)? {
+        val p = "/" + path.trimStart('/')
+        val f = when {
+            p.startsWith("/media/internal/") -> UserFiles.resolve(root, p.removePrefix("/media/internal/"))
+            p.startsWith("/media/cryptofs/apps/") -> File(installed, p.removePrefix("/media/cryptofs/apps/"))
+            else -> File(root, p.trimStart('/'))
+        }?.takeIf { it.isFile } ?: return null
+        return { runCatching { f.inputStream() as java.io.InputStream }.getOrNull() }
     }
 
     companion object { const val SERVICES = "usr/palm/services" }

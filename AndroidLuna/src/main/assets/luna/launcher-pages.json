@@ -26,6 +26,7 @@
 		{"title": "apps", "items": [
 			"com.palm.app.browser_default",
 			"com.palm.app.notes_default",
+			"com.palm.app.photos_default",
 			"com.palm.calculator_default",
 			"com.palm.app.clock_default"
 		]},
@@ -33,6 +34,7 @@
 			"com.palm.app.enyo-findapps_default"
 		]},
 		{"title": "prefs", "items": [
+			"com.palm.app.accounts_default",
 			"com.palm.app.deviceinfo_default",
 			"com.palm.app.exhibitionpreferences_default",
 			"com.palm.app.screenlock_default",

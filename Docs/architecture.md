@@ -196,6 +196,10 @@ product; being "close enough" is not the goal.
     own file names no favourites page, so GAMES starts empty here too. Anything the layout
     doesn't name falls back to its category and keywords (LunaCE's
     `AppMonitor::pageDesignatorForWebOSApp`), then to the first page, alphabetically.
+    Until the user arranges the dock it holds `assets/luna/default-dock-positions.json`, in the
+    shape of the device's `/usr/palm/default-dock-positions.json` (its `quicklauncher` list):
+    Web, Email, Calendar, Photos & Videos and App Catalog (codepoet, 2026-10-08; the
+    TouchPad's had Messaging in App Catalog's place). A phone's dock takes the first four.
   - A dragged icon moves to another tab when it touches that tab, as LunaCE's tab bar takes
     it, or when it's held within 50 px of the screen's left or right edge (1500 ms,
     `pagePanForIconMoveDelayMs`); held within 20 px of the page's top or bottom, the page
@@ -351,6 +355,19 @@ product; being "close enough" is not the goal.
     WebView allows mixed content, and a global XHR shim sends cross-origin requests over the
     bridge to a native HTTP client. (`shouldInterceptRequest` alone isn't enough, because it
     can't see request bodies.)
+    - **Local network** (`LocalNet.kt`, compat.js). Images and players don't go through
+      XHR. A current WebView (149, Pixel Tablet, 2026-10-08) blocks an https page's plain-http
+      image to a private address as mixed content, allowed or not, and holds a request to the
+      loopback interface for good, with no permission request to the app - Chromium's Local
+      Network Access; a public http image still loads. On such an engine (Chromium 141 and
+      later, an assumed cut-off: only 149 is measured) compat.js points `http://` images and
+      media - `src` properties, `setAttribute`, `new Audio`, and markup as it is inserted -
+      at `/__lunacy/net?u=` on the page's own origin, which the card fetches with `Http.kt`
+      and streams back, byte ranges included. HLS playlists, fetched that way or served from
+      `/media/internal`, have their `http://` URIs rewritten the same way, and
+      `/media/internal` media stays on the app origin, since the loopback `MediaServer` is
+      out of reach there too. Plex's thumbnails and its transcoded video play again. Older
+      engines are unchanged. CSS `url(http://...)` images are not covered.
     - **How.** `net.js` replaces `XMLHttpRequest` in every page. Requests to the page's own
       origin, other app origins and non-HTTP schemes go to the real XHR unchanged. Any other
       `http`/`https` request goes to `NetShim.kt` and `Http.kt`: asynchronously as a queued
@@ -512,6 +529,10 @@ product; being "close enough" is not the goal.
 - **Frames can reach the bus (ratchet item).** A JavaScript interface is visible to every
   frame in the WebView, including remote iframes. On Android 5 this is accepted. On later
   targets, the bridge moves to `WebMessageListener` restricted to `*.media.cryptofs.apps`.
+  Lunacy relies on it for one thing a device did: a frame of another app's origin inside a
+  card (Accounts showing Email's account wizard through `enyo.CrossAppUI`) calls the bus as
+  the card's app, as every frame of a webOS card did, and gets its replies through the main
+  frame by `postMessage` (2026-10-08, `bridge.js`).
 - **Enyo's `WebView` control.** On webOS, `enyo.WebView` wrapped the native `BrowserAdapter`
   plugin, which drew a page that browserserver, another process, had loaded. In a Lunacy card
   the plugin is a native Android WebView (`BrowserViews.kt`), a child of the card's own
@@ -663,6 +684,22 @@ A settings app Lunacy can neither answer nor hand over isn't shipped at all. Pal
 settings apps that Lunacy ships (Screen & Lock, Help) are in the APK with a NOTICE, as
 abandonware, like Mojo and the Prelude fonts (codepoet, 2026-09-20).
 
+**Accounts** (`com.palm.app.accounts` 3.1.1, from the reference TouchPad) is in the APK
+unchanged (2026-10-08). It is LG's Apache 2.0 release with the webOS CE project's additions
+(the keep-data choice on removing an account, and the "Delete Account Data" page), and it sits
+first on SETTINGS, where the device's layout puts it. Synergy connectors send their users to
+it (webCal Sync's own instructions do), and it is where an account is removed:
+- **Adding** goes through each template's own screens: the accounts library's sign-in page
+  with the template's labels, its `validator`, then `createAccount`.
+- **Removing** is `com.palm.service.accounts/deleteAccount`, the service's own orchestration:
+  the account is marked `beingDeleted`, each capability gets `onEnabled` false and `onDelete`
+  (Synergy connectors delete their records; the mail services theirs), the credentials leave
+  the key manager, the sync state is cleared and the account record is deleted. The records
+  deleted that way stay in db8 as tombstones until db8 purges them (Db8 below and
+  [db8.md](db8.md)): a week on, as on the device.
+- The local profile account is greyed out and can't be opened, as on the reference TouchPad;
+  so the profile's settings, and its "erase device", are out of reach on both.
+
 **Palm's Video Player** is in the APK on the same terms, and for a different reason: it is
 part of the platform rather than an app someone chooses. webOS apps play video by launching
 `com.palm.app.videoplayer` with a target, and MeTube - among others - has no player of its
@@ -722,6 +759,10 @@ Lunacy has it - inside the environment, and as Android's own screen saver.
   `applicationManager/listDockModeLaunchPoints` answers with the records a TouchPad returns,
   and `addDockModeLaunchPoint`/`removeDockModeLaunchPoint` turn one on or off, telling every
   subscriber.
+- **Which face it opens on** is LunaSysMgr's rule (`DockModeWindowManager::setDockModeState`):
+  the Time face at first, then the face that was showing when the mode was last left, back to
+  Time if that app has been switched off since. Lunacy keeps it across restarts of its process
+  (`DockMode.defaultApp`); LunaSysMgr kept it in memory, but it restarted only with the device.
 - **The title changes face.** While exhibiting, the status bar's title drops down the faces to
   choose from - the shell's Time, and every app its owner turned on - and picking one switches
   without leaving the mode, as LunaSysMgr's DockModeAppMenu did. Rows are LunaCE's 70 px, icon
@@ -781,8 +822,42 @@ answers the kind from the files themselves (codepoet's design, a deliberate delt
   firing watches as an ordinary write does. While a watch is open the kind is checked every
   5 s, so a list on the screen picks up a file as it arrives. Ids are kept from one query to
   the next, so paging and anything an app stores by `_id` keep working.
-- Media kinds (images, audio, video and their albums) are not part of this yet; Android's
-  MediaStore is the obvious source when they are.
+- Photos and videos are indexed the same way: see the next section. Audio isn't yet.
+
+### Photos and videos
+
+Palm's Photos & Videos 3.1.8001 is bundled, unchanged, from the reference TouchPad; Palm's
+photos service (`com.palm.service.photos`) runs as a system JS service from the webOS root.
+The app lists what webOS's media index holds and shows the thumbnails the service makes.
+
+- **`MediaIndex.kt`** answers the media index from the files, as `FileIndex.kt` answers
+  documents ([luna-deltas.md](luna-deltas.md) A16): `com.palm.media.image.file:1` (JPEG, PNG,
+  BMP), `com.palm.media.video.file:1` (MP4 and QuickTime with a video track, WMV, AVI) and
+  `com.palm.media.image.album:1`, one per folder holding any, all under the parent kind
+  `com.palm.media.types:1`. The records, indexes and consumers are filenotifyd's, measured on
+  the TouchPad: EXIF dates read as local time, a movie's own creation time, Palm's album
+  names (Album.getPathFromImage and its predefined albums, so Android's Pictures and Movies
+  are the albums `photos` and `video`; Android's camera folder, DCIM/Camera, is "Photo roll",
+  a delta in luna-deltas A16), an album's `modifiedTime` off by the
+  timezone as filenotifyd's was. A file's record is kept while the file is unchanged, since
+  EXIF and movie headers are slow to read.
+- **`Db8.mirror`** grew what these need: properties the source sets only on a new record
+  (`appCacheComplete`, which the service then owns; `showAlbum`; a video's
+  `playbackPosition`), records the source doesn't speak for (an account's synced albums),
+  a query of the parent kind bringing its children into line, and image records naming
+  their album's `_id` (`mirrorIds`).
+- **Thumbnails.** After a pass that found new files, the index calls the service's
+  `cacheThumbnails`, as filenotifyd did. The service reads extractfs's JSON for each image's
+  size and copies a scaled JPEG off it with `ionice -c3 cp` into
+  `/media/internal/.photosApp/Generated`, where the app finds it; opening a picture makes
+  a 1024-px "screennail" the same way. Videos carry no thumbnail of their own (only Palm's
+  camera embedded one), so the grid shows the app's video placeholder, as the TouchPad did.
+- **extractfs** (`Extractfs.kt`) is the card host's and the services' alike, with both
+  forms of path measured on the TouchPad; see the JS services section for how a service
+  reads it.
+- **Not yet:** the account sources (Facebook, Photobucket, Snapfish: their services are
+  long dead), the welcome page's "Find More…" (it lists the account templates the device
+  has, and Lunacy has none for photos), and printing.
 
 ### System UI
 
@@ -1160,6 +1235,21 @@ webOS apps could ship JS services (`usr/palm/services/<id>/`, with `services.jso
   (`files/webos`) for `fs`, for `child_process` (the executable, arguments, and `sh -c` command
   lines) and for `require`. There, `/media/cryptofs/apps` is the installed packages,
   `/media/internal` is user storage, and `/bin/sh` is Android's shell.
+- **Android's folders.** `/media/internal`'s mapped folders (`UserFiles.kt`: `photos`,
+  `camera`, `downloads`, ...) are Android's own for services too: the host gets them in
+  `LUNACY_MEDIA` and maps a path into one where Lunacy's own tree hasn't got that folder, as
+  the card host and PDK apps do.
+- **Root's privileges.** webOS ran services as root, which file modes don't bind; the photos
+  service makes its cache folder with `mkdir(path, 666)` (decimal, so `d-w--w--wT`) and goes
+  on using it. A folder or file a service makes or chmods keeps its owner's access. `ionice`
+  (`/bin/ionice` in the webOS root) runs its command without setting the I/O priority, a
+  system call Android's seccomp filter kills an app's process for.
+- **extractfs.** webOS's thumbnailer was a filesystem, read like any file: the photos
+  service streams its JSON and `cp`s its JPEGs. A read stream, `readFile`, or a child
+  process given an extractfs path waits while Lunacy writes the result (`Extractfs.kt`, over
+  the host link's `extractfs` message) to `/tmp/extractfs`, then reads that; a read the
+  device would have refused fails as it did there (`cp: read error: No such file or
+  directory`, exit 1).
 - **curl.** Services shell out to `/usr/bin/curl` (webOS Internals' `curl-tls13` on a TouchPad).
   A static curl can't resolve names on Android (musl reads `/etc/resolv.conf`, which Android
   lacks), so `/usr/bin/curl` and `curl11` run `curl.js`: the curl options services use
@@ -1276,8 +1366,17 @@ activity runs at a time and two that a user started.
 - An activity's callback to `applicationManager/launch` or `open` hands the app its
   `$activity` inside the launch params, as webOS's application manager did, and a headless app
   a service launches gets no startup card (nothing showed on webOS until it opened a window).
-- Lunacy has one bus, so `type.bus` is kept but not enforced. Power locks (`type.power`) are
-  accepted and do nothing: the shell keeps Android awake its own way.
+- Lunacy has one bus, so `type.bus` is kept but not enforced.
+- **Asleep, as webOS was.** Schedules fall due on the wall clock and wake the device, as
+  powerd's RTC timeouts did; `type.power` activities hold a wake lock; `com.palm.power/timeout`
+  is powerd's keyed timers; and every sign of having been asleep or frozen (Doze ending, the
+  network unblocked, lost CPU time, a late heartbeat, the shell coming forward) is answered as
+  a webOS resume, running everything that fell due meanwhile. While Doze blocks the network,
+  the connection manager says so (luna-deltas A18). `Power.kt`, `PowerService.kt`,
+  `SleepWake.kt`; the measurements, the mapping and what is still open are in
+  [sleep-and-wake.md](sleep-and-wake.md). Until 2026-10-08 schedules were Handler delays,
+  which count only time awake. **Exact alarms (ratchet item):** apps targeting API 31 and
+  later need `SCHEDULE_EXACT_ALARM` or `USE_EXACT_ALARM`; Lunacy targets 24 and 28.
 
 ## Email
 

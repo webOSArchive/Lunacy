@@ -189,6 +189,7 @@ open class AppWindow(
         // a tablet, a Pre3's on a phone. It is set for navigator.userAgent, the page's own
         // loads and the network shim alike, so a server can't tell them apart.
         settings.userAgentString = profile.userAgent
+        LocalNet.init(context)
         net = NetShim(appId, settings.userAgentString, profile.carrierCode) { id ->
             main.post { if (!destroyed) evaluateJavascript("window.__lunacyNetDone&&__lunacyNetDone($id)", null) }
         }
@@ -225,7 +226,7 @@ open class AppWindow(
         }
         webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? =
-                host.server.serve(req.url)
+                LocalNet.serve(req, profile.userAgent) ?: host.server.serve(req.url)
             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                 page++; net.reset(); sql.reset(); endCalls()
                 // A new page: the old one's native web views go with it.
@@ -459,6 +460,8 @@ open class AppWindow(
         @JavascriptInterface fun processId(): Int = pid
         @JavascriptInterface fun activityId(): Int = host.activityId(this@AppWindow)
         @JavascriptInterface fun mediaBase(): String = host.mediaBase()
+        /** Whether http:// images and media go through LocalNet (compat.js, "Local network"). */
+        @JavascriptInterface fun localNetworkBlocked(): Boolean = LocalNet.blocked
         @JavascriptInterface fun activate() { main.post { host.activate(this@AppWindow) } }
         @JavascriptInterface fun keyboard(show: Boolean) { main.post { host.keyboard(this@AppWindow, show) } }
         @JavascriptInterface fun keyboardResizes(resize: Boolean) { keyboardResizes = resize }

@@ -19,7 +19,9 @@ import java.util.concurrent.Executors
  * a query must be served by one of its kind's indexes, as on webOS. Work runs on one thread,
  * in order; objects of a kind are cached in memory once read.
  */
-class Db8(private val service: String, file: File?) {
+class Db8(private val service: String, file: File?,
+           /** A debuggable build: the SDK's relay may purge (see "purge"). */
+           private val debuggable: Boolean = false) {
     private val db: SQLiteDatabase = if (file != null) SQLiteDatabase.openOrCreateDatabase(file, null) else SQLiteDatabase.create(null)
     private val worker = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
@@ -27,7 +29,8 @@ class Db8(private val service: String, file: File?) {
     private val cache = HashMap<String, LinkedHashMap<String, JSONObject>>()  // kind -> id -> object
     private val watches = ArrayList<Watch>()
     /** Kinds whose records are kept in line with a source of truth outside db8; see [mirror]. */
-    private class Mirror(val source: () -> List<JSONObject>) { var synced = 0L }
+    private class Mirror(val source: () -> List<JSONObject>, val initial: Set<String>, val owns: (JSONObject) -> Boolean,
+                         val added: (() -> Unit)?) { var synced = 0L }
     private val mirrors = HashMap<String, Mirror>()
     private var mirrorTicker: java.util.concurrent.ScheduledExecutorService? = null
     private var rev = 0L
@@ -51,6 +54,8 @@ class Db8(private val service: String, file: File?) {
         db.execSQL("CREATE INDEX IF NOT EXISTS objects_kind ON objects (kind)")
         db.execSQL("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v INTEGER)")
         db.execSQL("CREATE TABLE IF NOT EXISTS permissions (kind TEXT, caller TEXT, ops TEXT, PRIMARY KEY (kind, caller))")
+        // db8's RevTimestamp records: which revision the database was at, at each purge.
+        db.execSQL("CREATE TABLE IF NOT EXISTS revtimes (rev INTEGER PRIMARY KEY, ts INTEGER)")
         runCatching { db.execSQL("ALTER TABLE permissions ADD COLUMN ops TEXT") }  // databases from before ops
         db.rawQuery("SELECT spec FROM kinds", null).use { c -> while (c.moveToNext()) parseKind(JSONObject(c.getString(0))).let { kinds[it.id] = it } }
         rev = meta("rev"); idCounter = meta("ids")
@@ -102,13 +107,19 @@ class Db8(private val service: String, file: File?) {
      * added), and one whose source has gone is purged, each firing watches as any write does.
      * While a watch is open on the kind it is checked every [MIRROR_WATCH_MS], so a list that
      * is on the screen hears about a file as it arrives.
+     *
+     * [initial] names properties the source sets only on a new record, which others then own
+     * (the photos service marks an image's thumbnails done). [owns] picks the records the source
+     * speaks for; the rest are left alone (a photo album synced from an account has no folder).
+     * [added] runs, on db8's thread, after a pass that made new records.
      */
-    fun mirror(spec: JSONObject, permissions: JSONArray, source: () -> List<JSONObject>) = worker.execute {
+    fun mirror(spec: JSONObject, permissions: JSONArray, initial: Set<String> = emptySet(), owns: (JSONObject) -> Boolean = { true },
+               added: (() -> Unit)? = null, source: () -> List<JSONObject>) = worker.execute {
         try {
             putKind(CONFIGURATOR, spec)
             putPermissions(CONFIGURATOR, JSONObject().put("permissions", permissions))
         } catch (e: Exception) { Log.w(AppServer.TAG, "$service: mirror ${spec.optString("id")}: ${e.message}"); return@execute }
-        mirrors[spec.getString("id")] = Mirror(source)
+        mirrors[spec.getString("id")] = Mirror(source, initial, owns, added)
         if (mirrorTicker == null) mirrorTicker = Executors.newSingleThreadScheduledExecutor().also {
             it.scheduleWithFixedDelay({
                 worker.execute { for ((k, m) in mirrors) if (watches.any { w -> k in w.kinds }) syncMirror(k, m) }
@@ -123,34 +134,62 @@ class Db8(private val service: String, file: File?) {
         val files = try { m.source() } catch (e: Exception) { Log.w(AppServer.TAG, "$service: mirror $kind: $e"); return }
         val byPath = LinkedHashMap<String, JSONObject>()
         for (f in files) byPath[f.optString("path")] = f
-        val current = objects(kind).values.filter { !it.optBoolean("_del") }
+        val current = objects(kind).values.filter { !it.optBoolean("_del") && m.owns(it) }
         transaction {
             for (o in current) {
                 val f = byPath.remove(o.optString("path"))
-                if (f == null) delOne(o, purge = true)
-                else if (f.keys().asSequence().any { k -> valueText(o, k) != valueText(f, k) }) mergeOne(o, f)
+                if (f == null) { delOne(o, purge = true); continue }
+                for (k in m.initial) f.remove(k)
+                if (f.keys().asSequence().any { k -> !same(o.opt(k), f.opt(k)) }) mergeOne(o, f)
             }
             for (f in byPath.values) {
                 val o = JSONObject(f.toString()).put("_kind", kind).put("_id", newId()).put("_rev", nextRev())
+                assignIds(o)
                 applyRevSets(null, o)
                 store(o)
                 changed(null, o)
             }
         }
+        if (byPath.isNotEmpty()) m.added?.invoke()
+    }
+
+    /** Equal as a source says it: the _ids db8 gave objects inside a record aren't the source's. */
+    private fun same(a: Any?, b: Any?): Boolean = when {
+        a is JSONObject && b is JSONObject -> {
+            val ka = a.keys().asSequence().filter { it != "_id" }.toSet()
+            ka == b.keys().asSequence().filter { it != "_id" }.toSet() && ka.all { same(a.opt(it), b.opt(it)) }
+        }
+        a is JSONArray && b is JSONArray -> a.length() == b.length() && (0 until a.length()).all { same(a.opt(it), b.opt(it)) }
+        a is Number && b is Number -> a.toDouble() == b.toDouble()
+        else -> a == b || (a == null && b == JSONObject.NULL) || (a == JSONObject.NULL && b == null)
+    }
+
+    /**
+     * For a mirror's source, on db8's thread: the mirrored [kind] brought into line, and its
+     * records' ids by path (an image's albumId is its folder's album).
+     */
+    fun mirrorIds(kind: String): Map<String, String> {
+        mirrors[kind]?.let { syncMirror(kind, it) }
+        return objects(kind).values.filter { !it.optBoolean("_del") }.associate { it.optString("path") to it.getString("_id") }
     }
 
     /** What an operation could read or change of a mirrored kind: the one it names, or all of them. */
     private fun syncMirrorsFor(method: String, p: JSONObject) {
         if (mirrors.isEmpty() || method !in MIRRORED_OPS) return
         val from = p.optJSONObject("query")?.optString("from")
-        if (from != null && from.isNotEmpty()) mirrors[from]?.let { syncMirror(from, it) }
+        // A query of a kind reads every kind that extends it: those are synced too.
+        if (from != null && from.isNotEmpty()) { for (k in family(from)) mirrors[k]?.let { syncMirror(k, it) } }
         else for ((k, m) in mirrors) syncMirror(k, m)
     }
 
+    private var bus: Bus? = null
+
     fun register(bus: Bus) {
-        for (m in listOf("putKind", "delKind", "put", "get", "merge", "del", "find", "search", "watch", "reserveIds", "batch", "putPermissions")) {
+        this.bus = bus
+        for (m in listOf("putKind", "delKind", "put", "get", "merge", "del", "find", "search", "watch", "reserveIds", "batch", "putPermissions", "purge", "purgeStatus")) {
             bus.register(service, m, Bus.CallHandler { call -> worker.execute { handle(m, call) } })
         }
+        bus.register(service, "internal/scheduledPurge", Bus.CallHandler { scheduledPurge(it) })
     }
 
     private fun handle(method: String, call: Bus.Call) {
@@ -184,6 +223,14 @@ class Db8(private val service: String, file: File?) {
         "reserveIds" -> JSONObject().put("returnValue", true).put("ids", JSONArray((1..p.optInt("count", 1).coerceIn(1, 1000)).map { newId() })).toString()
         "batch" -> batch(caller, p)
         "putPermissions" -> putPermissions(caller, p)
+        "purge" -> {
+            // A debug build lets the SDK's relay purge too, to test the window without waiting it out.
+            if (caller !in ADMINS && !(debuggable && caller == "novacomd")) throw DbError(-3963, "db: permission denied")
+            val w = p.opt("window")
+            if (w != null && w !is Int && w !is Long) throw DbError(22, "invalid parameters: caller='$caller' error='invalid type for property 'window''")
+            JSONObject().put("returnValue", true).put("count", purgeDeleted((w as? Number)?.toInt() ?: PURGE_WINDOW_DAYS)).toString()
+        }
+        "purgeStatus" -> JSONObject().put("returnValue", true).put("rev", lastPurgedRev()).toString()
         else -> error(-1, "Unknown method \"$method\" for category \"/\"")
     }
 
@@ -746,6 +793,72 @@ class Db8(private val service: String, file: File?) {
         }
     }
 
+    // ---- purge ----
+
+    /**
+     * Deleted objects are kept, whole, marked _del, so that watches and syncs can see the
+     * deletion (`delOne`). db8 removes them for good once they have been deleted for longer
+     * than its purge window: 7 days on the reference TouchPad (/etc/palm/mojodb.conf
+     * "purgeWindow"), with the source's default 14. Each purge notes the revision the database
+     * is at with the time (RevTimestamp), takes the newest note older than the window, removes
+     * every deleted object at or below that revision, and remembers it as the last purged
+     * revision, which purgeStatus reports and syncs read to learn they missed deletions
+     * (`MojDb::purge`, `purgeImpl`). Deleting an account (an Email account's mail, a Synergy
+     * account's events) comes to this: until it runs, the data is still in the database.
+     */
+    private fun purgeDeleted(windowDays: Int): Int {
+        val now = System.currentTimeMillis()
+        var count = 0
+        transaction {
+            db.insert("revtimes", null, ContentValues().apply { put("rev", nextRev()); put("ts", now) })
+            val cut = db.rawQuery("SELECT rev, ts FROM revtimes WHERE ts <= ? ORDER BY ts DESC LIMIT 1",
+                arrayOf((now - windowDays * 86_400_000L).toString())).use { if (it.moveToFirst()) it.getLong(0) to it.getLong(1) else null }
+                ?: return@transaction
+            val gone = ArrayList<JSONObject>()
+            db.rawQuery("SELECT json FROM objects WHERE json LIKE '%\"_del\":true%'", null).use { c ->
+                while (c.moveToNext()) {
+                    val o = runCatching { JSONObject(c.getString(0)) }.getOrNull() ?: continue
+                    if (o.optBoolean("_del") && o.optLong("_rev") <= cut.first) gone += o
+                }
+            }
+            gone.forEach { purge(it) }
+            count = gone.size
+            if (count > 0) setMeta(LAST_PURGED, cut.first + 1)
+            db.delete("revtimes", "ts <= ?", arrayOf(cut.second.toString()))
+        }
+        if (count > 0) Log.i(AppServer.TAG, "$service: purged $count deleted objects")
+        return count
+    }
+
+    /** -1 until a purge has removed something, as on the reference TouchPad. */
+    private fun lastPurgedRev(): Long = meta(LAST_PURGED) - 1
+
+    /**
+     * palm://com.palm.db/internal/scheduledPurge, the daily "mojodbpurge" activity's callback
+     * (/etc/palm/activities/com.palm.db, the device's file). As db8's PurgeHandler: answer at
+     * once, adopt the activity, purge, and complete it with restart, so it runs again a day on.
+     */
+    private fun scheduledPurge(call: Bus.Call) {
+        val bus = bus ?: return call.reply(error(-1, "db: not ready"))
+        val activityId = call.params.optJSONObject("\$activity")?.opt("activityId")
+            ?: return call.reply(error(22, "invalid parameters: caller='${call.appId}' error='required property not found - '\$activity''"))
+        call.reply(ok())
+        val ids = JSONObject().put("activityId", activityId).put("activityName", "mojodb scheduled purge")
+        var done = false
+        var adopt: Bus.Call? = null
+        adopt = bus.call(service, "palm://com.palm.activitymanager/adopt", JSONObject(ids.toString()).put("wait", true).put("subscribe", true).toString(), privateBus = true) { reply ->
+            val r = runCatching { JSONObject(reply) }.getOrNull() ?: return@call
+            if (done || !(r.optBoolean("adopted") || r.optString("event") == "orphan")) return@call
+            done = true
+            worker.execute {
+                runCatching { purgeDeleted(PURGE_WINDOW_DAYS) }.onFailure { Log.w(AppServer.TAG, "$service: purge failed", it) }
+                bus.call(service, "palm://com.palm.activitymanager/complete", JSONObject(ids.toString()).put("restart", true).toString(), privateBus = true) {
+                    main.post { adopt?.cancel() }
+                }
+            }
+        }
+    }
+
     // ---- batch ----
 
     private fun batch(caller: String, p: JSONObject): String {
@@ -791,6 +904,13 @@ class Db8(private val service: String, file: File?) {
     companion object {
         /** meta: the one-time repair that gave older records' array objects their _ids has run. */
         private const val NESTED_IDS = "nestedIds"
+        /** meta: the last purged revision, plus one (0 for none). */
+        private const val LAST_PURGED = "lastPurgedRev"
+        /** The reference TouchPad's purgeWindow (/etc/palm/mojodb.conf). */
+        private const val PURGE_WINDOW_DAYS = 7
+        /** db8's admin role (/etc/palm/mojodb.conf), the only callers allowed purge. */
+        private val ADMINS = setOf("com.palm.configurator", "com.palm.service.backup", "com.palm.odd.service",
+            "com.palm.service.migrationscript", "com.palm.spacecadet", "com.palm.backup.privileged", "com.palm.app.backup.service")
         /** How often a mirrored kind is checked against its source while it is being used, and while watched. */
         private const val MIRROR_MS = 2000L
         private const val MIRROR_WATCH_MS = 5000L

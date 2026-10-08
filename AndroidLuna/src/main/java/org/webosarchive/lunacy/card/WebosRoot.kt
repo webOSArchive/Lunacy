@@ -166,7 +166,8 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
      * are written for it (Android 5 has no sed, awk, head or basename), so every busybox
      * command gets its link at its own path, as busybox installs itself. Before them go
      * Lunacy's own: `/bin/sh` is busybox's ash, as on webOS; curl and luna-send run in Node;
-     * `mount` answers the remount scripts do before writing to the rootfs.
+     * `mount` answers the remount scripts do before writing to the rootfs; `ionice` runs its
+     * command without the priority Android won't let an app set.
      */
     private fun installTools() {
         // Links from an earlier APK point at its native library folder, which moves on update.
@@ -185,7 +186,7 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
                 ProcessBuilder(bb.path, "--list-full").redirectErrorStream(true).start().inputStream.bufferedReader().readLines()
             } catch (e: IOException) { Log.w(AppServer.TAG, "rootfs: busybox won't run: $e"); emptyList() }
             // Lunacy's own tools take these names instead.
-            val ours = setOf("bin/mount", "usr/bin/curl", "usr/bin/luna-send")
+            val ours = setOf("bin/mount", "usr/bin/curl", "usr/bin/luna-send", "bin/ionice")
             for (a in applets.map { it.trim() }.filter { it.isNotEmpty() && it !in ours }) {
                 val f = File(root, a)
                 if (f.exists() || runCatching { Os.readlink(f.path) }.isSuccess) f.delete()
@@ -203,6 +204,11 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
         // `mount -o remount,rw /` is what a script says before it writes to the rootfs, which
         // here is always writable; any other mount is one Lunacy can't do.
         script("bin/mount", "case \" \$* \" in *remount*) exit 0;; esac\necho \"mount: permission denied\" >&2\nexit 1\n")
+        // `ionice -c3 cp ...` is how the photos service copies its thumbnails. Setting an I/O
+        // priority (ioprio_set) is a system call Android's seccomp filter kills an app's
+        // process for, so the class is dropped and the command runs as it is.
+        script("bin/ionice", "while [ \$# -gt 0 ]; do case \"\$1\" in -c|-n) shift 2;; -c*|-n*|-t) shift;; " +
+            "-p) exit 0;; --) shift; break;; *) break;; esac; done\n[ \$# -gt 0 ] || { echo \"none: prio 0\"; exit 0; }\nexec \"\$@\"\n")
         list.writeText(made.joinToString("") { "$it\n" })
     }
 

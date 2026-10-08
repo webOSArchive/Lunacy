@@ -1,0 +1,9 @@
+{
+    "quicklauncher": [
+        "com.palm.app.browser_default",
+        "com.palm.app.email_default",
+        "com.palm.app.calendar_default",
+        "com.palm.app.photos_default",
+        "com.palm.app.enyo-findapps_default"
+    ]
+}

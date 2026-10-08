@@ -35,11 +35,25 @@ for (const level of ["log", "info", "warn", "error", "debug"]) {
 // Absolute paths under these roots are webOS paths; everything else (/data, /system, /proc,
 // /dev) is the real Android filesystem.
 const WEBOS = /^\/(usr|media|bin|sbin|var|etc|tmp|home|opt|lib)(\/|$)/;
-function real(p) { return typeof p === "string" && WEBOS.test(p) ? ROOT + p : p; }
+// /media/internal's folders that are Android's ("photos=/storage/emulated/0/Pictures:..."), as
+// UserFiles.kt maps them: a folder Lunacy's own tree hasn't got is Android's.
+const MEDIA = {};
+for (const e of (process.env.LUNACY_MEDIA || "").split(":")) {
+	const i = e.indexOf("=");
+	if (i > 0) { MEDIA[e.slice(0, i).toLowerCase()] = e.slice(i + 1); }
+}
+const exists0 = fs.existsSync;
+function real(p) {
+	if (typeof p !== "string" || !WEBOS.test(p)) { return p; }
+	const m = /^\/media\/internal\/([^\/]+)(\/.*)?$/.exec(path.posix.normalize(p));
+	const android = m && MEDIA[m[1].toLowerCase()];
+	if (android && !exists0(ROOT + "/media/internal/" + m[1])) { return android + (m[2] || ""); }
+	return ROOT + p;
+}
 function realAll(s) {
 	// Absolute webOS paths inside a shell command line.
 	return String(s).replace(/(^|[\s'"=(;|&<>])(\/(?:usr|media|bin|sbin|var|etc|tmp|home|opt|lib)(?:\/[^\s'";|&<>)]*)?)/g,
-		(m, pre, p) => pre + ROOT + p);
+		(m, pre, p) => pre + real(p));
 }
 
 function wrap(obj, name, argIndexes) {
@@ -58,6 +72,103 @@ for (const n of ["access", "appendFile", "chmod", "chown", "createReadStream", "
 	wrap(fs, n + "Sync", [0]);
 }
 for (const n of ["rename", "copyFile", "link", "symlink"]) { wrap(fs, n, [0, 1]); wrap(fs, n + "Sync", [0, 1]); }
+
+// webOS ran services as root, which file modes don't bind: the photos service makes its cache
+// folder with mkdir(path, 666) - decimal, so d-w--w--wT - and goes on using it. Lunacy's
+// service isn't root, so what a service makes or chmods keeps its owner's access.
+function ownerKeeps(mode, bits) {
+	if (mode === undefined || mode === null || typeof mode === "function") { return mode; }
+	if (typeof mode === "object") { return Object.assign({}, mode, { mode: ownerKeeps(mode.mode, bits) }); }
+	const m = typeof mode === "string" ? parseInt(mode, 8) : mode;
+	return isNaN(m) ? mode : (m | bits);
+}
+for (const n of ["mkdir", "mkdirSync"]) {
+	const f = fs[n];
+	fs[n] = function (p, mode) {
+		const a = Array.prototype.slice.call(arguments);
+		if (a.length > 1) { a[1] = ownerKeeps(mode, 0o700); }
+		return f.apply(fs, a);
+	};
+}
+for (const n of ["chmod", "chmodSync"]) {
+	const f = fs[n];
+	fs[n] = function (p, mode) {
+		const a = Array.prototype.slice.call(arguments);
+		let dir = false;
+		try { dir = fs.statSync(p).isDirectory(); } catch (e) {}
+		a[1] = ownerKeeps(mode, dir ? 0o700 : 0o600);
+		return f.apply(fs, a);
+	};
+}
+
+// extractfs: webOS's thumbnailer was a filesystem, /var/luna/data/extractfs<image>:<size...>,
+// that services read like any file (the photos service streams its JSON and cp's its JPEGs).
+// Lunacy makes the file on request (Extractfs.kt): a read of one waits for it, then reads
+// the copy. A read the device would have failed fails as it did there.
+const EXTRACTFS = "/var/luna/data/extractfs";
+function isExtractfs(p) { return typeof p === "string" && p.indexOf(EXTRACTFS) === 0; }
+let nextExtract = 1;
+const extracting = new Map();  // id -> callback(webOS path or null)
+function extract(p, cb) {
+	const id = "x" + nextExtract++;
+	extracting.set(id, cb);
+	send({ t: "extractfs", id: id, spec: p.slice(EXTRACTFS.length) });
+}
+function noEntry(p) {
+	const e = new Error("ENOENT: no such file or directory, open '" + p + "'");
+	e.code = "ENOENT"; e.errno = -2; e.path = p;
+	return e;
+}
+const createReadStream0 = fs.createReadStream, readFile0 = fs.readFile;
+fs.createReadStream = function (p, opts) {
+	if (!isExtractfs(p)) { return createReadStream0.apply(fs, arguments); }
+	const out = new (require("stream").PassThrough)();
+	const enc = typeof opts === "string" ? opts : opts && opts.encoding;
+	if (enc) { out.setEncoding(enc); }
+	extract(p, (made) => {
+		if (!made) { out.emit("error", noEntry(p)); return; }
+		createReadStream0.call(fs, made).on("error", (e) => out.emit("error", e)).pipe(out);
+	});
+	return out;
+};
+fs.readFile = function (p) {
+	const a = Array.prototype.slice.call(arguments);
+	if (!isExtractfs(p)) { return readFile0.apply(fs, a); }
+	const cb = a[a.length - 1];
+	extract(p, (made) => made ? (a[0] = made, readFile0.apply(fs, a)) : cb(noEntry(p)));
+};
+
+// A child process given an extractfs file starts once the file is there. Until then it is a
+// stand-in with the same streams and events; one whose file can't be made fails as cp did
+// on the device ("cp: read error: No such file or directory", exit 1).
+function withExtracts(args, start) {
+	const wanted = (args || []).filter(isExtractfs);
+	if (!wanted.length) { return start(args); }
+	const PassThrough = require("stream").PassThrough;
+	const child = new EventEmitter();
+	child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+	child.kill = function (sig) { child.killed = true; if (child.real) { child.real.kill(sig); } };
+	const made = {};
+	let left = wanted.length, failed = false;
+	const go = () => {
+		if (child.killed) { return; }
+		if (failed) {
+			child.stderr.end("cp: read error: No such file or directory\n"); child.stdout.end();
+			setImmediate(() => { child.emit("exit", 1, null); child.emit("close", 1, null); });
+			return;
+		}
+		const real = child.real = start(args.map((a) => made[a] || a));
+		child.pid = real.pid;
+		real.stdout && real.stdout.pipe(child.stdout);
+		real.stderr && real.stderr.pipe(child.stderr);
+		real.stdin && child.stdin.pipe(real.stdin);
+		for (const ev of ["exit", "close", "error"]) { real.on(ev, function () { child.emit.apply(child, [ev].concat(Array.prototype.slice.call(arguments))); }); }
+	};
+	for (const p of wanted) {
+		extract(p, (m) => { if (m) { made[p] = m; } else { failed = true; } if (--left === 0) { go(); } });
+	}
+	return child;
+}
 
 // Child processes: the executable, arguments that are webOS paths, and "sh -c" command lines.
 // PATH puts webOS's /usr/bin (curl) and /bin (sh) first.
@@ -79,7 +190,7 @@ function splitArgs(args, opts) {
 const spawn0 = cp.spawn, execFile0 = cp.execFile, exec0 = cp.exec, spawnSync0 = cp.spawnSync, execSync0 = cp.execSync, execFileSync0 = cp.execFileSync;
 cp.spawn = function (file, args, opts) {
 	if (!Array.isArray(args)) { opts = args; args = []; }
-	return spawn0.call(cp, real(file), childArgs(file, args), childOptions(opts));
+	return withExtracts(args, (a) => spawn0.call(cp, real(file), childArgs(file, a), childOptions(opts)));
 };
 cp.spawnSync = function (file, args, opts) {
 	if (!Array.isArray(args)) { opts = args; args = []; }
@@ -89,7 +200,7 @@ cp.execFile = function (file, args, opts, cb) {
 	if (typeof args === "function") { cb = args; args = []; opts = {}; }
 	else if (!Array.isArray(args)) { cb = opts; opts = args; args = []; }
 	if (typeof opts === "function") { cb = opts; opts = {}; }
-	return execFile0.call(cp, real(file), childArgs(file, args), childOptions(opts), cb);
+	return withExtracts(args, (a) => execFile0.call(cp, real(file), childArgs(file, a), childOptions(opts), cb));
 };
 cp.execFileSync = function (file, args, opts) {
 	if (!Array.isArray(args)) { opts = args; args = []; }
@@ -126,7 +237,11 @@ class Message {
 	uniqueToken() { return String(this.m.id); }
 	token() { return this.m.id; }
 	sender() { return this.m.sender || ""; }
-	senderServiceName() { return this.m.senderService || ""; }
+	// A service's own bus name when a service called: the framework's commands adopt the
+	// activity they were called with only when this is com.palm.activitymanager, and merely
+	// monitor it otherwise, which leaves them unable to complete it (mojoservice
+	// controller_command.js). An app's call has none.
+	senderServiceName() { return this.m.senderService || (this.m.fromService ? this.m.sender : "") || ""; }
 	applicationID() { return this.m.sender || ""; }
 	isSubscription() { return !!this.m.subscribe; }
 	respond(json) { send({ t: "response", id: this.m.id, payload: String(json) }); return true; }
@@ -191,6 +306,9 @@ function receive(m) {
 		h.emit("request", new Message(m));
 	} else if (m.t === "cancel") {
 		for (const h of handles) { h.emit("cancel", new Message(m)); }
+	} else if (m.t === "extractfs") {
+		const cb = extracting.get(m.id);
+		if (cb) { extracting.delete(m.id); cb(m.path || null); }
 	} else if (m.t === "callResponse") {
 		const r = outgoing.get(m.id);
 		if (r) {

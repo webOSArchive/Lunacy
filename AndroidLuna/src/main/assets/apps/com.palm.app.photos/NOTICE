@@ -1,0 +1,11 @@
+Palm's Photos & Videos (com.palm.app.photos 3.1.8001), as it is on the reference TouchPad
+(webOS CE 3.1.0), copied from /media/cryptofs/apps/usr/palm/applications.
+
+Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence; distributed by
+Lunacy as abandonware, like Mojo, Palm's other bundled apps, the Prelude fonts and the
+TouchPad wallpapers: no owner has asserted rights since webOS was discontinued.
+
+The app is here exactly as it was packaged, and Lunacy does not change it (rule 5 in
+CLAUDE.md). It lists what webOS's media index holds (MediaIndex.kt answers it from the files
+under /media/internal, Android's Pictures, DCIM and Movies among them) and shows the
+thumbnails Palm's photos service makes, which Lunacy also ships.

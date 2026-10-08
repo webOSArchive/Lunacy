@@ -185,7 +185,7 @@ done
 # reference TouchPad (Workbench/vendor/touchpad/services-fw, os-services and etc-db).
 R=$L/rootfs
 mkdir -p $R/usr/palm/frameworks $R/usr/palm/services $R/usr/palm/public/accounts $R/etc/palm/db/kinds $R/etc/palm/db/permissions $R/etc/palm/tempdb $R/etc/palm/activities
-for f in foundations foundations.crypto foundations.io foundations.json mojoservice mojoservice.transport underscore globalization mojoloader.js calendar contacts; do
+for f in foundations foundations.crypto foundations.io foundations.json foundations.xml mojoservice mojoservice.transport mojoservice.transport.sync underscore globalization mojoloader.js calendar contacts; do
     cp -r $V/touchpad/services-fw/$f $R/usr/palm/frameworks/ 2>/dev/null || cp -r $V/touchpad/$f $R/usr/palm/frameworks/
 done
 cp -r $V/touchpad/services-fw/jsservicelauncher $R/usr/palm/services/
@@ -232,6 +232,10 @@ for s in com.palm.service.contacts com.palm.service.contacts.linker; do
     cp -r $V/touchpad/os-services/$s $R/usr/palm/services/
     cp -r $V/touchpad/etc-activities/$s $R/etc/palm/activities/
 done
+# db8's own: its daily purge of deleted objects (Db8.kt, scheduledPurge), the device's file. Not
+# its 5-minute space check (com.palm.db.space.json): Lunacy's db8 keeps no quotas to check.
+mkdir -p $R/etc/palm/activities/com.palm.db
+cp $V/touchpad/etc-activities/com.palm.db/com.palm.db.purge.json $R/etc/palm/activities/com.palm.db/
 rm -f $R/usr/palm/services/com.palm.service.contacts/run_tests.sh $R/usr/palm/services/com.palm.service.contacts/testSpec.json
 cat > $R/usr/palm/services/com.palm.service.contacts/NOTICE <<'NOTICE'
 Palm's contacts service, copied from /usr/palm/services on the reference TouchPad
@@ -244,6 +248,15 @@ The contacts linker service, copied from /usr/palm/services on the reference Tou
 (webOS CE 3.1.0), where it is the community's 1.1.0.2 (Herman van Hazendonk), as webOS CE
 ships it; and its activity file from /etc/palm/activities. Copyright LG Electronics, Inc.;
 Apache 2.0 (see LICENSE).
+NOTICE
+# The photos service, which makes Photos & Videos' thumbnails (Docs/architecture.md, "Photos
+# and videos"). Its install script for developers stays out.
+cp -r $V/touchpad/os-services/com.palm.service.photos $R/usr/palm/services/
+rm -f $R/usr/palm/services/com.palm.service.photos/install-on-device.sh
+cat > $R/usr/palm/services/com.palm.service.photos/NOTICE <<'NOTICE'
+Palm's photos service, copied from /usr/palm/services on the reference TouchPad (webOS CE
+3.1.0), without its developer install script. Copyright Palm, Inc. / Hewlett-Packard. Never
+released under an open licence; distributed by Lunacy as abandonware, like Mojo.
 NOTICE
 # The system's own account template, which the accounts service reads: webOS CE's, named
 # "webOS Account" (Workbench/vendor/webos-ce, the CE project's system/).

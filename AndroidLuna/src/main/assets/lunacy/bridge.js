@@ -9,8 +9,14 @@
 	// an iframe. Here a reply comes back through evaluateJavascript, which only ever runs in
 	// the main frame, so each same-origin frame registers itself with the main frame and
 	// replies are handed on to whichever frame is waiting for that token. Tokens come from
-	// one counter shared by the frames, so they can't be confused. A cross-origin frame
-	// can't join in (and shouldn't: see the ratchet items in docs/architecture.md).
+	// one counter shared by the frames, so they can't be confused.
+	// A frame from another origin can't reach the main frame's objects, and webOS's cross-app UI
+	// is often one here: the Accounts app shows Email's account wizard, from Email's origin. On
+	// webOS every frame of a card made its calls as the card's app (which is why Accounts asks
+	// for the mail services' permissions), and so do they here. Such a frame numbers its calls
+	// from a range of its own, tells the main frame the range by postMessage, and the main
+	// frame posts each reply in it to that frame alone. See the ratchet item on frames in
+	// docs/architecture.md.
 	var shared = (function () {
 		try {
 			var t = window.top;
@@ -19,6 +25,28 @@
 			return t;
 		} catch (e) { return null; }
 	})();
+	var RANGE = 1000000;
+	var ownBase = 0;
+	if (!shared) {
+		ownBase = RANGE * (1 + Math.floor(Math.random() * 2000));
+		window.__lunacyToken = ownBase;
+		// Strings, as Enyo's own messages are: its handlers read every message with indexOf.
+		try { window.top.postMessage("lunacyFrameBase=" + ownBase, "*"); } catch (e) {}
+		window.addEventListener("message", function (e) {
+			var m = typeof e.data === "string" && e.source === window.top && /^lunacyReply=/.test(e.data) ? e.data : null;
+			if (!m) { return; }
+			var d; try { d = JSON.parse(m.slice(12)); } catch (x) { return; }
+			if (d.token >= ownBase && d.token < ownBase + RANGE) { Bridge.__replyLocal(d.token, d.json); }
+		});
+	}
+	// The main frame: which cross-origin frame owns which range of tokens.
+	var foreign = {};
+	if (window.top === window) {
+		window.addEventListener("message", function (e) {
+			var m = typeof e.data === "string" && /^lunacyFrameBase=\d+$/.test(e.data) ? e.data : null;
+			if (m && e.source) { foreign[Number(m.slice(16))] = e.source; }
+		});
+	}
 	function nextToken() {
 		var holder = shared || window;
 		holder.__lunacyToken = (holder.__lunacyToken || 0) + 1;
@@ -66,6 +94,8 @@
 				if (f !== window && f.PalmServiceBridge && f.PalmServiceBridge.__replyLocal(t, json)) { return; }
 			} catch (e) {}
 		}
+		var base = Math.floor(t / RANGE) * RANGE, target = foreign[base];
+		if (target) { try { target.postMessage("lunacyReply=" + JSON.stringify({ token: t, json: json }), "*"); } catch (e) {} }
 	};
 	window.PalmServiceBridge = Bridge;
 

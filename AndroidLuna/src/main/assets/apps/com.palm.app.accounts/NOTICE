@@ -1,0 +1,11 @@
+Accounts (com.palm.app.accounts 3.1.1), the webOS account manager, as it is on the reference
+TouchPad (webOS CE 3.1.0), copied from its /usr/palm/applications.
+
+The app is LG Electronics' Apache 2.0 release of HP's (Open webOS; see LICENSE and README.md
+alongside). The webOS CE project's changes are in it as the device has them: the "Delete
+Account Data" page (source/RetainedDataView.js) and the keep-data choice on removing an
+account.
+
+The app is here exactly as it was packaged, and Lunacy does not change it (rule 5 in
+CLAUDE.md). It lists accounts, adds them through each account template's own screens, and
+removes them through com.palm.service.accounts, whose capability providers clear their data.

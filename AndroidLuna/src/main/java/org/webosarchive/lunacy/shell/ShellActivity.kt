@@ -55,7 +55,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     /** The app that launched each app, until that launch's card is shown (showAsCard). */
     private val launchers = HashMap<String, String>()
-    private val activityManager by lazy { org.webosarchive.lunacy.card.ActivityManager(this) }
+    /** powerd's part: timers that wake the device, and locks that keep it awake. */
+    private val power by lazy { org.webosarchive.lunacy.card.Power(applicationContext) }
+    /** Every sign of having been asleep or frozen, answered as a webOS resume. */
+    private val sleepWake by lazy { org.webosarchive.lunacy.card.SleepWake(this, power) }
+    private val powerService by lazy { org.webosarchive.lunacy.card.PowerService(this, power) }
+    private val activityManager by lazy { org.webosarchive.lunacy.card.ActivityManager(this, power) }
     private lateinit var webos: org.webosarchive.lunacy.card.WebosRoot
     private lateinit var mediaServer: org.webosarchive.lunacy.card.MediaServer
     private lateinit var configurator: org.webosarchive.lunacy.card.Configurator
@@ -82,7 +87,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private var androidById: Map<String, AppInfo> = emptyMap()
     /** Whether the shell is on screen (between onStart and onStop): a Home press then is Lunacy's own. */
     private var started = false
-    override fun onStart() { super.onStart(); started = true }
+    override fun onStart() { super.onStart(); started = true; sleepWake.check("shell") }
     override fun onStop() { started = false; super.onStop() }
 
     /** What the launcher shows: webOS apps, the launch points they added, then Android's. */
@@ -207,7 +212,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "webOS root ready in ${System.currentTimeMillis() - t} ms")
             // What the ROM brought: its services and their db8 kinds, and any system apps.
             // Activities run once the root's services are on the bus, as webOS's waited for boot.
-            runOnUiThread { jsServices.reload(); nativeServices.reload(); appsChanged(); activityManager.enable(); afterFirstUse(); FontWarmer(this, server).warmWhenIdle() }
+            runOnUiThread { jsServices.reload(); nativeServices.reload(); appsChanged(); activityManager.enable(); powerService.enable(); afterFirstUse(); FontWarmer(this, server).warmWhenIdle() }
         }, "webos-root").start()
 
         // The dock draws an icon being dragged out of it above its own bounds.
@@ -1785,10 +1790,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             closeMenu()
             if (launcherOpen) closeLauncher()
             hideKeyboard()
-            // The app its owner chose, if any; otherwise the shell's own Time face. webOS
-            // launched the chosen app with dockMode set, which is how it knows to show its
-            // exhibition view rather than its ordinary one.
-            exhibitionApp = dockMode.enabledApp()?.takeIf { registry.get(it) != null }
+            // The face it was last left on, if that app is still switched on; otherwise the
+            // shell's own Time face. webOS launched the app with dockMode set, which is how it
+            // knows to show its exhibition view rather than its ordinary one.
+            exhibitionApp = dockMode.defaultApp()
             // The dock covers the card view, which goes on underneath, untouched.
             cards.visibility = View.INVISIBLE
             cards.cards.forEach { it.window.setStageActive(false) }
@@ -1814,6 +1819,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             // (DockModeWindowManager::setDockModeState, DockModeCloseAppsOnExit), so an app's
             // Exhibition view doesn't turn up anywhere afterwards. An app that was started for
             // the dock ends with its window; one that was already running keeps its cards.
+            // What was showing is where the next Exhibition opens, as LunaSysMgr's default.
+            dockMode.setDefault(exhibitionApp)
             exhibitionApp = null
             dockShown = null
             dockWindows.values.toList().forEach { onWindowClosed(it) }
@@ -1946,7 +1953,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         org.webosarchive.lunacy.card.LunacyService(this, registry, jsServices, jsServices.root, { displayInfo() }, ::askPermissions,
             { intent -> runCatching { startActivityForResult(intent, 200) }.isSuccess }, onLayoutChanged = { recreate() },
             wallpaper = ::wallpaperSource, onFirstUseDone = ::afterFirstUse).register(bus)
-        org.webosarchive.lunacy.card.ConnectionManager(this).register(bus)
+        val connections = org.webosarchive.lunacy.card.ConnectionManager(this) { sleepWake.blocked }.also { it.register(bus) }
+        sleepWake.onBlockedChanged = connections::changed
+        sleepWake.onBlocked = activityManager::networkBlocked
         // Secrets, where the accounts service keeps each account's credentials.
         org.webosarchive.lunacy.card.KeyManager(java.io.File(filesDir, "keymanager.json")).register(bus)
         org.webosarchive.lunacy.card.DeviceProfileService(this, profile).register(bus)
@@ -1955,12 +1964,17 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // album art, MeTube's "download first". It writes into the webOS tree.
         org.webosarchive.lunacy.card.DownloadManager(jsServices.root).register(bus)
         org.webosarchive.lunacy.card.ImageService(jsServices.root).register(bus)
-        val db8 = org.webosarchive.lunacy.card.Db8("com.palm.db", java.io.File(filesDir, "db8.sqlite")).also { it.register(bus) }
+        val db8 = org.webosarchive.lunacy.card.Db8("com.palm.db", java.io.File(filesDir, "db8.sqlite"),
+            applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0).also { it.register(bus) }
         val tempdb = org.webosarchive.lunacy.card.Db8("com.palm.tempdb", null).also { it.register(bus) }
-        // Documents' index, answered from the folders themselves (FileIndex).
+        // Documents', photos' and videos' indexes, answered from the folders themselves (FileIndex, MediaIndex).
         org.webosarchive.lunacy.card.FileIndex(jsServices.root).attach(db8)
+        org.webosarchive.lunacy.card.MediaIndex(jsServices.root).attach(db8, bus)
         // After db8: it reads its persisted activities back as it registers.
+        power.register()
         activityManager.register(bus)
+        powerService.register(bus)
+        sleepWake.start()
         configurator = org.webosarchive.lunacy.card.Configurator(files, db8, tempdb, webos.root, bus)
         configurator.run()
         bus.register("com.palm.applicationManager", "launch", launchHandler)
@@ -2077,12 +2091,20 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     private val dockPrefs by lazy { getSharedPreferences("launcher", MODE_PRIVATE) }
 
-    /** The dock's apps, as the user arranged them; at first, the first five apps. */
+    /**
+     * The dock's apps, as the user arranged them; until they do, Lunacy's
+     * assets/luna/default-dock-positions.json, in the shape of the device's
+     * /usr/palm/default-dock-positions.json (whose "quicklauncher" LunaSysMgr read for a fresh
+     * dock): Web, Email, Calendar, Photos & Videos and App Catalog (codepoet, 2026-10-08; the
+     * TouchPad's had Messaging where Lunacy has App Catalog). A phone's dock takes the first four.
+     */
     private fun dock(): List<String> {
-        val saved = dockPrefs.getString("dock", null)
-            ?: return registry.launchPoints.take(quickLaunch.maxItems).map { it.id }
-        val a = runCatching { org.json.JSONArray(saved) }.getOrDefault(org.json.JSONArray())
-        return (0 until a.length()).map { a.optString(it) }
+        val a = dockPrefs.getString("dock", null)?.let { runCatching { org.json.JSONArray(it) }.getOrNull() }
+            ?: runCatching {
+                org.json.JSONObject(assets.open("luna/default-dock-positions.json").bufferedReader().use { it.readText() })
+                    .getJSONArray("quicklauncher")
+            }.getOrDefault(org.json.JSONArray())
+        return (0 until a.length()).map { a.optString(it).removeSuffix("_default") }.take(quickLaunch.maxItems)
     }
 
     private fun setDock(ids: List<String>) {

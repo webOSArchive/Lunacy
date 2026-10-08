@@ -181,7 +181,8 @@ class AppServer(
             // webOS's user storage, shared by apps and services (JS services write files here).
             path.startsWith(MEDIA_INTERNAL) -> {
                 val rel = path.removePrefix(MEDIA_INTERNAL)
-                if (thumb != null) thumbnail(rel, thumb) else internal(rel)?.let { respond(it, path, resource, app) }
+                if (thumb != null) thumbnail(rel, thumb)
+                else internal(rel)?.let { s -> respond(LocalNet.playlist(s, rel, "file:///$path"), path, resource, app) }
             }
             else -> null
         }
@@ -194,71 +195,11 @@ class AppServer(
     private fun internal(rel: String): InputStream? =
         UserFiles.resolve(webosRoot, rel)?.takeIf { it.isFile }?.inputStream()
 
-    /**
-     * webOS's thumbnailer: `/var/luna/data/extractfs/<source>:<x>:<y>:<w>:<h>:<mode>`.
-     *
-     * Not a service and not a file an app wrote - a FUSE filesystem, mounted on the device at
-     * `/var/luna/data/extractfs`, that answered a read with the named image scaled down. Any
-     * app that shows artwork at a fixed size uses it rather than letting the page scale a
-     * full-size picture: drPodder's feed and episode lists ask for every podcast's cover at
-     * `:0:0:56:56:3`, and without it the lists are full of broken images.
-     *
-     * Measured on the reference TouchPad on 2026-09-22, by reading the synthetic files
-     * straight off the mount and looking at what came back:
-     *
-     * | asked for | source | came back |
-     * |---|---|---|
-     * | `:0:0:56:56:3` | 480 x 480 | 56 x 56 |
-     * | `:0:0:56:56:3` | 700 x 875 | **45 x 56** |
-     * | `:0:0:100:50:3` | 700 x 875 | **40 x 50** |
-     *
-     * So the box is a bound, not a shape: the image is scaled to fit inside it with its
-     * aspect ratio kept, and never cropped or stretched. Modes 0 and 3 returned the same
-     * bytes for the same source, and the first two numbers were 0 in everything seen, so
-     * neither is acted on here; if an app turns up that varies them, measure again.
-     *
-     * The device returned an uncompressed BMP. This returns a PNG, which no page can tell
-     * apart from an img's point of view and which is a tenth the size.
-     */
-    private fun extractfs(spec: String): WebResourceResponse? {
-        // <source path>:<x>:<y>:<width>:<height>:<mode>, so the last five fields are the box.
-        val parts = spec.trimStart('/').split(':')
-        if (parts.size < 6) return null
-        val source = parts.dropLast(5).joinToString(":")
-        val box = parts.takeLast(5).map { it.toIntOrNull() ?: return null }
-        val w = box[2]
-        val h = box[3]
-        if (w !in 1..4096 || h !in 1..4096) return null
-        val open = resolveWebos(source) ?: return null
-        return try {
-            // inJustDecodeBounds makes decodeStream return null and fill in the options,
-            // so what says whether the source is there is the stream, not the bitmap.
-            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            (open() ?: return null).use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
-            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-            var sample = 1
-            while (bounds.outWidth / (sample * 2) >= w && bounds.outHeight / (sample * 2) >= h) sample *= 2
-            val bmp = open()?.use {
-                android.graphics.BitmapFactory.decodeStream(it, null,
-                    android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
-            } ?: return null
-            // Fit inside the box, as the device does, and never scale up: a source smaller
-            // than the box came back at its own size there.
-            val scale = minOf(w.toFloat() / bmp.width, h.toFloat() / bmp.height, 1f)
-            val out = if (scale < 1f) android.graphics.Bitmap.createScaledBitmap(
-                bmp, Math.max(1, Math.round(bmp.width * scale)), Math.max(1, Math.round(bmp.height * scale)), true)
-            else bmp
-            val bytes = java.io.ByteArrayOutputStream()
-            out.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, bytes)
-            if (out !== bmp) out.recycle()
-            bmp.recycle()
-            WebResourceResponse("image/png", null, 200, "OK", mapOf("Cache-Control" to "max-age=600"),
-                ByteArrayInputStream(bytes.toByteArray()))
-        } catch (e: Exception) {
-            Log.w(TAG, "extractfs $spec: $e")
-            null
+    /** webOS's thumbnailer, as a page reads it ([Extractfs]). */
+    private fun extractfs(spec: String): WebResourceResponse? =
+        Extractfs.read(spec, Extractfs.Opener(::resolveWebos))?.let {
+            WebResourceResponse(it.mime, null, 200, "OK", mapOf("Cache-Control" to "max-age=600"), ByteArrayInputStream(it.bytes))
         }
-    }
 
     /**
      * An absolute webOS path, as the thumbnailer is given one: user storage or an app's own

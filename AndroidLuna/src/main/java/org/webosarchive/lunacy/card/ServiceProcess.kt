@@ -15,8 +15,12 @@ import java.util.concurrent.Executor
  *
  *   to it    {"t":"request","id","service","category","method","payload","sender","fromService","subscribe","outside"}
  *            {"t":"cancel","id"}, {"t":"callResponse","id","payload","subscribe","sender"}
+ *            {"t":"extractfs","id","path"?}
  *   from it  {"t":"response","id","payload"}, {"t":"call","id","url","payload","subscribe","appId"?},
- *            {"t":"cancelCall","id"}, {"t":"ready"}
+ *            {"t":"cancelCall","id"}, {"t":"ready"}, {"t":"extractfs","id","spec"}
+ *
+ * "extractfs" is webOS's thumbnailing filesystem, which a service read like any file ([Extractfs]):
+ * the process asks for the file first and is given the webOS path it has been written to.
  *
  * [start] runs on [worker] and returns the started process. Everything else is on the main thread.
  */
@@ -27,6 +31,8 @@ class ServiceProcess(
     /** What the log calls it: "js service", "native service". */
     private val kind: String,
     worker: Executor,
+    /** Makes an extractfs read's file, and gives its webOS path (or null) on the main thread. */
+    private val extractfs: ((spec: String, reply: (String?) -> Unit) -> Unit)? = null,
     private val start: () -> Process,
     private val onEnded: (ServiceProcess) -> Unit,
 ) {
@@ -113,6 +119,13 @@ class ServiceProcess(
             }
             "cancelCall" -> outgoing.remove(m.optString("id"))?.cancel()
             "ready" -> Log.i(AppServer.TAG, "$kind $name ready")
+            "extractfs" -> {
+                val id = m.optString("id")
+                val made = extractfs ?: return send(JSONObject().put("t", "extractfs").put("id", id))
+                made(m.optString("spec")) { path ->
+                    if (!ended) send(JSONObject().put("t", "extractfs").put("id", id).apply { path?.let { put("path", it) } })
+                }
+            }
         }
     }
 

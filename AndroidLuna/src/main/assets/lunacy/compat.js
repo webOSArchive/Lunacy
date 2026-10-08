@@ -463,6 +463,96 @@
 	if (!window.webkitCancelRequestAnimationFrame && cancel) { window.webkitCancelRequestAnimationFrame = cancel; }
 })();
 
+// webosEvent: the TouchPad's browser gave every page this profiling hook, and apps mark their
+// timings with it (Photos & Videos, opening a picture). Enyo stubs it only where there is no
+// PalmSystem. Measured on the reference TouchPad: an object with nothing enumerable, whose
+// start, stop and event take anything and return undefined.
+(function () {
+	if (window.webosEvent) { return; }
+	var hook = {};
+	["start", "stop", "event"].forEach(function (n) {
+		Object.defineProperty(hook, n, { value: function () {}, writable: true, configurable: true });
+	});
+	window.webosEvent = hook;
+})();
+
+// An absolutely positioned child of a -webkit-box that names no offsets sits where it would
+// have started in flow. 2011 WebKit's box layout (RenderDeprecatedFlexibleBox) set that static
+// position as it walked the children, before packing moved the others: the start of the box's
+// content, past the in-flow children before it, at the top (or, in a vertical box, the left).
+// Current Chromium lays -webkit-box out as a flexbox, where the static position follows the
+// box's packing and alignment, so Photos & Videos' grab handle, an image in a centred toolbar,
+// drifted to the middle of it (2026-10-08, measured against the TouchPad). Such an element
+// gets that position as offsets, kept in step as the layout changes; one whose offsets a
+// stylesheet sets, or its app sets afterwards, is left alone. Candidates are found by their
+// inline style, which is how apps and Enyo give a component its position.
+(function () {
+	if (!window.MutationObserver || !window.requestAnimationFrame) { return; }
+	var placed = [], queued = false;
+	function px(v) { return parseFloat(v) || 0; }
+	function unpositioned(e) {
+		var s = e.style;
+		return s && (s.position === "absolute" || s.position === "fixed") && !s.left && !s.right && !s.top && !s.bottom;
+	}
+	// Whether a stylesheet gives it offsets: it moves when they are forced back to auto.
+	function styledElsewhere(e) {
+		var before = e.getBoundingClientRect(), s = e.style, sides = ["left", "right", "top", "bottom"];
+		sides.forEach(function (n) { s.setProperty(n, "auto", "important"); });
+		var after = e.getBoundingClientRect();
+		sides.forEach(function (n) { s.removeProperty(n); });
+		return before.left !== after.left || before.top !== after.top;
+	}
+	function place(e) {
+		var p = e.parentElement;
+		if (!p) { return false; }
+		var ps = getComputedStyle(p);
+		if (ps.display !== "-webkit-box" && ps.display !== "-webkit-inline-box") { return false; }
+		var vertical = ps.webkitBoxOrient === "vertical" || ps.webkitBoxOrient === "block-axis";
+		var pr = p.getBoundingClientRect(), es = getComputedStyle(e), er = e.getBoundingClientRect();
+		var x = pr.left + px(ps.borderLeftWidth) + px(ps.paddingLeft), y = pr.top + px(ps.borderTopWidth) + px(ps.paddingTop);
+		for (var c = p.firstElementChild; c && c !== e; c = c.nextElementSibling) {
+			var cs = getComputedStyle(c);
+			if (cs.position === "absolute" || cs.position === "fixed" || cs.display === "none") { continue; }
+			var r = c.getBoundingClientRect();
+			if (vertical) { y += r.height + px(cs.marginTop) + px(cs.marginBottom); }
+			else { x += r.width + px(cs.marginLeft) + px(cs.marginRight); }
+		}
+		var left = Math.round(px(es.left) + x + px(es.marginLeft) - er.left) + "px";
+		var top = Math.round(px(es.top) + y + px(es.marginTop) - er.top) + "px";
+		if (e.style.left !== left) { e.style.left = left; }
+		if (e.style.top !== top) { e.style.top = top; }
+		e.__lunacyStatic = { left: left, top: top };
+		return true;
+	}
+	function run() {
+		queued = false;
+		placed = placed.filter(function (e) {
+			var mine = e.__lunacyStatic;
+			// Gone, or its app has since positioned it.
+			if (!document.contains(e) || e.style.left !== mine.left || e.style.top !== mine.top || e.style.right || e.style.bottom) { return false; }
+			// Only a change is written, so a layout at rest stays quiet.
+			return place(e);
+		});
+		var found = document.querySelectorAll('[style*="absolute"],[style*="fixed"]');
+		for (var i = 0; i < found.length; i++) {
+			var e = found[i];
+			if (e.__lunacyStatic || !unpositioned(e)) { continue; }
+			var box = e.parentElement && getComputedStyle(e.parentElement).display;
+			if (box !== "-webkit-box" && box !== "-webkit-inline-box") { continue; }
+			if (styledElsewhere(e)) { e.__lunacyStatic = { left: null, top: null }; continue; }
+			if (place(e)) { placed.push(e); }
+		}
+	}
+	function queue() { if (!queued) { queued = true; requestAnimationFrame(run); } }
+	function start() {
+		new MutationObserver(queue).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
+		window.addEventListener("resize", queue);
+		window.addEventListener("load", queue);
+		queue();
+	}
+	if (document.documentElement) { start(); } else { document.addEventListener("DOMContentLoaded", start); }
+})();
+
 // file:///media/internal/... (webOS's user storage, where JS services leave files for apps)
 // is served on every app origin at /media/internal/...; pages ran from file:// on webOS and
 // used those URLs directly.
@@ -471,7 +561,19 @@
 window.__lunacyFileUrl = function (u, media) {
 	if (typeof u !== "string" || !/^file:\/\/\/media\/internal\//i.test(u)) { return u; }
 	var N = window.LunacyNative;
-	return media && N && N.mediaBase ? N.mediaBase() + u.slice(7) : u.slice(7);
+	return media && N && N.mediaBase && !__lunacyLocalBlocked ? N.mediaBase() + u.slice(7) : u.slice(7);
+};
+
+// Local network. webOS pages, on file://, could show any http:// image and play any http://
+// stream - a Plex client's thumbnails and tracks on its server at http://192.168.x.x. A current
+// WebView blocks an https page's plain-http requests to a private address and holds one to the
+// loopback interface for good, mixed content allowed or not (LocalNet.kt). Where it does, the
+// page's http:// images and media go to /__lunacy/net on its own origin, and Lunacy fetches
+// them. Elsewhere nothing changes.
+var __lunacyLocalBlocked = !!(window.LunacyNative && LunacyNative.localNetworkBlocked && LunacyNative.localNetworkBlocked());
+window.__lunacyLocalUrl = function (u) {
+	if (!__lunacyLocalBlocked || typeof u !== "string" || !/^http:\/\//i.test(u)) { return u; }
+	return "/__lunacy/net?u=" + encodeURIComponent(u);
 };
 
 // Pages that put a file:// URL in a frame or an image, as webOS pages could: an app's own or
@@ -490,13 +592,14 @@ window.__lunacyPageUrl = function (u) {
 	[window.HTMLIFrameElement, window.HTMLImageElement].forEach(function (E) {
 		var P = E && E.prototype, d = P && Object.getOwnPropertyDescriptor(P, "src");
 		if (!d || !d.set) { return; }
+		var map = E === window.HTMLImageElement ? function (v) { return __lunacyLocalUrl(__lunacyPageUrl(v)); } : __lunacyPageUrl;
 		Object.defineProperty(P, "src", {
 			configurable: true, enumerable: d.enumerable, get: d.get,
-			set: function (v) { d.set.call(this, __lunacyPageUrl(v)); }
+			set: function (v) { d.set.call(this, map(v)); }
 		});
 		var set = P.setAttribute;
 		P.setAttribute = function (name, value) {
-			return set.call(this, name, String(name).toLowerCase() === "src" ? __lunacyPageUrl(value) : value);
+			return set.call(this, name, String(name).toLowerCase() === "src" ? map(value) : value);
 		};
 	});
 })();
@@ -504,7 +607,7 @@ window.__lunacyPageUrl = function (u) {
 // The same for URLs given to new Audio(url) and to setAttribute("src") on media elements, as
 // SoundManager2 does.
 (function () {
-	var map = function (u) { return window.__lunacyFileUrl(u, true); };
+	var map = function (u) { return window.__lunacyLocalUrl(window.__lunacyFileUrl(u, true)); };
 	var M = window.HTMLMediaElement && HTMLMediaElement.prototype, S = window.HTMLSourceElement && HTMLSourceElement.prototype;
 	[M, S].forEach(function (P) {
 		if (!P) { return; }
@@ -533,9 +636,30 @@ window.__lunacyPageUrl = function (u) {
 		configurable: true, enumerable: d.enumerable, get: d.get,
 		set: function (v) {
 			if (v === "") { this.removeAttribute("src"); return; }
-			d.set.call(this, window.__lunacyFileUrl ? __lunacyFileUrl(v, true) : v);
+			d.set.call(this, window.__lunacyFileUrl ? __lunacyLocalUrl(__lunacyFileUrl(v, true)) : v);
 		}
 	});
+})();
+
+// Markup gets the same: an http:// image or player that a framework writes as HTML (Enyo
+// renders its controls as markup) is pointed at /__lunacy/net as it arrives. The engine has
+// already refused the first request by then; this asks again where it will be answered.
+(function () {
+	if (!__lunacyLocalBlocked || !window.MutationObserver) { return; }
+	var SEL = "img[src^='http:'],img[src^='HTTP:'],audio[src^='http:'],video[src^='http:'],source[src^='http:']";
+	var fix = function (el) { el.setAttribute("src", el.getAttribute("src")); };
+	new MutationObserver(function (records) {
+		for (var i = 0; i < records.length; i++) {
+			var added = records[i].addedNodes;
+			for (var j = 0; j < added.length; j++) {
+				var n = added[j];
+				if (n.nodeType !== 1) { continue; }
+				if (n.matches && n.matches(SEL)) { fix(n); }
+				var inner = n.querySelectorAll ? n.querySelectorAll(SEL) : [];
+				for (var k = 0; k < inner.length; k++) { fix(inner[k]); }
+			}
+		}
+	}).observe(document, { childList: true, subtree: true });
 })();
 
 // WebSQL, which is where Mojo apps keep their data. Two things about the reference TouchPad's

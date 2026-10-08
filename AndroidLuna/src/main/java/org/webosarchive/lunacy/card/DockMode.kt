@@ -75,8 +75,22 @@ class DockMode(context: Context, private val registry: AppRegistry) {
             .ifEmpty { app.title }
     }
 
-    /** The app the user picked for Exhibition, if any; otherwise the shell's own Time face. */
-    fun enabledApp(): String? = registry.apps.firstOrNull { isEnabled(it.id) }?.id
+    /**
+     * The face Exhibition opens on: the one that was showing when it was last left, if that is
+     * still an enabled launch point, and otherwise the shell's own Time (null).
+     *
+     * That is LunaSysMgr's rule (DockModeWindowManager::setDockModeState): the clock is entry 0
+     * and the default until the mode is first left, leaving it records the active app as the
+     * default, and disabling the default app puts it back to the clock. Lunacy keeps it across
+     * restarts of its process, which on Android come far more often than LunaSysMgr's did.
+     */
+    fun defaultApp(): String? =
+        prefs.getString(DEFAULT, null)?.takeIf { registry.get(it) != null && isEnabled(it) }
+
+    /** Exhibition was left showing [appId] (null for Time): it opens there next time. */
+    fun setDefault(appId: String?) {
+        prefs.edit().apply { if (appId == null) remove(DEFAULT) else putString(DEFAULT, appId) }.apply()
+    }
 
     private fun setEnabled(p: JSONObject, enabled: Boolean): String {
         val appId = p.optString("appId")
@@ -92,5 +106,9 @@ class DockMode(context: Context, private val registry: AppRegistry) {
         return Bus.ok()
     }
 
-    companion object { const val SERVICE = "com.palm.applicationManager" }
+    companion object {
+        const val SERVICE = "com.palm.applicationManager"
+        /** The default face's key, beside the per-app switches; no app id starts with a dot. */
+        private const val DEFAULT = ".default"
+    }
 }

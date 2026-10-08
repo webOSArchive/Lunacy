@@ -12,8 +12,13 @@ import org.json.JSONObject
  * palm://com.palm.connectionmanager/getstatus (also getStatus, as the TouchPad accepts both),
  * backed by Android's connectivity. The reply has the reference TouchPad's shape; a
  * subscription gets the status at once and again whenever it changes.
+ *
+ * While Android keeps Lunacy off the network to save power ([blocked]: Doze, see SleepWake),
+ * the network is reported down, and up again when it is back. A TouchPad kept its Wi-Fi up
+ * through a suspend, but its connections survived that; an app's don't survive Doze, and the
+ * down and up is the signal webOS's services already reconnect on (luna-deltas A18).
  */
-class ConnectionManager(private val context: Context) {
+class ConnectionManager(private val context: Context, private val blocked: () -> Boolean = { false }) {
     private val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
     private val subscribers = LinkedHashSet<Bus.Call>()  // main thread
@@ -41,16 +46,20 @@ class ConnectionManager(private val context: Context) {
     private fun startWatching() {
         if (receiver != null) return
         receiver = object : BroadcastReceiver() {
-            override fun onReceive(c: Context, i: Intent) {
-                val s = status()
-                if (s == last) return
-                last = s
-                subscribers.toList().forEach { it.reply(s) }
-            }
+            override fun onReceive(c: Context, i: Intent) = changed()
         }
         context.registerReceiver(receiver, IntentFilter().apply {
             addAction(ConnectivityManager.CONNECTIVITY_ACTION); addAction(WifiManager.RSSI_CHANGED_ACTION)
         })
+    }
+
+    /** Tells subscribers the status, if it has changed. */
+    fun changed() {
+        if (subscribers.isEmpty()) return
+        val s = status()
+        if (s == last) return
+        last = s
+        subscribers.toList().forEach { it.reply(s) }
     }
 
     private fun stopWatching() {
@@ -60,7 +69,7 @@ class ConnectionManager(private val context: Context) {
 
     @Suppress("DEPRECATION")
     fun status(): String {
-        val active = cm.activeNetworkInfo
+        val active = cm.activeNetworkInfo?.takeIf { !blocked() }
         val online = active?.isConnected == true
         val down = JSONObject().put("state", "disconnected")
         val wifi = if (active?.isConnected == true && active.type == ConnectivityManager.TYPE_WIFI) {

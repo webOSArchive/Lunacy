@@ -30,9 +30,13 @@ import java.util.TimeZone
  * unknown id's errorCode 2, and list's activity objects. Lunacy has one bus, so "type.bus"
  * is recorded but not enforced. See Docs/architecture.md, "Activity manager".
  *
+ * Asleep, too, as webOS's was: a schedule falls due on the wall clock and wakes the device for
+ * it (an RTC alarm, as the activity manager asked powerd for one), and a "power" activity
+ * keeps the CPU up while it runs (powerd's power activity). See [Power].
+ *
  * Main thread throughout.
  */
-class ActivityManager(private val context: Context) {
+class ActivityManager(private val context: Context, private val power: Power) {
     private lateinit var bus: Bus
     private val main = Handler(Looper.getMainLooper())
 
@@ -65,6 +69,8 @@ class ActivityManager(private val context: Context) {
         var ending: String? = null
         var terminate = false
         var restart = false
+        /** Set while Android had Lunacy's network blocked, so the block's end brings it due ([networkReturned]). */
+        var setWhileBlocked = false
         var focused = false
         var triggerCall: Bus.Call? = null
         /** The reply that fired the trigger, while it has. */
@@ -110,6 +116,7 @@ class ActivityManager(private val context: Context) {
             bus.register(SERVICE, m, Bus.CallHandler { it.reply(Bus.ok()) })
         watchNetwork()
         watchBattery()
+        power.onDue { wakeup() }
         load()
     }
 
@@ -418,7 +425,7 @@ class ActivityManager(private val context: Context) {
 
     private fun disarm(a: Activity) {
         a.triggerCall?.cancel(); a.triggerCall = null
-        timers.remove(a.id)?.let { main.removeCallbacks(it) }
+        if (due.remove(a.id) != null) power.at(TIMER, due.values.minOrNull())
     }
 
     /** Whether the activity may run now, and if so, runs or queues it. */
@@ -446,6 +453,8 @@ class ActivityManager(private val context: Context) {
 
     private fun run(a: Activity) {
         a.running = true
+        // Locked before it is told to start, as webOS took powerd's lock first.
+        if (a.power) power.lock(a.id)
         event(a, "start")
         a.callback?.let { callCallback(a, it) }
     }
@@ -482,6 +491,7 @@ class ActivityManager(private val context: Context) {
         if (a.ending == null || a.subs.isNotEmpty() || activities[a.id] !== a) return
         val wasRunning = a.running
         a.running = false
+        power.unlock(a.id, a.powerDebounce)
         a.schedule?.let { if (it.interval != null) it.lastFinished = System.currentTimeMillis() }
         // A bootup requirement is met once a boot (Open webOS's SystemManagerProxy trips each
         // one when boot finishes, and never again): an activity that needed it and has run is
@@ -570,15 +580,82 @@ class ActivityManager(private val context: Context) {
 
     // ---- schedules ----
 
-    private val timers = HashMap<Int, Runnable>()
+    /** When each armed schedule falls due, wall-clock time, by activity id. */
+    private val due = HashMap<Int, Long>()
 
+    /**
+     * Arms a schedule on the wall clock. webOS's activity manager kept one wakeup with powerd
+     * (PowerdScheduler: palm://com.palm.power/timeout/set, "wakeup":true) for the earliest
+     * schedule, so a sleeping device woke for its next sync. A Handler's delay counts only
+     * time awake, and a mail check every 15 minutes became one every 15 minutes of use.
+     */
     private fun scheduleTimer(a: Activity) {
         val s = a.schedule ?: return
-        timers.remove(a.id)?.let { main.removeCallbacks(it) }
-        val at = s.nextStart ?: return
-        val r = Runnable { timers.remove(a.id); s.due = true; evaluate(a) }
-        timers[a.id] = r
-        main.postDelayed(r, (at - System.currentTimeMillis()).coerceAtLeast(0))
+        due.remove(a.id)
+        a.setWhileBlocked = s.interval == null && needsNetwork(a) &&
+            (blockedSince != null || System.currentTimeMillis() - lastBlocked < BLOCK_LEAD_MS)
+        val at = s.nextStart
+        if (at != null) due[a.id] = at
+        if (at != null && at <= System.currentTimeMillis()) main.post { wakeup() }
+        else power.at(TIMER, due.values.minOrNull())
+    }
+
+    // ---- Android's network blocks (SleepWake) ----
+
+    /** When the current block began, if Lunacy's network is blocked now. */
+    private var blockedSince: Long? = null
+    private var lastBlocked = 0L
+
+    private fun needsNetwork(a: Activity) = NETWORK_REQUIREMENTS.any { a.requirements.has(it) }
+
+    /**
+     * Android has blocked Lunacy's network (Doze, or a background block), or given it back.
+     *
+     * A block cuts every connection, and a service takes the cut for a server or network
+     * failure and sets a retry for a few minutes on: mojomail's 5 minutes after a dropped IDLE,
+     * Synergy's "5m" after a network error. A TouchPad never saw that cut - its connections
+     * lived through a suspend - so those retries are Android's doing, and they wait out their
+     * minutes after the network is back, push mail with them (measured: 3 min 18 s after a
+     * short Doze, Galaxy Tab A7 Lite). So a one-shot schedule that needs the network and was
+     * set during a block, or in the moments before Android reported it (the cut arrives first),
+     * falls due as the block ends (luna-deltas A18). Intervals keep their own times.
+     */
+    fun networkBlocked(blocked: Boolean) {
+        val now = System.currentTimeMillis()
+        if (blocked) {
+            blockedSince = now; lastBlocked = now
+            // Retries already set just before the report belong to the block too.
+            activities.values.filter { it.schedule?.interval == null && needsNetwork(it) && due.containsKey(it.id) &&
+                (it.schedule?.setAt ?: 0L) >= now - BLOCK_LEAD_MS }.forEach { it.setWhileBlocked = true }
+            return
+        }
+        blockedSince = null; lastBlocked = now
+        for (a in activities.values.toList()) {
+            if (!a.setWhileBlocked) continue
+            a.setWhileBlocked = false
+            if (due.remove(a.id) == null) continue
+            Log.i(AppServer.TAG, "activity ${a.id} ${a.name}: set during a network block; due now")
+            a.schedule?.due = true
+            evaluate(a)
+        }
+        power.at(TIMER, due.values.minOrNull())
+    }
+
+    /**
+     * Everything that has fallen due runs, and the next one is armed: when the wakeup goes off,
+     * and whenever the device comes back from sleep (a schedule that fell due meanwhile runs
+     * now, once, by the rules in [Schedule.queue]).
+     */
+    private fun wakeup() {
+        val now = System.currentTimeMillis()
+        for ((id, at) in due.toList()) {
+            if (at > now) continue
+            due.remove(id)
+            activities[id]?.let { a -> a.schedule?.due = true; evaluate(a) }
+        }
+        val next = due.values.minOrNull()
+        if (next != null && next - now <= Power.EARLY_MS) power.soon(next)
+        power.at(TIMER, next)
     }
 
     private class Schedule(val spec: JSONObject) {
@@ -586,6 +663,8 @@ class ActivityManager(private val context: Context) {
         var precise = false; var relative = false; var skip = false; var local = false
         var lastFinished: Long? = null
         var nextStart: Long? = null
+        /** When it was last armed (wall clock). */
+        var setAt = 0L
         var due = false
 
         fun past() = end?.let { e -> (nextStart ?: System.currentTimeMillis()) >= e } ?: false
@@ -593,6 +672,7 @@ class ActivityManager(private val context: Context) {
         /** Works out the next start and clears due, as each queueing did. */
         fun queue() {
             due = false
+            setAt = System.currentTimeMillis()
             val now = System.currentTimeMillis()
             val iv = interval
             if (iv == null) { nextStart = start; return }
@@ -943,6 +1023,9 @@ class ActivityManager(private val context: Context) {
         loaded = true
         Log.i(AppServer.TAG, "activities: $n restored")
         held.toList().also { held.clear() }.forEach { it() }
+        // The webOS root may have come up first (db8 answers late when Lunacy starts busy):
+        // then nothing will call enable again, and what was restored has to start now.
+        if (enabled) waitingForEnable.toList().also { waitingForEnable.clear() }.forEach { if (activities[it.id] === it) start(it) }
     }
 
     private fun error(code: Int, text: String) =
@@ -950,6 +1033,11 @@ class ActivityManager(private val context: Context) {
 
     companion object {
         const val SERVICE = "com.palm.activitymanager"
+        /** Its timer with [Power], under the key it had with powerd. */
+        private const val TIMER = "com.palm.activitymanager.wakeup"
+        private val NETWORK_REQUIREMENTS = listOf("internet", "internetConfidence", "wifi", "wifiConfidence", "wan", "wanConfidence")
+        /** How long before Android reports a block a schedule still counts as set by it. */
+        private const val BLOCK_LEAD_MS = 10_000L
         private const val KIND = "com.palm.activity:1"
         private val PRIORITIES = listOf("none", "lowest", "low", "normal", "high", "highest")
         private val CONFIDENCE = listOf("none", "poor", "fair", "excellent")

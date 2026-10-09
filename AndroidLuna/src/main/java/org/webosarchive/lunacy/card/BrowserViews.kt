@@ -65,6 +65,20 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         /** Fonts the reference TouchPad had besides Prelude (/usr/share/fonts), by the names pages use. */
         private val DEVICE_FONTS = setOf("arial", "verdana", "georgia", "times new roman", "times", "courier new", "courier",
             "lucida console", "monospace")
+        /**
+         * A link with a `download` attribute is followed like any other, as the TouchPad's
+         * WebKit (534, before the attribute) followed it: the file it leads to isn't a page,
+         * so the browser is handed it and downloads it. WebView 44 knows the attribute and
+         * hands such a tap to nobody, so nothing happened (a file listing on the Nexus 5,
+         * 2026-10-09). Only http(s) links: a blob: or data: one exists for the attribute.
+         */
+        private const val PLAIN_DOWNLOAD_LINKS = "(function(){if(window.__lunacyPlainDownloads){return;}" +
+            "window.__lunacyPlainDownloads=true;document.addEventListener('click',function(e){" +
+            "if(e.defaultPrevented||e.button){return;}var a=e.target;" +
+            "while(a&&a.tagName!=='A'){a=a.parentNode;}" +
+            "if(!a||!a.hasAttribute('download')||!/^https?:/i.test(a.href)){return;}" +
+            "var t=(a.getAttribute('target')||'').toLowerCase();if(t&&t!=='_self'){return;}" +
+            "e.preventDefault();location.href=a.href;},false);})()"
         private var nextId = 1
         private var nextPage = 1
         /** Windows a page has opened, waiting for the card that will show them; by identifier. */
@@ -678,6 +692,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 titleChanged()
             }
             override fun onPageFinished(view: WebView, url: String) {
+                if (settings.javaScriptEnabled) view.evaluateJavascript(PLAIN_DOWNLOAD_LINKS, null)
                 @Suppress("DEPRECATION") scaleChanged(view.getScale())
                 owner.send(id, "loadProgressChanged", 100)
                 owner.send(id, "loadStopped")

@@ -1269,8 +1269,16 @@ window.__lunacyWatchProgress = (function () {
 // (codepoet, 2026-10-03). Nothing changes on a tablet, where no card is that narrow. `html`
 // lifts the rule above every app's own `.box-center`, whichever loads last; an inline style
 // still wins, as it would have on the device.
-(function () {
-	var s = document.createElement("style");
-	s.textContent = "@media (max-width: 540px) { html .box-center { width: auto; margin-left: 12px; margin-right: 12px; } }";
-	(document.head || document.documentElement).appendChild(s);
-})();
+//
+// As a stylesheet link, not a <style>: Mojo's locale setup reads the href of every sheet in
+// the document (Mojo.Locale.unloadLocaleSpecificStylesheets), a <style>'s is null, and every
+// Mojo app stopped while it started - Palm's Video Player among them, so MeTube's videos
+// never opened (2026-10-09). No webOS page of Palm's had a <style> for it to meet.
+window.__lunacyStyle = function (css) {
+	var l = document.createElement("link");
+	l.rel = "stylesheet";
+	l.href = "data:text/css," + encodeURIComponent(css);
+	(document.head || document.documentElement).appendChild(l);
+	return l;
+};
+__lunacyStyle("@media (max-width: 540px) { html .box-center { width: auto; margin-left: 12px; margin-right: 12px; } }");

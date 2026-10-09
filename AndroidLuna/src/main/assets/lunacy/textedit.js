@@ -53,11 +53,17 @@
 			"<path d='" + p + "' fill='#dfdfde' stroke='rgba(0,0,0,0.5)' stroke-width='1' stroke-linejoin='round'/></svg>";
 	}
 
+	// The popup's styles, as a link rather than a <style>: Mojo reads every sheet's href
+	// (compat.js, __lunacyStyle). Added with the page, so they are in long before a popup.
+	(function () {
+		var s = document.createElement("link");
+		s.rel = "stylesheet";
+		s.href = "data:text/css," + encodeURIComponent(CSS);
+		(document.head || document.documentElement).appendChild(s);
+	})();
+
 	function build() {
 		if (ui || !document.body) { return; }
-		var s = document.createElement("style");
-		s.textContent = CSS;
-		(document.head || document.documentElement).appendChild(s);
 		ui = document.createElement("div");
 		ui.className = "lunacy-edit";
 		popup = document.createElement("div");

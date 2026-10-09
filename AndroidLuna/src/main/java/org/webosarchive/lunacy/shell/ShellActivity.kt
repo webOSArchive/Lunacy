@@ -222,7 +222,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val root = FrameLayout(this).apply { clipChildren = false }
         wallpaperView = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
         showWallpaper()
-        root.addView(wallpaperView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        val screen = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        screen.addView(wallpaperView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        screen.addView(root, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
 
         hidden = FrameLayout(this)
         root.addView(hidden, FrameLayout.LayoutParams(1, 1))
@@ -365,7 +367,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             topMargin = luna.px(StatusBar.HEIGHT); gravity = android.view.Gravity.TOP or android.view.Gravity.START
         })
 
-        setContentView(root)
+        fitCutout(screen, root)
+        setContentView(screen)
         // The splash was the window's background (Theme.Lunacy.Splash), which is what Android
         // painted while this was all being set up. The shell covers it now, so let the logo go
         // rather than hold the bitmap behind an opaque wallpaper for the rest of the session.
@@ -2390,6 +2393,47 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             .withEndAction { if (!show) quickLaunch.visibility = View.INVISIBLE }.start()
     }
 
+    /**
+     * A display cutout (a phone's camera): the window takes the whole screen, cutout and all,
+     * where Android would leave the cutout's band black. At the top, the shell runs up to the
+     * screen's edge as on a device without one: the status bar lays its items out around the
+     * camera, and what the camera covers below the bar is lost behind it. A cutout at the
+     * side or bottom (the phone turned) stays a black band beside the shell, so a card's
+     * edge never goes under it. Luna-deltas A20.
+     */
+    private fun fitCutout(screen: FrameLayout, root: FrameLayout) {
+        if (android.os.Build.VERSION.SDK_INT < 28) return
+        window.attributes = window.attributes.apply {
+            layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+        screen.setOnApplyWindowInsetsListener { _, insets ->
+            val cut = insets.displayCutout
+            val l = cut?.safeInsetLeft ?: 0; val r = cut?.safeInsetRight ?: 0; val b = cut?.safeInsetBottom ?: 0
+            if (root.paddingLeft != l || root.paddingRight != r || root.paddingBottom != b) {
+                root.setPadding(l, 0, r, b)
+                wallpaperView.layoutParams = (wallpaperView.layoutParams as FrameLayout.LayoutParams).apply { setMargins(l, 0, r, b) }
+            }
+            // The top corners. A screen that reports none but has a cutout in it (the Kyocera)
+            // is taken to have rounded ones all the same, a tenth of its short side in radius.
+            fun corner(pos: Int): Float = if (android.os.Build.VERSION.SDK_INT >= 31) insets.getRoundedCorner(pos)?.radius?.toFloat() ?: 0f else 0f
+            var tl = corner(android.view.RoundedCorner.POSITION_TOP_LEFT)
+            var tr = corner(android.view.RoundedCorner.POSITION_TOP_RIGHT)
+            if (cut != null && tl == 0f && tr == 0f) {
+                val dm = android.util.DisplayMetrics()
+                @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(dm)
+                tl = minOf(dm.widthPixels, dm.heightPixels) * ASSUMED_CORNER; tr = tl
+            }
+            // A side the shell is kept off (the cutout's, turned) is clear of its corner.
+            statusBar.corners = (if (l > 0) 0f else tl) to (if (r > 0) 0f else tr)
+            // The camera's span across the bar, in the bar's x, a 3 px margin either side.
+            val bar = luna.px(StatusBar.HEIGHT)
+            statusBar.cutout = cut?.boundingRects?.filter { it.top < bar && !it.isEmpty }
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { rs -> (rs.minOf { it.left } - l - luna.px(3f))..(rs.maxOf { it.right } - l + luna.px(3f)) }
+            insets
+        }
+    }
+
     /** Full screen: hide Android's bars; a swipe from the edge shows them for a moment. */
     private fun goImmersive() {
         @Suppress("DEPRECATION")
@@ -2406,6 +2450,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     companion object {
         /** The launcher's launch point title, com.palm.launcher's on the reference TouchPad. */
         const val LAUNCHER_TITLE = "Launcher"
+        /** An unreported rounded corner's radius on a screen with a cutout, as a part of its short side (fitCutout). */
+        const val ASSUMED_CORNER = 0.1f
         const val LAUNCHER_MS = 350L   // reference TouchPad lunaAnimations.conf: launcherDuration 350, curve 15
         const val DOCK_MS = 350L       // quickLaunchDuration
         const val FADE_MS = 200L       // quickLaunchFadeDuration

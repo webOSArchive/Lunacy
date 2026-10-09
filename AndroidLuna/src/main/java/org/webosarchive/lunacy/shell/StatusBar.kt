@@ -124,6 +124,7 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
         // StatusBarIcon: at most 26 px high (positiveSpaceTopPadding - 2), scaled to fit.
         val k = Math.min(1f, luna.px(26f) / b.height)
         val w = b.width * k * icon.width; val h = b.height * k
+        @Suppress("NAME_SHADOWING") val right = clearOfCutout(right, w)
         val p = Paint(Paint.FILTER_BITMAP_FLAG).apply { alpha = (icon.progress * 255).toInt() }
         c.drawBitmap(b, Rect(0, 0, Math.round(b.width * icon.width), b.height), RectF(right - w, (height - h) / 2f, right, (height + h) / 2f), p)
         return right - w - gap * icon.width
@@ -233,6 +234,40 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
      */
     enum class Mode(val color: Int) { CARDS(Color.rgb(0x51, 0x55, 0x58)), APP(Color.rgb(0x51, 0x55, 0x58)), LAUNCHER(Color.rgb(0x4F, 0x54, 0x5A)) }
     private val fill = Paint()
+
+    /**
+     * Where a display cutout (a phone's camera) crosses the bar, from its left to its right
+     * edge in the bar's x, with a margin; null without one (ShellActivity.fitCutout). The title
+     * and the right-hand groups flow around it, items stepping past it whole.
+     */
+    var cutout: ClosedFloatingPointRange<Float>? = null
+        set(v) { field = v; invalidate() }
+
+    /**
+     * The radii of the screen's top left and top right corners, where they are rounded (a phone
+     * with a cutout; ShellActivity.fitCutout), else 0. The bar's ends keep inside the curve.
+     */
+    var corners = 0f to 0f
+        set(v) { field = v; invalidate() }
+
+    /** How far a corner of radius [r] reaches in at the height of the bar's text, plus 2 px. */
+    private fun cornerInset(r: Float): Float {
+        val y = height / 2f - luna.px(6f)  // about the top of the title's capitals
+        if (r <= 0f || y >= r) return 0f
+        return r - Math.sqrt((r * r - (r - y) * (r - y)).toDouble()).toFloat() + luna.px(2f)
+    }
+
+    /** The right edge for an item [w] wide meant to end at [right], left of the cutout if it would cross it. */
+    private fun clearOfCutout(right: Float, w: Float): Float {
+        val g = cutout ?: return right
+        return if (right - w < g.endInclusive && right > g.start) g.start else right
+    }
+
+    /** The left edge for an item [w] wide meant to start at [left], right of the cutout if it would cross it. */
+    private fun clearOfCutoutRight(left: Float, w: Float): Float {
+        val g = cutout ?: return left
+        return if (left < g.endInclusive && left + w > g.start) g.endInclusive else left
+    }
     private var fillOpacity = 0f
     private var fillAnim: ValueAnimator? = null
 
@@ -375,14 +410,15 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
         titleRight = drawTitle(c, h)
 
         // System group, right to left: ▾, clock, battery, info icons, separator.
-        var x = width - luna.px(3f)
+        // The ▾ has 7 px either side of it, of which the corner may take all but 2.
+        var x = width - maxOf(luna.px(3f), cornerInset(corners.second) - luna.px(5f))
         x = drawArrowLeft(c, x)
         // LunaCE's clock: %I:%M with the leading zero stripped and no AM/PM, or %H:%M when the
         // device is set to 24 hours (reference §4.2). It follows the same setting apps are
         // told about through PalmSystem.timeFormat.
         val clock = android.text.format.DateFormat.format(
             if (android.text.format.DateFormat.is24HourFormat(context)) "H:mm" else "h:mm", Date()).toString()
-        x -= clockPaint.measureText(clock)
+        x = clearOfCutout(x, clockPaint.measureText(clock)) - clockPaint.measureText(clock)
         c.drawText(clock, x, baseline(clockPaint, h), clockPaint)
         x -= luna.px(5f)
         val battery = when {
@@ -393,7 +429,7 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
         x = drawIcon(c, battery, x)
         for (icon in info) x = drawSliding(c, icon, x - luna.px(5f) * icon.width, 0f)
         x -= luna.px(5f)
-        systemLeft = x - luna.px(2f)
+        systemLeft = clearOfCutout(x, luna.px(2f)) - luna.px(2f)
         if (!systemMenuOpen) separator(c, systemLeft)
         drawNotifications(c, systemLeft - luna.px(3f))
     }
@@ -401,11 +437,11 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
     /** The title group; returns its right edge. */
     private fun drawTitle(c: Canvas, h: Float): Float {
         // 7 px padding, title (max 140 px, elided), ▾ when an app is up, separator.
-        val lx = luna.px(7f)
         val max = luna.px(140f)
         fun elide(s: String) = android.text.TextUtils.ellipsize(s, android.text.TextPaint(text), max, android.text.TextUtils.TruncateAt.END).toString()
         val t = elide(title)
         var w = text.measureText(t)
+        val lx = clearOfCutoutRight(maxOf(luna.px(7f), cornerInset(corners.first)), w)
         val old = oldTitle
         if (old != null && titleProgress < 1f) {
             // StatusBarTitle::animateTitleTransition: the old text fades out and the new one in,
@@ -424,8 +460,9 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
             val a = luna.image("statusBar/menu-arrow.png")
             val p = Paint().apply { alpha = (arrowProgress * 255).toInt() }
             if (a != null) {
-                c.drawBitmap(a, right + luna.px(7f), (height - a.height) / 2f, p)
-                right += luna.px(7f) + a.width + luna.px(7f)
+                val ax = clearOfCutoutRight(right + luna.px(7f), a.width.toFloat())
+                c.drawBitmap(a, ax, (height - a.height) / 2f, p)
+                right = ax + a.width + luna.px(7f)
             }
             luna.image("statusBar/status-bar-separator.png")?.let { c.drawBitmap(it, right, 0f, p) }
         } else right += luna.px(7f)
@@ -444,7 +481,7 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
     /** A ▾ ending at x (right-aligned groups); returns its left edge. */
     private fun drawArrowLeft(c: Canvas, x: Float, p: Paint? = null): Float {
         val a = luna.image("statusBar/menu-arrow.png") ?: return x
-        val left = x - luna.px(7f) - a.width
+        val left = clearOfCutout(x - luna.px(7f), a.width.toFloat()) - a.width
         c.drawBitmap(a, left, (height - a.height) / 2f, p)
         return left - luna.px(7f)
     }
@@ -466,8 +503,8 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
             c.saveLayerAlpha(0f, 0f, x, height.toFloat(), p.alpha, Canvas.ALL_SAVE_FLAG)
             for (icon in notif.values) x = drawSliding(c, icon, x, luna.px(5f))
             c.restore()
-            if (!menuOpen) separator(c, x - luna.px(2f), p)
-            x -= luna.px(2f)
+            x = clearOfCutout(x, luna.px(2f)) - luna.px(2f)
+            if (!menuOpen) separator(c, x, p)
         }
         notificationLeft = x
         val b = banner ?: return
@@ -508,7 +545,7 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
 
     private fun drawIcon(c: Canvas, path: String, right: Float): Float {
         val b = luna.image(path) ?: return right
-        val left = right - b.width
+        val left = clearOfCutout(right, b.width.toFloat()) - b.width
         c.drawBitmap(b, left, (height - b.height) / 2f, null)
         return left
     }

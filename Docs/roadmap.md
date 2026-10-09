@@ -3,7 +3,19 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-10-07)
+## Where things stand (2026-10-09)
+
+**2026-10-09: 0.7.0 released** (codepoet). The test round's faults fixed and pushed through
+b2362ec (build 216, compared by codepoet on six devices): Pandora and Plex through the local
+network proxy on recent WebViews, WebView 44's script and audio-progress bugs, Enyo 0010's
+mid-switch resize that froze Plex, dashboards' focus, Lunacy's CSS as stylesheet links (Mojo
+apps start again), download links, content handlers (files open in the app that claims their
+type, as `applicationManager` answered on the TouchPad), and Web's loading bar and copy popup
+drawn over the native view, with A12 fixed. See [fix-log.md](fix-log.md). After the release:
+the App Catalog's icon replaces HP's bag as on webOS CE (luna-deltas A19), and
+`getTimeZoneRules` skips zones it doesn't know as the TouchPad does, which put an Outlook
+WebCal feed's events 4 hours early (184bf0d, build 220, not pushed). Quickoffice 2.3.0 and
+Adobe Reader 10.4.0, fixed for phones in the apps themselves, went to codepoet for the Museum.
 
 **2026-10-07, evening: hybrid apps open their documents** (codepoet: "work autonomously until
 the hybrid apps can open their respective document types"). A web app's

@@ -16,15 +16,15 @@ Lunacy provides that contract on Android.
 
 ## How it works
 
-Lunacy reimplements the contract, not the machine:
+Lunacy re-implements the contract, not the OS:
 
 1. **A simulated Luna shell.** A native Android UI that recreates the webOS experience: card
    view, gestures, launcher, notification banners and dashboard. None of Palm's code runs.
-   It only has to look and behave like webOS, and it has to feel right.
-2. **Modernized frameworks.** Apps don't ship their framework; they load it from
-   `/usr/palm/frameworks/…` and trust the OS to provide it. Lunacy supplies the TouchPad's own
+   It looks and behaves like webOS, and it has to feel right.
+2. **Modernized frameworks.** Apps load their framework from
+   `/usr/palm/frameworks/...` and trust the OS to provide it. Lunacy supplies the TouchPad's own
    [Enyo 1.0](https://github.com/enyojs/enyo-1.0) (Apache 2.0), fixed to run on a modern
-   Chromium renderer. One fix in the library covers every app built on it.
+   Chromium renderer. Fixes in the library cover every app built on it.
 3. **Apps as cards.** Each app runs unmodified in its own WebView card, on its own origin.
 4. **A simulated service bus.** `palm://` calls are routed either to Lunacy itself (app
    manager, db8, shell services) or to the equivalent Android feature (connectivity, power,
@@ -33,10 +33,10 @@ Lunacy reimplements the contract, not the machine:
 Enyo was designed to scale from phone to tablet: its flex layouts and panels fill whatever
 screen they are given. So most apps run at the device's real size, on both phones and tablets.
 
-## What it comes first
+## What comes first
 
-The look and feel is the TouchPad's, measured on one: how a card opens, how the launcher
-moves, what a loading card does, where every pixel of the shell sits. That fidelity is the
+The look and feel is the TouchPad's, measured on an original device: how a card opens, how the launcher
+moves, what a loading card does, where every pixel of the shell sits. Fidelity is the
 project's first rule, ahead of speed or simplicity, and every difference the engine forces is
 measured and written down ([Docs/luna-deltas.md](Docs/luna-deltas.md)).
 
@@ -51,26 +51,27 @@ measured and written down ([Docs/luna-deltas.md](Docs/luna-deltas.md)).
 ## Scope and order
 
 1. Enyo 1 apps (webOS 3.x, TouchPad era), and Enyo 2 apps, which bundle their own framework
-   and need only the compatibility layer and the bus
+   can run on any OS, but feel at home on Lunacy.
 2. Mojo apps (webOS 1.x–2.x)
 3. JS (Node) services that ship with apps
 4. PDK native apps
+5. Hybrid apps: web apps that interact with a PDK plug-in
 
-Apps come from webOS Archive's [catalogue](https://appcatalog.webosarchive.org), through the
+Apps come from webOS Archive's [Museum](https://appcatalog.webosarchive.org), through the
 TouchPad's own App Catalog. It is itself an Enyo app, so Lunacy bundles it and it runs inside
 Lunacy like any other card. The shell's styling target is LunaCE.
 
 ## Platform
 
 Lunacy supports Android 5.0.1 through Android 17 on tablets, as a 32-bit APK for the older
-devices and a 64-bit one for the newer. Phones are not supported yet.
+devices and a 64-bit one for the newer. Phones are partially supported through light adaptation or zooming.
 - Can run as the default Android Launcher (optional)
 - Pair it with the optional webOS-style keyboard
-- Launches Mojo, Enyo and Android apps
+- Launches webOS and Android apps
 
 ## Using it
 
-Lunacy is sideloaded: there is no store listing.
+Lunacy is sideloaded: there is no store listing for now.
 
 1. **Allow unknown sources.** Settings → Security → Unknown sources. (On Android 8 and later
    this is asked for per app, when you open the APK.)
@@ -88,14 +89,6 @@ Lunacy is sideloaded: there is no store listing.
    tab. Lunacy never turns Daydream on by itself.
 
 Building from source is [BUILDING.md](BUILDING.md).
-
-## Status
-
-In *early* development; 0.5.5 is the current release. The Luna shell (card view with card
-stacks, launcher, status bar, notifications, Just Type) and Enyo and Mojo apps such as the App
-Catalog run on an Android 5 tablet, measured against a real TouchPad. Newer Android installs it
-without workarounds (tested on Android 14). See [Docs/roadmap.md](Docs/roadmap.md)
-for where things stand.
 
 ## Documentation
 
@@ -119,4 +112,4 @@ for where things stand.
   like the TouchPad's keyboard, scroll ball and all. A separate APK that shares nothing with
   Lunacy and works in any Android app.
 
-Part of the [webOS Archive](https://www.webosarchive.org) family of projects.
+A project of [webOS Archive](https://www.webosarchive.org).

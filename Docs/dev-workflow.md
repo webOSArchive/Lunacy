@@ -252,6 +252,34 @@ novaterm -d lunacy                    # a shell in Lunacy's webOS root
 This replaces `adb push` and `--es install` for probe apps, and works with a release build.
 The architecture doc's "Developer tools" item has how it works.
 
+## A dummy mail account
+
+For checking Email's layout on a device that can't reach a real server (the Nexus 5's
+certificate store is too old for Fastmail), `Workbench/dummy-mail.sh` runs a throwaway one:
+[GreenMail](https://greenmail-mail-test.github.io/greenmail/) 2.0.1 in Docker, plain IMAP and
+SMTP without TLS, bound to this machine's loopback. A device on USB reaches it through
+`adb reverse`, so it sees the server at its own 127.0.0.1. Made 2026-10-08 for the phone layout
+of Email.
+
+```sh
+Workbench/dummy-mail.sh start              # the container, seeded: nine messages, Sent/Drafts/Trash
+Workbench/dummy-mail.sh connect <serial>   # the device's 127.0.0.1:3143 and :3025 reach it
+Workbench/dummy-mail.sh stop <serial>      # remove the container and the device's forwards
+```
+
+The seed is a mix meant for layout: plain messages, a short HTML one, a two-message thread,
+a long twelve-paragraph body, a subject too long for a phone's list, and a 600 px newsletter that
+should be zoomed out to fit a phone's pane. `seed` adds them again.
+
+On the device: Email > Email Account, `dummy@lunacy.test` and password `dummy`, Sign In. The
+lookup fails and Manual Setup opens: IMAP, incoming server 127.0.0.1 port 3143, outgoing
+127.0.0.1 port 3025, no encryption either way, the same user and password for both. Its fields
+are hard to reach with taps on a phone; from DevTools they are in the wizard's frame inside
+Email's page (`cRUDAccounts_manualConfig_inHost`, `_inPort`, `_outHost`, `_outPort`,
+`_outPassword`, then `isFormComplete()` and `validateAccount()` on
+`cRUDAccounts_manualConfig`). Over Wi-Fi adb, `adb reverse` works the same way. The account
+stops syncing when the forwards or the container go, and comes back when they return.
+
 ## Reading a probe's output when palm-log won't
 
 `palm-log -f <appid>` holds the novacom connection, and `palm-launch` then times out behind

@@ -31,6 +31,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     override val bus = Bus()
     private lateinit var luna: Luna
     private lateinit var registry: AppRegistry
+    /** Which app opens which type of file: installed apps' mimeTypes and the system's (ContentHandlers). */
+    private lateinit var handlers: org.webosarchive.lunacy.card.ContentHandlers
     /** Launch points apps have added (applicationManager/addLaunchPoint). */
     private lateinit var addedLaunchPoints: org.webosarchive.lunacy.card.LaunchPoints
     private lateinit var packages: Packages
@@ -196,6 +198,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         server = AppServer(assets, files, jsServices.root, java.io.File(filesDir, "framework-art"))
         mediaServer = org.webosarchive.lunacy.card.MediaServer(jsServices.root)
         registry = AppRegistry(files)
+        handlers = org.webosarchive.lunacy.card.ContentHandlers(registry, webos.root)
         addedLaunchPoints = org.webosarchive.lunacy.card.LaunchPoints(webos.root, files)
         org.webosarchive.lunacy.card.Http.init(assets)
         packages = Packages(files.root, java.io.File(cacheDir, "packages"), webos)
@@ -879,11 +882,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     /**
-     * applicationManager/listAllHandlersForMime. Lunacy has no registry of content handlers
-     * yet; it answers for packages, which it installs itself, as the Preware it stands in for
-     * (INSTALLERS) - codepoet's call: Lunacy won't run Preware, so it may answer as Preware.
-     * The reply is the reference TouchPad's, with Preware installed; any other mime gets its
-     * "No handlers found" answer, and no mime its complaint.
+     * applicationManager/listAllHandlersForMime, from the content handlers (ContentHandlers):
+     * `{"subscribed":false,"mime":…,"returnValue":true,"resourceHandlers":{"activeHandler":{…}}}`
+     * as the reference TouchPad gave it. Packages are answered for by the Preware Lunacy stands
+     * in for (INSTALLERS) - codepoet's call: Lunacy won't run Preware, so it may answer as
+     * Preware. A type nothing handles gets the device's "No handlers found", and no mime its
+     * complaint.
      */
     private fun handlersForMime(p: JSONObject): String {
         val mime = p.optString("mime")
@@ -892,7 +896,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 .put("errorCode", "Must have either an url or a mime parameter").toString()
         val isIpk = mime == IPK_MIME || (mime.isEmpty() && p.optString("url").substringBefore('?').endsWith(".ipk", true))
         val j = JSONObject().put("subscribed", false).put("mime", mime.ifEmpty { IPK_MIME })
-        if (!isIpk) return j.put("returnValue", false).put("errorCode", "No handlers found for $mime").toString()
+        if (!isIpk) {
+            val active = handlers.activeHandler(mime)
+                ?: return j.put("returnValue", false).put("errorCode", "No handlers found for $mime").toString()
+            return j.put("returnValue", true).put("resourceHandlers", JSONObject().put("activeHandler", active)).toString()
+        }
         return j.put("returnValue", true).put("resourceHandlers", JSONObject().put("activeHandler", JSONObject()
             .put("mime", IPK_MIME).put("extension", "ipk").put("appId", "org.webosinternals.preware")
             .put("streamable", true).put("index", 0).put("appName", "Preware"))).toString()
@@ -902,19 +910,29 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     /**
      * applicationManager/getResourceInfo: which app a URL's content goes to, and whether that
-     * app streams it. Measured on the reference TouchPad (2026-10-04): `{"returnValue":true,
-     * "uri":…, "appIdByExtension":…, "canStream":…}`; an mp3 goes to the streaming music player
-     * (canStream true), and a type nothing handles - a zip, application/octet-stream - to the
-     * Web app, which downloads it. Lunacy's handlers are its video player for video; anything
-     * else is the Web app's.
+     * app streams it, from the content handlers. Measured on the reference TouchPad
+     * (2026-10-04, 2026-10-09): `{"returnValue":true, "uri":…, "appIdByExtension":…,
+     * "mimeByExtension":…, "canStream":…}`. Given a mime, the handler is the mime's and there is
+     * no mimeByExtension; otherwise the extension's. A web URL nothing handles - a zip,
+     * application/octet-stream - goes to the Web app, which downloads it; a file nothing
+     * handles is "can't find a handler for the given uri".
      */
     private fun resourceInfo(p: JSONObject): String {
         val uri = p.optString("uri")
         if (uri.isEmpty()) return Bus.error("getResourceInfo: no uri")
-        val ext = android.webkit.MimeTypeMap.getFileExtensionFromUrl(uri).lowercase()
-        val mime = p.optString("mime").ifEmpty { android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext).orEmpty() }
-        val video = registry.get(VIDEO_PLAYER)?.takeIf { mime.startsWith("video/") }
-        return Bus.ok(mapOf("uri" to uri, "appIdByExtension" to (video?.id ?: BROWSER), "canStream" to (video != null)))
+        val byMime = handlers.byMime(p.optString("mime"))
+        val e = byMime ?: handlers.forTarget(uri)
+        val j = JSONObject().put("returnValue", true).put("uri", uri)
+        when {
+            e != null -> {
+                j.put("appIdByExtension", e.appId)
+                if (byMime == null) j.put("mimeByExtension", e.mime)
+                j.put("canStream", e.streamable)
+            }
+            isWebUrl(uri) -> j.put("appIdByExtension", BROWSER).put("canStream", false)
+            else -> return JSONObject().put("returnValue", false).put("errorText", "can't find a handler for the given uri").toString()
+        }
+        return j.toString()
     }
 
     /**
@@ -1920,6 +1938,21 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 reply(Bus.ok(mapOf("processId" to "success")))
                 return@Handler
             }
+            // A file goes to the app that handles its type (ContentHandlers): a PDF to Adobe
+            // Reader, a .doc to Quickoffice, with the target as it was given, as the reference
+            // TouchPad launched them (2026-10-09). Whether the file is there is the app's affair.
+            if (id.isEmpty() && p.optString("target").isNotEmpty() && !isWebUrl(p.optString("target"))) {
+                val target = p.optString("target")
+                handlers.forTarget(target)?.let { h ->
+                    launch(h.appId, JSONObject().put("target", target), launcher = caller)
+                    reply(Bus.ok(mapOf("processId" to "success")))
+                    return@Handler
+                }
+                if (target.startsWith("file:", true) || target.startsWith("/")) {
+                    reply(JSONObject().put("returnValue", false).put("errorText", "No handler for $target").toString())
+                    return@Handler
+                }
+            }
             // A link, an email, a phone number, a map: webOS's own apps owned these and Lunacy
             // doesn't have them, so Android's answer instead. See WebosLinks.
             val link = org.webosarchive.lunacy.card.WebosLinks.intentFor(id, params, p.optString("target"))
@@ -2029,6 +2062,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         bus.register("com.palm.applicationManager", "updateLaunchPointIcon") { caller, p, reply -> runOnUiThread { reply(updateLaunchPointIcon(caller, p)) } }
         bus.register("com.palm.applicationManager", "listAllHandlersForMime") { _, p, reply -> reply(handlersForMime(p)) }
         bus.register("com.palm.applicationManager", "getResourceInfo") { _, p, reply -> reply(resourceInfo(p)) }
+        bus.register("com.palm.applicationManager", "getHandlerForExtension") { _, p, reply -> reply(handlers.handlerForExtension(p)) }
+        bus.register("com.palm.applicationManager", "getHandlerForUrl") { _, p, reply -> reply(handlers.handlerForUrl(p)) }
         org.webosarchive.lunacy.card.UniversalSearch(this).register(bus)
         // browserserver's own calls, which the Web app makes for its Preferences.
         bus.register("com.palm.browserServer", "clearCache") { _, _, reply ->
@@ -2390,7 +2425,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val INSTALLERS = setOf("org.webosinternals.preware", "org.webosports.app.preware")
         /** webOS's Web app, which Lunacy ships; web links open in it. */
         const val BROWSER = "com.palm.app.browser"
-        const val VIDEO_PLAYER = "com.palm.app.videoplayer"
         const val IPK_MIME = "application/vnd.webos.ipk"
     }
 

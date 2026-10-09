@@ -557,8 +557,8 @@ product; being "close enough" is not the goal.
   Just Type's search. What it asks of the system is answered: its db8 kinds (bookmarks,
   history, preferences) are in the ROM's `/etc/palm`, `com.palm.universalsearch` gives the
   TouchPad's web search engines, `applicationManager/getResourceInfo` sends a download to the
-  app that handles it (video to the video player, anything else to the Web app, which
-  downloads it, as measured), and its bookmark thumbnails are served from
+  app that handles its type (a type nothing handles to the Web app, which downloads it, as
+  measured), its downloads' **Open** goes through `applicationManager/open` to that app, and its bookmark thumbnails are served from
   `/var/luna/data/browser`. Its pages are drawn light whatever Android's theme is, and it sends
   the WebView's own user agent: the TouchPad's would get today's sites' unsupported-browser
   pages, while app cards keep the TouchPad's for the services they talk to. One thing is
@@ -1108,6 +1108,18 @@ no `openDatabase` at all, and Lunacy provides it in JS instead:
     and `applicationManager/listPackages` lists packages with their apps and services. `applicationManager/listAllHandlersForMime` names Preware as
     the handler for `.ipk` (Lunacy answers for Preware's ids), and `launchPointChanges`
     tells subscribers of apps added and removed.
+  - **Content handlers** (`ContentHandlers.kt`). Which app opens which type of file: every
+    installed app's appinfo.json `mimeTypes`, then the system's `resources` from
+    `/usr/palm/command-resource-handlers.json`, leaving out entries for apps Lunacy hasn't
+    got. Built from the app registry when asked, and the registry is rescanned after every
+    install and removal, so an app's types come and go with it, as webOS's application
+    manager rebuilt its table on each. `open` with a file target launches the type's app with
+    `{"target": …}` as given; `getResourceInfo`, `listAllHandlersForMime`,
+    `getHandlerForExtension` and `getHandlerForUrl` answer from it, in the reference
+    TouchPad's shapes (measured 2026-10-09 with Adobe Reader and Quickoffice installed): the
+    first entry for an extension or mime wins, and a type nothing handles gets the device's
+    own error. The one difference is `index`, which the device took from a counter of its
+    own and Lunacy from the entry's place in the table.
 - **Secrets.** `com.palm.keymanager` keeps each caller's keys, as the accounts service keeps
   every account's credentials. **Ratchet item:** the device kept them encrypted; Lunacy keeps
   them in a file in its private storage, which a later target can wrap with Android's keystore.

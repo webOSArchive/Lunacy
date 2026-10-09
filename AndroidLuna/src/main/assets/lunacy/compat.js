@@ -553,6 +553,120 @@
 	if (document.documentElement) { start(); } else { document.addEventListener("DOMContentLoaded", start); }
 })();
 
+// A margin at the edge of a -webkit-box's child is dropped. 2011 WebKit (534.6, the reference
+// TouchPad) discarded a margin that would collapse out through the top or bottom of a box's
+// child with no padding or border there: the child is as tall as its content, the content at
+// its edge. Chromium makes each child its own formatting context, so the margin stays inside
+// and the child grows by it. Measured with Workbench/probe's enyoprobe 0.0.2 (2026-10-09):
+// TouchPad and Lunacy, horizontal and vertical boxes, a top margin alone, a margin two blocks
+// down, a child of fixed height - the margin is gone on the device in every case and kept here;
+// a child with padding, and an inline-block, keep theirs on both. The Web app's action bar is
+// the case people see: its buttons' clients have 3 px margins, so in Chromium the bar's row grew
+// 6 px and its load progress sat under it with a gap (luna-deltas A12). Such a margin is set
+// to 0 inline here, and given back if the child gains padding or the element moves.
+(function () {
+	if (!window.MutationObserver || !window.requestAnimationFrame) { return; }
+	var zeroed = [], dirty = [], all = true, queued = false;
+	var SIDE = { top: ["Top", "marginTop", "margin-top"], bottom: ["Bottom", "marginBottom", "margin-bottom"] };
+	function box(e) {
+		if (!e || e.nodeType !== 1) { return false; }
+		var d = getComputedStyle(e).display;
+		return d === "-webkit-box" || d === "-webkit-inline-box";
+	}
+	// The block at a child's top (or bottom) edge whose margin would collapse through it.
+	function edgeChild(e, last) {
+		for (var n = last ? e.lastChild : e.firstChild; n; n = last ? n.previousSibling : n.nextSibling) {
+			if (n.nodeType === 3) { if (/\S/.test(n.nodeValue)) { return null; } continue; }
+			if (n.nodeType !== 1) { continue; }
+			var s = getComputedStyle(n);
+			if (s.display === "none" || s.position === "absolute" || s.position === "fixed" || s.float !== "none") { continue; }
+			return s.display === "block" || s.display === "list-item" ? n : null;
+		}
+		return null;
+	}
+	function closedEdge(s, side) {
+		return (parseFloat(s["padding" + SIDE[side][0]]) || 0) > 0 || (parseFloat(s["border" + SIDE[side][0] + "Width"]) || 0) > 0;
+	}
+	// The blocks whose margins collapse out through a box child's edge.
+	function chain(kid, side, out) {
+		var s = getComputedStyle(kid);
+		if (closedEdge(s, side)) { return; }
+		for (var c = edgeChild(kid, side === "bottom"); c; c = edgeChild(c, side === "bottom")) {
+			var cs = getComputedStyle(c);
+			out.push([c, side]);
+			if (closedEdge(cs, side) || cs.overflow !== "visible") { return; }
+		}
+	}
+	function wanted(kids) {
+		var out = [];
+		kids.forEach(function (k) { chain(k, "top", out); chain(k, "bottom", out); });
+		return out;
+	}
+	function has(list, e, side) {
+		for (var i = 0; i < list.length; i++) { if (list[i][0] === e && list[i][1] === side) { return i; } }
+		return -1;
+	}
+	function zero(e, side) {
+		var prop = SIDE[side][2];
+		zeroed.push([e, side, e.style.getPropertyValue(prop), e.style.getPropertyPriority(prop)]);
+		e.style.setProperty(prop, "0px", "important");
+	}
+	function restore(z) {
+		var prop = SIDE[z[1]][2];
+		if (z[2]) { z[0].style.setProperty(prop, z[2], z[3]); } else { z[0].style.removeProperty(prop); }
+	}
+	function kidsOf(parents) {
+		var kids = [];
+		parents.forEach(function (p) {
+			if (!box(p)) { return; }
+			for (var c = p.firstElementChild; c; c = c.nextElementSibling) { if (kids.indexOf(c) < 0) { kids.push(c); } }
+		});
+		return kids;
+	}
+	function run() {
+		queued = false;
+		var parents;
+		if (all) {
+			all = false;
+			parents = [].slice.call(document.getElementsByTagName("*"));
+		} else {
+			parents = [];
+			dirty.forEach(function (e) {
+				if (!document.documentElement.contains(e)) { return; }
+				for (var p = e, n = 0; p && p.nodeType === 1 && n < 4; p = p.parentNode, n++) { if (parents.indexOf(p) < 0) { parents.push(p); } }
+				if (e.getElementsByTagName) { [].forEach.call(e.getElementsByTagName("*"), function (d) { parents.push(d); }); }
+			});
+		}
+		dirty = [];
+		var kids = kidsOf(parents);
+		// Margins given back first, so what is asked of the layout is the app's own.
+		var mine = zeroed.filter(function (z) {
+			return !document.documentElement.contains(z[0]) || kids.some(function (k) { return k.contains(z[0]); });
+		});
+		mine.forEach(function (z) { restore(z); zeroed.splice(zeroed.indexOf(z), 1); });
+		wanted(kids).forEach(function (w) {
+			if (has(zeroed, w[0], w[1]) >= 0) { return; }
+			if ((parseFloat(getComputedStyle(w[0])[SIDE[w[1]][1]]) || 0) !== 0) { zero(w[0], w[1]); }
+		});
+	}
+	function queue() { if (!queued) { queued = true; requestAnimationFrame(run); } }
+	function start() {
+		new MutationObserver(function (records) {
+			for (var i = 0; i < records.length; i++) {
+				var r = records[i];
+				// Its own margins changing are this pass's doing.
+				if (r.type === "attributes" && r.attributeName === "style" && has(zeroed, r.target, "top") + has(zeroed, r.target, "bottom") > -2) { continue; }
+				dirty.push(r.target);
+				for (var j = 0; r.addedNodes && j < r.addedNodes.length; j++) { if (r.addedNodes[j].nodeType === 1) { dirty.push(r.addedNodes[j]); } }
+			}
+			if (dirty.length) { queue(); }
+		}).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class"] });
+		window.addEventListener("load", function () { all = true; queue(); });
+		queue();
+	}
+	if (document.documentElement) { start(); } else { document.addEventListener("DOMContentLoaded", start); }
+})();
+
 // file:///media/internal/... (webOS's user storage, where JS services leave files for apps)
 // is served on every app origin at /media/internal/...; pages ran from file:// on webOS and
 // used those URLs directly.

@@ -10,6 +10,17 @@
 .actionbar .menu-container { padding: 1px 4px 0; }
 .actionbar-tool-button { padding: 0; }
 #out { font: 12px monospace; white-space: pre-wrap; }
+/* 0.0.2: the same margin case without Enyo (luna-deltas A12). */
+.hbox { display: -webkit-box; -webkit-box-orient: horizontal; -webkit-box-align: start; background: #ddd; margin: 4px 0; }
+.vbox { display: -webkit-box; -webkit-box-orient: vertical; background: #ddd; margin: 4px 0; width: 200px; }
+.kid { padding: 0; border: 0; background: #9cf; }
+.kid.padded { padding: 1px 0; }
+.kid.tall { height: 40px; }
+.inner { margin: 3px 0; height: 20px; background: #c33; }
+.inner.toponly { margin: 3px 0 0; }
+.inner.ib { display: inline-block; width: 30px; }
+.mid { margin: 0; }
+.deep { margin: 5px 0; height: 20px; background: #3c3; }
 </style>
 </head>
 <body>
@@ -28,6 +39,18 @@ enyo.kind({
 	],
 	rendered: function() {
 		this.inherited(arguments);
+		// After Enyo's render, which replaces the body.
+		var d = document.createElement("div");
+		d.id = "cases";
+		d.innerHTML = "<div class=\"hbox\" id=\"h1\"><div class=\"kid\"><div class=\"inner\"></div></div></div>" +
+	"<div class=\"vbox\" id=\"v1\"><div class=\"kid\"><div class=\"inner\"></div></div></div>" +
+	"<div class=\"hbox\" id=\"h2\"><div class=\"kid padded\"><div class=\"inner\"></div></div></div>" +
+	"<div class=\"hbox\" id=\"h3\"><div class=\"kid\"><div class=\"inner toponly\"></div></div></div>" +
+	"<div class=\"hbox\" id=\"h4\"><div class=\"kid\"><div class=\"inner ib\"></div></div></div>" +
+	"<div class=\"hbox\" id=\"h5\"><div class=\"kid\"><div class=\"mid\"><div class=\"deep\"></div></div></div></div>" +
+	"<div class=\"hbox\" id=\"h6\"><div class=\"kid tall\"><div class=\"inner\"></div></div></div>" +
+	"<div class=\"vbox\" id=\"v2\"><div class=\"kid\"><div class=\"inner\"></div></div><div class=\"kid\"><div class=\"inner\"></div></div></div>";
+		document.body.appendChild(d);
 		setTimeout(enyo.bind(this, "measure"), 1500);
 	},
 	measure: function() {
@@ -45,6 +68,16 @@ enyo.kind({
 		var p = this.$.plain.hasNode();
 		box("textButton", p);
 		box("textClient", p.firstChild);
+		// 0.0.2: each case's box, its child and the child's first child, relative to the box.
+		var cases = document.getElementById("cases").children;
+		for (var c = 0; c < cases.length; c++) {
+			var bx = cases[c], br = bx.getBoundingClientRect(), parts = [];
+			for (var k = bx.firstElementChild; k; k = k.nextElementSibling) {
+				var kr = k.getBoundingClientRect(), g = k.firstElementChild, gr = g.getBoundingClientRect();
+				parts.push("kid y=" + (kr.top - br.top) + " h=" + kr.height + " inner y=" + (gr.top - kr.top) + " h=" + gr.height);
+			}
+			lines.push("case " + bx.id + " box h=" + br.height + " " + parts.join(" ; "));
+		}
 		lines.push("ua " + navigator.userAgent);
 		for (var i = 0; i < lines.length; i++) {
 			try { console.error("ENYOPROBE " + lines[i]); } catch (e) {}

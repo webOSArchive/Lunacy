@@ -111,6 +111,20 @@ open class AppWindow(
      */
     val emulated: Boolean = false,
 ) : WebView(context) {
+    /** A native web view is drawn without the parts the page draws over it (BrowserViews.Browser.holesInCard). */
+    override fun drawChild(canvas: android.graphics.Canvas, child: android.view.View, drawingTime: Long): Boolean {
+        val holes = (child as? BrowserViews.Browser)?.holesInCard()
+        if (holes.isNullOrEmpty()) return super.drawChild(canvas, child, drawingTime)
+        canvas.save()
+        for (h in holes) {
+            if (android.os.Build.VERSION.SDK_INT >= 26) canvas.clipOutRect(h)
+            else @Suppress("DEPRECATION") canvas.clipRect(h, android.graphics.Region.Op.DIFFERENCE)
+        }
+        val drawn = super.drawChild(canvas, child, drawingTime)
+        canvas.restore()
+        return drawn
+    }
+
     private val main = Handler(Looper.getMainLooper())
     /** Counts the pages this window has loaded; see [Native.call]. Main thread. */
     private var page = 0

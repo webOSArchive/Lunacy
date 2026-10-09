@@ -549,7 +549,11 @@ product; being "close enough" is not the goal.
   app answers with a card of its own), and holding a link or image (the app's context menu).
   The plugin drew into the page, so Enyo's popups came out over the web content; while one is
   open over the box, the native view is drawn into a picture that takes its place in the page,
-  and steps aside until the popup has gone. Outside a Lunacy card the fork still draws an
+  and steps aside until the popup has gone. Anything else the page draws over the box (the Web
+  app's load progress, the copy and paste popup) is a hole in the native view: the page sends
+  those rectangles with its place, and the card leaves them out when it draws the view
+  (`AppWindow.drawChild`; WebView ignores a clip with holes while it draws itself, so the view
+  is drawn into a layer of its own while it has any) and takes the touches there. Outside a Lunacy card the fork still draws an
   iframe. See [the fork's change log](../LunaRuntimes/enyo-1.0/CHANGES.md), 0002 and 0005.
 - **The Web app.** Palm's own (`com.palm.app.browser`) ships with Lunacy, unchanged, and is
   where web links go: `applicationManager/open` with an `http`, `https` or `data` target opens

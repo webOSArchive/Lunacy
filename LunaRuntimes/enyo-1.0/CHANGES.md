@@ -180,6 +180,15 @@ offers `LunacyNative.webViewCreate`; elsewhere (a desktop browser) 0002's iframe
   picture, the page shows the picture as the box's background, and the view steps aside once
   the picture is up; it comes back when the popup has gone. `BasicPopup.prepareOpen` and
   `close` are wrapped so that this happens at once rather than at the next look.
+- **What the page draws over the box.** Anything else the page puts over the web content - the
+  Web app's load progress under its action bar, Lunacy's copy and paste popup over its address
+  field - was seen over it on the device and hidden under the native view here. Its place now
+  carries *holes*: the parts of positioned elements outside the box (and not holding it) that
+  are seen and paint something (a background, an image, a border, text), found again when the
+  document changes. The native view is drawn without them, so the card shows there, and a touch
+  that starts in one is the card's. Added 2026-10-09 (codepoet: the progress bar was missing,
+  and the popup was almost all under the view); checked on the Nexus 5 (WebView 44), Galaxy Tab
+  A7 Lite and Pixel Tablet (153).
 
 `destroy` is replaced rather than wrapped: the original sets a property on `this.node`, which
 throws when the control is destroyed before it was ever rendered.

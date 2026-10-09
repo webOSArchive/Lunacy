@@ -246,7 +246,7 @@ Found 2026-09-22 with `emuprobe`: its inline script, run while the page is parse
 
 ### A12. A margin inside a zero-padding `-webkit-box` child
 
-**Measured 2026-10-04; left as it is (codepoet: "something I can live with").** The Web app's action bar draws its buttons, URL field and icons 3 px lower than the TouchPad does; the bar's own edges, its art and the icons match. Comparison: `Workbench/results/web-actionbar-compare.png` (TouchPad above Lunacy on the HP 10 G2, 1:1 and 3x).
+**Fixed 2026-10-09 (compat), when it put the Web app's load progress 6 px below its action bar.** Measured 2026-10-04 and first left as it was (codepoet: "something I can live with"). The Web app's action bar draws its buttons, URL field and icons 3 px lower than the TouchPad does; the bar's own edges, its art and the icons match. Comparison: `Workbench/results/web-actionbar-compare.png` (TouchPad above Lunacy on the HP 10 G2, 1:1 and 3x).
 
 The cause is the engine, not the app. An Enyo `ToolButton` is a block holding `.enyo-tool-button-client`, which has 3 px top and bottom margins. The Web app gives its action bar's buttons `padding: 0` (`.actionbar-tool-button`). With no padding or border between them, the client's margins collapse through the button, and the TouchPad's `-webkit-box` (WebKit 534.6) then ignored them: the button is as tall as the client. Chromium makes a flex item an independent formatting context, so the margins stay inside it and the button grows by 6 px; the row it is centred in grows with it.
 
@@ -262,7 +262,20 @@ The cause is the engine, not the app. An Enyo `ToolButton` is a block holding `.
 
 A text button keeps its padding, so its client's margins stay inside it on both engines; that is why zeroing the client's margins everywhere is wrong (tried live: the icon buttons came right and the text button shrank to 46). The client is also 1 px taller here (49 against 48), the line box under the inline-block icon, from font metrics.
 
-**If it is revisited:** a compat-layer rule beside A11's pass: for an element whose parent is a `-webkit-box` and which has no top (or bottom) padding or border, its first (or last) in-flow child's top (or bottom) margin is taken as zero. Measure a second case on the TouchPad first (a vertical box, and a child that isn't a ToolButton) before making it general.
+**The fix.** enyoprobe 0.0.2 added eight cases without Enyo, run on the TouchPad and in Lunacy (Nexus 5):
+
+| case | TouchPad | Lunacy before | Lunacy after |
+|---|---|---|---|
+| horizontal box, padding-free child, block with 3 px margins | child 20, block at 0 | 26, at 3 | 20, at 0 |
+| the same in a vertical box | 20, at 0 | 26, at 3 | 20, at 0 |
+| child with 1 px padding | 28, at 4 | 28, at 4 | 28, at 4 |
+| top margin only | 20 | 23 | 20 |
+| inline-block block | 31, at 3 | 32, at 3 | 32, at 3 |
+| margin two blocks down | 20 | 30 | 20 |
+| child of fixed height | block at 0 | at 3 | at 0 |
+| two children of a vertical box | 20 + 20 | 26 + 26 | 20 + 20 |
+
+So WebKit 534.6 dropped any margin that would collapse out through the top or bottom of a box's child with no padding or border there; a padded child and an inline-block keep theirs on both. compat.js now sets such margins to 0 inline (and gives them back if the child gains padding), every engine and every app. The toolbar row is 53 px as on the device, the icon button 49 (48 there: the 1 px line box below), the text button y 7, h 52 as there. The Web app's load progress now starts at its action bar's bottom edge (WebView 44) or 2 px over it (WebView 153); the device's starts 1 px over it.
 
 ### A13. Selecting text in a web page, in the Web app
 

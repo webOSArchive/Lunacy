@@ -201,6 +201,13 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         private var shown = false
         private var cover = false
         private var generation = 0
+        /**
+         * Where the page draws over the box, in this view's px: the plugin drew into the page,
+         * so whatever the page put over it - the Web app's load progress, the copy and paste
+         * popup - was seen above the web content. Here those parts of the view are left
+         * undrawn, so the card shows through, and a touch that starts in one is the card's.
+         */
+        private var holes: List<Rect> = emptyList()
 
         init {
             settings.apply {
@@ -246,6 +253,21 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 layoutParams = AbsoluteLayout.LayoutParams(r.width(), r.height(), r.left, r.top)
             }
             shown = p.optBoolean("visible") && r.width() > 0 && r.height() > 0
+            val h = ArrayList<Rect>()
+            p.optJSONArray("holes")?.let { a ->
+                for (i in 0 until a.length()) {
+                    val q = a.optJSONArray(i) ?: continue
+                    val hx = q.optDouble(0); val hy = q.optDouble(1)
+                    val hole = Rect(px(hx) + window.scrollX - r.left, px(hy) + window.scrollY - r.top,
+                        px(hx + q.optDouble(2)) + window.scrollX - r.left, px(hy + q.optDouble(3)) + window.scrollY - r.top)
+                    if (hole.intersect(0, 0, r.width(), r.height())) h += hole
+                }
+            }
+            if (h != holes) {
+                holes = h
+                setLayerType(if (h.isEmpty()) View.LAYER_TYPE_NONE else View.LAYER_TYPE_HARDWARE, null)
+                invalidate()
+            }
             val wantCover = p.optBoolean("covered")
             if (wantCover && !cover) coverNow()
             else if (!wantCover && cover) uncover()
@@ -567,8 +589,17 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 }
             }
         }
+        /**
+         * The view's holes as the card draws it: the card leaves them out when it puts the view
+         * on the screen ([AppWindow.drawChild]). WebView ignores a clip with holes in it while it
+         * draws itself, so while there are holes the view is drawn into a layer of its own
+         * first, and the layer is what gets clipped.
+         */
+        fun holesInCard(): List<Rect> = holes.map { Rect(it).apply { offset(this@Browser.left, this@Browser.top) } }
+
         override fun dispatchTouchEvent(e: MotionEvent): Boolean {
-            if (e.actionMasked == MotionEvent.ACTION_DOWN) passing = headerCss > 0 && e.y < clipTop()
+            if (e.actionMasked == MotionEvent.ACTION_DOWN) passing = (headerCss > 0 && e.y < clipTop()) ||
+                holes.any { it.contains(e.x.toInt(), e.y.toInt()) }
             if (passing) { if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL) passing = false; return false }
             return super.dispatchTouchEvent(e)
         }

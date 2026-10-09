@@ -94,7 +94,9 @@ class SystemService(private val webosRoot: File, private val store: File) {
      * of each zone answers {tz, year, hasDstChange, utcOffset, dstOffset, dstStart, dstEnd}:
      * offsets in seconds east of UTC, the two changes as the instants they happen, and -1 for
      * all three when the year has none, with utcOffset then the offset in force (London's is
-     * 3600 in 1969). No years means this year. The replies and errors are the reference
+     * 3600 in 1969). No years means this year. A zone the device doesn't know ("Eastern Standard
+     * Time", a Windows name an Outlook feed carries, or "") is left out and the rest answered;
+     * only when nothing is known does the call fail. The replies and errors are the reference
      * TouchPad's, measured with luna-send; Lunacy fills them from Android's zone data. One
      * difference: the TouchPad's zone data stopped at 2037, and it answered no daylight saving
      * for any later year, where Lunacy answers the rules.
@@ -108,13 +110,14 @@ class SystemService(private val webosRoot: File, private val store: File) {
         for (i in 0 until asked.length()) {
             val entry = asked.optJSONObject(i) ?: return fail("Missing tz entry")
             val id = entry.opt("tz") as? String ?: return fail("Missing tz entry")
-            if (id !in known) return fail(NO_RULES)
+            if (id !in known) continue
             val zone = java.util.TimeZone.getTimeZone(id)
             val years = entry.optJSONArray("years")
             val list = if (years == null || years.length() == 0) listOf(java.util.Calendar.getInstance().get(java.util.Calendar.YEAR))
                        else (0 until years.length()).map { years.optInt(it) }
             for (y in list) results.put(yearRules(zone, id, y))
         }
+        if (results.length() == 0) return fail(NO_RULES)
         return JSONObject().put("returnValue", true).put("results", results).toString()
     }
 

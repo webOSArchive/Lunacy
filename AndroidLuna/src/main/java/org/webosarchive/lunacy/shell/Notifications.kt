@@ -203,7 +203,13 @@ class DashboardMenu(context: Context, private val luna: Luna, private val onDism
         rows.addView(row, 0, LinearLayout.LayoutParams(luna.px(CONTENT_W), luna.px(ROW_H)).apply {
             if (rows.childCount > 0) (rows.getChildAt(0).layoutParams as LinearLayout.LayoutParams).topMargin = divider()
         })
-        requestLayout()
+        requestLayout()        // DashboardWindowContainer::addWindow: focused if the drop-down is open, not if it isn't.
+        w.sendFocus(isOpen)
+    }
+
+    /** DashboardWindowContainer::focusAllWindows, as the drop-down opens or closes. */
+    private fun focusAll(focus: Boolean) {
+        for (i in 0 until rows.childCount) (rows.getChildAt(i) as? Row)?.window?.sendFocus(focus)
     }
 
     private fun divider() = luna.image("menu-divider.png")?.height ?: luna.px(2)
@@ -220,6 +226,7 @@ class DashboardMenu(context: Context, private val luna: Luna, private val onDism
     fun open() {
         if (rows.childCount == 0) return
         isOpen = true
+        focusAll(true)
         visibility = View.VISIBLE
         scroller.scrollTo(0, 0)
         animate().cancel()
@@ -230,6 +237,7 @@ class DashboardMenu(context: Context, private val luna: Luna, private val onDism
     fun close() {
         if (!isOpen) return
         isOpen = false
+        focusAll(false)
         animate().cancel()
         animate().alpha(0f).setDuration(FADE_MS).setInterpolator(Easing.Linear)
             .withEndAction { if (!isOpen) visibility = View.INVISIBLE }.start()

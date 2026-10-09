@@ -89,6 +89,11 @@
 		return null;
 	}
 	function plain(f) { return f.tagName === "INPUT" || f.tagName === "TEXTAREA"; }
+	// A field's selection, or null where it has none to give. WebView 44 throws on reading it from
+	// an email or number input (Apollo's sign-in, 2026-10-09); later engines answer null, and the
+	// TouchPad's WebKit gave one.
+	function selStart(f) { try { return f.selectionStart; } catch (e) { return null; } }
+	function selEnd(f) { try { return f.selectionEnd; } catch (e) { return null; } }
 
 	// Chromium drops the caret at the start of a line in an editable box whose left edge
 	// falls just past a device pixel, on a screen with a fractional pixel ratio: Email's
@@ -183,7 +188,7 @@
 			}
 		}
 		if (plain(f)) {
-			var a = f.selectionStart, z = f.selectionEnd, m = mirror(f);
+			var a = selStart(f), z = selEnd(f), m = mirror(f);
 			try {
 				rg = document.createRange();
 				if (a === z) {
@@ -221,12 +226,12 @@
 	}
 
 	function selectionRange(f) {
-		if (plain(f)) { return [f.selectionStart, f.selectionEnd]; }
+		if (plain(f)) { return [selStart(f), selEnd(f)]; }
 		var s = window.getSelection();
 		return s.rangeCount ? s.getRangeAt(0) : null;
 	}
 	function hasSelection(f) {
-		if (plain(f)) { return f.selectionEnd > f.selectionStart; }
+		if (plain(f)) { return selEnd(f) > selStart(f); }
 		var s = window.getSelection();
 		return s.rangeCount > 0 && !s.isCollapsed && f.contains(s.anchorNode);
 	}
@@ -237,7 +242,7 @@
 	// The word around the caret, as WebKit's word selection takes it.
 	function selectWord(f) {
 		if (plain(f)) {
-			var v = f.value, a = f.selectionStart, z = a, W = /[\wÀ-￿'’]/;
+			var v = f.value, a = selStart(f), z = a, W = /[\wÀ-￿'’]/;
 			while (a > 0 && W.test(v.charAt(a - 1))) { a--; }
 			while (z < v.length && W.test(v.charAt(z))) { z++; }
 			if (a === z && z < v.length) { z++; }
@@ -361,7 +366,7 @@
 		// The finger is on the handle, below or above the text; the point it means is the line.
 		var y = drag.start ? t.clientY + 14 : t.clientY - 14;
 		if (plain(field)) {
-			var off = offsetAt(field, t.clientX, y), a = field.selectionStart, z = field.selectionEnd;
+			var off = offsetAt(field, t.clientX, y), a = selStart(field), z = selEnd(field);
 			if (drag.start) { a = Math.min(off, z - 1); } else { z = Math.max(off, a + 1); }
 			try { field.setSelectionRange(Math.max(0, a), z); } catch (e) {}
 		} else {
@@ -457,7 +462,7 @@
 				var onSelection = false;
 				if (hasSelection(f)) {
 					var off = offsetAt(f, x, y);
-					if (plain(f)) { onSelection = off >= f.selectionStart && off <= f.selectionEnd; }
+					if (plain(f)) { onSelection = off >= selStart(f) && off <= selEnd(f); }
 					else { var rg = window.getSelection().getRangeAt(0); onSelection = !!off && rg.comparePoint && rg.comparePoint(off.startContainer, off.startOffset) === 0; }
 				}
 				field = f;

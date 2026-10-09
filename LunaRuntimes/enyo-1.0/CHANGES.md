@@ -314,6 +314,18 @@ Both layouts now end with `_reflowViews`: the pane's flow, each view's styles wr
 node, and each view's box rebuilt (`display: none`, a layout read, the display put back). It
 runs only when the layout changes, which is at start and when a turn crosses the width.
 
+Going to the stacked layout, `setFixedWidth(true)` told each view's controls to resize at
+once (`SlidingView.applySize`), in the middle of the loop: the view still had the wide
+layout's flex and `width: 0px`, so a control measuring itself then came out 0 px wide. Plex
+for webOS's grid did, turned from landscape to portrait on a phone, and with no columns its
+`VirtualList` filled the screen with empty rows for ever (`VirtualScroller.pushPages`): the
+card froze, and on Android 6, where every card shares one renderer, the whole shell with it.
+The fixed width is now set without the broadcast, and each view that would have been told is
+told (`doResize`, then the resize to its controls) once the layout is whole. Measured on
+2026-10-09 on the Nexus 5 (WebView 44): before, the grid measured 0 then 360 px on the turn to
+portrait; after, 320 px in landscape and 360 px in portrait, two turns each way, nothing else
+told twice that wasn't before.
+
 Measured on 2026-10-08 on the Nexus 5 (WebView 44, a 360 px card): the album view was 0 px wide
 at the libraries' left edge, and is now 360 px and slides over them; dragging it right brings
 the libraries back. Turned to landscape (640 px) the pane is two views again, 280 and 360 px,

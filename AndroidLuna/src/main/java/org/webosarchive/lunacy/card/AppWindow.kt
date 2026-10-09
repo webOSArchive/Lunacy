@@ -322,6 +322,21 @@ open class AppWindow(
         if (pageReady) deliverActive()
     }
 
+    /**
+     * A dashboard's focus, as LunaSysMgr sent it (DashboardWindowContainer): told when it is
+     * added - activated if the drop-down is open, deactivated if not - and again each time the
+     * drop-down opens or closes, whether or not that changes anything. Apps fill a dashboard in
+     * from those events: Apollo's showed only its placeholder until one came. Measured on the
+     * reference TouchPad with the window probe (2026-10-09): a new dashboard hears
+     * windowDeactivated as soon as it is sized.
+     */
+    fun sendFocus(active: Boolean) {
+        this.active = active
+        told = null
+        if (pageReady) deliverActive() else focusPending = true
+    }
+    private var focusPending = false
+
     /** Whether the shell has this window's card focused. */
     private var active = false
     /** What the page was last told, so that it hears each change once, as it did on webOS. */
@@ -339,14 +354,16 @@ open class AppWindow(
         told = active
         evaluateJavascript("if(window.PalmSystem){PalmSystem.isActivated=$active}", null)
         callMojo(if (active) "stageActivated" else "stageDeactivated")
-        host.stageFocused(this, active)
+        // A dashboard's focus is the drop-down's, not the app's card's.
+        if (type != "dashboard") host.stageFocused(this, active)
     }
 
     private fun onPageReady() {
         if (pageReady) return
         pageReady = true
         // Until now it believed itself inactive, which is how a page starts.
-        if (active) deliverActive() else told = false
+        if (active || focusPending) deliverActive() else told = false
+        focusPending = false
     }
 
     /**
@@ -470,6 +487,8 @@ open class AppWindow(
         @JavascriptInterface fun mediaBase(): String = host.mediaBase()
         /** Whether http:// images and media go through LocalNet (compat.js, "Local network"). */
         @JavascriptInterface fun localNetworkBlocked(): Boolean = LocalNet.blocked
+        /** The WebView's Chromium major version, for compat.js's engine-bound fixes; -1 if unknown. */
+        @JavascriptInterface fun engineMajor(): Int = Engine.major
         @JavascriptInterface fun activate() { main.post { host.activate(this@AppWindow) } }
         @JavascriptInterface fun keyboard(show: Boolean) { main.post { host.keyboard(this@AppWindow, show) } }
         @JavascriptInterface fun keyboardResizes(resize: Boolean) { keyboardResizes = resize }

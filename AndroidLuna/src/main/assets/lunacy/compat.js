@@ -613,15 +613,102 @@ window.__lunacyPageUrl = function (u) {
 		if (!P) { return; }
 		var set = P.setAttribute;
 		P.setAttribute = function (name, value) {
-			return set.call(this, name, String(name).toLowerCase() === "src" ? map(value) : value);
+			var src = String(name).toLowerCase() === "src";
+			if (src && P === M && window.__lunacyWatchProgress) { __lunacyWatchProgress(this); }
+			return set.call(this, name, src ? map(value) : value);
 		};
 	});
 	var A = window.Audio;
 	if (A) {
-		var Audio = function (src) { return arguments.length && src !== undefined ? new A(map(src)) : new A(); };
+		var Audio = function (src) {
+			var a = arguments.length && src !== undefined ? new A(map(src)) : new A();
+			if (window.__lunacyWatchProgress) { __lunacyWatchProgress(a); }
+			return a;
+		};
 		Audio.prototype = A.prototype;
 		window.Audio = Audio;
 	}
+})();
+
+// An ordered script that fails held the page's load event for good on old engines. A page may
+// add scripts to run in order (script.async = false, as LAB.js does); on WebView 44 (Nexus 5,
+// measured 2026-10-09) one that fails to load - a 404, a dead host - before the page's load
+// event leaves the document waiting for it: load never fires, readyState stays "interactive",
+// and Enyo never calls stageReady, so the card stays on its splash. Apollo for phones loads
+// Villo's patch.js from a host that is gone, and never opened. The TouchPad's WebKit fired
+// load, as WebView 153 does (Pixel Tablet, measured the same day). Removing the failed
+// element doesn't release it; a failed async script doesn't hold it. So until load, such
+// scripts are added as async ones, one at a time, each once the one before has run or
+// failed: the same order, and their error events as before. Engines below 60 only: the fix
+// is in Chromium's 2015-16 ScriptRunner changes, so the cut-off is an assumption, not a
+// measurement.
+(function () {
+	var N = window.LunacyNative, major = N && N.engineMajor ? N.engineMajor() : -1;
+	if (major < 0 || major >= 60 || !window.HTMLScriptElement) { return; }
+	var loaded = false, busy = false, queue = [];
+	window.addEventListener("load", function () { loaded = true; });
+	function run() {
+		if (busy || !queue.length) { return; }
+		busy = true;
+		queue.shift()();
+	}
+	function chain(name) {
+		var P = Node.prototype, orig = P[name];
+		P[name] = function (el) {
+			if (loaded || !(el instanceof HTMLScriptElement) || el.async !== false || !el.src || el.__lunacyOrdered) {
+				return orig.apply(this, arguments);
+			}
+			el.__lunacyOrdered = true;
+			el.async = true;
+			var parent = this, args = arguments;
+			queue.push(function () {
+				var done = function () {
+					el.removeEventListener("load", done);
+					el.removeEventListener("error", done);
+					busy = false;
+					run();
+				};
+				el.addEventListener("load", done);
+				el.addEventListener("error", done);
+				try { orig.apply(parent, args); } catch (e) { done(); throw e; }
+			});
+			run();
+			return el;
+		};
+	}
+	chain("appendChild");
+	chain("insertBefore");
+})();
+
+// A player that has its data says so. webOS's media server fired progress while a track
+// loaded; WebView 44 hands audio to Android's MediaPlayer, which fires none before playback:
+// loadstart, suspend, then loadedmetadata and canplay with nothing buffered (Nexus 5,
+// measured 2026-10-09). Apollo starts a track only once it has seen progress, and sat
+// silent at canplay. So on those engines an element that reaches loadeddata without a
+// progress since its loadstart gets one then. Below Chromium 60, as above: an assumption
+// about when Chromium stopped using MediaPlayer for audio, measured only at 44 (needed) and
+// 153 (not).
+window.__lunacyWatchProgress = (function () {
+	var N = window.LunacyNative, major = N && N.engineMajor ? N.engineMajor() : -1;
+	if (major < 0 || major >= 60) { return function () {}; }
+	return function (el) {
+		if (!el || el.__lunacyProgress) { return; }
+		var seen = el.__lunacyProgress = { seen: false };
+		el.addEventListener("loadstart", function () { seen.seen = false; }, true);
+		el.addEventListener("progress", function () { seen.seen = true; }, true);
+		el.addEventListener("loadeddata", function () {
+			if (seen.seen) { return; }
+			seen.seen = true;
+			var e = document.createEvent("Event");
+			e.initEvent("progress", false, false);
+			el.dispatchEvent(e);
+		}, true);
+	};
+})();
+(function () {
+	var P = window.HTMLMediaElement && HTMLMediaElement.prototype, load = P && P.load;
+	if (!load) { return; }
+	P.load = function () { __lunacyWatchProgress(this); return load.apply(this, arguments); };
 })();
 
 // An empty src leaves a media element empty and silent. On the TouchPad, audio.src = "" fired
@@ -636,6 +723,7 @@ window.__lunacyPageUrl = function (u) {
 		configurable: true, enumerable: d.enumerable, get: d.get,
 		set: function (v) {
 			if (v === "") { this.removeAttribute("src"); return; }
+			if (window.__lunacyWatchProgress) { __lunacyWatchProgress(this); }
 			d.set.call(this, window.__lunacyFileUrl ? __lunacyLocalUrl(__lunacyFileUrl(v, true)) : v);
 		}
 	});
@@ -856,7 +944,8 @@ window.__lunacyPageUrl = function (u) {
 			if (!size) { continue; }
 			var parts = size.split(/\s*,\s*/), out = [], covers = true;
 			for (var p = 0; p < parts.length; p++) {
-				var xy = parts[p].trim().split(/\s+/);
+				// Not trim(): pages replace it, and Plex's returns undefined.
+				var xy = parts[p].replace(/^\s+|\s+$/g, "").split(/\s+/);
 				var sx = px(xy[0], w), sy = px(xy.length > 1 ? xy[1] : xy[0], h);
 				if (parseFloat(sx) < w || parseFloat(sy) < h) { covers = false; }
 				out.push(sx + " " + sy);
@@ -931,7 +1020,8 @@ window.__lunacyPageUrl = function (u) {
 		String(content || "").split(/[,\s]+/).forEach(function (part) {
 			var at = part.indexOf("=");
 			if (at < 0) { return; }
-			var k = part.slice(0, at).trim().toLowerCase(), v = part.slice(at + 1).trim();
+			// The split leaves no whitespace to trim, and pages replace trim(): Plex's returns undefined.
+			var k = part.slice(0, at).toLowerCase(), v = part.slice(at + 1);
 			if (k) { out.push([k, v]); }
 		});
 		return out;

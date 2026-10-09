@@ -3,7 +3,6 @@ package org.webosarchive.lunacy.card
 import android.content.Context
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
-import android.webkit.WebSettings
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
@@ -47,10 +46,8 @@ object LocalNet {
     fun init(context: Context) {
         if (checked) return
         checked = true
-        val major = runCatching {
-            Regex("Chrome/(\\d+)").find(WebSettings.getDefaultUserAgent(context))?.groupValues?.get(1)?.toInt()
-        }.getOrNull() ?: 0
-        blocked = major >= 141
+        Engine.init(context)
+        blocked = Engine.major >= 141
     }
 
     /** Request headers a player or image load sends that matter to the server. */
@@ -77,9 +74,20 @@ object LocalNet {
                     ByteArrayInputStream(rewrite(text, c.url.toString()).toByteArray()))
             }
             val out = LinkedHashMap<String, String>()
-            for (h in listOf("Content-Length", "Content-Range", "Accept-Ranges", "Cache-Control", "Last-Modified", "ETag"))
+            for (h in listOf("Content-Range", "Accept-Ranges", "Cache-Control", "Last-Modified", "ETag"))
                 c.getHeaderField(h)?.let { out[h] = it }
-            val body = (if (code >= 400) c.errorStream else c.inputStream) ?: ByteArrayInputStream(ByteArray(0))
+            val raw = (if (code >= 400) c.errorStream else c.inputStream) ?: ByteArrayInputStream(ByteArray(0))
+            val length = c.getHeaderField("Content-Length")?.trim()?.toLongOrNull()
+            val range = c.getHeaderField("Content-Range")?.let { RANGE.find(it) }
+            val body = when {
+                code == 206 && range != null -> {
+                    val first = range.groupValues[1].toLong()
+                    val total = range.groupValues[3].toLongOrNull() ?: (range.groupValues[2].toLong() + 1)
+                    Whole(raw, first, total - first)
+                }
+                length != null -> Whole(raw, 0, length)
+                else -> raw
+            }
             WebResourceResponse(type?.substringBefore(';')?.trim()?.ifEmpty { null } ?: "application/octet-stream",
                 type?.let { Regex("charset=([^;\\s]+)", RegexOption.IGNORE_CASE).find(it)?.groupValues?.get(1) },
                 code, c.responseMessage?.ifEmpty { null } ?: "OK", out, body)
@@ -114,6 +122,29 @@ object LocalNet {
     private fun via(u: String, base: String): String {
         val abs = runCatching { URL(URL(base), u).toString() }.getOrNull() ?: return u
         return if (abs.startsWith("http://", ignoreCase = true)) "$PATH?u=" + URLEncoder.encode(abs, "UTF-8") else u
+    }
+
+    private val RANGE = Regex("bytes\\s+(\\d+)-(\\d+)/(\\d+|\\*)", RegexOption.IGNORE_CASE)
+
+    /**
+     * The body as the WebView expects it: the whole resource, of which the server sent [rest]
+     * bytes from [first] on. The WebView applies a request's Range to the stream itself (its
+     * InputStreamReader): it checks the range against available(), then skips to the first
+     * byte. The server has already answered that range, so the bytes before [first] are skipped
+     * without being there. Otherwise every seek, and the player's look at the end of the file,
+     * failed with net::ERR_FAILED; and a network stream's available() of 0 also gave the answer
+     * a second Content-Length of 0 (WebView 153, 2026-10-09) - Apollo's Pandora tracks never
+     * played. A resource past 2 GB reports 2 GB.
+     */
+    private class Whole(private val s: InputStream, private var first: Long, private var rest: Long) : InputStream() {
+        override fun available() = (first + rest).coerceIn(0, Int.MAX_VALUE.toLong()).toInt()
+        override fun skip(n: Long): Long {
+            if (first == 0L) return super.skip(n)
+            return minOf(n, first).also { first -= it }
+        }
+        override fun read(): Int = s.read().also { if (it >= 0) rest-- }
+        override fun read(b: ByteArray, off: Int, len: Int): Int = s.read(b, off, len).also { if (it > 0) rest -= it }
+        override fun close() = s.close()
     }
 
     private fun status(code: Int, reason: String) =

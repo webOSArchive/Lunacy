@@ -363,7 +363,11 @@ product; being "close enough" is not the goal.
       later, an assumed cut-off: only 149 is measured) compat.js points `http://` images and
       media - `src` properties, `setAttribute`, `new Audio`, and markup as it is inserted -
       at `/__lunacy/net?u=` on the page's own origin, which the card fetches with `Http.kt`
-      and streams back, byte ranges included. HLS playlists, fetched that way or served from
+      and streams back, byte ranges included. The WebView applies a request's Range to the
+      stream it is given as though that were the whole file, so the answer to a range poses as
+      the whole resource, the bytes before the range skipped without being fetched (WebView
+      153, 2026-10-09: without that every seek failed, and Apollo's Pandora tracks never
+      loaded). HLS playlists, fetched that way or served from
       `/media/internal`, have their `http://` URIs rewritten the same way, and
       `/media/internal` media stays on the app origin, since the loopback `MediaServer` is
       out of reach there too. Plex's thumbnails and its transcoded video play again. Older

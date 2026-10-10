@@ -133,9 +133,34 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
     }
 
     private fun configure(path: String, target: Db8, owner: String) {
-        val kinds = read("$path/kinds", owner) { JSONObject(it) }
-        val permissions = read("$path/permissions", owner) { JSONArray(it) }
+        val kinds = read("$path/kinds", owner) { JSONObject(jsonC(it)) }
+        val permissions = read("$path/permissions", owner) { JSONArray(jsonC(it)) }
         if (kinds.isNotEmpty() || permissions.isNotEmpty()) target.configure(kinds, permissions)
+    }
+
+    /**
+     * A kind or permission file as webOS's json-c read it: a comma before a closing brace or
+     * bracket is dropped. The TouchPad's own com.palm.tasklist kind has one inside an object
+     * ("description": "…",\n}), which org.json refuses; the device registers the kind.
+     */
+    private fun jsonC(text: String): String {
+        val out = StringBuilder(text.length)
+        var inString = false; var escaped = false; var comma = -1
+        for (c in text) {
+            if (inString) {
+                out.append(c)
+                if (escaped) escaped = false else if (c == '\\') escaped = true else if (c == '"') inString = false
+                continue
+            }
+            when {
+                c == '"' -> { comma = -1; inString = true; out.append(c) }
+                c == ',' -> { comma = out.length; out.append(c) }
+                (c == '}' || c == ']') && comma >= 0 -> { out.deleteCharAt(comma); comma = -1; out.append(c) }
+                c.isWhitespace() -> out.append(c)
+                else -> { comma = -1; out.append(c) }
+            }
+        }
+        return out.toString()
     }
 
     private fun <T> read(path: String, owner: String, parse: (String) -> T): List<T> =
@@ -150,9 +175,9 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
 
     private fun configureFiles(dir: File, target: Db8, pkg: String) {
         val kinds = parseFiles(File(dir, "kinds"), pkg) { text, owner ->
-            JSONObject(text).apply { if (owner != null && !has("owner")) put("owner", owner) }
+            JSONObject(jsonC(text)).apply { if (owner != null && !has("owner")) put("owner", owner) }
         }
-        val permissions = parseFiles(File(dir, "permissions"), pkg) { text, _ -> JSONArray(text) }
+        val permissions = parseFiles(File(dir, "permissions"), pkg) { text, _ -> JSONArray(jsonC(text)) }
         if (kinds.isNotEmpty() || permissions.isNotEmpty()) target.configure(kinds, permissions)
     }
 

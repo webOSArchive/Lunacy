@@ -220,7 +220,7 @@ class Db8(private val service: String, file: File?,
         "find" -> find(caller, p, call, search = false)
         "search" -> find(caller, p, call, search = true)
         "watch" -> watch(caller, p, call)
-        "reserveIds" -> JSONObject().put("returnValue", true).put("ids", JSONArray((1..p.optInt("count", 1).coerceIn(1, 1000)).map { newId() })).toString()
+        "reserveIds" -> reserveIds(caller, p)
         "batch" -> batch(caller, p)
         "putPermissions" -> putPermissions(caller, p)
         "purge" -> {
@@ -895,6 +895,16 @@ class Db8(private val service: String, file: File?,
     }
 
     /** A required top-level parameter, or db8's schema error (code 22) naming it. */
+    /** As the TouchPad answers (measured): 0 is no ids, a negative count is out of range, and
+     *  more than 1000 is refused. mojomail-eas keeps a pool of ids and counts on exactly that. */
+    private fun reserveIds(caller: String, p: JSONObject): String {
+        val count = (required(caller, p, "count") as? Number)?.toLong()
+            ?: throw DbError(22, "invalid parameters: caller='$caller' error='invalid type for property 'count''")
+        if (count < 0) throw DbError(22, "invalid parameters: caller='$caller' error='value out of range for property 'count''")
+        if (count > 1000) throw DbError(-3967, "cannot reserve more than 1000 ids")
+        return JSONObject().put("returnValue", true).put("ids", JSONArray((0 until count).map { newId() })).toString()
+    }
+
     private fun required(caller: String, p: JSONObject, name: String): Any =
         p.opt(name) ?: throw DbError(22, "invalid parameters: caller='$caller' error='required property not found - '$name''")
 

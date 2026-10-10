@@ -1432,8 +1432,41 @@ the TouchPad's own mail services. What it uses, and where Lunacy answers:
 - **Sending.** The compose window saves the message to the outbox; mojomail-smtp's outbox watch
   fires, it sends (TLS, `AUTH LOGIN`) and moves the message to Sent, and mojomail-imap appends
   it on the server.
-- **Not yet:** POP and Exchange (codepoet: IMAP and SMTP only for now); contacts (Email looks
-  up `com.palm.person`, which is there and empty); attachments haven't been tried.
+- **Not yet:** POP; attachments haven't been tried. Exchange has its own section below.
+
+## Exchange (EAS)
+
+Microsoft Exchange accounts work as on the TouchPad: mail, contacts, calendar and the global
+address list, through Palm's own `mojomail-eas` (1.1-122.2, the reference TouchPad's binary,
+EAS 2.5 to 14.1), run as a native service like the IMAP one (`com.palm.eas`, its D-Bus
+service file and the `ssl11mail` shim; libxml2 2.7.2 comes with it). Measured end to end on
+the Galaxy Tab A7 Lite against codepoet's Zoho test account (`msync.zoho.com`, EAS 14.1),
+with the reference TouchPad on the same account as the other side.
+
+- **Accounts.** The `com.palm.eas` template (Microsoft Exchange: Email, Contacts, Address
+  Lookup, Calendar) appears in Add an Account. Email's wizard validates with
+  `com.palm.eas/validateAccount` (Options, then a FolderSync as the provision test), and the
+  accounts service creates the account with the capabilities as the TouchPad's account has them.
+- **Sync and push.** After a FolderSync the service syncs each mail folder, contacts and the
+  calendar, then holds a Ping, so a change on the server (new mail, a contact, an event)
+  arrives within seconds. Local changes (read, delete, a new contact or event) go up through
+  the service's db8 watches.
+- **Sending.** SendMail, and GAL lookups from compose's address field (`queryGal`).
+- **Calendar** needs `com.palm.systemservice/timezone/getTimeZoneFromEasData` for every event
+  (SystemService.kt, measured, from the TouchPad's `/usr/palm/ext-timezones.json`), and
+  `com.palm.service.calendar.meetingupdate` (Palm's JS service, with the `calendar.io`
+  framework) for every event it sends up.
+- **Kinds.** The EAS kinds and the bases they extend that no bundled app brings
+  (`com.palm.securitypolicy`, `.device`, tasks and task lists) are the TouchPad's `/etc/palm`
+  files; the configurator now reads json-c's trailing commas, which the task-list kind has.
+- **Not done: security policies.** Zoho asks for none (`policyKey` 0). A server that requires a
+  device passcode (Office 365 commonly does) has Email set one through
+  `com.palm.systemmanager/setDevicePasscode` and friends, which webOS's LunaSysMgr enforced
+  (EASPolicyManager). Lunacy has no lock screen of its own (Android's is the real one), so
+  those calls fail honestly and such an account can't be set up. Whether to answer them from
+  Android's keyguard is codepoet's decision; see [eas.md](eas.md).
+
+More in [eas.md](eas.md): what was measured, HP's own bugs that show through, and what is open.
 
 ## Calendar
 

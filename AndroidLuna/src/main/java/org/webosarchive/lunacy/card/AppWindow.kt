@@ -157,6 +157,9 @@ open class AppWindow(
      * would otherwise hand the last one's attributes to the first.
      */
     private val pendingAttributes = java.util.concurrent.ConcurrentLinkedQueue<JSONObject>()
+    /** When the page's last window.open began, while its window isn't bound yet; 0 when none is pending. */
+    private val popupLock = Object()
+    private var popupSince = 0L
     @Volatile private var destroyed = false
     /** This page's open bus calls, by bridge token: subscriptions until they're cancelled. Main thread. */
     private val calls = HashMap<Int, Bus.Call>()
@@ -234,6 +237,8 @@ open class AppWindow(
                 if (child.type == "dashboard" || child.type == "popupalert") child.setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 (resultMsg.obj as WebViewTransport).webView = child
                 resultMsg.sendToTarget()
+                // The transport is handled on this thread, in order: after it, the window is bound.
+                main.post { synchronized(popupLock) { popupSince = 0L; popupLock.notifyAll() } }
                 host.onWindowOpened(this@AppWindow, child)
                 return true
             }
@@ -414,6 +419,8 @@ open class AppWindow(
     }
 
     private companion object {
+        /** How long an open holds the next one when no window comes of it. */
+        const val POPUP_WAIT_MS = 1000L
         /** Plausible process ids, in the range webOS apps started at. */
         val nextPid = java.util.concurrent.atomic.AtomicInteger(1183)
         val FOUR = setOf("up", "down", "left", "right")
@@ -531,9 +538,26 @@ open class AppWindow(
 
         @JavascriptInterface fun log(msg: String) { Log.i(AppServer.TAG, "[$appId] palm $msg") }
 
-        /** Called by the page's window.open wrapper just before the native open. */
+        /**
+         * Called by the page's window.open wrapper just before the native open. The page waits
+         * here (a bridge call blocks its script) until the last window it opened is bound to its
+         * view: WebView holds one new window at a time and drops another that reaches it first
+         * ("Blocking popup window creation as an outstanding popup window is still pending").
+         * Email lost its mail card that way, opened while its login-error dashboard was being
+         * bound. An open that never makes a window (a name already open) stops holding the next
+         * one after [POPUP_WAIT_MS].
+         */
         @JavascriptInterface
         fun nextWindow(attributesJson: String) {
+            synchronized(popupLock) {
+                val until = popupSince + POPUP_WAIT_MS
+                while (popupSince != 0L) {
+                    val left = until - android.os.SystemClock.uptimeMillis()
+                    if (left <= 0) break
+                    popupLock.wait(left)
+                }
+                popupSince = android.os.SystemClock.uptimeMillis()
+            }
             pendingAttributes.add(try { JSONObject(attributesJson) } catch (e: Exception) { JSONObject() })
         }
 

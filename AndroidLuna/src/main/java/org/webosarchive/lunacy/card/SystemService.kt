@@ -35,6 +35,7 @@ class SystemService(private val webosRoot: File, private val store: File) {
     fun register(bus: Bus) {
         bus.register(SERVICE, "time/getSystemTime", Bus.CallHandler { systemTime(it) })
         bus.register(SERVICE, "timezone/getTimeZoneRules", Bus.CallHandler { it.reply(timeZoneRules(it.raw)) })
+        bus.register(SERVICE, "timezone/getTimeZoneFromEasData", Bus.CallHandler { it.reply(timeZoneFromEasData(it.params)) })
         bus.register(SERVICE, "getPreferences", Bus.CallHandler { getPreferences(it) })
         bus.register(SERVICE, "setPreferences", Bus.CallHandler { setPreferences(it) })
         bus.register(SERVICE, "wallpaper/importWallpaper", Bus.CallHandler { importWallpaper(it) })
@@ -122,6 +123,97 @@ class SystemService(private val webosRoot: File, private val store: File) {
     }
 
     private val zoneIds by lazy { java.util.TimeZone.getAvailableIDs().toHashSet() }
+
+    /**
+     * palm://com.palm.systemservice/timezone/getTimeZoneFromEasData: the zone an Exchange
+     * server's time zone (Windows' TIME_ZONE_INFORMATION: bias in minutes west of UTC, and the
+     * two changes as "the nth weekday of a month") stands for. mojomail-eas asks it for every
+     * calendar event it syncs, and a failed answer fails the whole collection's sync.
+     *
+     * As luna-sysservice does it (TimeZoneService::cbGetTimeZoneFromEasData, Open webOS):
+     * the candidates are the zones of /usr/palm/ext-timezones.json's "timeZone" list whose
+     * offsetFromUTC is -bias, in the file's order. Unless both dates are whole (year, month,
+     * dayOfWeek, day, hour, minute and second, all integers in range), the first candidate is
+     * the answer; otherwise the first whose daylight saving this year starts and ends at those
+     * instants. mojomail-eas sends its dates without dayOfWeek, so on a device it always gets
+     * the first candidate. Measured on the reference TouchPad: bias 300 with US rules is
+     * America/Toronto, -60 Europe/Tirane, 0 Europe/London, -330 Asia/Kolkata, -600 with any dates
+     * missing dayOfWeek Australia/Brisbane; {} is "bias value missing", as is a bias that isn't
+     * an integer ("300", 300.5); 720 (in the list's syszones only) is "Failed to find any
+     * timezones with specified bias value", and whole dates that match no candidate "…with
+     * specified parametes" (sic). One difference: whole dates with Sydney's rules (bias -600)
+     * found no zone on the TouchPad, where this finds Australia/Melbourne, which they describe.
+     */
+    private fun timeZoneFromEasData(p: JSONObject): String {
+        val fail = { text: String -> JSONObject().put("returnValue", false).put("errorText", text).toString() }
+        val bias = p.opt("bias")
+        if (bias !is Int && bias !is Long) return fail("bias value missing")
+        val offset = -(bias as Number).toInt()
+        val candidates = easZones.filter { it.second == offset }.map { it.first }
+        if (candidates.isEmpty()) return fail("Failed to find any timezones with specified bias value")
+        val ok = { tz: String -> JSONObject().put("returnValue", true).put("timeZone", tz).toString() }
+        val standard = easDate(p.optJSONObject("standardDate"))
+        val daylight = easDate(p.optJSONObject("daylightDate"))
+        if (standard == null || daylight == null) return ok(candidates.first())
+        val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+        val stdDay = easDayOfMonth(standard, year)
+        val dstDay = easDayOfMonth(daylight, year)
+        for (id in candidates) {
+            if (id !in zoneIds) continue
+            val rules = yearRules(java.util.TimeZone.getTimeZone(id), id, year)
+            if (!rules.optBoolean("hasDstChange")) continue
+            // mktime with tm_isdst forced: the standard date is read as daylight time, the
+            // daylight date as standard time.
+            val end = wallClock(year, standard, stdDay) - rules.getLong("dstOffset")
+            val start = wallClock(year, daylight, dstDay) - rules.getLong("utcOffset")
+            if (end == rules.getLong("dstEnd") && start == rules.getLong("dstStart")) return ok(id)
+        }
+        return fail("Failed to find any timezones with specified parametes")
+    }
+
+    /** ext-timezones.json's "timeZone" list, as (ZoneID, offsetFromUTC) in the file's order. */
+    private val easZones: List<Pair<String, Int>> by lazy {
+        runCatching {
+            val list = JSONObject(File(webosRoot, "usr/palm/ext-timezones.json").readText()).getJSONArray("timeZone")
+            (0 until list.length()).mapNotNull { i ->
+                val z = list.optJSONObject(i) ?: return@mapNotNull null
+                val id = z.opt("ZoneID") as? String ?: return@mapNotNull null
+                val off = z.opt("offsetFromUTC") as? Number ?: return@mapNotNull null
+                if (!z.has("supportsDST")) return@mapNotNull null
+                id to off.toInt()
+            }
+        }.getOrElse { Log.w(AppServer.TAG, "systemservice: no ext-timezones.json: $it"); emptyList() }
+    }
+
+    /** An EAS date's month, dayOfWeek, week ("day", 5 = the last), hour, minute and second, or null unless whole. */
+    private fun easDate(o: JSONObject?): IntArray? {
+        if (o == null) return null
+        val v = listOf("year", "month", "dayOfWeek", "day", "hour", "minute", "second").map { k ->
+            val x = o.opt(k); if (x is Int || x is Long) (x as Number).toInt() else return null
+        }
+        val (_, month, dow, day) = v
+        if (month !in 1..12 || dow !in 0..6 || day !in 1..5 || v[4] !in 0..59 || v[5] !in 0..59 || v[6] !in 0..59) return null
+        return intArrayOf(month, dow, day, v[4], v[5], v[6])
+    }
+
+    /** The day of the month an EAS date's "nth weekday" falls on this year (updateEasDateDayOfMonth). */
+    private fun easDayOfMonth(d: IntArray, year: Int): Int {
+        val utc = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { clear(); set(year, d[0] - 1, 1) }
+        val firstWday = utc.get(java.util.Calendar.DAY_OF_WEEK) - 1
+        val last = utc.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
+        val days = IntArray(35) { -1 }
+        for (i in 1..last) if (i + firstWday - 1 < days.size) days[i + firstWday - 1] = i
+        var weekStart = 0
+        while (weekStart < 5 && days[weekStart * 7 + d[1]] == -1) weekStart++
+        val week = (weekStart + d[2] - 1).coerceIn(0, 4)
+        return days[week * 7 + d[1]]
+    }
+
+    /** Seconds since the epoch of the date's wall-clock time this year, read as UTC. */
+    private fun wallClock(year: Int, d: IntArray, day: Int): Long {
+        val utc = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { clear(); set(year, d[0] - 1, day, d[3], d[4], d[5]) }
+        return utc.timeInMillis / 1000
+    }
 
     /** One zone's year: its changes found by stepping a day at a time, each then narrowed to the second. */
     private fun yearRules(zone: java.util.TimeZone, id: String, year: Int): JSONObject {

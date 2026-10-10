@@ -40,7 +40,7 @@ apart from ids, revisions and page tokens.
   token object that way). `merge {query, props}` returns `{"count": n}`.
 - `del {ids}` marks objects `_del` and returns `{id, rev}`; with `"purge": true` they're
   removed and only `{id}` returns. `del {query}` returns `{"count": n}`.
-- `reserveIds {count}` returns `{"ids": [...]}`. `batch {operations: [{method, params}]}`
+- `reserveIds {count}` returns `{"ids": [...]}`, as the TouchPad does (measured 2026-10-10): `count` 0 gives `[]`, a negative one error 22 ("value out of range"), more than 1000 error -3967 ("cannot reserve more than 1000 ids"). mojomail-eas keeps a pool of reserved ids and asked for 0 and then -1; Lunacy had answered at least one id, which threw its count off. `batch {operations: [{method, params}]}`
   returns `{"responses": [...]}`.
 
 ## Queries

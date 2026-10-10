@@ -186,14 +186,14 @@ done
 # reference TouchPad (Workbench/vendor/touchpad/services-fw, os-services and etc-db).
 R=$L/rootfs
 mkdir -p $R/usr/palm/frameworks $R/usr/palm/services $R/usr/palm/public/accounts $R/etc/palm/db/kinds $R/etc/palm/db/permissions $R/etc/palm/tempdb $R/etc/palm/activities
-for f in foundations foundations.crypto foundations.io foundations.json foundations.xml mojoservice mojoservice.transport mojoservice.transport.sync underscore globalization mojoloader.js calendar contacts; do
+for f in foundations foundations.crypto foundations.io foundations.json foundations.xml mojoservice mojoservice.transport mojoservice.transport.sync underscore globalization mojoloader.js calendar calendar.io contacts; do
     cp -r $V/touchpad/services-fw/$f $R/usr/palm/frameworks/ 2>/dev/null || cp -r $V/touchpad/$f $R/usr/palm/frameworks/
 done
 cp -r $V/touchpad/services-fw/jsservicelauncher $R/usr/palm/services/
 cp -r $V/webos-ce/system/usr/palm/frameworks/contacts/. $R/usr/palm/frameworks/contacts/
 cat > $R/usr/palm/frameworks/NOTICE <<'NOTICE'
 Palm's JS service frameworks (foundations*, mojoservice*, globalization, underscore,
-mojoloader.js, calendar, contacts - webOS CE's copy, with its AppPrefs fix) and jsservicelauncher, copied from /usr/palm on the reference TouchPad
+mojoloader.js, calendar, calendar.io, contacts - webOS CE's copy, with its AppPrefs fix) and jsservicelauncher, copied from /usr/palm on the reference TouchPad
 (webOS CE 3.1.0). Status: treated as abandonware, like Mojo: no owner has asserted rights
 since webOS was discontinued. underscore is MIT (Jeremy Ashkenas).
 NOTICE
@@ -222,6 +222,16 @@ cat > $R/usr/palm/services/com.palm.service.calendar.reminders/NOTICE <<'NOTICE'
 Palm's calendar reminders service, copied from /usr/palm/services on the reference TouchPad
 (webOS CE 3.1.0), without its test list. Copyright Palm, Inc. / Hewlett-Packard. Never
 released under an open licence; distributed by Lunacy as abandonware, like Mojo.
+NOTICE
+# Calendar's meeting update service, which mails an event's attendees its invitation (an
+# iCalendar part, made with calendar.io) through the account's own transport. mojomail-eas
+# calls it for every event it sends up, with or without attendees, and fails the sync's
+# notifications without it.
+cp -r $V/touchpad/os-services/com.palm.service.calendar.meetingupdate $R/usr/palm/services/
+cat > $R/usr/palm/services/com.palm.service.calendar.meetingupdate/NOTICE <<'NOTICE'
+Palm's calendar meeting update service, copied from /usr/palm/services on the reference
+TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. / Hewlett-Packard. Never released under an
+open licence; distributed by Lunacy as abandonware, like Mojo.
 NOTICE
 # Contacts' services (Docs/architecture.md, "Contacts"): the contacts service (vCards,
 # favorites, sort order) and the linker, which joins contacts into the people the app lists.
@@ -351,10 +361,38 @@ cp -r $E/usr/palm/public/accounts/com.palm.imap $R/usr/palm/public/accounts/
 # handles which resource, which Email reads.
 cp -r $E/usr/palm/public/accounts/com.palm.othermail $R/usr/palm/public/accounts/
 cp $V/touchpad/command-resource-handlers.json $R/usr/palm/
+# Exchange ActiveSync: Palm's mojomail-eas (mail, contacts, calendar and tasks over EAS), as the
+# reference TouchPad runs it, on the same libraries and ssl11mail shim, with libxml2 besides
+# (autodiscover). Its kinds and the security-policy permission are /etc/palm/db's; the base
+# kinds it extends that no bundled app brings (security policies, the system manager's, and
+# tasks and task lists, which the TouchPad keeps in /etc/palm whether or not Tasks is there)
+# come with it. From Workbench/vendor/touchpad/eas, and etc-db for the tasks.
+A=$V/touchpad/eas
+cp $A/usr/bin/mojomail-eas $R/usr/bin/
+cp $A/sysroot/usr/lib/libxml2.so.2 $R/usr/lib/
+cp $A/usr/share/dbus-1/system-services/com.palm.eas.service $R/usr/share/dbus-1/system-services/
+cp $A/etc/palm/db/kinds/* $R/etc/palm/db/kinds/
+cp $A/etc/palm/db/permissions/com.palm.securitypolicy.eas $R/etc/palm/db/permissions/
+cp $A/etc/palm/db_kinds/com.palm.securitypolicy $A/etc/palm/db_kinds/com.palm.securitypolicy.device $R/etc/palm/db_kinds/
+cp $V/touchpad/etc-db/db/permissions/com.palm.securitypolicy $R/etc/palm/db/permissions/
+for k in com.palm.task com.palm.tasklist com.palm.tasklist.alltasks com.palm.tasklist.unfiled; do
+    cp $V/touchpad/etc-db/db/kinds/$k $R/etc/palm/db/kinds/
+    cp $V/touchpad/etc-db/db/permissions/$k $R/etc/palm/db/permissions/
+done
+cp -r $A/usr/palm/public/accounts/com.palm.eas $R/usr/palm/public/accounts/
+# The system service's zone list, which getTimeZoneFromEasData picks a zone from for every
+# Exchange calendar event (SystemService.kt). From Workbench/vendor/touchpad/tz.
+cp $V/touchpad/tz/ext-timezones.json $R/usr/palm/
+cat > $R/usr/palm/NOTICE.timezones <<'NOTICE'
+ext-timezones.json: the system service's list of time zones, from /usr/palm on the reference
+TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. / Hewlett-Packard; distributed by Lunacy as it
+shipped, as abandonware.
+NOTICE
 cat > $R/usr/bin/NOTICE.mail <<'NOTICE'
-mojomail-imap, mojomail-smtp and filecache, the D-Bus service files that start them, and the
-libraries under /usr/lib they link (libmojo*, libemail-common, libpalmsocket, libPmLogLib,
-libPmStateMachineEngine), with the IMAP and "Email Account" (othermail) templates,
+mojomail-imap, mojomail-smtp, mojomail-eas and filecache, the D-Bus service files that start
+them, and the libraries under /usr/lib they link (libmojo*, libemail-common, libpalmsocket,
+libPmLogLib, libPmStateMachineEngine), with the IMAP, Exchange (eas) and "Email Account"
+(othermail) templates, the EAS, security-policy and task kinds under /etc/palm/db,
 /usr/palm/command-resource-handlers.json and the kinds under
 /etc/palm/db_kinds, copied from the reference TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. /
 Hewlett-Packard; LG Electronics later released mojomail, db8 and filecache's predecessors
@@ -362,7 +400,8 @@ under the Apache 2.0 licence (https://github.com/openwebos). Distributed by Luna
 shipped, as abandonware.
 Third-party libraries from the same device, each under its own licence: GLib, GIO, GObject,
 GModule, GThread, glibmm, giomm and libsigc++ (LGPL 2.1), Boost 1.39 (Boost Software
-Licence), ICU 3.6 (ICU licence), jemalloc (BSD), c-ares (MIT), cJSON / mjson (MIT).
+Licence), ICU 3.6 (ICU licence), jemalloc (BSD), c-ares (MIT), cJSON / mjson (MIT), libxml2
+2.7.2 (MIT).
 /usr/lib/ssl11 and /usr/lib/ssl11mail: OpenSSL 1.1 (OpenSSL / SSLeay licence), curl 4.5.0
 (curl licence) and the webOS CE community's libssl_compat shim and mailssl.cnf, from the
 reference TouchPad, where webOS CE runs the mail services on them for TLS 1.2.

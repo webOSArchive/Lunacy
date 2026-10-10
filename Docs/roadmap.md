@@ -3,7 +3,21 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-10-09)
+## Where things stand (2026-10-10)
+
+**2026-10-10: Exchange ActiveSync** (codepoet: "port the EAS sync functionality from webOS to
+Lunacy", working autonomously). Palm's own `mojomail-eas` runs as a native service, like IMAP:
+on the Galaxy Tab A7 Lite against codepoet's Zoho test account, Email adds a Microsoft
+Exchange account, syncs, reads, sends (codepoet received the test mail), deletes, looks up the
+address list and gets push through Ping; Contacts and Calendar sync both ways, checked
+against the reference TouchPad on the same account. Fixed on the way, all general and
+measured on the TouchPad: db8's `reserveIds` edge cases, `getTimeZoneFromEasData`, Palm's
+meeting update service and `calendar.io`, the configurator reading json-c's trailing commas,
+and a WebView race that dropped a window opened right after another. Open: security policies
+(a server that requires a device passcode can't be added; a decision for codepoet), tasks,
+attachments, a real Exchange server. See [eas.md](eas.md). Uncommitted.
+
+## Where things stood (2026-10-09)
 
 **2026-10-09: 0.7.0 released** (codepoet). The test round's faults fixed and pushed through
 b2362ec (build 216, compared by codepoet on six devices): Pandora and Plex through the local

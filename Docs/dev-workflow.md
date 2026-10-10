@@ -12,7 +12,7 @@ out on the reference devices. Changes made to the Android device are listed sepa
 | `AndroidLuna/src/main/assets/luna/` | LunaCE images (Apache 2.0), Prelude fonts and TouchPad wallpapers (abandonware), each with a NOTICE | yes |
 | `AndroidLuna/src/main/assets/lunacy/` | Injected page scripts: `compat.js` (input model, flicks, uncaught errors), `bridge.js` (PalmSystem, PalmServiceBridge), `net.js` (network shim), `websql.js` (WebSQL on WebViews that dropped it), `fonts.css` (generated) | yes |
 | `AndroidLuna/src/main/assets/certs/` | Mozilla CA roots for Lunacy's own HTTP (MPL 2.0), with a NOTICE | yes |
-| `AndroidLuna/src/main/assets/apps/` | The bundled apps: Lunacy's own (Device Info, the shortcuts to Android's settings, Sounds & Alerts), Palm's own that ship as abandonware (Screen & Lock, Help, Exhibition, Clock, Calculator, Memos, and the Video Player, which has no icon and is launched by other apps), and App Catalog 6.2, webOS Archive's restoration of the TouchPad's own. Each carries a NOTICE | yes |
+| `CoreApps/` | The bundled apps, outside the shell so they can be compared and shared with LuneOS (the build copies them into the APK at `assets/apps/`; [README](../CoreApps/README.md)): Lunacy's own (Device Info, the shortcuts to Android's settings, Sounds & Alerts), Palm's own that ship as abandonware (Screen & Lock, Help, Exhibition, Clock, Calculator, Memos, and the Video Player, which has no icon and is launched by other apps), and App Catalog 6.2, webOS Archive's restoration of the TouchPad's own. Each carries a NOTICE | yes |
 | `AndroidLuna/src/main/assets/luna-systemui/` | The system UI webOS served from the OS, at its own paths: Lunacy's file picker | yes |
 | `LunaRuntimes/enyo-1.0/` | Lunacy's changes to Enyo, as patches against upstream, with CHANGES.md as the fork's change log | yes |
 | `LunaRuntimes/mojo/` | Lunacy's changes to Palm's Mojo, likewise, with CHANGES.md explaining how Mojo is packaged | yes |
@@ -38,7 +38,7 @@ out on the reference devices. Changes made to the Android device are listed sepa
 | `Workbench/vendor/touchpad/os-services/`, `etc-db/`, `etc-openal/`, `etc-activities/` | The TouchPad's OpenAL configuration, its palmprofile, accounts, calendar reminders and meeting update, contacts and contacts linker services, its account templates, its `/etc/palm/db` and `tempdb` kinds, and the contacts services' `/etc/palm/activities` files; `fetch-assets.sh` builds the webOS root's ROM from them. `contacts-tp/` is the raw pull they came from | no |
 | `Workbench/vendor/touchpad/icu/` | The TouchPad's `libicuio`, `libicule` and `libiculx` (ICU 3.6), which Quick Office's plugin links besides the ICU the mail services brought; `fetch-assets.sh` lays them into the ROM's `/usr/lib` | no |
 | `Workbench/vendor/webos-ce/` | A copy of the webOS CE project's `system/` folder (CE's palmprofile account template, Enyo accounts library with the App Catalog icon, `contacts` framework and Mojo's `palmcontactsVersion1_0` builtin), with the commit it was taken at in `COMMIT`; `fetch-assets.sh` lays them over the TouchPad's | no |
-| `Workbench/vendor/settings-apps/` | Palm's settings apps not yet shipped; `fetch-assets.sh` copies the ones that aren't already in `assets/apps/` into `local-assets/apps/` for testing | no |
+| `Workbench/vendor/settings-apps/` | Palm's settings apps not yet shipped; `fetch-assets.sh` copies the ones that aren't already in `CoreApps/` into `local-assets/apps/` for testing | no |
 | `Workbench/results/` | Screenshots and logs | no |
 | `Meta/` | codepoet's artwork, including the launcher icon the mipmaps are made from | yes |
 | `out/` | Where both modules' APKs are copied when they build | no |
@@ -46,6 +46,7 @@ out on the reference devices. Changes made to the Android device are listed sepa
 ## Build and run
 
 ```sh
+./build.sh debug --fetch        # fetch-assets.sh, then every APK into out/ (BUILDING.md); ./build.sh release for a release
 AndroidLuna/fetch-assets.sh     # once, and whenever the vendor clones change (needs NDK r21e)
 ./gradlew assembleDebug         # both modules; :AndroidLuna:assembleDebug for the shell alone
 ./gradlew lintDebug             # NewApi is fatal: minSdk 21 must hold

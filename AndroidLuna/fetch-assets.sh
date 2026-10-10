@@ -39,11 +39,11 @@ webOS CE project's (the community enyo-accounts 1.1.1.1, with CE's strings and A
 NOTICE
 cp -r ../Workbench/apps-src/com.ingloriousapps.glimpse/usr/palm/applications/com.ingloriousapps.glimpse $T/apps/
 # Palm's own settings apps that Lunacy ships (Screen & Lock, Help) are committed under
-# assets/apps/ with their NOTICE, like Mojo and the fonts. Any others under
+# ../CoreApps/ with their NOTICE, like Mojo and the fonts. Any others under
 # Workbench/vendor/settings-apps/ are copied here for testing and stay out of the repo.
 for a in $V/settings-apps/*; do
     id=$(basename "$a")
-    [ -d "$a" ] && [ ! -d "src/main/assets/apps/$id" ] && cp -r "$a" $L/apps/
+    [ -d "$a" ] && [ ! -d "../CoreApps/$id" ] && cp -r "$a" $L/apps/
 done
 # Records a tree's symlinks as a manifest - "link target", both relative to the tree, the
 # target followed to a real file - and takes the links out. Gradle's asset merger refuses a

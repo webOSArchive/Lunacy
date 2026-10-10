@@ -53,7 +53,7 @@ What this target means:
   receivers for implicit broadcasts are refused (Lunacy has neither), and Android's autofill
   reaches WebView forms (to check against the TouchPad).
 - **First Use.** A webOS device put a First Use app in front of a new owner. Lunacy's
-  (`assets/apps/org.webosarchive.lunacy.firstuse`, no launcher icon) is launched by the shell
+  (`CoreApps/org.webosarchive.lunacy.firstuse`, no launcher icon) is launched by the shell
   on the first start and asks for the Android permissions above, one page each, in Palm's
   First Use look; on Android 5, which granted them at install, it is a welcome and Done. It
   talks to Lunacy's own service: `permissions/status`, `permissions/request` (storage puts up

@@ -51,6 +51,8 @@ android {
     // populated by fetch-assets.sh into local-assets/, which is gitignored. The fonts and
     // wallpapers are committed under src/main/assets/luna with their NOTICE.
     sourceSets["main"].assets.srcDirs("src/main/assets", "local-assets")
+    // The bundled apps live in ../CoreApps, outside the shell, so they can be compared with
+    // and shared with LuneOS (codepoet); bundleCoreApps puts them in the APK at assets/apps/.
     // Test apps users shouldn't get go in only when asked for: ./gradlew assembleDebug
     // -PtestApps. Releases leave them out (codepoet). test-apps/ is Lunacy's own (Notify
     // Test); local-test-apps/ is fetch-assets.sh's (Glimpse, the Enyo samples).
@@ -72,4 +74,24 @@ android {
         create("arm32") { dimension = "abi"; ndk { abiFilters += "armeabi-v7a" }; targetSdk = 24 }
         create("arm64") { dimension = "abi"; ndk { abiFilters += "arm64-v8a" }; targetSdk = 28 }
     }
+}
+
+/** Copies ../CoreApps into a generated asset root as apps/, following its symlinks. */
+abstract class BundleCoreApps : DefaultTask() {
+    @get:InputDirectory @get:PathSensitive(PathSensitivity.RELATIVE) abstract val apps: DirectoryProperty
+    @get:OutputDirectory abstract val output: DirectoryProperty
+    @get:Inject abstract val fs: FileSystemOperations
+
+    @TaskAction fun run() {
+        // The folder's own README is for people, not an app.
+        fs.sync { from(apps) { exclude { it.relativePath.segments.size == 1 && it.name == "README.md" } }; into(output.dir("apps")) }
+    }
+}
+
+val bundleCoreApps = tasks.register<BundleCoreApps>("bundleCoreApps") {
+    apps.set(rootProject.layout.projectDirectory.dir("CoreApps"))
+}
+
+androidComponents.onVariants { variant ->
+    variant.sources.assets?.addGeneratedSourceDirectory(bundleCoreApps, BundleCoreApps::output)
 }

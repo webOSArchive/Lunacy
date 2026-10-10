@@ -20,7 +20,8 @@ optional companion keyboard. Neither depends on the other.
 
 | | |
 |---|---|
-| `AndroidLuna/` | The shell: Kotlin and Android Views, `minSdk 21`. Its `src/main/assets/` carries the bundled apps, the Luna artwork and the injected page scripts. |
+| `AndroidLuna/` | The shell: Kotlin and Android Views, `minSdk 21`. Its `src/main/assets/` carries the Luna artwork and the injected page scripts. |
+| `CoreApps/` | The bundled webOS apps, one folder per app id with its NOTICE ([its README](CoreApps/README.md)). The build copies them into the APK at `assets/apps/`. |
 | `LunaKeyboard/` | The keyboard, an `InputMethodService`. Self-contained; see [its README](LunaKeyboard/README.md). |
 | `LunaRuntimes/` | Lunacy's changes to the frameworks apps load from the OS - `enyo-1.0/` and `mojo/` - as patch series with a CHANGES.md against upstream. Not compiled: `fetch-assets.sh` applies them to a stock tree. |
 | `AndroidLuna/tools/build-busybox.sh` | Builds busybox for both ABIs against Android's own libc (bionic), as position-independent executables, without `FEATURE_SUID`. Android's seccomp policy for apps kills a process on any system call bionic doesn't make: the prebuilt busyboxes call `setuid()` as every applet starts, and a static glibc build died in its own startup on Android 17 (package scripts died with exit 159 either way, and the 64-bit root had no commands at all). Needs only the NDK. `fetch-assets.sh` runs it when `local-build/busybox/out/` has no build and copies that build into `local-jni/` on every run; delete `out/` to rebuild. The applets bionic can't build (mount, hush, ifconfig, su and a few more) are listed in the script; none is anything a package script uses. |
@@ -32,14 +33,46 @@ optional companion keyboard. Neither depends on the other.
 
 ## Build
 
+`build.sh` at the top of the repo is the one way to build, and the same commit builds the same
+bytes each time:
+
+```sh
+./build.sh debug                 # the shell for both ABIs and the keyboard, debug-signed
+./build.sh debug --fetch         # the same, after running fetch-assets.sh
+./build.sh debug --test-apps     # a development build, with the test apps
+./build.sh release               # signed with codepoet's key: fresh assets, clean build, lint
+```
+
+It checks the toolchain first (JDK 17, the SDK in `local.properties`, `local-assets/`
+populated), and then:
+
+- runs Gradle without the daemon or the build cache;
+- removes the old APKs of the same type from `out/`;
+- checks that every APK it expects is there;
+- writes `out/SHA256SUMS`;
+- prints the version, the build number and the commit.
+
+A release has more rules. It refuses:
+
+- a tree with uncommitted changes, because the build number is the last commit's;
+  `--allow-dirty` overrides this;
+- a missing `keystore.properties`;
+- `--test-apps`.
+
+A release also runs `fetch-assets.sh` (`--no-fetch` skips that), builds from clean, runs lint,
+and checks every signature with `apksigner`. The APKs are reproducible because AGP's encrypted
+dependency block is left out of them (it was new bytes on every build); app bundles keep it for
+Google Play. The Gradle tasks underneath still work alone:
+
 ```sh
 AndroidLuna/fetch-assets.sh      # once, and again whenever the vendor clones change
 ./gradlew assembleDebug          # both APKs
 ./gradlew lintDebug              # NewApi is fatal here: minSdk 21 has to hold
 ```
 
-Both APKs land in **`out/`** at the top of the repo, named after their module and variant:
-`out/AndroidLuna-debug.apk` and `out/LunaKeyboard-debug.apk`. (Gradle also leaves its own
+The APKs land in **`out/`** at the top of the repo, named after their module, ABI and variant:
+`out/AndroidLuna-arm32-debug.apk`, `out/AndroidLuna-arm64-debug.apk` and
+`out/LunaKeyboard-debug.apk`. (Gradle also leaves its own
 copies under each module's `build/outputs/apk/`; `out/` is the one to reach for.) Build one
 alone with `./gradlew :AndroidLuna:assembleDebug` or `./gradlew :LunaKeyboard:assembleDebug`,
 and `./gradlew clean` empties `out/` along with the modules' build folders.
@@ -104,7 +137,7 @@ how visual changes are checked.
 
 ## Signed releases
 
-A release is `./gradlew assembleRelease`: `out/AndroidLuna-arm32-release.apk`,
+A release is `./build.sh release` (or `./gradlew assembleRelease`): `out/AndroidLuna-arm32-release.apk`,
 `out/AndroidLuna-arm64-release.apk` and `out/LunaKeyboard-release.apk`, signed with
 codepoet's key from 0.5.5 on. The key is named in `keystore.properties` at the top of the
 repo, which is git-ignored and stays on the machine that builds releases (its format is in

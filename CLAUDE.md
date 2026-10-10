@@ -47,7 +47,8 @@ Enyo/Mojo frameworks and a simulated Luna service bus. Read [README.md](README.m
 ## Layout
 
 One Gradle root builds two APKs. `AndroidLuna/` is the shell; `LunaKeyboard/` is the optional
-companion keyboard and depends on nothing in Lunacy. `LunaRuntimes/enyo-1.0/` and
+companion keyboard and depends on nothing in Lunacy. `CoreApps/` holds the bundled webOS apps,
+one folder per app id, kept outside the shell so they can be compared and shared with LuneOS. `LunaRuntimes/enyo-1.0/` and
 `LunaRuntimes/mojo/` hold Lunacy's changes to the frameworks apps load from the OS, as patch
 series applied to a stock tree by `AndroidLuna/fetch-assets.sh`. See
 [BUILDING.md](BUILDING.md); `Docs/dev-workflow.md` has the folder-by-folder table.

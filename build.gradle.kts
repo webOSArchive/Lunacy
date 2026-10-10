@@ -62,6 +62,20 @@ subprojects {
     }
 }
 
+/**
+ * The same commit builds the same APK bytes. AGP otherwise puts the dependency list in the
+ * APK's signing block encrypted for Google Play, with a fresh key each build, so no two APKs
+ * matched. Play reads it from an app bundle, not an APK, so bundles keep it: a Play build of
+ * Lunacy (codepoet, 2026-10-10: a limited one is planned) is a bundle.
+ */
+subprojects {
+    plugins.withId("com.android.application") {
+        extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
+            dependenciesInfo { includeInApk = false }
+        }
+    }
+}
+
 /** Clears out/ along with the modules' own build folders. */
 tasks.register<Delete>("clean") {
     delete(outDir)

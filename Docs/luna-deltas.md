@@ -309,6 +309,34 @@ So WebKit 534.6 dropped any margin that would collapse out through the top or bo
 
 **An engine-forced delta, 2026-10-09, measured on the Kyocera A101BM, codepoet's direction.** The TouchPad's screen had no cutout. A phone with a camera in the screen reports a cutout (on the Kyocera a band 164 px high across the top, the camera's bounds at x 885 to 993), and Android places a full-screen window below it, so the shell started 164 px down under a black band. Android's own launchers draw there. The shell's window now takes the cutout (`LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES`, Android 9 and later) and runs up to the screen's top edge as on a device without one (`ShellActivity.fitCutout`). Where the camera crosses the status bar, the bar's items step past it whole (`StatusBar.cutout`, with a 3 px margin). The title moves right of it, and the system group and the dashboard icons move left of it, so on the Kyocera the whole system group sits to the camera's left. The bar's ends also keep inside the screen's rounded top corners: the title and the ▾ move in as far as the curve reaches at the height of the title's capitals, plus 2 px. Android 12 and later report the corners' radii. The Kyocera reports 0, so a screen with a cutout that reports no corners is taken to have rounded ones, a tenth of its short side in radius (108 px on the Kyocera; the title moves from 19 px to 48 px). The taps follow the items. What the camera covers below the bar (on the Kyocera, the top right of a card or the launcher) is lost behind it, which codepoet accepted. A cutout at the side or the bottom (the phone turned) stays a black band beside the shell, as Android left it, so a card's edge never goes under the camera. Without a cutout, nothing changes.
 
+### A21. The device lock is Android's
+
+**A deliberate delta, codepoet's decision, 2026-10-10.** On the TouchPad, LunaSysMgr kept a
+passcode of its own and its lock screen asked for it; an Exchange server's policy (a PIN of
+at least so many digits, say) was enforced against that passcode. Lunacy has no lock screen:
+Android's is the real one, and a webOS passcode would protect nothing. So
+`com.palm.systemmanager`'s lock calls answer from Android (`SecurityPolicy.kt`). A policy that
+requires a password is enforced when Android has a secure screen lock, `getDeviceLockMode`
+reports `none` when it hasn't, and `pin` or `password` (whichever was last set through webOS,
+`password` otherwise) when it has. What a person sees:
+
+- **Setting a PIN or password** (Email's "Device Password Required", Screen & Lock's Secure
+  Unlock) shows webOS's dialogs as on the TouchPad, and the passcode is checked against the
+  policy with the TouchPad's own messages. Then **Android's Screen lock type chooser opens**,
+  and the person sets the lock there, typing it again. The answer is whatever Android has on
+  return: no secure lock is an error ("Android's screen lock was not set", -7). The passcode
+  typed into webOS's dialog is not kept.
+- **Turning it off** (Screen & Lock's Off) opens the same chooser, where Android first asks for
+  the current credential.
+- **Checking it** (`matchDevicePasscode`, Screen & Lock's Change PIN) opens Android's own
+  credential confirmation; the passcode typed into webOS's dialog is ignored.
+- **A lock set or removed in Android's settings** is noticed when Lunacy comes back to the
+  front, and the policy's status follows it.
+- **Not done:** Screen & Lock's Lock After stores webOS's `lockTimeout` but Android's lock delay
+  stays Android's (an app can't set it); a policy's inactivity timeout and failed-attempt limit
+  are reported but not enforced (Android counts its own attempts); a server's remote wipe
+  (`com.palm.storage`) is not answered.
+
 ## B. The shell
 
 ### B1. Card view: stacks, reorder, dimming, the angry card
@@ -542,8 +570,8 @@ error from `Bus`; these are the ones apps and frameworks call.
 
 ### C2. `com.palm.systemmanager`
 
-Nothing is registered, so every call gets "Service does not exist", which is honest. The
-methods the C++ registers ([SystemService.cpp](https://github.com/webOSArchive/LunaCE/blob/master/Src/base/SystemService.cpp),
+Only the lock's four methods are registered (A21); any other gets "Unknown method", which is
+honest. The methods the C++ registers ([SystemService.cpp](https://github.com/webOSArchive/LunaCE/blob/master/Src/base/SystemService.cpp),
 the `{ "name", cb… }` table near the top) and which are worth having:
 
 | Method | What | Lunacy step |
@@ -554,7 +582,7 @@ the `{ "name", cb… }` table near the top) and which are worth having:
 | `systemUi` | the launcher and system-UI verbs (`launchertitlechange`, `launcheraction`, `showAppMenu`, `quicklaunch`, `virtualkeyboard`, `addcard`, `deletecard`…); the key list is in the file | only `launchertitlechange` (with B5's tab rename) is worth doing; the rest served luna-systemui |
 | `subscribeToSystemUI` / `publishToSystemUI` | the channel luna-systemui listened on | not needed: Lunacy's own picker replaces luna-systemui |
 | `takeScreenShot` | writes a PNG, plays `shutter` | easy (`PixelCopy` isn't on API 21; draw the root view to a bitmap); low priority |
-| `getSecurityPolicy`, `getDeviceLockMode`, `setDevicePasscode`, `matchDevicePasscode` | the lock screen's | keep the honest error (fix-log: Lunacy has no lock screen, Android's is real) |
+| `getSecurityPolicy`, `getDeviceLockMode`, `setDevicePasscode`, `matchDevicePasscode` | the lock screen's | **done 2026-10-10**, answered from Android's lock (A21, `SecurityPolicy.kt`) |
 | `launchModalApp` / `dismissModalApp` | a 320×480 modal child card over the caller, with the `#0F0F0F` 60 % scrim | see D; only Palm's Accounts uses it |
 | `runProgressAnimation`, `applicationHasBeenTerminated`, `setAnimationValues`, the debug ones | n/a | never |
 

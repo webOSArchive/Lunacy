@@ -67,6 +67,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var mediaServer: org.webosarchive.lunacy.card.MediaServer
     private lateinit var configurator: org.webosarchive.lunacy.card.Configurator
     private lateinit var systemService: org.webosarchive.lunacy.card.SystemService
+    private lateinit var securityPolicy: org.webosarchive.lunacy.card.SecurityPolicy
+    /** Android's screen-lock setup is open for a setDevicePasscode: what to do when the person is back. */
+    private var lockReturn: (() -> Unit)? = null
+    private var lockLeft = false
+    /** Android's credential confirmation is open for a matchDevicePasscode. */
+    private var confirmReturn: ((Boolean) -> Unit)? = null
     private lateinit var audio: org.webosarchive.lunacy.card.AudioService
     private lateinit var displayService: org.webosarchive.lunacy.card.DisplayService
     /** The wallpaper view, reloaded when the preference changes. */
@@ -536,9 +542,39 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     override fun onResume() {
         super.onResume(); inFront = true
+        if (lockLeft) { lockLeft = false; val back = lockReturn; lockReturn = null; back?.invoke() }
+        if (::securityPolicy.isInitialized) securityPolicy.recheck()
     }
 
-    override fun onPause() { inFront = false; org.webosarchive.lunacy.card.CookieFlush.now(); super.onPause() }
+    override fun onPause() {
+        inFront = false; if (lockReturn != null) lockLeft = true
+        org.webosarchive.lunacy.card.CookieFlush.now(); super.onPause()
+    }
+
+    @Deprecated("Lunacy's minSdk 21 has no ActivityResult API")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == CONFIRM_LOCK) { val back = confirmReturn; confirmReturn = null; back?.invoke(resultCode == RESULT_OK) }
+    }
+
+    /** Android's side of webOS's device lock (SecurityPolicy): Android's own lock screen is the lock. */
+    private val lockHost = object : org.webosarchive.lunacy.card.SecurityPolicy.Host {
+        private val keyguard get() = getSystemService(KEYGUARD_SERVICE) as android.app.KeyguardManager
+        override fun isSecure() = keyguard.isKeyguardSecure
+        override fun chooseLock(done: () -> Unit): Boolean {
+            // The screen-lock chooser itself, or failing that the security settings it is in.
+            val ok = listOf(android.app.admin.DevicePolicyManager.ACTION_SET_NEW_PASSWORD, android.provider.Settings.ACTION_SECURITY_SETTINGS)
+                .any { action -> runCatching { startActivity(android.content.Intent(action)) }.isSuccess }
+            if (ok) { lockReturn = done; lockLeft = false }
+            return ok
+        }
+        override fun confirmLock(done: (Boolean) -> Unit): Boolean {
+            val intent = keyguard.createConfirmDeviceCredentialIntent(null, null) ?: return false
+            val ok = runCatching { startActivityForResult(intent, CONFIRM_LOCK) }.isSuccess
+            if (ok) confirmReturn = done
+            return ok
+        }
+    }
 
     // ---- apps ----
 
@@ -853,6 +889,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val before = registry.launchPoints.associateBy { it.id }
         registry.reload()
         configurator.run()
+        securityPolicy.load()
         Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "apps rescanned in ${System.currentTimeMillis() - start} ms")
         launcher.setApps(launchPoints())
         dockMode.launchPointsChanged()
@@ -2036,6 +2073,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         sleepWake.start()
         configurator = org.webosarchive.lunacy.card.Configurator(files, db8, tempdb, webos.root, bus)
         configurator.run()
+        // Exchange's security policies and the device lock, once the kinds are there (SecurityPolicy).
+        securityPolicy = org.webosarchive.lunacy.card.SecurityPolicy(bus, lockHost, java.io.File(filesDir, "securitypolicy.json"))
+        securityPolicy.register()
+        securityPolicy.load()
         bus.register("com.palm.applicationManager", "launch", launchHandler)
         bus.register("com.palm.applicationManager", "open", launchHandler)
         // What Enyo's CrossAppUI asks for before loading another app's UI. The reference
@@ -2448,6 +2489,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     companion object {
+        /** onActivityResult code for Android's credential confirmation (matchDevicePasscode). */
+        private const val CONFIRM_LOCK = 201
         /** The launcher's launch point title, com.palm.launcher's on the reference TouchPad. */
         const val LAUNCHER_TITLE = "Launcher"
         /** An unreported rounded corner's radius on a screen with a cutout, as a part of its short side (fitCutout). */

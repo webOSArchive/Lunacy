@@ -36,7 +36,7 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
         // apps, since they extend kinds an app owns (com.palm.imap.account extends the Email
         // app's com.palm.mail.account).
         if (system != null) {
-            val kinds = parseFiles(File(system, "etc/palm/db_kinds"), "/etc/palm/db_kinds") { text, _ -> JSONObject(text) }
+            val kinds = parseFiles(File(system, "etc/palm/db_kinds"), "/etc/palm/db_kinds") { text, _ -> JSONObject(jsonC(text)) }
             if (kinds.isNotEmpty()) db.configure(kinds, emptyList())
         }
         // The file cache's types, as webOS's configurator defined them at boot ("filecache"):

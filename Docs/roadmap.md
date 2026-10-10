@@ -13,9 +13,11 @@ address list and gets push through Ping; Contacts and Calendar sync both ways, c
 against the reference TouchPad on the same account. Fixed on the way, all general and
 measured on the TouchPad: db8's `reserveIds` edge cases, `getTimeZoneFromEasData`, Palm's
 meeting update service and `calendar.io`, the configurator reading json-c's trailing commas,
-and a WebView race that dropped a window opened right after another. Open: security policies
-(a server that requires a device passcode can't be added; a decision for codepoet), tasks,
-attachments, a real Exchange server. See [eas.md](eas.md). Uncommitted.
+and a WebView race that dropped a window opened right after another (f057b07). Then, on
+codepoet's go-ahead, Exchange's security policies (luna-deltas A21): LunaSysMgr's
+EASPolicyManager ported, with Android's own screen lock as the device lock, so a server that
+requires a device password can be added; Screen & Lock's Secure Unlock follows Android's lock.
+Open: a real server's policy, tasks, attachments. See [eas.md](eas.md). Not pushed.
 
 ## Where things stood (2026-10-09)
 

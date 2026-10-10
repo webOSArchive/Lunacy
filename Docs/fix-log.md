@@ -290,6 +290,7 @@ fixed-viewport fallback is allowed).
 | 2026-10-10 | Every event sent up logs a critical "Service does not exist: com.palm.service.calendar.meetingupdate" | mojomail-eas | Palm's meeting update service wasn't shipped | ROM (the TouchPad's service and `calendar.io`) |
 | 2026-10-10 | `com.palm.tasklist` kind not registered ("Expected literal value") | the configurator, the TouchPad's own kind file | A comma before a closing brace, which json-c accepted and org.json refuses | bus (configurator reads json-c's trailing commas) |
 | 2026-10-10 | Email's card stays on its splash after launch | Email, with its login-error dashboard opening at the same time (seen once) | WebView drops a window opened before the last one is bound ("outstanding popup window is still pending") | shell (`nextWindow` waits for the last window to be bound, 1 s at most) |
+| 2026-10-10 | An Exchange server that requires a device password can't be added | Email (Exchange) | `com.palm.systemmanager`'s lock calls were unregistered (Lunacy has no lock screen) | bus (`SecurityPolicy`: EASPolicyManager's policies, enforced by Android's lock; luna-deltas A21) |
 
 ## Known gaps, by the layer they belong to
 
@@ -310,9 +311,10 @@ Found while testing the apps below; each is general, not tied to one app.
   under the names a webOS device used (`downloads`, `music`, `photos`, `documents`, `camera`,
   `video`), so it shows the files the user actually has. Proved end to end: Papyrus imported
   and read an ePub from Android's Downloads folder, unchanged.
-- **bus, not implemented:** `com.palm.systemmanager` (`getSecurityPolicy`, `getDeviceLockMode`,
-  `setDevicePasscode`). Lunacy has no lock screen — Android's is the real one — so Screen &
-  Lock's Secure Unlock shows Off and gets an honest error if it is changed.
+- ~~**bus, not implemented:** `com.palm.systemmanager` (`getSecurityPolicy`, `getDeviceLockMode`,
+  `setDevicePasscode`)~~ — done 2026-10-10, answered from Android's own lock (luna-deltas A21):
+  Screen & Lock's Secure Unlock shows Android's lock and sets it through Android's chooser, and
+  Exchange's password policies are enforced by it.
 - ~~**system files:** `tellurium_config.json`~~ — done 2026-09-20.
 - **framework, enyo.WebView:** what only the plugin could do is logged, not done: saving the
   view or an image to a file, resizing an image, the plugin's own dialogs, printing and

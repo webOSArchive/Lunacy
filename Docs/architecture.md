@@ -675,9 +675,9 @@ actually owns, and each settings app falls into one of three cases:
 - **Palm's app, unchanged**, where Lunacy can answer what it asks for. Screen & Lock is the
   first: `com.palm.systemservice` stores its preferences and holds the wallpaper,
   `com.palm.display/control` really does set Android's brightness and screen-off timeout, and
-  Change Wallpaper opens the file picker below. What Lunacy hasn't got (a lock screen:
-  `com.palm.systemmanager`) returns the bus's honest error, and the app shows what it showed
-  on a device when a service failed.
+  Change Wallpaper opens the file picker below. Secure Unlock shows Android's own screen lock
+  and sets it through Android's chooser (`com.palm.systemmanager`, luna-deltas A21); its Lock
+  After is stored but can't move Android's lock delay.
 - **A shortcut to Android's own screen**, where the setting belongs to the host OS and a copy
   of webOS's UI could only pretend. Wi-Fi is an icon that opens Android's
   settings through `palm://org.webosarchive.lunacy/android/openSettings`. They declare it with
@@ -1459,12 +1459,11 @@ with the reference TouchPad on the same account as the other side.
 - **Kinds.** The EAS kinds and the bases they extend that no bundled app brings
   (`com.palm.securitypolicy`, `.device`, tasks and task lists) are the TouchPad's `/etc/palm`
   files; the configurator now reads json-c's trailing commas, which the task-list kind has.
-- **Not done: security policies.** Zoho asks for none (`policyKey` 0). A server that requires a
-  device passcode (Office 365 commonly does) has Email set one through
-  `com.palm.systemmanager/setDevicePasscode` and friends, which webOS's LunaSysMgr enforced
-  (EASPolicyManager). Lunacy has no lock screen of its own (Android's is the real one), so
-  those calls fail honestly and such an account can't be set up. Whether to answer them from
-  Android's keyguard is codepoet's decision; see [eas.md](eas.md).
+- **Security policies** (`SecurityPolicy.kt`, luna-deltas A21). A server that requires a device
+  password gets one, enforced by Android's own screen lock: EASPolicyManager's aggregate of the
+  `com.palm.securitypolicy` records is kept as on webOS, Email's "Device Password Required" and
+  PIN dialogs are webOS's, and the lock itself is set in Android's chooser. Measured against the
+  TouchPad's replies; a real server's policy is still to try.
 
 More in [eas.md](eas.md): what was measured, HP's own bugs that show through, and what is open.
 

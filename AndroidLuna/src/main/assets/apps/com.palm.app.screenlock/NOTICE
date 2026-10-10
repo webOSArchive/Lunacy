@@ -14,5 +14,6 @@ stylesheets/screenlock.css): the view fits a phone's card, which Palm's fixed 50
 not, and every footnote under a group has the same 6 px above and 9 px below. Everything else
 is Palm's and runs because Lunacy answers what it asks for: com.palm.systemservice keeps its
 preferences and its wallpaper, com.palm.display/control sets Android's brightness and
-screen-off timeout, and enyo.FilePicker finds Lunacy's picker at webOS's own path. What
-Lunacy hasn't got - a lock screen, com.palm.systemmanager - returns the bus's honest error.
+screen-off timeout, enyo.FilePicker finds Lunacy's picker at webOS's own path, and
+com.palm.systemmanager's lock calls answer from Android's own screen lock, which Secure Unlock
+sets through Android's chooser (Docs/luna-deltas.md, A21).

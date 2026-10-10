@@ -127,15 +127,46 @@ What CE could take from this:
   TouchPad's; anyone reimplementing db8 or the system service (LuneOS, Herrie's rewrite) needs
   the same.
 
+## Security policies (2026-10-10)
+
+Built on codepoet's go-ahead: the policy is webOS's, the lock is Android's (luna-deltas A21).
+`SecurityPolicy.kt` is LunaSysMgr's EASPolicyManager and the policy half of its Security class,
+ported: at start it deletes temporary policies (`isTemp`), reads the saved
+`com.palm.securitypolicy.device` record, merges every `com.palm.securitypolicy` record into the
+strictest aggregate (EASPolicy::merge), saves it back as the device record with its status, and
+watches for changes. mojomail-eas compares that record with the server's policy before it acks.
+"Enforced" is Android's `KeyguardManager.isKeyguardSecure()` when a password is required.
+
+Measured on the reference TouchPad (luna-send, with a probe `com.palm.securitypolicy.eas`
+record put as `com.palm.eas` and deleted again), and matched field for field on the Galaxy Tab:
+
+- No policy: `getSecurityPolicy` is `{"policy":{"password":{"enabled":false,"minLength":1,"maxRetries":0,"alphaNumeric":false},"inactivityInSeconds":9998,"id":<device record>,"status":{"enforced":true,"retriesLeft":0}},"returnValue":true}`;
+  `getDeviceLockMode` `{"returnValue":true,"subscribed":false,"lockMode":"none","policyState":"active","retriesLeft":0}`.
+- A 4-digit PIN policy, 8 attempts, 900 s: `password` gains `"allowSimplePassword":true`,
+  `inactivityInSeconds` 900, status `{"enforced":false,"retriesLeft":8}`, `policyState` "pending";
+  the device record carries the aggregate's fields and status.
+- `setDevicePasscode` under it: `"12"` → -2 "Passcode not minimum length", `"abcd"` as a PIN → -5
+  "Pin invalid", `none` → -1 "Passcode is empty"; `{}` and an unknown mode succeed and change
+  nothing. `matchDevicePasscode` with no lock: `{"returnValue":false,"lockedOut":false,"retriesLeft":0}`.
+
+On the Galaxy Tab with the same probe policy (put into db8 directly, as the account would):
+Email's wizard showed webOS's "Device Password Upgrade Required" prompt (HP's own caption: the
+guard never reads the lock mode), then webOS's PIN pad twice, then Android's Screen lock type
+chooser; with a PIN set there, the guard reported success, the policy went active and
+`getDeviceLockMode` said `pin`. Backing out of the chooser answers -7 "Android's screen lock was
+not set". `matchDevicePasscode` brought up Android's credential prompt and answered by it.
+Removing the PIN in Android's settings set the policy back to pending on return. Deleting the
+policy (as Email may) fired the watch and the aggregate went back to no policy. Screen & Lock's
+Secure Unlock showed Simple PIN with Change PIN while Android's lock was set.
+
+The probing set a PIN of 1234 on the TouchPad once (a valid passcode is applied, not just
+checked); it was removed at once (android5-setup.md).
+
 ## Open
 
-- **Security policies.** A server that sends a policy (passcode length, lock timeout, wipe)
-  has Email ask `com.palm.systemmanager` (`getSecurityPolicy`, `setDevicePasscode`,
-  `getDeviceLockMode`), which LunaSysMgr's EASPolicyManager answered and enforced with webOS's
-  lock screen. Lunacy registers none of them (fix-log: Android's lock screen is the real one),
-  so such an account can't be added. Possible answer, for codepoet to decide: report the
-  policy as met when Android has a secure lock screen (`KeyguardManager.isKeyguardSecure`), and
-  ask the user to set one in Android's settings otherwise. Not testable with Zoho.
+- **Security policies against a real server.** The probe policy stands in for one; a server
+  that sends a policy (Office 365) is still to try, and so is remote wipe (`com.palm.storage`,
+  not answered). The policy's inactivity timeout and attempt limit aren't enforced on Android.
 - Tasks: the template's TASKS capability is there, and mojomail-eas syncs task lists, but
   Lunacy has no Tasks app and Zoho's account showed none.
 - Untried: attachments, meeting invitations from someone else (`respondToMeetingInvitations`),

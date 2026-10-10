@@ -208,6 +208,13 @@ int __lxstat64(int v, const char *path, struct stat64 *st) { REAL(__lxstat64); M
    no file. The *at forms are the calls bionic itself uses. */
 int access(const char *path, int how) { MAPPED(path); return faccessat(AT_FDCWD, mp_, how, 0); }
 DIR *opendir(const char *path) { REAL(opendir); MAPPED(path); return real_opendir(mp_); }
+
+/*
+ * dlopen by a webOS path: libpurple loads its protocol plugins from /usr/lib/purple-2 (through
+ * glib's g_module_open), which only the webOS root has. A bare name ("libfoo.so") is the
+ * loader's own search and is left alone.
+ */
+void *dlopen(const char *path, int flags) { REAL(dlopen); MAPPED(path); return real_dlopen(mp_, flags); }
 int mkdir(const char *path, mode_t mode) { MAPPED(path); return mkdirat(AT_FDCWD, mp_, mode); }
 int rmdir(const char *path) { MAPPED(path); return unlinkat(AT_FDCWD, mp_, AT_REMOVEDIR); }
 int unlink(const char *path) { MAPPED(path); return unlinkat(AT_FDCWD, mp_, 0); }
@@ -540,4 +547,97 @@ int system(const char *cmd)
 	if ((pid = spawn_command(cmd, -1, 0, -1)) < 0) return -1;
 	while (waitpid(pid, &status, 0) < 0) if (errno != EINTR) return -1;
 	return status;
+}
+
+/*
+ * Host names, through glibc's own resolver. glibc reads /etc/hosts and /etc/resolv.conf with
+ * its internal calls, which no preload sees, so it would read Android's (no nameservers; a
+ * hosts file with localhost alone) instead of the webOS root's. c-ares (the mail services,
+ * curl) reads them with fopen and was mapped already; libpurple's resolver is glibc's.
+ * A name in the root's /etc/hosts is answered from there, as nss_files would; any other goes
+ * to glibc with the root's nameservers, held against glibc's reload of Android's empty file.
+ */
+#include <netdb.h>
+#include <resolv.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <ctype.h>
+
+/* The address `name` has in the webOS root's /etc/hosts (IPv4), or 0. */
+static int webos_host(const char *name, struct in_addr *out)
+{
+	REAL(fopen);
+	char buf_[PATH_MAX], line[512];
+	const char *path = map("/etc/hosts", buf_);
+	FILE *f;
+	int found = 0;
+	if (!name || path[0] != '/' || strcmp(path, "/etc/hosts") == 0 || !(f = real_fopen(path, "r"))) return 0;
+	while (!found && fgets(line, sizeof line, f)) {
+		char *save, *addr, *tok;
+		if ((tok = strchr(line, '#'))) *tok = 0;
+		if (!(addr = strtok_r(line, " \t\r\n", &save)) || inet_pton(AF_INET, addr, out) != 1) continue;
+		while ((tok = strtok_r(NULL, " \t\r\n", &save)))
+			if (strcasecmp(tok, name) == 0) { found = 1; break; }
+	}
+	fclose(f);
+	return found;
+}
+
+/* Points this thread's resolver at the webOS root's nameservers. */
+static void webos_nameservers(void)
+{
+	REAL(fopen);
+	char buf_[PATH_MAX], line[256];
+	const char *path = map("/etc/resolv.conf", buf_);
+	FILE *f;
+	int n = 0;
+	if (path[0] != '/' || strcmp(path, "/etc/resolv.conf") == 0 || !(f = real_fopen(path, "r"))) return;
+	if (!(_res.options & RES_INIT)) res_init();
+	while (n < MAXNS && fgets(line, sizeof line, f)) {
+		char ns[64];
+		struct in_addr a;
+		if (sscanf(line, " nameserver %63s", ns) != 1 || inet_pton(AF_INET, ns, &a) != 1) continue;
+		_res.nsaddr_list[n].sin_family = AF_INET;
+		_res.nsaddr_list[n].sin_port = htons(53);
+		_res.nsaddr_list[n].sin_addr = a;
+		n++;
+	}
+	fclose(f);
+	if (n) { _res.nscount = n; _res.options |= RES_NORELOAD; }
+}
+
+int getaddrinfo(const char *node, const char *service, const struct addrinfo *hints, struct addrinfo **res)
+{
+	REAL(getaddrinfo);
+	struct in_addr a;
+	int family = hints ? hints->ai_family : AF_UNSPEC;
+	if (node && !(hints && (hints->ai_flags & AI_NUMERICHOST))) {
+		if ((family == AF_UNSPEC || family == AF_INET) && webos_host(node, &a)) {
+			char ip[INET_ADDRSTRLEN];
+			struct addrinfo h = { 0 };
+			if (hints) h = *hints;
+			h.ai_family = AF_INET;
+			h.ai_flags |= AI_NUMERICHOST;
+			inet_ntop(AF_INET, &a, ip, sizeof ip);
+			return real_getaddrinfo(ip, service, &h, res);
+		}
+		webos_nameservers();
+	}
+	return real_getaddrinfo(node, service, hints, res);
+}
+
+struct hostent *gethostbyname(const char *name)
+{
+	REAL(gethostbyname);
+	static __thread struct hostent he;
+	static __thread struct in_addr addr;
+	static __thread char *addrs[2], *aliases[1], hname[256];
+	if (name && webos_host(name, &addr)) {
+		snprintf(hname, sizeof hname, "%s", name);
+		addrs[0] = (char *)&addr; addrs[1] = NULL; aliases[0] = NULL;
+		he.h_name = hname; he.h_aliases = aliases; he.h_addrtype = AF_INET; he.h_length = 4; he.h_addr_list = addrs;
+		return &he;
+	}
+	webos_nameservers();
+	return real_gethostbyname(name);
 }

@@ -582,9 +582,17 @@ class Db8(private val service: String, file: File?,
         return out.toString()
     }
 
+    /**
+     * A query that has results already fires at once, as db8's did (measured on the TouchPad:
+     * {"returnValue":true,"fired":true} as the only reply); one that hasn't answers
+     * {"returnValue":true} and fires when an object it would return changes. Activities
+     * triggered by a watch rely on the first: the IM transport re-arms its login-state watch
+     * with records already past the revision it last saw.
+     */
     private fun watch(caller: String, p: JSONObject, call: Bus.Call?): String {
         val q = required(caller, p, "query") as JSONObject
-        val (_, kindsQueried) = run(caller, q, search = false, validate = true)
+        val (results, kindsQueried) = run(caller, q, search = false, validate = true)
+        if (results.isNotEmpty()) return JSONObject().put("returnValue", true).put("fired", true).toString()
         if (call != null) addWatch(call, kindsQueried, clauses(q.optJSONArray("where")))
         return ok()
     }

@@ -11,7 +11,7 @@
  * That has to happen outside the process: glibc makes the calls before any preload is loaded,
  * and as a thread starts with every signal blocked, where a SIGSYS can't be caught and kills
  * the process whatever handler it has. So the app runs as this program's ptrace child. The
- * kernel stops it only for a refused call, a signal, a new thread or the exec; its other
+ * kernel stops it only for a refused call, a signal, a new thread or process, or an exec; its other
  * calls run as they would untraced. Every other signal is passed on as it came.
  *
  *   libenosys.so <program> [args...]
@@ -54,7 +54,10 @@ int main(int argc, char **argv)
 	}
 	int status;
 	if (waitpid(app, &status, 0) != app || !WIFSTOPPED(status)) { fprintf(stderr, "enosys: the app didn't start\n"); return 1; }
-	ptrace(PTRACE_SETOPTIONS, app, 0, (void *)(PTRACE_O_EXITKILL | PTRACE_O_TRACECLONE | PTRACE_O_TRACEEXEC));
+	/* Forked children too: a child the app forks makes refused calls as the app does (libpurple's
+	 * DNS helper dies at its first one, after resetting every signal to its default). */
+	ptrace(PTRACE_SETOPTIONS, app, 0, (void *)(PTRACE_O_EXITKILL | PTRACE_O_TRACECLONE | PTRACE_O_TRACEFORK |
+		PTRACE_O_TRACEVFORK | PTRACE_O_TRACEEXEC));
 	ptrace(PTRACE_CONT, app, 0, 0);
 
 	static unsigned char told[1024];
@@ -65,12 +68,12 @@ int main(int argc, char **argv)
 			return 1;
 		}
 		if (WIFEXITED(status) || WIFSIGNALED(status)) {
-			if (who != app) continue;   /* one of its threads */
+			if (who != app) continue;   /* one of its threads, or a process it forked */
 			return WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
 		}
 		if (!WIFSTOPPED(status)) continue;
 		int sig = WSTOPSIG(status);
-		if (status >> 16) { ptrace(PTRACE_CONT, who, 0, 0); continue; }   /* a new thread, the exec */
+		if (status >> 16) { ptrace(PTRACE_CONT, who, 0, 0); continue; }   /* a new thread or process, an exec */
 		if (sig == SIGSYS) {
 			siginfo_t si;
 			if (ptrace(PTRACE_GETSIGINFO, who, 0, &si) == 0 && si.si_code == SYS_SECCOMP) {

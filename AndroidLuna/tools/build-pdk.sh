@@ -357,7 +357,9 @@ $CC -O2 -shared -fPIC -Wl,-soname,libSDL_cinema.so "$SRC/libcinema/cinema.c" -o 
 
 # ---- the glibc runtime ----
 L=$WORK/sysroot/lib/arm-linux-gnueabi
-for f in libc.so.6 libm.so.6 libdl.so.2 libpthread.so.0 librt.so.1 libgcc_s.so.1 libz.so.1; do cp "$L/$f" "$OUT/lib/"; done
+# libnsl, libresolv and libutil: libpurple links them (Messaging's IM transport).
+for f in libc.so.6 libm.so.6 libdl.so.2 libpthread.so.0 librt.so.1 libgcc_s.so.1 libz.so.1 \
+         libnsl.so.1 libresolv.so.2 libutil.so.1; do cp "$L/$f" "$OUT/lib/"; done
 cp $WORK/sysroot/usr/lib/arm-linux-gnueabi/libstdc++.so.6 "$OUT/lib/"
 # A build id, so that an installed Lunacy refreshes the extracted runtime when it changes.
 date -u +%Y-%m-%dT%H:%M:%SZ > "$OUT/BUILD"
@@ -423,7 +425,7 @@ PY
 QEMU_VER=$(cat "$OUT/qemu-lib/VERSION")
 cat > "$OUT/NOTICE" <<EOF
 The PDK runtime (Docs/pdk.md), built by tools/build-pdk.sh:
-- ld-linux.so.3 (as libld-linux.so), libc, libm, libdl, libpthread, librt: GNU C Library
+- ld-linux.so.3 (as libld-linux.so), libc, libm, libdl, libpthread, librt, libnsl, libresolv, libutil: GNU C Library
   $(awk '$1=="Package:"{cur=$2} $1=="Version:" && cur=="libc6" {print $2; exit}' deb/Packages) (LGPL 2.1), Debian bookworm armel.
 - libgcc_s, libstdc++: GCC 12 runtime (GPL 3 with the GCC Runtime Library Exception), Debian bookworm armel.
 - libz: zlib (zlib licence), Debian bookworm armel.

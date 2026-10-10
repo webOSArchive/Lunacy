@@ -100,7 +100,9 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
         val firstUseOnly = prefs == null || !File(prefs, "ran-first-use").exists() || !File(prefs, "first-use-profile-created").exists()
         for ((path, creator, text) in found) {
             if (activitiesDone[path] == text) continue
-            val params = try { JSONObject(text) } catch (e: Exception) { Log.w(AppServer.TAG, "configurator: $path unreadable: $e"); continue }
+            // Palm's own files carry trailing commas, which webOS's parser took and org.json reads as
+            // a null element (the IM transport's command watch, a query with a null clause).
+            val params = try { JSONObject(jsonC(text)) } catch (e: Exception) { Log.w(AppServer.TAG, "configurator: $path unreadable: $e"); continue }
             val activity = params.optJSONObject("activity") ?: run { Log.w(AppServer.TAG, "configurator: $path has no activity"); null } ?: continue
             if (firstUseOnly && !params.optBoolean("firstUseSafe")) continue
             val (kind, id) = creator.split(':', limit = 2)

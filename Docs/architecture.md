@@ -1304,7 +1304,15 @@ The TouchPad's own C++ system services run as they shipped, under the PDK's glib
 ([pdk.md](pdk.md)): today `mojomail-imap`, `mojomail-smtp` and `filecache`, with the libraries
 they link (libmojocore, libmojoluna, libmojodb, libemail-common, libpalmsocket, GLib, Boost,
 ICU 3.6, jemalloc, c-ares) and webOS CE's OpenSSL 1.1 shim for mail (`ssl11mail`, TLS 1.2), all
-in the ROM from the reference TouchPad.
+in the ROM from the reference TouchPad. Being tried: Messaging's IM transport and account
+validator from webOS 3.0.5, with its libpurple 2.5.1 and AIM plugin, signing in to the webOS Chat
+server (the AIM plan); a development `/etc/hosts` in the root points AIM's login host at it.
+
+- **Names** resolve through c-ares for the mail services, and through glibc for libpurple. glibc
+  reads its files with calls the preload can't see, so the preload answers `getaddrinfo` and
+  `gethostbyname` from the root's `/etc/hosts` and points glibc at the root's nameservers.
+- **Forks** are traced like threads under libenosys, since a forked child (libpurple's DNS
+  helper) makes the same refused calls.
 
 - **Started as ls-hubd started them.** `NativeServices` reads the webOS root's D-Bus service
   files (`/usr/share/dbus-1/system-services/<name>.service`): `Name=` is the bus name, and

@@ -92,7 +92,10 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
         val index = try { context.assets.open("$ROM.index").bufferedReader().readLines().filter { it.isNotBlank() } }
             catch (e: IOException) { ArrayList<String>().also { l -> walkAssets(ROM) { l += it } } }
         for (rel in index) {
-            val bytes = context.assets.open("$ROM/$rel").use { it.readBytes() }
+            // A file the index lists but the APK doesn't carry is skipped, not fatal: aapt drops
+            // some names by itself (dotfiles), and the shell must still start.
+            val bytes = try { context.assets.open("$ROM/$rel").use { it.readBytes() } }
+                catch (e: IOException) { Log.w(AppServer.TAG, "rootfs: $rel is listed but not in the APK"); continue }
             val sum = sha1(bytes)
             now[rel] = sum
             val f = File(root, rel)

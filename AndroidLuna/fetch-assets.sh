@@ -416,47 +416,62 @@ libicuio.so.36, libicule.so.36 and libiculx.so.36: ICU 3.6 (ICU licence,
 https://github.com/unicode-org/icu/blob/main/LICENSE), as the reference TouchPad (webOS CE
 3.1.0) ships them in /usr/lib.
 NOTICE
-# Messaging's instant messaging, being tried (the webOS Chat plan: AIM through an OSCAR server):
-# stock webOS 3.0.5's stack, whose binaries are of the mail services' vintage and run on the same
-# runtime and libraries. Palm's IM transport (imlibpurpletransport) and account validator, its
-# libpurple 2.5.1 with the AIM plugin (liboscar, libaim) and helper plugins, the chat threader (a
-# JS service), the messaging kinds, activities and frameworks, and Palm's AIM account template.
-# The app (Messaging 3.0.6606, from the image's own ipk) goes to local-assets/apps for testing,
-# not CoreApps. From Workbench/vendor/touchpad/messaging-305, taken from webOS 3.0.5's doctor.
-M=$V/touchpad/messaging-305
-if [ -d $M ]; then
-    mkdir -p $R/usr/lib/purple-2 $R/etc/palm/tempdb/kinds $R/etc/palm/tempdb/permissions $R/etc/palm/contact_linker_plugins
-    cp $M/usr/bin/imlibpurpletransport $M/usr/bin/imaccountvalidator $R/usr/bin/
-    cp $M/usr/lib/libpurple.so.0.5.1 $R/usr/lib/libpurple.so.0
-    for p in liboscar.so.0.0.0 libaim.so idle.so newline.so offlinemsg.so; do cp $M/usr/lib/purple-2/$p $R/usr/lib/purple-2/; done
-    # libaim links liboscar by its RPATH, /usr/lib/purple-2, which the loader reads in Android's
-    # filesystem; in /usr/lib the loader's path (the webOS root's) finds it.
-    mv $R/usr/lib/purple-2/liboscar.so.0.0.0 $R/usr/lib/liboscar.so.0
-    for s in com.palm.imlibpurple com.palm.imaccountvalidator com.palm.messaging.chatthreader; do
-        cp $M/usr/share/dbus-1/system-services/$s.service $R/usr/share/dbus-1/system-services/
-    done
-    cp $M/etc/palm/db/kinds/* $R/etc/palm/db/kinds/
-    cp $M/etc/palm/db/permissions/* $R/etc/palm/db/permissions/
-    cp $M/etc/palm/tempdb/kinds/* $R/etc/palm/tempdb/kinds/
-    cp $M/etc/palm/tempdb/permissions/* $R/etc/palm/tempdb/permissions/ 2>/dev/null || true
-    cp -r $M/etc/palm/activities/* $R/etc/palm/activities/
-    cp $M/etc/palm/contact_linker_plugins/* $R/etc/palm/contact_linker_plugins/
-    cp -r $M/usr/palm/services/com.palm.messaging.chatthreader $R/usr/palm/services/
-    cp -r $M/usr/palm/frameworks/messaging.library $M/usr/palm/frameworks/contacts.plugin.messaging $R/usr/palm/frameworks/
-    cp -r $M/usr/palm/public/accounts/com.palm.aol $R/usr/palm/public/accounts/
-    cp -r $M/ipk/usr/palm/applications/com.palm.app.messaging $L/apps/
-    cat > $R/usr/bin/NOTICE.messaging <<'NOTICE'
-imlibpurpletransport, imaccountvalidator, the chat threader service, the messaging kinds,
-activities and frameworks (messaging.library, contacts.plugin.messaging), the AIM account
-template (com.palm.aol) and Messaging 3.0.6606, from HP webOS 3.0.5's own image (the TouchPad's
-webOS Doctor). Copyright Palm, Inc. / Hewlett-Packard; LG Electronics later released the IM
-transport (imlibpurpleservice) under the Apache 2.0 licence (https://github.com/openwebos).
-Distributed by Lunacy as they shipped, as abandonware.
-libpurple 2.5.1 and its plugins (/usr/lib/libpurple.so.0, /usr/lib/purple-2): Pidgin's
-libpurple (GPL 2 or later, https://pidgin.im), as Palm built it for webOS 3.0.5 (libpurple
-1.0-r1palm26, its patches named in that package's control file).
+# Messaging's instant messaging (Docs/messaging.md): webOS CE's stack, as the reference TouchPad
+# runs it. Herrie's IM transport (imlibpurpleservice) with CE's libpurple 2.14.13, its newer
+# runtime (/usr/lib/synergy-runtime: GLib 2.x and GIO, libffi, tidy, opus, ogg, nsl, zlib) and
+# helper plugins, CE's chat threader, kinds and activities; AIM's protocol plugin, libaim.so,
+# built from Pidgin 2.14.2 with webOS Chat's defaults (the webOS Chat project's
+# client/libaim/build-touchpad.sh: CE has none, Pidgin dropped AIM in 2.14.3); and from webOS
+# 3.0.5, which CE no longer carries, Palm's account validator and AIM account template. The
+# services start with the runtime folder first on their library path; Lunacy's glibc and
+# libstdc++ serve in place of CE's. Messaging itself is in CoreApps. From
+# Workbench/vendor/touchpad/messaging (CE) and messaging-305 (webOS 3.0.5's doctor).
+M=$V/touchpad/messaging
+M5=$V/touchpad/messaging-305
+mkdir -p $R/usr/lib/purple-2 $R/usr/lib/synergy-runtime $R/etc/palm/tempdb/kinds $R/etc/palm/tempdb/permissions $R/etc/palm/contact_linker_plugins
+cp $M/usr/bin/imlibpurpletransport $M/usr/bin/imaccountvalidator $R/usr/bin/
+cp $M/libpurple.so.0.14.13 $R/usr/lib/libpurple.so.0
+cp $M/usr/lib/synergy-runtime/* $R/usr/lib/synergy-runtime/
+for p in libaim.so idle.so newline.so offlinemsg.so autoaccept.so statenotify.so; do cp $M/usr/lib/purple-2/$p $R/usr/lib/purple-2/; done
+cat > $R/usr/share/dbus-1/system-services/com.palm.imlibpurple.service <<'SVC'
+[D-BUS Service]
+Name=com.palm.imlibpurple
+Exec=/usr/bin/env LD_LIBRARY_PATH=/usr/lib/synergy-runtime /usr/bin/imlibpurpletransport -c {\"log\":{\"appender\":{\"type\":\"pmlog\"},\"levels\":{\"imlibpurple\":\"info\"}}} PalmPre Palm-Pre/1.5
+SVC
+cat > $R/usr/share/dbus-1/system-services/com.palm.imaccountvalidator.service <<'SVC'
+[D-BUS Service]
+Name=com.palm.imaccountvalidator
+Exec=/usr/bin/env LD_LIBRARY_PATH=/usr/lib/synergy-runtime /usr/bin/imaccountvalidator -c {\"log\":{\"appender\":{\"type\":\"pmlog\"},\"levels\":{\"imaccountvalidator\":\"info\"}}} PalmPre Palm-Pre/1.5
+SVC
+cp $M/usr/share/dbus-1/system-services/com.palm.messaging.chatthreader.service $R/usr/share/dbus-1/system-services/
+cp $M/etc/palm/db/kinds/* $R/etc/palm/db/kinds/
+cp $M/etc/palm/db/permissions/* $R/etc/palm/db/permissions/
+cp $M/etc/palm/tempdb/kinds/* $R/etc/palm/tempdb/kinds/
+cp $M/etc/palm/tempdb/permissions/com.palm.imbuddystatus $R/etc/palm/tempdb/permissions/
+cp -r $M/etc/palm/activities/* $R/etc/palm/activities/
+cp $M/etc/palm/contact_linker_plugins/* $R/etc/palm/contact_linker_plugins/
+cp -r $M/usr/palm/services/com.palm.messaging.chatthreader $R/usr/palm/services/
+cp -r $M/usr/palm/frameworks/messaging.library $M/usr/palm/frameworks/contacts.plugin.messaging $R/usr/palm/frameworks/
+cp -r $M5/usr/palm/public/accounts/com.palm.aol $R/usr/palm/public/accounts/
+cat > $R/usr/bin/NOTICE.messaging <<'NOTICE'
+imlibpurpletransport: webOS CE's IM transport (imlibpurpleservice, Herrie and the webOS CE
+community, https://github.com/webOS-ports/imlibpurpleservice), Apache 2.0, from the reference
+TouchPad (webOS CE 3.1.0), with the chat threader (Palm's, with the webOS CE project's fixes),
+the messaging kinds, activities and frameworks.
+imaccountvalidator and the AIM account template (com.palm.aol): HP webOS 3.0.5's own image (the
+TouchPad's webOS Doctor). Copyright Palm, Inc. / Hewlett-Packard; LG Electronics released
+imlibpurpleservice under the Apache 2.0 licence (https://github.com/openwebos). Distributed by
+Lunacy as they shipped, as abandonware.
+/usr/lib/libpurple.so.0 (libpurple 2.14.13) and its helper plugins in /usr/lib/purple-2: Pidgin's
+libpurple (GPL 2 or later, https://pidgin.im), as webOS CE built them.
+/usr/lib/purple-2/libaim.so: Pidgin 2.14.2's OSCAR (AIM) plugin (GPL 2 or later), built for
+webOS CE's libpurple by the webOS Chat project with four defaults changed (login host
+oscar.webosarchive.org, MD5 login, no TLS); its build script and the change are in that project,
+the source is Pidgin 2.14.2's release (https://pidgin.im).
+/usr/lib/synergy-runtime: webOS CE's runtime for the transport, from the same device: GLib, GIO,
+GObject, GModule and GThread (LGPL 2.1), libffi (MIT), tidy-html5 (W3C licence), Opus (BSD),
+libogg (BSD), libnsl (LGPL 2.1), zlib (zlib licence).
 NOTICE
-fi
 # /etc/mtab, the mounts as the TouchPad's /proc/mounts listed them (measured, less each app's
 # jail): Adobe Reader's plugin opens a document only while /media/internal is mounted, which
 # was how a device in USB drive mode turned it away. Native code reads it through the preload.
@@ -513,6 +528,10 @@ NOTICE
 # that Lunacy needn't walk it with AssetManager.list(), which reads the APK's whole asset
 # index on every call.
 chmod -R u+w $R
+# The APK leaves out what aapt's default ignore pattern names (dotfiles, *~, *.scc, thumbs.db,
+# picasa.ini, CVS); a file listed but not packaged would stop the ROM's sync. Git's own files
+# came with CE's chat threader.
+find $R -type f \( -name '.*' -o -name '*~' -o -name '*.scc' -o -iname thumbs.db -o -iname picasa.ini \) -delete
 links $R $L/rootfs.links
 (cd $L/rootfs && find . -type f | sed 's#^\./##' | sort) > $L/rootfs.index
 # The PDK runtime goes into local-assets and local-jni, both emptied above, so it is built

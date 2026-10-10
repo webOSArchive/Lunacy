@@ -19,6 +19,17 @@ EASPolicyManager ported, with Android's own screen lock as the device lock, so a
 requires a device password can be added; Screen & Lock's Secure Unlock follows Android's lock.
 Open: a real server's policy, tasks, attachments. See [eas.md](eas.md). Not pushed.
 
+**2026-10-10: Messaging and webOS Chat** (codepoet: investigate an AIM server so Lunacy and webOS
+CE users can chat through the webOS Community account; then "add it to Lunacy, use the CE
+version"). Messaging 3.2.0 (webOS CE's) ships in CoreApps with CE's IM transport and libpurple
+and webOS Chat's AIM plugin. On the Galaxy Tab A7 Lite it chatted with the reference TouchPad
+through a prototype OSCAR server (PHP, codepoet's `Oscar` project, which has the plan and a
+deployment guide). Fixed on the way, all general: the preload's `dlopen` and glibc resolver,
+libenosys tracing forks, db8 `watch` firing on existing results (measured), activity files'
+trailing commas, and the ROM's dotfiles. Open: deploying `oscar.webosarchive.org`, the
+community-account sign-in, and the CE transport's settings bug as a pull request. See
+[messaging.md](messaging.md). Not pushed.
+
 ## Where things stood (2026-10-09)
 
 **2026-10-09: 0.7.0 released** (codepoet). The test round's faults fixed and pushed through

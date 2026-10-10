@@ -1,0 +1,17 @@
+Palm's Messaging (com.palm.app.messaging), as webOS Community Edition ships it, copied from
+/usr/palm/applications on the reference TouchPad (webOS CE 3.1.0), where it is 3.0.6607. Its
+version is 3.2.0 here, the number webOS CE gives it for release (codepoet, 2026-10-10). It is HP webOS
+3.0.5's Messaging 3.0.6606 with the webOS CE project's changes (by Herrie and the webOS CE
+community): servers and channels, reactions, edits and deletions, receipts, failed-message
+dashboards, and Unicode emoji drawn from the bundled images.
+
+Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence; distributed by
+Lunacy as abandonware, like Mojo, Email and the Prelude fonts. The webOS CE changes are the webOS
+CE project's.
+
+images/emoji: the EmojiOne set, as webOS CE bundled it (utilities/utils.js names it). EmojiOne's
+free releases were licensed under Creative Commons Attribution 4.0 (CC BY 4.0); the version
+isn't recorded in the app. Emoji artwork by EmojiOne (Ranks.com, now JoyPixels).
+
+The app is here as it was installed, with that version number and less one file: debug.log, a Windows Chrome crash log left in
+the CE package.

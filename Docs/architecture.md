@@ -1304,9 +1304,9 @@ The TouchPad's own C++ system services run as they shipped, under the PDK's glib
 ([pdk.md](pdk.md)): today `mojomail-imap`, `mojomail-smtp` and `filecache`, with the libraries
 they link (libmojocore, libmojoluna, libmojodb, libemail-common, libpalmsocket, GLib, Boost,
 ICU 3.6, jemalloc, c-ares) and webOS CE's OpenSSL 1.1 shim for mail (`ssl11mail`, TLS 1.2), all
-in the ROM from the reference TouchPad. Being tried: Messaging's IM transport and account
-validator from webOS 3.0.5, with its libpurple 2.5.1 and AIM plugin, signing in to the webOS Chat
-server (the AIM plan); a development `/etc/hosts` in the root points AIM's login host at it.
+in the ROM from the reference TouchPad. Messaging's IM transport is webOS CE's (Herrie's
+imlibpurpleservice) on CE's libpurple 2.14.13 and transport runtime (`/usr/lib/synergy-runtime`),
+with webOS Chat's AIM plugin ([messaging.md](messaging.md)).
 
 - **Names** resolve through c-ares for the mail services, and through glibc for libpurple. glibc
   reads its files with calls the preload can't see, so the preload answers `getaddrinfo` and

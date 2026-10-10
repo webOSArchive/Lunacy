@@ -23,6 +23,7 @@ changes is marked `[Lunacy]` in its source.
 | App Catalog | `com.palm.app.enyo-findapps` | 6.2.2927 | webOS Archive's restoration of the TouchPad's own |
 | Exhibition | `com.palm.app.exhibitionpreferences` | 1.0.0 | Palm, HP webOS 3.x (abandonware) |
 | Help | `com.palm.app.help` | 2.0.0 | Palm, HP webOS 3.x, content host moved to help.webosarchive.org |
+| Messaging | `com.palm.app.messaging` | 3.2.0 | Palm, HP webOS 3.0.5 (abandonware), with the webOS CE project's changes |
 | Memos | `com.palm.app.notes` | 3.0.20 | Palm, HP webOS 3.x (abandonware) |
 | Photos & Videos | `com.palm.app.photos` | 3.1.8001 | Palm, from the reference TouchPad (abandonware) |
 | Screen & Lock | `com.palm.app.screenlock` | 1.0.0 | Palm, HP webOS 3.x (abandonware), with Lunacy's changes |

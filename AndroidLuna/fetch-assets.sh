@@ -453,6 +453,13 @@ cp $M/etc/palm/contact_linker_plugins/* $R/etc/palm/contact_linker_plugins/
 cp -r $M/usr/palm/services/com.palm.messaging.chatthreader $R/usr/palm/services/
 cp -r $M/usr/palm/frameworks/messaging.library $M/usr/palm/frameworks/contacts.plugin.messaging $R/usr/palm/frameworks/
 cp -r $M5/usr/palm/public/accounts/com.palm.aol $R/usr/palm/public/accounts/
+# webOS Chat's account type and service (the webOS Chat project's client/webos-chat, linked
+# as Workbench/vendor/webos-chat): with a webOS Account signed in, the service fetches the
+# chat credentials and makes the AIM account, so nobody types a pass phrase (messaging.md).
+WC=$V/webos-chat
+rm -rf $R/usr/palm/services/com.palm.webosarchive.chat
+cp -r $WC/service $R/usr/palm/services/com.palm.webosarchive.chat
+cp -r $WC/accounts/org.webosarchive.chat $R/usr/palm/public/accounts/
 cat > $R/usr/bin/NOTICE.messaging <<'NOTICE'
 imlibpurpletransport: webOS CE's IM transport (imlibpurpleservice, Herrie and the webOS CE
 community, https://github.com/webOS-ports/imlibpurpleservice), Apache 2.0, from the reference
@@ -468,6 +475,8 @@ libpurple (GPL 2 or later, https://pidgin.im), as webOS CE built them.
 webOS CE's libpurple by the webOS Chat project with four defaults changed (login host
 oscar.webosarchive.org, MD5 login, no TLS); its build script and the change are in that project,
 the source is Pidgin 2.14.2's release (https://pidgin.im).
+/usr/palm/services/com.palm.webosarchive.chat and the account type org.webosarchive.chat: the
+webOS Chat project's (codepoet, https://github.com/webOSArchive/Oscar-AIM-for-webOS).
 /usr/lib/synergy-runtime: webOS CE's runtime for the transport, from the same device: GLib, GIO,
 GObject, GModule and GThread (LGPL 2.1), libffi (MIT), tidy-html5 (W3C licence), Opus (BSD),
 libogg (BSD), libnsl (LGPL 2.1), zlib (zlib licence).

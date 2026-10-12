@@ -453,13 +453,24 @@ cp $M/etc/palm/contact_linker_plugins/* $R/etc/palm/contact_linker_plugins/
 cp -r $M/usr/palm/services/com.palm.messaging.chatthreader $R/usr/palm/services/
 cp -r $M/usr/palm/frameworks/messaging.library $M/usr/palm/frameworks/contacts.plugin.messaging $R/usr/palm/frameworks/
 cp -r $M5/usr/palm/public/accounts/com.palm.aol $R/usr/palm/public/accounts/
-# webOS Chat's account type and service (the webOS Chat project's client/webos-chat, linked
-# as Workbench/vendor/webos-chat): with a webOS Account signed in, the service fetches the
-# chat credentials and makes the AIM account, so nobody types a pass phrase (messaging.md).
-WC=$V/webos-chat
+# webOS Chat's account type and service: with a webOS Account signed in, the service fetches
+# the chat credentials and makes the AIM account, so nobody types a pass phrase (messaging.md).
+# They come from the webOS Chat project's repository at the commit pinned here (its
+# client/webos-chat), cloned into Workbench/vendor/oscar when it isn't there; a local clone's
+# working tree is left as it is. Move the pin to take a newer version.
+OSCAR_REPO=https://github.com/webOSArchive/Oscar-AIM-for-webOS.git
+OSCAR_COMMIT=cf5f5d93e3210cef93e69f4b0b306cd75632be69
+O=$V/oscar
+[ -d $O/.git ] || git clone -q $OSCAR_REPO $O
+git -C $O cat-file -e "$OSCAR_COMMIT^{commit}" 2>/dev/null || git -C $O fetch -q origin ||
+    { echo "fetch-assets: can't fetch webOS Chat from $OSCAR_REPO" >&2; exit 1; }
+WC=$(mktemp -d)
+git -C $O archive $OSCAR_COMMIT client/webos-chat | tar -x -C $WC ||
+    { echo "fetch-assets: webOS Chat commit $OSCAR_COMMIT isn't in $O" >&2; exit 1; }
 rm -rf $R/usr/palm/services/com.palm.webosarchive.chat
-cp -r $WC/service $R/usr/palm/services/com.palm.webosarchive.chat
-cp -r $WC/accounts/org.webosarchive.chat $R/usr/palm/public/accounts/
+cp -r $WC/client/webos-chat/service $R/usr/palm/services/com.palm.webosarchive.chat
+cp -r $WC/client/webos-chat/accounts/org.webosarchive.chat $R/usr/palm/public/accounts/
+rm -rf $WC
 cat > $R/usr/bin/NOTICE.messaging <<'NOTICE'
 imlibpurpletransport: webOS CE's IM transport (imlibpurpleservice, Herrie and the webOS CE
 community, https://github.com/webOS-ports/imlibpurpleservice), Apache 2.0, from the reference
@@ -476,7 +487,8 @@ webOS CE's libpurple by the webOS Chat project with four defaults changed (login
 oscar.webosarchive.org, MD5 login, no TLS); its build script and the change are in that project,
 the source is Pidgin 2.14.2's release (https://pidgin.im).
 /usr/palm/services/com.palm.webosarchive.chat and the account type org.webosarchive.chat: the
-webOS Chat project's (codepoet, https://github.com/webOSArchive/Oscar-AIM-for-webOS).
+webOS Chat project's (codepoet, https://github.com/webOSArchive/Oscar-AIM-for-webOS), at the
+commit fetch-assets.sh pins.
 /usr/lib/synergy-runtime: webOS CE's runtime for the transport, from the same device: GLib, GIO,
 GObject, GModule and GThread (LGPL 2.1), libffi (MIT), tidy-html5 (W3C licence), Opus (BSD),
 libogg (BSD), libnsl (LGPL 2.1), zlib (zlib licence).

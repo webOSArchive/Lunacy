@@ -21,7 +21,7 @@ chat by itself ("Signing in with the webOS Account" below).
 | Chat threader (`com.palm.messaging.chatthreader`, JS) | webOS CE: Palm's, with Herrie's fixes | ROM `/usr/palm/services` |
 | `imaccountvalidator` and the AIM account template (`com.palm.aol`) | HP webOS 3.0.5's own image; CE no longer carries either | ROM `/usr/bin`, `/usr/palm/public/accounts` |
 | The messaging kinds, permissions, activities, frameworks | webOS CE | ROM `/etc/palm`, `/usr/palm/frameworks` |
-| webOS Chat's account type (`org.webosarchive.chat`) and service (`com.palm.webosarchive.chat`, JS) | The webOS Chat project's `client/webos-chat`, linked as `Workbench/vendor/webos-chat` | ROM `/usr/palm/public/accounts`, `/usr/palm/services` |
+| webOS Chat's account type (`org.webosarchive.chat`) and service (`com.palm.webosarchive.chat`, JS) | The webOS Chat project's `client/webos-chat`, at the commit `fetch-assets.sh` pins (`OSCAR_COMMIT`; cloned into `Workbench/vendor/oscar` when missing) | ROM `/usr/palm/public/accounts`, `/usr/palm/services` |
 
 `AndroidLuna/fetch-assets.sh` lays them in from `Workbench/vendor/touchpad/messaging` (CE) and
 `messaging-305` (3.0.5). The transport and validator start with `/usr/lib/synergy-runtime`
@@ -59,22 +59,38 @@ own plugin and reach the same server through a hosts line for `login.messaging.a
 ## Signing in with the webOS Account
 
 With the webOS Community Account installed and signed in, nobody types a screen name or pass
-phrase. The webOS Chat service (`com.palm.webosarchive.chat`) runs at start and hourly from its
-activities. It gets the account's token (`com.palm.accountservices/getAccountToken`), trades it
+phrase. The webOS Chat service (`com.palm.webosarchive.chat`) runs from three activities: at
+start, hourly, and when the device's webOS Account record changes. It gets the account's token (`com.palm.accountservices/getAccountToken`), trades it
 at the App Museum (`device.php?m=getChatCredentials`, through `/usr/bin/curl` as the community
 account's service does) for the username and pass phrase, and keeps one account of the
 `org.webosarchive.chat` type with them, replacing it when the username or pass phrase changes on
 the website. That type has AIM's capability (`serviceName` `type_aim`, the transport as its
-`onEnabled`), so the transport signs it in like an AIM account it was handed. Signed out, or with
-a username that is still an email (the Museum answers 409), the service changes nothing.
+`onEnabled`), so the transport signs it in like an AIM account it was handed. Signed out (the
+token call answers `NO_TOKEN`), it removes the webOS Chat account, as the Community Account's
+sign-out clears its own data. With a username that is still an email (the Museum answers 409),
+or when the token can't be asked for at all, it changes nothing.
 
 The type is its own because the 3.0.5 AIM template only lets Contacts and Messaging create its
 accounts (`writePermissions`), and it has no validator, so Accounts never offers it under "Add
 account". The service has a `com.palm.*` id for the same reason as the community's apps: the
-profile and account kinds only answer `com.palm.*` callers on a TouchPad. Its activities don't
-watch the profile account, because `com.palm.account` has no index on `_rev` for the usual
-"newer than" watch. Measured 2026-10-12 on the Galaxy Tab A7 Lite against the live server:
-signed in as `curator`, the service made the account and the transport set it online.
+profile and account kinds only answer `com.palm.*` callers on a TouchPad.
+
+Following a sign-in: the Community Account renames its `com.palm.palmprofile` account record
+to the member when signing in, and back to "Local User" when signing out. The token's own kind
+(`com.palm.palmprofile:1`) is the account service's alone (`db: permission denied` to anyone
+else), so the activity watches the record: a db8 `find` with `"watch": true` on
+`com.palm.account:1` for that template, which fires on a change and not because results exist
+(a `watch` call would fire at once). Signing in renames the record before it saves the token,
+so a change with no token yet is asked about again every 5 s, five times, before it counts as
+signed out. The hourly and profile activities are completed with `restart`; one whose trigger
+answered with an error is ended instead, so a refused watch can't spin. A re-sign-in that
+doesn't rename the record (the same member, never signed out) is followed by the hourly run.
+
+Measured 2026-10-12 on the Galaxy Tab A7 Lite against the live server: signed in as
+`curator`, the service made the account and the transport set it online. Signed out (the
+service's `signOut`, which the Community Account's UI doesn't offer), the next run removed the
+chat account; signed in again through the UI, the watch fired, the account was made 1.8 s
+later and the transport had it signing in 5 s after the sign-in, and messages went both ways.
 
 ## Testing against a development server
 

@@ -108,11 +108,18 @@
 	// line starts at 399.03 and 403.02 device px drew no caret; 400.36, 401.69 and 404.35 did.
 	// The TouchPad drew it everywhere. So a focused editable box is moved by under half a
 	// device pixel, putting its line starts mid-pixel; nothing on screen moves by a whole one.
-	// Not for a box the page itself transforms.
+	// Inputs and textareas too: Messaging's Add Buddy fields drew no caret until something
+	// was typed (2026-10-12, A7 Lite: text starting 275.35 device px, none in 10 frames;
+	// moved 0.2 px, a caret in 9). A device pixel is devicePixelRatio times the page's scale,
+	// which compat.js pins below 1 on a scaled card (1.33 x 0.75 there, a whole device pixel
+	// per CSS px, yet the caret still went missing); Chromium 37 has no visualViewport, so
+	// there the ratio alone is used. Screens with a whole-number ratio are left alone. Not for
+	// a box the page itself transforms.
 	var gridded = null;
 	function alignToGrid(f) {
-		var ratio = window.devicePixelRatio || 1;
-		if (ratio === Math.round(ratio) || plain(f)) { return; }
+		var dpr = window.devicePixelRatio || 1;
+		if (dpr === Math.round(dpr)) { return; }
+		var ratio = dpr * (window.visualViewport ? window.visualViewport.scale : 1);
 		if (gridded !== f) {
 			if (gridded) { gridded.style.webkitTransform = ""; }
 			gridded = null;

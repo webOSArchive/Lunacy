@@ -267,8 +267,10 @@ class Db8(private val service: String, file: File?,
                 // here; webOS's JSON parser took the list as if it weren't there.
                 val ix = a.optJSONObject(i) ?: continue
                 val props = ArrayList<IndexProp>()
-                // An index that includes deleted objects leads with _del, as db8's did.
-                if (ix.optBoolean("incDel")) props += IndexProp("_del", null)
+                // An index that includes deleted objects leads with _del, as db8's did, unless
+                // it names _del first itself (the message kinds' "deleted": _del, _rev).
+                val pa0 = ix.optJSONArray("props")?.optJSONObject(0)?.optString("name")
+                if (ix.optBoolean("incDel") && pa0 != "_del") props += IndexProp("_del", null)
                 ix.optJSONArray("props")?.let { pa -> for (j in 0 until pa.length()) pa.getJSONObject(j).let {
                     val include = if (it.optString("type") == "multi") it.optJSONArray("include")?.let { inc ->
                         (0 until inc.length()).mapNotNull { n -> inc.optJSONObject(n)?.optString("name")?.takeIf { x -> x.isNotEmpty() } }

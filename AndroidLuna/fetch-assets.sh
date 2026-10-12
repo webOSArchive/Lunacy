@@ -427,7 +427,10 @@ NOTICE
 # (CE). webOS Chat's own account type replaced Palm's AIM one, so a password is never asked for.
 M=$V/touchpad/messaging
 mkdir -p $R/usr/lib/purple-2 $R/usr/lib/synergy-runtime $R/etc/palm/tempdb/kinds $R/etc/palm/tempdb/permissions $R/etc/palm/contact_linker_plugins
-cp $M/usr/bin/imlibpurpletransport $R/usr/bin/
+# The transport itself is rebuilt from codepoet's imlibpurpleservice fork (the auto-away, buddy
+# removal crash and presence fixes, on their way to Herrie's repository as a pull request) by
+# webos-doctor-ce's transport build; Workbench/vendor/im/transport/SOURCE says from what.
+cp $V/im/transport/imlibpurpletransport $R/usr/bin/
 cp $M/libpurple.so.0.14.13 $R/usr/lib/libpurple.so.0
 cp $M/usr/lib/synergy-runtime/* $R/usr/lib/synergy-runtime/
 for p in libaim.so idle.so newline.so offlinemsg.so autoaccept.so statenotify.so; do cp $M/usr/lib/purple-2/$p $R/usr/lib/purple-2/; done
@@ -469,8 +472,9 @@ cp -r $WC/client/webos-chat/app/org.webosarchive.chat.setup $L/apps/
 rm -rf $WC
 cat > $R/usr/bin/NOTICE.messaging <<'NOTICE'
 imlibpurpletransport: webOS CE's IM transport (imlibpurpleservice, Herrie and the webOS CE
-community, https://github.com/webOS-ports/imlibpurpleservice), Apache 2.0, from the reference
-TouchPad (webOS CE 3.1.0), with the chat threader (Palm's, with the webOS CE project's fixes),
+community, https://github.com/webOS-ports/imlibpurpleservice), Apache 2.0, built from codepoet's
+fork (https://github.com/codepoet80/imlibpurpleservice) for webOS CE's runtime; from the reference
+TouchPad (webOS CE 3.1.0): the chat threader (Palm's, with the webOS CE project's fixes),
 the messaging kinds, activities and frameworks.
 /usr/lib/libpurple.so.0 (libpurple 2.14.13) and its helper plugins in /usr/lib/purple-2: Pidgin's
 libpurple (GPL 2 or later, https://pidgin.im), as webOS CE built them.

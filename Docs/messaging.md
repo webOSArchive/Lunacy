@@ -19,9 +19,8 @@ chat by itself ("Signing in with the webOS Account" below).
 | `libaim.so` (AIM / OSCAR) | Pidgin 2.14.2's OSCAR code, built by the webOS Chat project for CE's libpurple, with webOS Chat's defaults | ROM `/usr/lib/purple-2/libaim.so` |
 | GLib 2.x, GIO, libffi, tidy, opus, ogg, nsl, zlib | webOS CE's transport runtime | ROM `/usr/lib/synergy-runtime` |
 | Chat threader (`com.palm.messaging.chatthreader`, JS) | webOS CE: Palm's, with Herrie's fixes | ROM `/usr/palm/services` |
-| `imaccountvalidator` and the AIM account template (`com.palm.aol`) | HP webOS 3.0.5's own image; CE no longer carries either | ROM `/usr/bin`, `/usr/palm/public/accounts` |
 | The messaging kinds, permissions, activities, frameworks | webOS CE | ROM `/etc/palm`, `/usr/palm/frameworks` |
-| webOS Chat's account type (`org.webosarchive.chat`) and service (`com.palm.webosarchive.chat`, JS) | The webOS Chat project's `client/webos-chat`, at the commit `fetch-assets.sh` pins (`OSCAR_COMMIT`; cloned into `Workbench/vendor/oscar` when missing) | ROM `/usr/palm/public/accounts`, `/usr/palm/services` |
+| webOS Chat's account type (`org.webosarchive.chat`), service (`com.palm.webosarchive.chat`, JS) and setup page (`org.webosarchive.chat.setup`, a hidden Enyo app) | The webOS Chat project's `client/webos-chat`, at the commit `fetch-assets.sh` pins (`OSCAR_COMMIT`; cloned into `Workbench/vendor/oscar` when missing) | ROM `/usr/palm/public/accounts`, `/usr/palm/services`; bundled app |
 
 `AndroidLuna/fetch-assets.sh` lays them in from `Workbench/vendor/touchpad/messaging` (CE) and
 `messaging-305` (3.0.5). The transport and validator start with `/usr/lib/synergy-runtime`
@@ -70,9 +69,21 @@ token call answers `NO_TOKEN`), it removes the webOS Chat account, as the Commun
 sign-out clears its own data. With a username that is still an email (the Museum answers 409),
 or when the token can't be asked for at all, it changes nothing.
 
+In Accounts, webOS Chat is under Add an Account (Messaging & Chat) and never asks for a
+password: its type's validator is a custom page (`customUI`, the hidden app
+`org.webosarchive.chat.setup`), which turns chat on and has the service make the account ("webOS
+Chat enabled"), or says to sign in or choose a username first. Change Login Settings on the
+account opens the same page, showing the screen name. Removing the account (Accounts' own
+Remove Account) turns chat off: the service keeps the id of the account it made in
+`/var/preferences/com.palm.webosarchive.chat/state.json`, and when that account is gone without
+its doing, no run makes another until webOS Chat is added again. Signing out of the webOS
+Account resets that (codepoet, 2026-10-12). Palm's 3.0.5 AIM type and its validator are no
+longer in the ROM, so nothing offers a password form for AIM; it asked for the pass phrase,
+which nobody knows to type. Measured on the A7 Lite 2026-10-12: removed, relaunched (stayed
+off), added again (enabled in about 9 s, signed in).
+
 The type is its own because the 3.0.5 AIM template only lets Contacts and Messaging create its
-accounts (`writePermissions`), and it has no validator, so Accounts never offers it under "Add
-account". The service has a `com.palm.*` id for the same reason as the community's apps: the
+accounts (`writePermissions`). The service has a `com.palm.*` id for the same reason as the community's apps: the
 profile and account kinds only answer `com.palm.*` callers on a TouchPad.
 
 Following a sign-in: the Community Account renames its `com.palm.palmprofile` account record
@@ -114,7 +125,7 @@ screen name and chat key from the server's `accounts.json`.
 - **webOS CE doesn't have the webOS Chat service yet.** A CE TouchPad needs the service and
   account type installed with role files for its bus (`ls2` roles); Lunacy doesn't read those.
 - **Two AIM accounts: Messaging sends on one.** Its account list is keyed by service name,
-  and Palm's AIM type and webOS Chat's are both `type_aim`, so with both on a device every
+  and Palm's AIM type (in the ROM until 2026-10-12) and webOS Chat's are both `type_aim`, so with both on a device every
   outgoing message goes out on one of them, signed in or not. Seen 2026-10-12 on the A7 Lite:
   messages queued on the old development account (`waiting-for-connection`) while the webOS
   Chat account was online; removing the old account fixed it. Palm's Messaging behaves so with

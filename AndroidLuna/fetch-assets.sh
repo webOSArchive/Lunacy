@@ -421,15 +421,13 @@ NOTICE
 # runtime (/usr/lib/synergy-runtime: GLib 2.x and GIO, libffi, tidy, opus, ogg, nsl, zlib) and
 # helper plugins, CE's chat threader, kinds and activities; AIM's protocol plugin, libaim.so,
 # built from Pidgin 2.14.2 with webOS Chat's defaults (the webOS Chat project's
-# client/libaim/build-touchpad.sh: CE has none, Pidgin dropped AIM in 2.14.3); and from webOS
-# 3.0.5, which CE no longer carries, Palm's account validator and AIM account template. The
-# services start with the runtime folder first on their library path; Lunacy's glibc and
-# libstdc++ serve in place of CE's. Messaging itself is in CoreApps. From
-# Workbench/vendor/touchpad/messaging (CE) and messaging-305 (webOS 3.0.5's doctor).
+# client/libaim/build-touchpad.sh: CE has none, Pidgin dropped AIM in 2.14.3). The services
+# start with the runtime folder first on their library path; Lunacy's glibc and libstdc++
+# serve in place of CE's. Messaging itself is in CoreApps. From Workbench/vendor/touchpad/messaging
+# (CE). webOS Chat's own account type replaced Palm's AIM one, so a password is never asked for.
 M=$V/touchpad/messaging
-M5=$V/touchpad/messaging-305
 mkdir -p $R/usr/lib/purple-2 $R/usr/lib/synergy-runtime $R/etc/palm/tempdb/kinds $R/etc/palm/tempdb/permissions $R/etc/palm/contact_linker_plugins
-cp $M/usr/bin/imlibpurpletransport $M/usr/bin/imaccountvalidator $R/usr/bin/
+cp $M/usr/bin/imlibpurpletransport $R/usr/bin/
 cp $M/libpurple.so.0.14.13 $R/usr/lib/libpurple.so.0
 cp $M/usr/lib/synergy-runtime/* $R/usr/lib/synergy-runtime/
 for p in libaim.so idle.so newline.so offlinemsg.so autoaccept.so statenotify.so; do cp $M/usr/lib/purple-2/$p $R/usr/lib/purple-2/; done
@@ -437,11 +435,6 @@ cat > $R/usr/share/dbus-1/system-services/com.palm.imlibpurple.service <<'SVC'
 [D-BUS Service]
 Name=com.palm.imlibpurple
 Exec=/usr/bin/env LD_LIBRARY_PATH=/usr/lib/synergy-runtime /usr/bin/imlibpurpletransport -c {\"log\":{\"appender\":{\"type\":\"pmlog\"},\"levels\":{\"imlibpurple\":\"info\"}}} PalmPre Palm-Pre/1.5
-SVC
-cat > $R/usr/share/dbus-1/system-services/com.palm.imaccountvalidator.service <<'SVC'
-[D-BUS Service]
-Name=com.palm.imaccountvalidator
-Exec=/usr/bin/env LD_LIBRARY_PATH=/usr/lib/synergy-runtime /usr/bin/imaccountvalidator -c {\"log\":{\"appender\":{\"type\":\"pmlog\"},\"levels\":{\"imaccountvalidator\":\"info\"}}} PalmPre Palm-Pre/1.5
 SVC
 cp $M/usr/share/dbus-1/system-services/com.palm.messaging.chatthreader.service $R/usr/share/dbus-1/system-services/
 cp $M/etc/palm/db/kinds/* $R/etc/palm/db/kinds/
@@ -452,14 +445,13 @@ cp -r $M/etc/palm/activities/* $R/etc/palm/activities/
 cp $M/etc/palm/contact_linker_plugins/* $R/etc/palm/contact_linker_plugins/
 cp -r $M/usr/palm/services/com.palm.messaging.chatthreader $R/usr/palm/services/
 cp -r $M/usr/palm/frameworks/messaging.library $M/usr/palm/frameworks/contacts.plugin.messaging $R/usr/palm/frameworks/
-cp -r $M5/usr/palm/public/accounts/com.palm.aol $R/usr/palm/public/accounts/
 # webOS Chat's account type and service: with a webOS Account signed in, the service fetches
 # the chat credentials and makes the AIM account, so nobody types a pass phrase (messaging.md).
 # They come from the webOS Chat project's repository at the commit pinned here (its
 # client/webos-chat), cloned into Workbench/vendor/oscar when it isn't there; a local clone's
 # working tree is left as it is. Move the pin to take a newer version.
 OSCAR_REPO=https://github.com/webOSArchive/Oscar-AIM-for-webOS.git
-OSCAR_COMMIT=cf5f5d93e3210cef93e69f4b0b306cd75632be69
+OSCAR_COMMIT=d73da476b0b65a5e33477f245c46cf883d8d4585
 O=$V/oscar
 [ -d $O/.git ] || git clone -q $OSCAR_REPO $O
 git -C $O cat-file -e "$OSCAR_COMMIT^{commit}" 2>/dev/null || git -C $O fetch -q origin ||
@@ -470,24 +462,24 @@ git -C $O archive $OSCAR_COMMIT client/webos-chat | tar -x -C $WC ||
 rm -rf $R/usr/palm/services/com.palm.webosarchive.chat
 cp -r $WC/client/webos-chat/service $R/usr/palm/services/com.palm.webosarchive.chat
 cp -r $WC/client/webos-chat/accounts/org.webosarchive.chat $R/usr/palm/public/accounts/
+# Its page in Accounts (the account type's validator.customUI): Add Account turns chat on,
+# removing the account turns it off. A hidden app, bundled like the core apps.
+rm -rf $L/apps/org.webosarchive.chat.setup
+cp -r $WC/client/webos-chat/app/org.webosarchive.chat.setup $L/apps/
 rm -rf $WC
 cat > $R/usr/bin/NOTICE.messaging <<'NOTICE'
 imlibpurpletransport: webOS CE's IM transport (imlibpurpleservice, Herrie and the webOS CE
 community, https://github.com/webOS-ports/imlibpurpleservice), Apache 2.0, from the reference
 TouchPad (webOS CE 3.1.0), with the chat threader (Palm's, with the webOS CE project's fixes),
 the messaging kinds, activities and frameworks.
-imaccountvalidator and the AIM account template (com.palm.aol): HP webOS 3.0.5's own image (the
-TouchPad's webOS Doctor). Copyright Palm, Inc. / Hewlett-Packard; LG Electronics released
-imlibpurpleservice under the Apache 2.0 licence (https://github.com/openwebos). Distributed by
-Lunacy as they shipped, as abandonware.
 /usr/lib/libpurple.so.0 (libpurple 2.14.13) and its helper plugins in /usr/lib/purple-2: Pidgin's
 libpurple (GPL 2 or later, https://pidgin.im), as webOS CE built them.
 /usr/lib/purple-2/libaim.so: Pidgin 2.14.2's OSCAR (AIM) plugin (GPL 2 or later), built for
 webOS CE's libpurple by the webOS Chat project with four defaults changed (login host
 oscar.webosarchive.org, MD5 login, no TLS); its build script and the change are in that project,
 the source is Pidgin 2.14.2's release (https://pidgin.im).
-/usr/palm/services/com.palm.webosarchive.chat and the account type org.webosarchive.chat: the
-webOS Chat project's (codepoet, https://github.com/webOSArchive/Oscar-AIM-for-webOS), at the
+/usr/palm/services/com.palm.webosarchive.chat, the account type org.webosarchive.chat and its
+setup app org.webosarchive.chat.setup: the webOS Chat project's (codepoet, https://github.com/webOSArchive/Oscar-AIM-for-webOS), at the
 commit fetch-assets.sh pins.
 /usr/lib/synergy-runtime: webOS CE's runtime for the transport, from the same device: GLib, GIO,
 GObject, GModule and GThread (LGPL 2.1), libffi (MIT), tidy-html5 (W3C licence), Opus (BSD),

@@ -14,7 +14,7 @@ chat by itself ("Signing in with the webOS Account" below).
 | Piece | From | Where it is in Lunacy |
 |---|---|---|
 | Messaging 3.2.0 (Enyo 1) | webOS CE: Palm's 3.0.6606 with the CE project's changes (servers and channels, reactions, edits, receipts, emoji), 3.0.6607 on the device; 3.2.0 is CE's release number | `CoreApps/com.palm.app.messaging` |
-| `imlibpurpletransport` (`com.palm.imlibpurple`) | webOS CE: Herrie's imlibpurpleservice | ROM `/usr/bin`, a native service |
+| `imlibpurpletransport` (`com.palm.imlibpurple`) | webOS CE's build of codepoet's imlibpurpleservice fork (Herrie's, with the fixes below), `Workbench/vendor/im/transport` (`SOURCE` names the commit) | ROM `/usr/bin`, a native service |
 | libpurple 2.14.13 and helper plugins | webOS CE | ROM `/usr/lib/libpurple.so.0`, `/usr/lib/purple-2` |
 | `libaim.so` (AIM / OSCAR) | Pidgin 2.14.2's OSCAR code, built by the webOS Chat project for CE's libpurple, with webOS Chat's defaults | ROM `/usr/lib/purple-2/libaim.so` |
 | GLib 2.x, GIO, libffi, tidy, opus, ogg, nsl, zlib | webOS CE's transport runtime | ROM `/usr/lib/synergy-runtime` |
@@ -22,9 +22,18 @@ chat by itself ("Signing in with the webOS Account" below).
 | The messaging kinds, permissions, activities, frameworks | webOS CE | ROM `/etc/palm`, `/usr/palm/frameworks` |
 | webOS Chat's account type (`org.webosarchive.chat`), service (`com.palm.webosarchive.chat`, JS) and setup page (`org.webosarchive.chat.setup`, a hidden Enyo app) | The webOS Chat project's `client/webos-chat`, at the commit `fetch-assets.sh` pins (`OSCAR_COMMIT`; cloned into `Workbench/vendor/oscar` when missing) | ROM `/usr/palm/public/accounts`, `/usr/palm/services`; bundled app |
 
-`AndroidLuna/fetch-assets.sh` lays them in from `Workbench/vendor/touchpad/messaging` (CE) and
-`messaging-305` (3.0.5). The transport and validator start with `/usr/lib/synergy-runtime`
-first on their library path, written into their D-Bus service files. Lunacy's glibc 2.36 and
+`AndroidLuna/fetch-assets.sh` lays them in from `Workbench/vendor/touchpad/messaging` (CE) and,
+for the transport, `Workbench/vendor/im/transport`. The transport starts with
+`/usr/lib/synergy-runtime` first on its library path, written into its D-Bus service file.
+The transport fixes from 2026-10-12, made in codepoet's fork and built by CE (Lunacy never
+rebuilds it):
+- accounts no longer go away by themselves five minutes after signing in (libpurple's
+  auto-away), which showed every webOS Chat buddy idle;
+- removing a buddy no longer aborts the transport (a string literal stored as an alias), which
+  crash-looped at every sign-in while the delete waited;
+- buddies' presence reaches Messaging after a restart, and accounts are signed back in;
+- only the accounts webOS asks for are signed in, so an account removed while the transport
+  wasn't running no longer signs in invisibly from libpurple's own `accounts.xml`. Lunacy's glibc 2.36 and
 libstdc++ stand in for CE's `synergy-glibc` and its libstdc++. The device's launch wrapper
 (`imwrap.sh`) isn't used.
 
@@ -118,12 +127,15 @@ screen name and chat key from the server's `accounts.json`.
 ## Known bugs and open items
 
 - **CE's transport and per-account settings.** `onCreate` stores the options nested under
-  `config`, but the transport hands libpurple the whole record. It also keeps the first
-  libpurple account it creates in `accounts.xml` and never re-applies options. Palm's original
-  has the first bug too. Both are for a pull request to imlibpurpleservice, along with backing
-  off a failing login (about 850 retries in 40 seconds, seen on the TouchPad).
-- **webOS CE doesn't have the webOS Chat service yet.** A CE TouchPad needs the service and
-  account type installed with role files for its bus (`ls2` roles); Lunacy doesn't read those.
+  `config`, but the transport as seen on the TouchPad on 2026-10-10 handed libpurple the whole
+  record, and never re-applied options to a libpurple account it had created. Unchecked
+  against the current fork; webOS Chat doesn't need either, since the plugin's defaults are
+  right. The login retry storm seen then (about 850 in 40 s) was AOL's client login, not a
+  missing backoff (the CE project's finding: the transport already doesn't retry credential
+  errors).
+- **webOS CE is building webOS Chat in:** an enabler package for 3.1.0 and the 3.2.0 image,
+  with the setup page inside its own app (the account type's `customUI` names that app there).
+  Lunacy ships the page as the hidden app `org.webosarchive.chat.setup`.
 - **The transport is CE's build, and CE's transport watchdog isn't ours.** Lunacy takes the
   transport webOS CE builds from codepoet's imlibpurpleservice fork (never rebuilt here;
   `Workbench/vendor/im/transport/SOURCE` names the commit). For 3.1.0, CE added a watchdog to its

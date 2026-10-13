@@ -124,6 +124,16 @@ screen name and chat key from the server's `accounts.json`.
   off a failing login (about 850 retries in 40 seconds, seen on the TouchPad).
 - **webOS CE doesn't have the webOS Chat service yet.** A CE TouchPad needs the service and
   account type installed with role files for its bus (`ls2` roles); Lunacy doesn't read those.
+- **The transport is CE's build, and CE's transport watchdog isn't ours.** Lunacy takes the
+  transport webOS CE builds from codepoet's imlibpurpleservice fork (never rebuilt here;
+  `Workbench/vendor/im/transport/SOURCE` names the commit). For 3.1.0, CE added a watchdog to its
+  wrapper, `imwrap.sh` (fork `a40e37c`): it kills an on-demand transport stuck at startup (one
+  thread on a futex for 60 s) and lets the resident one take over, after the first transport
+  hung on 2 of 7 TouchPad boots. The cause isn't found; CE's leading suspect is its own
+  wrappers deleting `/dev/shm/sem.PmLogLib`, a semaphore every PmLog process shares. Lunacy
+  runs the binary directly, with no wrappers and no PmLog daemon, so it has neither the
+  suspect nor the watchdog. When CE finds and fixes the cause (its 3.2.0 plan), check whether
+  the fix is in the transport itself, and if so take that build.
 - **Two AIM accounts: Messaging sends on one.** Its account list is keyed by service name,
   and Palm's AIM type (in the ROM until 2026-10-12) and webOS Chat's are both `type_aim`, so with both on a device every
   outgoing message goes out on one of them, signed in or not. Seen 2026-10-12 on the A7 Lite:

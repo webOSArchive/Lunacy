@@ -371,6 +371,7 @@ Added to reproduce a community report. Since 2026-10-02 the phone layout's test 
 | CE's latest transport (2026-10-12) | On the **Galaxy Tab A7 Lite**: an arm32 debug build with the transport CE built from the fork at `9ecf634` installed with `adb install -r` (data kept), Lunacy force-stopped and relaunched | Signs in as `colie` |
 | Transport that signs in only webOS's accounts (2026-10-12) | On the **Galaxy Tab A7 Lite**: an arm32 debug build with CE's transport at `d3120ab` installed with `adb install -r` (data kept); Lunacy force-stopped, libpurple's `accounts.xml` replaced by the earlier `accounts.xml.before-cleanup` (leftover `curator` and `LunacyTest@aol.com`, all enabled) to recreate the bug, the current file kept as `accounts.xml.colie-only`, and Lunacy relaunched | The transport disabled the two leftovers at start (`auto-login` 0) and signed in only `colie`; `accounts.xml` keeps all three entries, two disabled |
 | 0.7.2 build 242 on the Pixel (2026-10-12) | On the **Pixel Tablet**, at codepoet's request: the arm64 release build 242 (0.7.2, commit bcec28e) installed over build 238 with `adb install -r` | Data kept |
+| CE's transport at 1960854 (2026-10-13) | On the **Galaxy Tab A7 Lite**: an arm32 debug build with CE's transport built from the fork at `1960854` installed with `adb install -r` (data kept), Lunacy force-stopped and relaunched | Signs in as `colie`; the leftover accounts stay disabled |
 
 When the phone doesn't show in `adb devices` although it is on USB with debugging on, restart
 the adb server (`adb kill-server`).

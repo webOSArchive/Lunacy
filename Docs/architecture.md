@@ -1339,6 +1339,25 @@ with webOS Chat's AIM plugin ([messaging.md](messaging.md)).
   memory and says so once (`sem_open error`); its own levels then leave only errors.
   Development: `files/pdk/args/<bus name>` (in Lunacy's data, written with `run-as`) replaces a
   service's arguments, e.g. `-c '{"log":{"appender":{"type":"stdout"},"levels":{"default":"debug"}}}'`.
+  On a **release build**, where `run-as` is refused, write the same file through the SDK relay:
+  `novacom run` executes as Lunacy's own user, so it reaches the app's data. Save this script
+  (here for the IMAP service) and feed it to a shell on the device, with the device's id from
+  `novacom -l`: `novacom -d <id> run file:///bin/sh < imap-debug.sh`.
+
+  ```sh
+  D=/data/data/org.webosarchive.lunacy/files/pdk/args
+  mkdir -p $D
+  cat > $D/com.palm.imap <<'ARGS'
+  -c '{"log":{"appender":{"type":"stdout"},"levels":{"default":"debug","com.palm.imap":"debug","com.palm.imap.client":"debug","com.palm.imap.session":"debug","com.palm.mail.activity":"debug"}}}'
+  ARGS
+  # stop the running service; the next call starts it with the file's arguments
+  for p in /proc/[0-9]*; do c=$(tr '\0' ' ' < $p/cmdline 2>/dev/null)
+    case "$c" in *mojomail-imap*) kill ${p#/proc/};; esac; done
+  ```
+
+  The debug log is then in logcat as `svc [com.palm.imap]`. To turn it off, run the same with
+  `rm -f $D/com.palm.imap` in place of the `cat`. Used on the Pixel Tablet on 2026-10-12 to
+  find the IMAP `uid` bug, and turned off again.
 - **The network** is Android's: `HostNetwork` writes the root's `/etc/resolv.conf` from the
   active network's DNS servers (and again when they change), and
   `/etc/ssl/certs/ca-certificates.crt` from Android's trust store, the system's roots and the

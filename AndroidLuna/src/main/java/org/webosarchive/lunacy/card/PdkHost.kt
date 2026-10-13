@@ -105,7 +105,7 @@ class PdkHost(
         // The installer keeps a package's files as they came; a PDK binary wants its
         // execute bit back (the loader runs it, qemu checks it).
         original.setExecutable(true, false)
-        val binary = PdkRuntime.withoutExecStack(original)
+        val binary = PdkRuntime.runnable(original)
         val dataDir = File(context.filesDir, "pdk/data/$appId").also { it.mkdirs() }
         val webosRoot = File(context.filesDir, "webos")
         // A 32-bit CPU runs the binary through the loader; a 64-bit-only one runs it under
@@ -425,7 +425,10 @@ class PdkRuntime(private val context: Context, val appsRoot: File, val screenWid
 
     companion object {
         private const val PT_GNU_STACK = 0x6474e551L
+        private const val PT_INTERP = 3L
         private const val PF_X = 1
+        /** The loader webOS's binaries name, which the runtime provides (pdk/lib/ld-linux.so.3). */
+        private const val LOADER = "/lib/ld-linux.so.3"
 
         /**
          * A 2010 toolchain left many PDK binaries asking for an executable stack
@@ -437,8 +440,14 @@ class PdkRuntime(private val context: Context, val appsRoot: File, val screenWid
          * with a `.lunacy.` prefix, so a game that finds its data from its own path still
          * does. The package's own file is never written to. Returns the original when it
          * doesn't ask, or isn't an ELF the shell can read.
+         *
+         * The copy also names webOS's loader, /lib/ld-linux.so.3, as its interpreter when the
+         * binary names another: qemu (a 64-bit-only device) loads the interpreter the binary
+         * names, and webOS CE's IM transport names CE's own, /media/cryptofs/synergy-glibc/lib/
+         * ld-linux.so.3, which Lunacy doesn't have, so it exited at once on the Pixel Tablet
+         * (2026-10-13). The native path runs the loader itself and never reads the name.
          */
-        fun withoutExecStack(original: File): File {
+        fun runnable(original: File): File {
             try {
                 val bytes = original.readBytes()
                 if (bytes.size < 52 || bytes[0] != 0x7f.toByte() || bytes[1] != 'E'.code.toByte() || bytes[4] != 1.toByte()) return original
@@ -448,7 +457,19 @@ class PdkRuntime(private val context: Context, val appsRoot: File, val screenWid
                 for (i in 0 until phnum) {
                     val ph = phoff + i * phentsize
                     if (ph + 32 > bytes.size) break
-                    if (bb.getInt(ph).toLong() and 0xffffffffL != PT_GNU_STACK) continue
+                    val type = bb.getInt(ph).toLong() and 0xffffffffL
+                    if (type == PT_INTERP) {
+                        val off = bb.getInt(ph + 4); val size = bb.getInt(ph + 16)
+                        if (off < 0 || size <= LOADER.length || off + size > bytes.size) continue
+                        val name = String(bytes, off, size, Charsets.ISO_8859_1).substringBefore('\u0000')
+                        if (name != LOADER) {
+                            java.util.Arrays.fill(bytes, off, off + size, 0)
+                            LOADER.toByteArray(Charsets.ISO_8859_1).copyInto(bytes, off)
+                            changed = true
+                        }
+                        continue
+                    }
+                    if (type != PT_GNU_STACK) continue
                     val flags = bb.getInt(ph + 24)
                     if (flags and PF_X != 0) { bb.putInt(ph + 24, flags and PF_X.inv()); changed = true }
                 }
@@ -456,7 +477,7 @@ class PdkRuntime(private val context: Context, val appsRoot: File, val screenWid
                 val copy = File(original.parentFile, ".lunacy." + original.name)
                 if (!copy.isFile || copy.length() != original.length() || copy.lastModified() < original.lastModified()) {
                     copy.writeBytes(bytes)
-                    Log.i(AppServer.TAG, "pdk: ${original.name} asked for an executable stack; running a copy without")
+                    Log.i(AppServer.TAG, "pdk: running a copy of ${original.name} without an executable stack and with webOS's loader")
                 }
                 copy.setExecutable(true, false)
                 return copy

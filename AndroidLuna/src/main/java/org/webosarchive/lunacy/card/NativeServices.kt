@@ -71,7 +71,7 @@ class NativeServices(private val bus: Bus, private val webos: WebosRoot, private
         // The ROM lays files down without their execute bit. The loader doesn't need it, but
         // qemu (a 64-bit-only device) refuses a binary without it, as "Exec format error".
         original.setExecutable(true, false)
-        val binary = PdkRuntime.withoutExecStack(original)
+        val binary = PdkRuntime.runnable(original)
         // Development: files/pdk/args/<bus name> holds a command line that replaces the
         // service file's arguments (mojomail's own logging to stdout at debug level, which
         // reaches /var/log/messages: '-c {"log":{"appender":{"type":"stdout"},…}}').

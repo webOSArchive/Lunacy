@@ -3,7 +3,36 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-10-10)
+## Where things stand (2026-10-13)
+
+**0.7.2 release candidate: build 244** (commit c619922; arm32 and arm64, release and debug, and
+the keyboard 0.5.0), pushed, not tagged. codepoet tested chat on the Galaxy Tab A7 Lite on
+2026-10-13 ("everything seems to be good"); the release waits only on longevity testing of
+chat and the IM transport. Since 0.7.0:
+
+- **webOS Chat** ([messaging.md](messaging.md)). Messaging 3.2.0 with webOS CE's IM transport
+  and libpurple, chatting over AIM with `oscar.webosarchive.org` (the `Oscar` project). The
+  webOS Account's sign-in sets chat up with no pass phrase; webOS Chat is in Add Account (a
+  setup page, `org.webosarchive.chat.setup`), removing the account turns chat off, and signing
+  out resets that. Palm's 3.0.5 AIM type left the ROM.
+- **The IM transport is webOS CE's build** of codepoet's imlibpurpleservice fork, never rebuilt
+  here (`Workbench/vendor/im/transport/SOURCE`, now `1960854`). Its fixes this round: no
+  automatic away five minutes after sign-in; deleting a buddy no longer aborts it; presence
+  after a restart; only webOS's own accounts sign in (no hidden sessions from libpurple's
+  `accounts.xml`). CE's startup-hang watchdog is in its wrappers, which Lunacy doesn't use.
+- **Exchange ActiveSync** and its security policies ([eas.md](eas.md)).
+- **Fixes:** Db8 selects a stored `null` as `null` (an IMAP inbox stuck retrying push every
+  second); Db8 `incDel` indexes (the chat threader spinning); sounds an app names by its own
+  URL (Messaging's sent and received); the caret in inputs on scaled cards; the status bar
+  around display cutouts; time-zone rules; App Catalog's icon.
+- **Tools:** a native service's debug log on a release build, through `novacom run`
+  ([architecture.md](architecture.md), "Native services").
+
+Open: longevity of chat on the devices; CE's startup hang (a PmLog process killed while holding
+PmLogLib's semaphore, which the library never recovers; when CE fixes the cause, take it if it
+is in the transport); the Add Buddy invitation message, which the transport drops.
+
+## Where things stood (2026-10-10)
 
 **2026-10-10: Exchange ActiveSync** (codepoet: "port the EAS sync functionality from webOS to
 Lunacy", working autonomously). Palm's own `mojomail-eas` runs as a native service, like IMAP:

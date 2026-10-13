@@ -33,7 +33,13 @@ rebuilds it):
   crash-looped at every sign-in while the delete waited;
 - buddies' presence reaches Messaging after a restart, and accounts are signed back in;
 - only the accounts webOS asks for are signed in, so an account removed while the transport
-  wasn't running no longer signs in invisibly from libpurple's own `accounts.xml`. Lunacy's glibc 2.36 and
+  wasn't running no longer signs in invisibly from libpurple's own `accounts.xml`.
+
+The chat threader is webOS CE's 1.1.0.3 (2026-10-13, webos-doctor-ce `7162f27`, laid into
+`Workbench/vendor/touchpad/messaging`): its person lookup through a buddy (Synergy Revival's
+person-link fallback) never resolved when the sender was neither a contact nor a buddy linked
+to one, so the first message from a new webOS Chat user was stored but never filed into a
+conversation (found on the Pixel Tablet). 1.1.0.3 always sets that step's result. Lunacy's glibc 2.36 and
 libstdc++ stand in for CE's `synergy-glibc` and its libstdc++. The device's launch wrapper
 (`imwrap.sh`) isn't used.
 

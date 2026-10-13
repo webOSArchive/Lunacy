@@ -14,8 +14,9 @@ import org.webosarchive.lunacy.card.AppServer
  *
  * - No class and no file, or the class "none": nothing.
  * - A file named by the app plays: an absolute path is a path on the device (served from the
- *   app's origin, like any /usr/palm or /media/internal path), a relative one is looked up in
- *   the app's resources/<locale>/ and then its own folder.
+ *   app's origin, like any /usr/palm or /media/internal path; a file:// path or the app's own
+ *   URL names one too), a relative one is looked up in the app's resources/<locale>/ and then
+ *   its own folder.
  * - Otherwise the class's default: webOS's notification sound for "notifications" (and for
  *   any class it doesn't know), its alert sound for "alerts", "alarm" and "calendar", its
  *   ringtone for "ringtones". Measured on the reference TouchPad: "notifications" played
@@ -152,7 +153,12 @@ class Sounds(private val context: Context, private val server: AppServer, privat
     /** The app's sound file, copied out of the app server into the cache so MediaPlayer can open it. */
     private fun appFile(appId: String, entry: String): java.io.File? {
         val base = "https://$appId${AppServer.HOST_SUFFIX}"
-        val candidates = if (entry.startsWith("/")) listOf(base + entry) else {
+        // Apps that build the path from their own location (enyo.fetchAppRootPath, minus the
+        // "file://" a device's had) name it by the app's URL here, as Messaging does its sent
+        // and received sounds; a file:// path is a device path too.
+        val candidates = if (entry.startsWith("$base/")) listOf(entry)
+        else if (entry.startsWith("file:///")) listOf(base + entry.removePrefix("file://"))
+        else if (entry.startsWith("/")) listOf(base + entry) else {
             val locale = context.resources.configuration.locale.let { it.language + "_" + it.country.lowercase() }
             listOf(AppServer.appUrl(appId, "resources/$locale/$entry", dirOf(appId)), AppServer.appUrl(appId, entry, dirOf(appId)))
         }

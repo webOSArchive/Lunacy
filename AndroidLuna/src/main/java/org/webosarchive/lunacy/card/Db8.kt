@@ -770,13 +770,23 @@ class Db8(private val service: String, file: File?,
 
     private fun project(o: JSONObject, select: List<String>): JSONObject {
         val out = JSONObject()
-        for (s in select) value(o, s)?.let { v ->
+        // A property stored as null is selected as null, as db8 returned it: the IMAP service
+        // marks a message it has finished with "uid": null and skips it when it reads that back.
+        for (s in select) (value(o, s) ?: JSONObject.NULL.takeIf { storedNull(o, s) })?.let { v ->
             val parts = s.split('.')
             var cur = out
             for (part in parts.dropLast(1)) cur = cur.optJSONObject(part) ?: JSONObject().also { cur.put(part, it) }
             cur.put(parts.last(), v)
         }
         return out
+    }
+
+    /** Whether a dotted path (through objects) holds an explicit null. */
+    private fun storedNull(o: JSONObject, path: String): Boolean {
+        val parts = path.split('.')
+        var cur = o
+        for (part in parts.dropLast(1)) cur = cur.optJSONObject(part) ?: return false
+        return cur.has(parts.last()) && cur.isNull(parts.last())
     }
 
     private fun pageToken(offset: Int) = Base64.encodeToString("lunacy:$offset".toByteArray(), Base64.NO_WRAP or Base64.URL_SAFE)

@@ -5,10 +5,11 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-10-13)
 
-**0.7.2 release candidate: build 244** (commit c619922; arm32 and arm64, release and debug, and
-the keyboard 0.5.0), pushed, not tagged. codepoet tested chat on the Galaxy Tab A7 Lite on
-2026-10-13 ("everything seems to be good"); the release waits only on longevity testing of
-chat and the IM transport. Since 0.7.0:
+**0.7.2 release candidate: build 249** (commit 10c5550; arm32 and arm64, release and debug, and
+the keyboard 0.5.0), pushed; codepoet makes the release. On the Galaxy Tab A7 Lite and the
+Pixel Tablet. Two late fixes after build 244, both from the Pixel Tablet: the IM transport now
+runs under qemu (a 64-bit-only device), and the chat threader files the first message from a
+sender who is neither a contact nor a linked buddy. Since 0.7.0:
 
 - **webOS Chat** ([messaging.md](messaging.md)). Messaging 3.2.0 with webOS CE's IM transport
   and libpurple, chatting over AIM with `oscar.webosarchive.org` (the `Oscar` project). The
@@ -20,6 +21,11 @@ chat and the IM transport. Since 0.7.0:
   automatic away five minutes after sign-in; deleting a buddy no longer aborts it; presence
   after a restart; only webOS's own accounts sign in (no hidden sessions from libpurple's
   `accounts.xml`). CE's startup-hang watchdog is in its wrappers, which Lunacy doesn't use.
+- **Chat threader 1.1.0.3** (webOS CE's fix): Synergy Revival's person lookup through a buddy
+  never resolved for an unknown sender, so a new chat partner's first message was stored but
+  never shown.
+- **32-bit binaries under qemu run with webOS's loader** (`PdkRuntime.runnable`): qemu loads
+  the interpreter a binary names, and CE's transport names CE's own, which Lunacy doesn't have.
 - **Exchange ActiveSync** and its security policies ([eas.md](eas.md)).
 - **Fixes:** Db8 selects a stored `null` as `null` (an IMAP inbox stuck retrying push every
   second); Db8 `incDel` indexes (the chat threader spinning); sounds an app names by its own

@@ -564,6 +564,11 @@
 // the case people see: its buttons' clients have 3 px margins, so in Chromium the bar's row grew
 // 6 px and its load progress sat under it with a gap (luna-deltas A12). Such a margin is set
 // to 0 inline here, and given back if the child gains padding or the element moves.
+// Each zeroed margin remembers the box child it was zeroed for, and only a pass that looks at
+// that child again can give it back: a pass reaching only part of the way up the tree once
+// gave back a margin that only a box further up could take away again, and the next frame's
+// pass took it away - on every frame a scroller's content moved, so World Today's rows, each
+// a scroller with a 2 px top margin, shook up and down by 2 px as they scrolled (2026-10-14).
 (function () {
 	if (!window.MutationObserver || !window.requestAnimationFrame) { return; }
 	var zeroed = [], dirty = [], all = true, queued = false;
@@ -587,13 +592,16 @@
 	function closedEdge(s, side) {
 		return (parseFloat(s["padding" + SIDE[side][0]]) || 0) > 0 || (parseFloat(s["border" + SIDE[side][0] + "Width"]) || 0) > 0;
 	}
-	// The blocks whose margins collapse out through a box child's edge.
+	// The blocks whose margins collapse out through a box child's edge, each with that child.
 	function chain(kid, side, out) {
+		// A child that is a box itself lays its own children out, margins and all: nothing
+		// collapses out through it (World Today's first row kept its 2 px gap only by luck).
+		if (box(kid)) { return; }
 		var s = getComputedStyle(kid);
 		if (closedEdge(s, side)) { return; }
 		for (var c = edgeChild(kid, side === "bottom"); c; c = edgeChild(c, side === "bottom")) {
 			var cs = getComputedStyle(c);
-			out.push([c, side]);
+			out.push([c, side, kid]);
 			if (closedEdge(cs, side) || cs.overflow !== "visible") { return; }
 		}
 	}
@@ -606,9 +614,9 @@
 		for (var i = 0; i < list.length; i++) { if (list[i][0] === e && list[i][1] === side) { return i; } }
 		return -1;
 	}
-	function zero(e, side) {
+	function zero(e, side, kid) {
 		var prop = SIDE[side][2];
-		zeroed.push([e, side, e.style.getPropertyValue(prop), e.style.getPropertyPriority(prop)]);
+		zeroed.push([e, side, e.style.getPropertyValue(prop), e.style.getPropertyPriority(prop), kid]);
 		e.style.setProperty(prop, "0px", "important");
 	}
 	function restore(z) {
@@ -639,14 +647,16 @@
 		}
 		dirty = [];
 		var kids = kidsOf(parents);
-		// Margins given back first, so what is asked of the layout is the app's own.
-		var mine = zeroed.filter(function (z) {
-			return !document.documentElement.contains(z[0]) || kids.some(function (k) { return k.contains(z[0]); });
+		var want = wanted(kids);
+		// Given back: a margin whose element has gone, or whose child was looked at again and
+		// no longer drops it. One zeroed for a child this pass didn't reach stays as it is.
+		var stale = zeroed.filter(function (z) {
+			return !document.documentElement.contains(z[0]) || (kids.indexOf(z[4]) >= 0 && has(want, z[0], z[1]) < 0);
 		});
-		mine.forEach(function (z) { restore(z); zeroed.splice(zeroed.indexOf(z), 1); });
-		wanted(kids).forEach(function (w) {
+		stale.forEach(function (z) { restore(z); zeroed.splice(zeroed.indexOf(z), 1); });
+		want.forEach(function (w) {
 			if (has(zeroed, w[0], w[1]) >= 0) { return; }
-			if ((parseFloat(getComputedStyle(w[0])[SIDE[w[1]][1]]) || 0) !== 0) { zero(w[0], w[1]); }
+			if ((parseFloat(getComputedStyle(w[0])[SIDE[w[1]][1]]) || 0) !== 0) { zero(w[0], w[1], w[2]); }
 		});
 	}
 	function queue() { if (!queued) { queued = true; requestAnimationFrame(run); } }

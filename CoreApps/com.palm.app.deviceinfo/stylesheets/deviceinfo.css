@@ -68,6 +68,10 @@ body {
 	color: #777;
 	font-size: 14px;
 	padding: 8px 12px 20px 12px;
+	/* A service id is one long word (com.palm.service.calendar.meetingupdate): on a phone's
+	   card it ran past the column, the page grew wider than the card, and Enyo's scroller
+	   then scrolled sideways too. It breaks where it has to instead. */
+	word-wrap: break-word;
 }
 .dialog-title {
 	font-size: 20px;

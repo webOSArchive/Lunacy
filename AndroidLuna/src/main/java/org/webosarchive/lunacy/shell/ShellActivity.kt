@@ -2096,6 +2096,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                     reply(Bus.ok(mapOf("processId" to "success")))
                     return@Handler
                 }
+                // An Android package goes to Android's installer (WebosLinks.androidPackage).
+                org.webosarchive.lunacy.card.WebosLinks.androidPackage(target, jsServices.root)?.let {
+                    reply(org.webosarchive.lunacy.card.WebosLinks.open(this, it))
+                    return@Handler
+                }
                 if (target.startsWith("file:", true) || target.startsWith("/")) {
                     reply(JSONObject().put("returnValue", false).put("errorText", "No handler for $target").toString())
                     return@Handler

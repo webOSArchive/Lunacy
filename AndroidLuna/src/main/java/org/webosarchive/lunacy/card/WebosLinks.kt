@@ -21,6 +21,9 @@ import org.json.JSONObject
  * players are generally better, and this is a good place to behave differently). Without one,
  * the launch fails and Photos plays the video in its own player, as CE's does.
  *
+ * And Android's own packages: an `.apk` opened by path (the Web app's downloads list) has no
+ * webOS handler, and goes to Android's package installer, which asks the user as it always does.
+ *
  * This is the same bargain as the settings shortcuts (Docs/architecture.md, "Settings"): where
  * the thing belongs to the host OS, hand it over rather than pretend. It is a mapping of
  * webOS's *own* app ids, not a special case for any third-party app - Glimpse, the App Museum
@@ -106,6 +109,21 @@ object WebosLinks {
         if (local != null) intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         p?.optString("videoTitle")?.takeIf { it.isNotEmpty() }?.let { intent.putExtra(Intent.EXTRA_TITLE, it) }
         return intent
+    }
+
+    /**
+     * Android's package installer for an `.apk` under /media/internal, or null for any other
+     * file. From Android 7 the installer reads a content URI ([MediaFiles]); before that it only
+     * takes a file URI, which it can read only in Android's shared storage, not in Lunacy's own tree.
+     */
+    fun androidPackage(target: String, webosRoot: java.io.File): Intent? {
+        val path = target.removePrefix("file://")
+        if (!path.lowercase(java.util.Locale.US).endsWith(".apk")) return null
+        val uri = if (android.os.Build.VERSION.SDK_INT >= 24) MediaFiles.uriFor(path) ?: return null
+            else UserFiles.resolve(webosRoot, path.removePrefix("/media/internal/").takeIf { path.startsWith("/media/internal/") } ?: return null)
+                ?.takeIf { it.isFile && !it.canonicalPath.startsWith(webosRoot.canonicalPath) }?.let { Uri.fromFile(it) } ?: return null
+        return Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
 
     /**

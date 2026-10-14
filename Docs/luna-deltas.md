@@ -345,6 +345,10 @@ reports `none` when it hasn't, and `pin` or `password` (whichever was last set t
 
 **A deliberate delta, codepoet's decision, 2026-10-14** ("Android's video player is generally better ... this is a good place to behave differently"). webOS CE's Photos & Videos 3.2.0 hands a video to CE's Videos app (`applicationManager/launch` of `com.palm.app.videos` with `target`, `videoTitle` and the rest), and plays it in its own player only if that launch fails. Lunacy doesn't ship CE's Videos app; it answers that launch as one of webOS's own apps Android has (`WebosLinks.kt`, as for Maps and Phone): an `ACTION_VIEW` of the file, typed by its extension, as `content://org.webosarchive.lunacy.media/media/internal/...` (`MediaFiles.kt`, a read-only provider readable only through the intent's grant), or of a stream's http(s) URL. Whatever player the device has opens it, and Back returns to Lunacy. On a device with none, the launch fails and Photos plays the video in its card, as it does on a CE TouchPad without Videos. Palm's Video Player, which other apps launch by its own id, is unchanged.
 
+### A24. An Android package opens in Android's installer
+
+**A deliberate delta, codepoet's decision, 2026-10-14.** On webOS, opening an `.apk` by path (the Web app's downloads list calls `applicationManager/open` with the file as `target`) found no handler and failed. Lunacy runs on Android, so it hands the file to Android's package installer instead (`WebosLinks.androidPackage`): an `ACTION_VIEW` typed `application/vnd.android.package-archive`, the file lent as a content URI (`MediaFiles.kt`) from Android 7, and as a file URI before that, which the installer can read only in Android's shared storage (`downloads` is Android's Download folder). From Android 8 the user first allows Lunacy as a source in Android's own dialog; Lunacy declares `REQUEST_INSTALL_PACKAGES` for it. Google Play restricts that permission, so a Play build would need to drop this or justify it. Every other file without a handler still fails as on webOS.
+
 ## B. The shell
 
 ### B1. Card view: stacks, reorder, dimming, the angry card

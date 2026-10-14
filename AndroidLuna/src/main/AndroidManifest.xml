@@ -26,6 +26,9 @@
          (AndroidApps.uninstall). From a target of 28 (the arm64 flavour) ACTION_DELETE is
          silently dropped without this; the user still confirms on Android's own dialog. -->
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <!-- An .apk the user opens from the Web app's downloads goes to Android's installer
+         (WebosLinks.androidPackage); from Android 8 the installer needs this to accept it. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application
         android:label="Lunacy"
         android:icon="@mipmap/ic_launcher"

@@ -75,6 +75,11 @@
         <!-- Android's screen saver, which Android 5 calls Daydream, showing webOS's
              Exhibition mode. The system is the only thing allowed to start it
              (BIND_DREAM_SERVICE); its label and the launcher icon are what Settings lists. -->
+        <!-- /media/internal's files, lent to the Android app a video is handed to (WebosLinks). -->
+        <provider android:name=".card.MediaFiles"
+            android:authorities="org.webosarchive.lunacy.media"
+            android:exported="false"
+            android:grantUriPermissions="true" />
         <service android:name=".shell.ExhibitionDream"
             android:exported="true"
             android:label="Lunacy Exhibition"

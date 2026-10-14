@@ -877,8 +877,10 @@ what webOS's media index holds and shows the thumbnails the service makes.
   reading normal (`ExifOrientation.kt`), because webOS's WebKit ignored EXIF orientation and
   Chromium from 81 on honours it, in a canvas too, where no style turns it off. An XHR gets
   the file as it is.
-- **Videos** go to webOS CE's Videos app (`com.palm.app.videos`); Lunacy doesn't bundle it, so
-  the launch fails and Photos plays the video in its own player, as stock did.
+- **Videos** go to webOS CE's Videos app (`com.palm.app.videos`), which Lunacy doesn't bundle:
+  it hands that launch to Android's video player, the file lent as a content URI
+  (`WebosLinks.kt`, `MediaFiles.kt`; luna-deltas A23). Without a player the launch fails and
+  Photos plays the video in its own, as stock did.
 - **extractfs** (`Extractfs.kt`) is the card host's and the services' alike, with both
   forms of path measured on the TouchPad; see the JS services section for how a service
   reads it.

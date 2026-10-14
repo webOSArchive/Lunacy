@@ -16,6 +16,11 @@ import org.json.JSONObject
  * Android's mail composer, and so on. Web pages are the exception: Lunacy ships Palm's Web app,
  * and the shell opens them there; Android's browser answers only if it isn't installed.
  *
+ * Videos too: webOS CE's Photos hands a video to CE's Videos app (`com.palm.app.videos`), which
+ * Lunacy doesn't ship, and Android's player plays it instead (codepoet, 2026-10-14: Android's
+ * players are generally better, and this is a good place to behave differently). Without one,
+ * the launch fails and Photos plays the video in its own player, as CE's does.
+ *
  * This is the same bargain as the settings shortcuts (Docs/architecture.md, "Settings"): where
  * the thing belongs to the host OS, hand it over rather than pretend. It is a mapping of
  * webOS's *own* app ids, not a special case for any third-party app - Glimpse, the App Museum
@@ -25,7 +30,7 @@ object WebosLinks {
     /** webOS's built-in app ids that Android can answer for. */
     val HANDLED = setOf(
         "com.palm.app.browser", "com.palm.app.email", "com.palm.app.phone",
-        "com.palm.app.messaging", "com.palm.app.maps", "com.palm.app.youtube",
+        "com.palm.app.messaging", "com.palm.app.maps", "com.palm.app.youtube", "com.palm.app.videos",
     )
 
     /**
@@ -42,6 +47,7 @@ object WebosLinks {
             appId == "com.palm.app.phone" -> phone(params)
             appId == "com.palm.app.messaging" -> message(params)
             appId == "com.palm.app.maps" -> maps(params)
+            appId == "com.palm.app.videos" -> video(url, params)
             else -> null
         }
     }
@@ -86,6 +92,20 @@ object WebosLinks {
             else -> return null
         }
         return Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+    }
+
+    /**
+     * CE's Videos parameters: `target` (a path under /media/internal, or a stream's URL) and
+     * `videoTitle`. A file goes as a content URI Android's player may read ([MediaFiles]).
+     */
+    private fun video(target: String, p: JSONObject?): Intent? {
+        if (target.isEmpty()) return null
+        val local = MediaFiles.uriFor(target)
+        val uri = local ?: runCatching { Uri.parse(target) }.getOrNull()?.takeIf { it.scheme == "http" || it.scheme == "https" } ?: return null
+        val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, MediaFiles.mimeOf(target) ?: "video/*")
+        if (local != null) intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        p?.optString("videoTitle")?.takeIf { it.isNotEmpty() }?.let { intent.putExtra(Intent.EXTRA_TITLE, it) }
+        return intent
     }
 
     /**

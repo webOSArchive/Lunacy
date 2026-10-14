@@ -337,6 +337,10 @@ reports `none` when it hasn't, and `pin` or `password` (whichever was last set t
   are reported but not enforced (Android counts its own attempts); a server's remote wipe
   (`com.palm.storage`) is not answered.
 
+### A22. Memos fills a card taller than a TouchPad's
+
+**A deliberate delta, codepoet's decision, 2026-10-14.** Palm's Memos (3.0.20) gives its cream wall and its memo grid the TouchPad's own heights in `css/memos.css`: 995 and 943 px in portrait, 739 and 687 in landscape, each with Palm's arithmetic in a comment (1024 or 768, less the title and the status bar). On a TouchPad that is exactly the card. On any taller card (both screens of a Galaxy Z Fold3; a 16:10 tablet in portrait) the grid stopped short and Enyo's grey body showed beneath it, over the bottom 40 % of the Fold3's outer screen. A block marked `[Lunacy]` at the end of the stylesheet runs the wall to the card's bottom (`bottom: 0` for the fixed `:before`) and lets the grid flex into the rest of its `VFlexBox`; Palm's rules are left as they were above it. On a TouchPad-sized card the result is the same as before. It is an exception to rule 5, recorded in the app's NOTICE. Nothing general could fix it: the heights are the app's own numbers, not something the framework or the compat layer does.
+
 ## B. The shell
 
 ### B1. Card view: stacks, reorder, dimming, the angry card

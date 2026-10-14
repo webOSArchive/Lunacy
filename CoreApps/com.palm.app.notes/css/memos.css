@@ -56,3 +56,17 @@
 .redline {
   border: 1px solid red;
 }
+
+/* [Lunacy] The wall and the memo grid run to the card's bottom, rather than to the TouchPad's
+   own 1024 or 768 px above, which left Enyo's grey body under them on any taller card (a
+   foldable's screens, a 16:10 tablet in portrait). A TouchPad-sized card looks as before.
+   codepoet's exception to rule 5, 2026-10-14; see NOTICE. */
+#app-container:before {
+  height: auto;
+  bottom: 0;
+}
+
+.memo-grid-view > .memo-list {
+  height: auto;
+  -webkit-box-flex: 1;
+}

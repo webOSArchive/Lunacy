@@ -5,6 +5,9 @@ Lunacy as abandonware, like Mojo, the Prelude fonts and the TouchPad wallpapers:
 asserted rights since webOS was discontinued.
 
 Copied from the reference TouchPad, where it is pre-installed but lives in the user area of
-the filesystem (/media/cryptofs/apps). The app is here exactly as it was packaged, and Lunacy
-does not change it (rule 5 in CLAUDE.md). Its db8 kind and permissions (configuration/db) are
+the filesystem (/media/cryptofs/apps). The app is here as it was packaged, with one change,
+codepoet's exception to rule 5 in CLAUDE.md (2026-10-14): css/memos.css ends with a block
+marked [Lunacy] that runs the wall and the memo grid to the card's bottom. Palm's stylesheet
+gave them the TouchPad's own heights (995 and 943 px in portrait, 739 and 687 in landscape),
+which left Enyo's grey body showing under them on any card taller than a TouchPad's. Its db8 kind and permissions (configuration/db) are
 registered as the device's configurator did.

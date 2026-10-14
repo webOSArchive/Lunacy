@@ -154,7 +154,8 @@ Seen on the Nexus 5 at 640: Clock, Calculator and Device Info fit whole and read
 Memos fits and leaves a grey band under its grid, because the grid is a fixed 943 px, the
 TouchPad portrait's height less its bars, and the 1088 px page is taller than a TouchPad
 ever was (the architecture doc's "1024 × 768, scaled to fit" would need the card's aspect
-too; 640 is the width that reads best, and it is a setting).
+too; 640 is the width that reads best, and it is a setting). Since 2026-10-14 Memos runs its
+grid to the card's bottom, codepoet's exception to rule 5 ([luna-deltas.md](luna-deltas.md) A22).
 
 ## 5. Just Type (`JustTypePanel`)
 

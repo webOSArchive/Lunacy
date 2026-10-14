@@ -3,750 +3,102 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-10-13)
+## Where things stand (2026-10-14)
 
-**0.7.2 release candidate: build 249** (commit 10c5550; arm32 and arm64, release and debug, and
-the keyboard 0.5.0), pushed; codepoet makes the release. On the Galaxy Tab A7 Lite and the
-Pixel Tablet. Two late fixes after build 244, both from the Pixel Tablet: the IM transport now
-runs under qemu (a 64-bit-only device), and the chat threader files the first message from a
-sender who is neither a contact nor a linked buddy. Since 0.7.0:
+**Released: 0.7.2 release candidate, build 249** (commit 10c5550, pushed); codepoet makes the
+release. **Since then, on `main` and not pushed** (five commits, b216b67..1633974):
 
-- **webOS Chat** ([messaging.md](messaging.md)). Messaging 3.2.0 with webOS CE's IM transport
-  and libpurple, chatting over AIM with `oscar.webosarchive.org` (the `Oscar` project). The
-  webOS Account's sign-in sets chat up with no pass phrase; webOS Chat is in Add Account (a
-  setup page, `org.webosarchive.chat.setup`), removing the account turns chat off, and signing
-  out resets that. Palm's 3.0.5 AIM type left the ROM.
-- **The IM transport is webOS CE's build** of codepoet's imlibpurpleservice fork, never rebuilt
-  here (`Workbench/vendor/im/transport/SOURCE`, now `1960854`). Its fixes this round: no
-  automatic away five minutes after sign-in; deleting a buddy no longer aborts it; presence
-  after a restart; only webOS's own accounts sign in (no hidden sessions from libpurple's
-  `accounts.xml`). CE's startup-hang watchdog is in its wrappers, which Lunacy doesn't use.
-- **Chat threader 1.1.0.3** (webOS CE's fix): Synergy Revival's person lookup through a buddy
-  never resolved for an unknown sender, so a new chat partner's first message was stored but
-  never shown.
-- **32-bit binaries under qemu run with webOS's loader** (`PdkRuntime.runnable`): qemu loads
-  the interpreter a binary names, and CE's transport names CE's own, which Lunacy doesn't have.
-- **Exchange ActiveSync** and its security policies ([eas.md](eas.md)).
-- **Fixes:** Db8 selects a stored `null` as `null` (an IMAP inbox stuck retrying push every
-  second); Db8 `incDel` indexes (the chat threader spinning); sounds an app names by its own
-  URL (Messaging's sent and received); the caret in inputs on scaled cards; the status bar
-  around display cutouts; time-zone rules; App Catalog's icon.
-- **Tools:** a native service's debug log on a release build, through `novacom run`
-  ([architecture.md](architecture.md), "Native services").
+- **Foldables:** the shell decides phone or tablet again whenever the screen changes size, and
+  `ShellActivity.reshell` rebuilds its views in the other layout with every card kept, running,
+  in its group and state; the layout setting goes the same way instead of recreating the
+  activity ([phone.md](phone.md) §1, "Foldables"). Checked on a Galaxy Z Fold3 folded and
+  opened by hand.
+- **Memos** runs its wall and grid to the card's bottom on cards taller than a TouchPad's
+  (codepoet's exception to rule 5, [luna-deltas.md](luna-deltas.md) A22).
+- **compat:** the A12 margin fix no longer shakes scrolling rows (World Today's rows jumped
+  2 px every frame while flicked), and it leaves a box child's own items alone.
+- **Device Info:** a long service id breaks instead of widening the page, which had turned on
+  Enyo's sideways scrolling on phone-width screens (a user's Android 16 report).
 
-Open: longevity of chat on the devices; CE's startup hang (a PmLog process killed while holding
-PmLogLib's semaphore, which the library never recovers; when CE fixes the cause, take it if it
-is in the transport); the Add Buddy invitation message, which the transport drops.
+Builds: 252 (arm64 release) on the Pixel Tablet; the arm64 debug build on the Fold3.
 
-## Where things stood (2026-10-10)
+Open from this round: measure on the TouchPad whether a `-webkit-box` child's own margin
+collapses through its box (the A12 note; it decided World Today's first row); check Device
+Info's fix on the Fold3's outer screen with the installed build (proved live there, installed
+build checked only open).
 
-**2026-10-10: Exchange ActiveSync** (codepoet: "port the EAS sync functionality from webOS to
-Lunacy", working autonomously). Palm's own `mojomail-eas` runs as a native service, like IMAP:
-on the Galaxy Tab A7 Lite against codepoet's Zoho test account, Email adds a Microsoft
-Exchange account, syncs, reads, sends (codepoet received the test mail), deletes, looks up the
-address list and gets push through Ping; Contacts and Calendar sync both ways, checked
-against the reference TouchPad on the same account. Fixed on the way, all general and
-measured on the TouchPad: db8's `reserveIds` edge cases, `getTimeZoneFromEasData`, Palm's
-meeting update service and `calendar.io`, the configurator reading json-c's trailing commas,
-and a WebView race that dropped a window opened right after another (f057b07). Then, on
-codepoet's go-ahead, Exchange's security policies (luna-deltas A21): LunaSysMgr's
-EASPolicyManager ported, with Android's own screen lock as the device lock, so a server that
-requires a device password can be added; Screen & Lock's Secure Unlock follows Android's lock.
-Open: a real server's policy, tasks, attachments. See [eas.md](eas.md). Not pushed.
+## How it got here
 
-**2026-10-10: Messaging and webOS Chat** (codepoet: investigate an AIM server so Lunacy and webOS
-CE users can chat through the webOS Community account; then "add it to Lunacy, use the CE
-version"). Messaging 3.2.0 (webOS CE's) ships in CoreApps with CE's IM transport and libpurple
-and webOS Chat's AIM plugin. On the Galaxy Tab A7 Lite it chatted with the reference TouchPad
-through a prototype OSCAR server (PHP, codepoet's `Oscar` project, which has the plan and a
-deployment guide). Fixed on the way, all general: the preload's `dlopen` and glibc resolver,
-libenosys tracing forks, db8 `watch` firing on existing results (measured), activity files'
-trailing commas, and the ROM's dotfiles. Open: deploying `oscar.webosarchive.org`, the
-community-account sign-in, and the CE transport's settings bug as a pull request. See
-[messaging.md](messaging.md). Not pushed.
+One line per milestone; the detail is in [fix-log.md](fix-log.md), the topic docs and git.
 
-## Where things stood (2026-10-09)
+- **2026-09-20, ready to show:** one Gradle root, two APKs (shell and the optional keyboard);
+  Settings as three cases (Lunacy's own Device Info, Palm's Screen & Lock, Android shortcuts);
+  Exhibition, also as Android's screen saver; the file picker; Mojo's first app.
+- **2026-09-21:** the Mojo suite codepoet named runs, with Palm's Video Player (Mojo 2); the
+  Pre3 and a stock 3.0.5 TouchPad measured ([pre3.md](pre3.md); HP's `/etc/palm` is
+  byte-identical to CE's).
+- **2026-09-22, 0.2.0:** [luna-deltas.md](luna-deltas.md)'s A and B lists measured and done;
+  the viewport declared rather than inferred (the rules in [architecture.md](architecture.md)).
+- **2026-09-23, 0.2.5:** the first community reports: other screen scales, dashboards'
+  viewports, the tap radius, Enyo patch 0003, target API 24.
+- **2026-09-26, 0.3.0:** a webOS root filesystem, install scripts, webOS Accounts, App Catalog
+  installs through `appInstallService`; the APK from 82 to 48 MB; the startup card first.
+- **2026-10-01, 0.4.0:** arm64 and Android 17, one APK per ABI, First Use, the Nexus 7.
+- **2026-10-02:** the phone layout ([phone.md](phone.md)); WebSQL over SQLite where the WebView
+  has none; the first PDK apps (Keen, Transformers G1; [pdk.md](pdk.md)).
+- **2026-10-03, 0.5.0:** Mojo flicks, the launcher's over-scroll, busybox built against bionic,
+  the layout choice in Screen & Lock (B11), the keyboard at whole-number scales.
+- **2026-10-04, 0.5.5:** PVRTC decoding, Android's wallpaper following webOS's, Palm's Web app
+  on a native WebView, Calculator 3.2.0, Paste, webOS text selection.
+- **2026-10-05:** the SDK's tools over adb (webos-sdk-redux 0.4's novacomd); the Enyo fork
+  rebased on the TouchPad's own framework; apkenv's Android ports run as PDK apps.
+- **2026-10-06, 0.6.0 and 0.6.1:** native PDK on Android 10+ (`libenosys`), GPU driver fixes
+  (Tegra 3, Adreno 620 and 330); foldables move between screens without a restart prompt.
+- **2026-10-07, 0.7.0 built:** Email on IMAP/SMTP with Palm's native mail services, Calendar and
+  Contacts (webOS CE's, local), hybrid apps (Quick Office, Adobe Reader), documents' index.
+- **2026-10-08:** sleep and wake mapped to Android; Photos & Videos with the media indexer.
+- **2026-10-09, 0.7.0 released** (b2362ec, build 216): local-network proxy, WebView 44 fixes,
+  Enyo 0010, content handlers, A12; then A19 and time-zone rules.
+- **2026-10-10:** Exchange ActiveSync with its security policies ([eas.md](eas.md)); CoreApps/;
+  Messaging 3.2.0 with webOS CE's IM stack ([messaging.md](messaging.md)).
+- **2026-10-12/13, 0.7.2 RC:** webOS Chat live over `oscar.webosarchive.org`; the IM transport
+  under qemu; chat threader 1.1.0.3; Db8 null and `incDel` fixes.
 
-**2026-10-09: 0.7.0 released** (codepoet). The test round's faults fixed and pushed through
-b2362ec (build 216, compared by codepoet on six devices): Pandora and Plex through the local
-network proxy on recent WebViews, WebView 44's script and audio-progress bugs, Enyo 0010's
-mid-switch resize that froze Plex, dashboards' focus, Lunacy's CSS as stylesheet links (Mojo
-apps start again), download links, content handlers (files open in the app that claims their
-type, as `applicationManager` answered on the TouchPad), and Web's loading bar and copy popup
-drawn over the native view, with A12 fixed. See [fix-log.md](fix-log.md). After the release:
-the App Catalog's icon replaces HP's bag as on webOS CE (luna-deltas A19), and
-`getTimeZoneRules` skips zones it doesn't know as the TouchPad does, which put an Outlook
-WebCal feed's events 4 hours early (184bf0d, build 220, not pushed). Quickoffice 2.3.0 and
-Adobe Reader 10.4.0, fixed for phones in the apps themselves, went to codepoet for the Museum.
+## Open, carried forward
 
-**2026-10-07, evening: hybrid apps open their documents** (codepoet: "work autonomously until
-the hybrid apps can open their respective document types"). A web app's
-`<object type="application/x-palm-remote">` now runs its PDK plugin through the PDK runtime,
-its handlers called synchronously from the page and its `PDL_CallJS` calls delivered back, as
-the reference TouchPad's RemoteAdapter did (measured there). On the A7 Lite, natively and
-under qemu: Adobe Reader opens PDFs, and Quick Office opens .doc, .docx, .xls, .xlsx, .ppt,
-.pptx and .txt, from their own lists and from Android's Documents and Download. Built for it,
-all general: libpdl's JS calls, the plugin's GL replayed offscreen, a webOS `/etc/mtab` and
-`/tmp` for native code, `popen` and `system` run in the root's busybox, Android's folders for
-the preload, the TouchPad's other ICU libraries, qemu finding the runtime by its real path,
-and callable DOM collections in the compat layer (luna-deltas A17). See [pdk.md](pdk.md),
-§6c. Open: a visible plugin's picture; callable collections on Chromium 37.
+Gathered from the dated notes this section replaced (git has them in full). Check each before
+starting; some may have been settled since without a note.
 
-**2026-10-07: 0.7.0 built for in-house testing** (codepoet). Version 0.7.0, all targets, from
-an uncommitted tree (build 195). codepoet's first round, on a Pixel Tablet updated from a
-2026-10-04 build, found three faults, all fixed and in the rebuilt APKs: Calendar had no
-On-Device calendar (the profile account was stored before db8 gave array objects their
-`_id`; db8 now repairs old records once), Email couldn't start its services on a 64-bit-only
-device (qemu needs the execute bit; IMAP now logs in and idles under qemu), and the bus log
-showed an account's password (secrets are now blanked in the log). Then, on codepoet's design, documents' index answered from the files (luna-deltas A16): Quick
-Office and Adobe Reader list Documents and Download, and a file copied in shows up while the list
-is open. Opening one needed hybrid apps, since done (above). See [fix-log.md](fix-log.md).
-Committed as 0f75be8 (build 196), not pushed.
-
-**2026-10-07: Contacts, local only** (codepoet: local contacts only for now). webOS CE's
-Contacts 3.2.0 is bundled unchanged, with the TouchPad's contacts and linker services, and the
-CE project's palmprofile template and accounts library. On the A7 Lite: first launch offers "On
-This Device", a contact saves, lists, searches, opens and takes an edit, and survives a restart.
-Built for it, all general: each app's own activity (`PalmSystem.activityId` had been a constant),
-db8's longest-wildcard permissions, the IM kinds a TouchPad always has; and a startup bug in the
-app registry from the Calendar work is fixed. HP's duplicate prefs record (also on the reference
-TouchPad) was written up for the webOS CE project, which fixed it in its `contacts` framework;
-Lunacy ships CE's copy, and the device's two records healed to one. A contact's photo now saves:
-the file picker crops, as Palm's did, and `com.palm.image` (LunaSysService's image service,
-measured on the TouchPad) cuts it. See [architecture.md](architecture.md), "Contacts". Open:
-vCards, favorites; the other devices untried.
-
-**2026-10-07: Calendar, local only** (codepoet: share code with webOS CE's cleaned-up
-Calendar; no syncing in this pass). webOS CE's Calendar 3.2.0 is bundled unchanged, with the
-TouchPad's `calendar` library and its reminders service. On the A7 Lite: first launch offers
-"On This Device", the day view draws, an event saves, its reminder fires on time with the
-TouchPad's alert (Snooze, Dismiss), and the icon shows the date. Built for it, all general: the
-profile account webOS's boot job made, `configuration/activities`, boot activities that run once,
-`$activity` in launch params, the default launch point's icon, `getTimeZoneRules`, db8's `multi`
-props; see [architecture.md](architecture.md), "Calendar", and [fix-log.md](fix-log.md). The half-hour
-dividers were a fixed 965 px, the TouchPad's width; webOS CE's Calendar now runs them to the
-day's edge on any screen (checked on both). Saving an event scrolled the day view back to midnight,
-HP's bug (the hours scroller re-measured itself while hidden); the webOS CE project fixed it and
-Lunacy carries the fix. The reminder alert now sits inset from the corner, as on the TouchPad.
-Open: repeats, snooze, and the other devices untried (week and month views draw).
-
-**2026-10-07: Email, on IMAP and SMTP** (codepoet: "get email ported", IMAP and SMTP only for
-now). Palm's Email (3.0.13600) is bundled, and the TouchPad's own native mail services run in
-Lunacy as they shipped: `mojomail-imap`, `mojomail-smtp` and `filecache`, under the PDK's glibc
-runtime with Lunacy's `liblunaservice.so` carrying the Luna bus ([architecture.md](architecture.md),
-"Native services"). On the Galaxy Tab A7 Lite (Android 14, natively under libenosys), with
-codepoet's Fastmail test account: Email's own wizard adds the account (Manual Setup, as on a
-TouchPad for a domain it can't guess), the inbox syncs, a message opens with its header over its
-body as on the reference TouchPad, a message composed in Email is sent and comes back, and new
-mail arrives by IMAP IDLE within a second with Email's new-mail icon. Built for it, all general:
-a native service host (D-Bus service files), the activity manager rebuilt to webOS's
-(triggers, schedules, callbacks, requirements, adopt/complete, persistence), much of db8
-(revSets, built-in `_id` and `incDel` indexes, index defaults, nested ids, permission
-inheritance), the file cache's types, `com.palm.nettools/findMxRecords`, the browser plugin's
-email object, header strip and `scrolledTo`, Enyo patch 0006 (a percentage height inside a
-flexed child is 0 px, as WebKit 534 had it), the root's `resolv.conf` and CA bundle from
-Android, and the preload's seccomp and old-glibc answers. Every fix is in
-[fix-log.md](fix-log.md). The mail stack adds about 8 to 10 MB to the APK (ICU's data is 9 MB of
-it); codepoet: port what's needed, shrink later.
-
-A card closed while it is up now goes back to the card it joined, as LunaSysMgr's
-`m_cardToRestoreToMaximized` did (codepoet watched compose return to the inbox on the TouchPad),
-and a bare target an installed app claims in `command-resource-handlers.json` opens there
-(`mailto:` in Email). Open: attachments; the arm64 build (the services under qemu) and the Android 5 devices
-untried; PmLogLib's levels need PmLogDaemon's shared memory, so only errors are logged unless a
-service is started with `files/pdk/args`; contacts are an empty store. Enyo patches 0006 and
-0007 are in webos-sdk-redux too (committed there, not pushed).
-
-codepoet's first look (2026-10-07), all fixed and checked by codepoet: a message's fonts are
-now the TouchPad's (Prelude for names it lacked), compose's "Subject:" label stays over the
-focused field (Enyo patch 0007, paint order), the compose body shows its caret on an empty
-line (a Chromium caret bug at fractional pixel ratios; luna-deltas A15), and new mail is
-signed "-- Sent from Lunacy" (luna-deltas A14).
-
-## Where things stood (2026-10-06)
-
-**2026-10-06: 0.6.1, a mini release for foldables** (codepoet): One UI asked to restart
-Lunacy ("This app can't be resized while running") when a foldable moved it between its
-screens, because the shell is not resizable. It now declares `android.supports_size_changes`,
-so the move reaches it as a size change and it reflows, as on a rotation; split screen stays
-off. The phone or tablet layout and the shell's scale are still decided at startup, so an
-unfolded phone keeps the layout it started with (codepoet). Not tried on a foldable here;
-the testers who reported it will try it.
-
-**2026-10-06: 0.6.0, released to the community** (codepoet), build 182 from `4baa1a7`; the
-keyboard stays 0.5.0. Before release, Tiger Woods PGA Tour, Where's My Water and Fieldrunners
-were started on six devices with the same build, its version checked on each first: the HP
-10 G2 (Android 5.0.1), Nexus 7 (5.1.1) and Nexus 5 (6), natively; a Galaxy Tab A7 Lite
-(Android 14) and a Kyocera tablet (Android 12), natively too; the Pixel Tablet (17), under
-qemu. What the round turned up, all fixed ([pdk.md](pdk.md)):
-- **Native PDK on Android 10 and later.** Android's app seccomp policy killed every PDK app
-  on the 32-bit build there (glibc's `set_robust_list` and `rseq`, exit 159), so those
-  devices had only qemu. `libenosys.so` runs the app as its ptrace child and answers each
-  refused call with -ENOSYS; games keep 60 frames/s. The 32-bit build is now the one for any
-  device that can run 32-bit code; the 64-bit build only for 64-bit-only devices. Android 14
-  warns once that the 32-bit build isn't compatible (it targets SDK 24); it runs.
-- **GPU drivers.** Tegra 3's GLES 1 (Nexus 7) refuses `GL_FRAMEBUFFER_BINDING_OES`; Adreno
-  620's GLES 1 (Kyocera) wants a GLES 2 context current while GLES 1 contexts are made; Adreno
-  330's GLES 1 (Nexus 5) loses state when another context has been current, which drew Tiger
-  Woods' course white, so the card is now drawn from the app's own context, putting back the
-  state and the framebuffer the app had bound (`Workbench/probe/glstateprobe.c`).
-- **The shell.** A WebView renderer that dies closes its cards instead of taking Lunacy down
-  (the Kyocera's App Catalog); a PDK card not yet focused no longer tells its app it is
-  inactive (Fieldrunners waited on its launching card); the GL server logs failed and slow
-  swaps and long gaps between frames.
-
-Open: a Galaxy Tab A7 Lite on the 64-bit build loads Where's My Water levels for 20 to 65 s
-under qemu (the 32-bit build there is native); the other ten apkenv ports.
-
-**2026-10-05, evening: the Android ports.** Where's My Water, codepoet's first apkenv port,
-plays under Lunacy on the HP 10 G2 and on the Pixel Tablet under qemu, as the webOS package
-it is: the PDK runtime gained a `libEGL.so` answering as the TouchPad's did (measured with
-`Workbench/probe/eglprobe`), keeps Android's `/system` and `/vendor` out of a PDK app's
-sight, and its GLES 1 library answers state queries truthfully ([pdk.md](pdk.md) 6b). Swaps keep
-the TouchPad's 60 a second and SDL's audio stays as far ahead as the TouchPad's did, which
-ended a stutter. codepoet's
-1.0.3 of the port (current apkenv) fills a phone's screen too, and plays on all three test
-devices. Open: the other ten ports; `palm-install` of a 24 MB package was reset by the relay.
-
-**2026-10-05: the SDK's tools, and the TouchPad's Enyo.** The Palm SDK's `palm-install`,
-`palm-launch`, `palm-run`, `palm-log`, `novacom` and `novaterm` work against Lunacy over adb,
-through [webos-sdk-redux](https://github.com/webOSArchive/webos-sdk-redux) 0.4's novacomd,
-which lists Lunacy as `adb lunacy` beside a TouchPad. Lunacy serves novacomd's device side
-(`Novacom.kt`), keeps `/var/log/messages` in webOS's format (`SysLog.kt`), and gained
-appinstaller `installNoVerify`/`remove`, applicationManager `running`/`close` and display
-`setState "on"`, all measured on the TouchPad ([architecture.md](architecture.md), "Developer
-tools"; [dev-workflow.md](dev-workflow.md)). Lunacy says it is Lunacy in
-`/etc/palm-build-info` and the SDK recognises it by name (codepoet). A palm-install shows the
-launcher's pending icon, now named from the package's `appinfo.json` for every install. The
-Enyo fork is rebased onto the TouchPad's own framework: the GitHub release it patched before
-is a different build ([CHANGES.md](../LunaRuntimes/enyo-1.0/CHANGES.md)); ten bundled apps
-drew the same on both bases. SDK 0.4 ships the same Enyo. Open: compare `palm-log` output for
-the Web app's plugin calls with the TouchPad's; Mojo samples don't open in a desktop browser
-(webos-sdk-redux FRAMEWORKS.md).
-
-## Where things stood (2026-10-04)
-
-**2026-10-04: 0.5.5.** The shell is 0.5.5; the keyboard is unchanged at 0.5.0. PVRTC textures draw on GPUs without PowerVR's
-compression. The shell decodes them to RGBA where the driver refuses the format; before,
-they were white (Tiger Woods PGA Tour on the HP 10 G2's Mali-450; [pdk.md](pdk.md)).
-Android's wallpaper can follow webOS's (Screen & Lock's "Use on Android", opt-in). Lunacy has
-a browser: Palm's Web app, unchanged, on a native WebView behind `enyo.WebView` (Enyo patch
-0005), and web links from apps open in it ([architecture.md](architecture.md), "The Web
-app"). Add to Launcher works since 2026-10-05: `addLaunchPoint` and its siblings, which also
-make webOS Archive's PWA Installer work (architecture.md, "Launch points"). Open: the
-download manager's history, the TouchPad's default bookmarks. Against the TouchPad's Web app the action bar's contents sit
-3 px low, an engine difference left as it is ([luna-deltas.md](luna-deltas.md) A12).
-Calculator is webOS Archive's 3.2.0, with scientific keys in landscape, and the phone layout's
-fixed viewport fits a phone held either way ([phone.md](phone.md) §4).
-The Edit menu's Paste works in Mojo and Enyo apps, and Enyo no longer swallows the first tap
-after a field is focused ([fix-log.md](fix-log.md)). Text selection and the hold popup are webOS's, measured on the TouchPad with codepoet
-(architecture.md, "Text editing"): tap to place the caret, hold for Select / Select All /
-Paste, handles, Cut / Copy, double tap. In the Web app, holding on page text gives
-Android's own selection, kept by codepoet's decision ([luna-deltas.md](luna-deltas.md) A13).
-
-**2026-10-03: 0.5.0.** Both Lunacy APKs and the keyboard are 0.5.0, built without the test apps. codepoet's pre-release list, and the phone layout finished. Mojo lists coast
-again: the compat layer sent its synthesised flick *after* the mouseup, which Mojo's gesture
-tracker had already finished with ([fix-log.md](fix-log.md)). The launcher's over-scroll
-snaps back as LunaCE's does, under a friction that grows past the end, instead of crawling
-against the clamp for most of a second ([luna-deltas.md](luna-deltas.md) B5). Android apps
-can be uninstalled from the launcher on a target-28 build (`REQUEST_DELETE_PACKAGES`). webOS
-Community Account Manager installs on the Pixel Tablet: its postinst needs busybox, and the
-64-bit busybox never ran there - Android's seccomp policy killed the static glibc build in
-its own startup - so `tools/build-busybox.sh` now builds both ABIs against bionic
-([BUILDING.md](../BUILDING.md)). A Pre3 was connected and measured for the PDK phase: it
-turns an other-shape buffer *clockwise*, the opposite of the TouchPad, which `PdkWindow`
-now does on a portrait device, and the accelerometer's axis 0 is positive to the right, as
-assumed ([pdk.md](pdk.md)). A border-image on an element with zero border widths is
-not painted, as the TouchPad's WebKit had it (A11; First Use's Start Over button). The phone
-layout: taller launcher cells, a shorter dock, Just Type's panel fitted to a phone, a
-keyboard's first key opening Just Type, and the layout choice moved into Screen & Lock as
-codepoet's exception to rules 0 and 5 (B11; [phone.md](phone.md)), with Screen & Lock and
-Sounds & Alerts fitting a phone's card. The keyboard (0.5.0) draws at a whole-number scale
-chosen from the screen, 2x on the Nexus 5 and the Pixel Tablet, with 1x to 3x on its setup
-screen ([LunaKeyboard/README.md](../LunaKeyboard/README.md)). Both APKs are 0.5.0.
-
-## Where things stood (2026-10-02)
-
-**2026-10-02, evening: the first PDK app.** Commander Keen, the TouchPad's own binary, runs in
-a Lunacy card on the Nexus 5 with no emulation: Debian's armel glibc as the runtime, SDL 1.2
-rebuilt with Lunacy's video, event and audio drivers (a shared framebuffer file and a Unix
-socket to the shell), Lunacy's libpdl against Palm's headers, and `PdkWindow`/`PdkHost` in
-the shell. Title screen, touch, a game started, sound device open, the card in the card
-view. The runtime is built by `AndroidLuna/tools/build-pdk.sh`; the 64-bit flavour carries
-Termux's qemu for 32-bit ARM and runs the same binaries emulated (the Pixel Tablet). Along
-the way: the prebuilt busybox called `setuid` at every start and Android 10+ killed package
-scripts for it, so busybox is now built by `tools/build-busybox.sh`. A survey of the mirror
-counts 729 PDK apps, 151 of them 2D, 473 GLES 1.1, 122 GLES 2; SDL_mixer is built. The
-second app, Transformers G1, plays: its GLES 1.1 calls stream to the shell and are
-replayed into a framebuffer of the app's own size, shown in the card full screen and
-turned as the TouchPad turns a buffer of the other shape (measured on it), natively on
-the Nexus 5 and under qemu on the Pixel Tablet. SDL_image, SDL_ttf, SDL_net and the
-image and font libraries apps link by name are built, and webOS's paths resolve in the
-webOS root. A GLES 2 stream runs the shader apps (Dice, ThermalPad), and the accelerometer
-is SDL joystick 0 as on webOS (measured on the TouchPad). Next: hybrid apps (web apps with a
-PDK plugin; since done, 2026-10-07), OpenSSL 0.9.8 and curl. All in [pdk.md](pdk.md).
-
-**2026-10-02, afternoon: a phone layout.** `FormFactor` decides phone or tablet from the
-screen (short side in dp, diagonal in inches, shape as the tie-breaker) or the owner's
-setting (Screen & Lock's Layout group since 2026-10-03, codepoet's exception to rules 0
-and 5, [luna-deltas.md](luna-deltas.md) B11; `system/setLayout`; `--es layout`), and the
-shell and the device profile both follow it. On a phone the launcher has a 40 px tab bar whose 150 px tabs scroll
-sideways, two permanent tabs instead of four, 84 px cells with 56 px icons (four across a
-Nexus 5 portrait; since 2026-10-03 the cells are 112 tall, the TouchPad's at seven-eighths,
-so labels no longer run into the row below), and a dock of four icons with the launcher
-button as the fifth equal slot (since 2026-10-03, 95 px tall with 59 px icons: codepoet's
-5 % and 8 %). Just Type's panel also has a phone layout since 2026-10-03 (the field and
-groups span the width, the tiles as many across as fit), and a keyboard's first printable
-key in the card view or the launcher opens Just Type with that character, as on a TouchPad
-with a keyboard paired. What an app is told (a Pre3) follows the same decision; whether its
-page is scaled is the per-app fixed-viewport switch, in Device Info's new Software group, on
-by default for Palm's Clock, Calculator and Memos, which then fit whole. All in [phone.md](phone.md),
-with what is still unmeasured. The tablet is unchanged (checked on the Pixel Tablet).
-
-**2026-10-02: WebSQL where the WebView has none.** The Pixel Tablet's WebView (153) has no
-`openDatabase`, Chromium having removed WebSQL in 119, so Apollo, and every Mojo app's Depot,
-stopped at the first store. `websql.js` now provides the device's API over `WebSql.kt`, one
-SQLite file per app and database name ([architecture.md](architecture.md), "WebSQL"); the
-Android 5 devices keep the WebView's own. Measured against the TouchPad's rows in
-[mojo.md](mojo.md) inside Apollo's card; Apollo starts, and its settings survive a restart.
-Untested: the copy-in of a WebView's own WebSQL files, which needs a device updated across the
-removal. Not yet on the 32-bit build's devices: the same sources, but no run there since.
-
-**2026-10-01: 0.4.0. 64-bit ARM, Android 17, First Use, and a 2012 Nexus 7.** Both Lunacy APKs
-and the keyboard are 0.4.0. Node, its libc++, the launcher and
-busybox are now built for `arm64-v8a` as well as `armeabi-v7a` (`fetch-assets.sh`), so the APK
-installs on the 64-bit-only SoCs (Pixel 7 and later, most phones since) that refused it with
-`INSTALL_FAILED_NO_MATCHING_ABIS`; the 64-bit busybox is Alpine's static build, busybox.net
-having none. The build makes one APK per ABI (codepoet) rather than one 60 MB APK with both:
-`AndroidLuna-arm32-debug.apk` and `AndroidLuna-arm64-debug.apk`, 47 MB each, as two product
-flavours with their own targets: `arm32` keeps 24, the proven setting for the Android 5
-devices; `arm64` targets 28 (codepoet), which ends Android 17's "built for an older version"
-warning and is the last target with legacy external storage. With it: plain http is allowed
-by a network security config, WebView Safe Browsing is off, and the derived device id is
-stored the first time it is computed ([architecture.md](architecture.md), "Platform target").
-Run the same day on a Pixel Tablet (Android 17, arm64 only): the 32-bit APK is refused, the
-64-bit one installs, 64-bit Node 12 and busybox run, the target-28 build launches with no
-older-version warning, and an app installs over plain http
-([android5-setup.md](android5-setup.md)).
-
-*First Use, the same evening.* Lunacy has a First Use app (`org.webosarchive.lunacy.firstuse`,
-bundled, no launcher icon), as a webOS device put one in front of a new owner. The shell
-launches it on the first start; it asks for what Lunacy needs from Android - the shared
-storage behind `/media/internal`, and "Modify system settings" for Screen & Lock's brightness -
-one page each, skipping what the Android version doesn't ask for (Android 5: a welcome and
-Done), then says it has run (`firstUse/done`) and closes. The pages are Palm's First Use's
-in look (its background, box and buttons, with a NOTICE); the words are Lunacy's. The bus
-gained `permissions/status` and `permissions/request` on Lunacy's own service, callable by
-Lunacy's own apps only; a refusal Android has made final turns the page's button into one
-that opens Android's settings for Lunacy, and the page notices a grant made there. From
-codepoet's first walk-through: the storage page puts Android's dialog up as it opens, rather
-than waiting for a tap; going on without a grant is labelled Skip; and Palm's "Start Over"
-link sits bottom left with its confirmation (above the pane's views, which carry a z-index
-of their own). A Home Screen page (codepoet) offers to make Lunacy the device's home screen:
-from Android 10 through the system's own "set as default home" dialog (the home role), before
-that through Android's Home settings screen; it is a choice, not a permission, so it is
-offered on every Android version. Walked through on the Pixel Tablet, including the refusal
-paths; the home dialog was cancelled there, so the tablet's home app is unchanged. Rule 0
-isn't applied to First Use (codepoet): it is platform-specific by nature. Not yet run on the HP.
-
-*A phone in portrait, not a phone target.* On the Nexus 5 (1080 x 1920, shell scale 3, so a
-360 x 640 px shell, near the Pre3's own 320 x 533 at its `ScaleFactor=1.5`), apps are told
-they are on a Prē3 - webOS 2.2.4, the Pre3's user agent, a 360 x 640 screen - which is what
-decides a phone layout; Palm's Calculator, a tablet app, is simply clipped. The shell's own
-layout had three tablet assumptions that broke in portrait and are fixed (codepoet: not
-full phone support, just not broken): the Just Type pill was sized from a 768 px short side
-and ran off the screen, so on a phone it takes the screen's own; the dock's icons overlapped
-in slots narrower than an icon, so they shrink to the slot; the launcher's tab titles ran
-into each other, so a title wider than its tab is squeezed to fit. The card view takes the
-Pre3's card ratios ([pre3.md](pre3.md)) on a phone. First Use's column fits a phone-width
-card. Nothing changes on a tablet. Still open on phones: the keyboard raised by a focused
-field, and everything in "the shell's own layout on phones" beyond these.
-
-*App compat on the Pixel Tablet.* Hello! Name Tag, an Ares app, died at launch with "The load
-of framework submission 506 failed": `ares.js` writes the `mojo.js` tag with `document.write`,
-out of sight of the HTML transform that puts Mojo's builtins in front of it. `mojo.js` now goes
-out with a prelude that loads the builtins itself when they aren't there
-([fix-log.md](fix-log.md)). Seen while checking the normal path with Quick Tip Calculator: its
-first scene is Mojo's `WebView` widget, a `BrowserAdapter` object, which Lunacy provides for
-Enyo's `WebView` but not yet for Mojo's, so the card is an empty panel. Open. WebView 149
-takes `flex-basis` literally inside a
-`-webkit-box`, so App Catalog's sort buttons, a `RadioGroup` sized to its content, were split
-evenly and "Recommended" lost its end. Enyo patch 0004 probes for that engine and lets a
-content-sized box keep its children's natural widths, measured against the reference TouchPad
-to within 2 px ([fix-log.md](fix-log.md)).
-
-*16 KB pages, the same evening.* Android 17 put up an "Android App Compatibility" dialog on
-every launch of the (debuggable) build, naming `libnode.so` and `libc++_shared.so` as not
-16 KB-aligned: both were other projects' prebuilts linked at 4 KB. The 64-bit build is now
-clean: libc++ and the launcher come from NDK r28c, and `libnode.so` is rebuilt from the
-nodejs-mobile 0.3.3 source with the two linker options the alignment needs
-(`AndroidLuna/tools/build-node.sh`; the host-side V8 tools also needed `<cstdint>` under GCC
-13). The dialog is gone on the Pixel Tablet and Node 12.19 runs there. The 32-bit build keeps
-nodejs-mobile's prebuilt, the one proven on the Android 5 devices (codepoet). Android 17 (API 37) was read for what it does to a
-target-24, sideloaded Lunacy: it keeps the install floor at 24 but warns at first launch below
-target 28 (measured), and nearly everything else in it applies only to apps targeting 37; what
-does reach Lunacy is listed under "Later". A 2012
-Nexus 7 on Android 4.3 was looked at and declined as a target (legacy WebKit, no DevTools, no
-immersive mode, Node built for API 21); codepoet is flashing it to 5.1.1, where it is simply
-another API 21 device. Added to the list: a First Use app (below, "Later").
-
-**2026-09-26, later: 0.3.0. The APK at 48 MB, the startup card first, and a review's fixes.** The keyboard is 0.3.0 too, so the pair is easy to match up. The
-shell APK was 82 MB. Text and fonts were stored uncompressed, Enyo's SDK `support/` folder
-was shipped, Node was unstripped, and every framework was in twice because `cp -L` had turned
-the device's `version/1.0` symlinks into copies; each is in [BUILDING.md](BUILDING.md). The
-startup card now goes into the card view before the page loads and maximizes when the app
-is ready (codepoet: the card is what the loading is behind), and a headless app gets a
-placeholder card at launch; Exhibition's launches get
-none - [luna-deltas.md](luna-deltas.md) D. From a code review: the activity's re-creation
-(a font-size change) leaked every card and Node process; db8 loaded the whole store on the
-first lookup by id; `time/getSystemTime` and `display/control/status` subscriptions never
-heard a change; a download whose URL ended in `/` targeted the Download folder itself;
-Node's version and folder listings ran on the main thread; a wallpaper import could overwrite
-a shipped one; an install restarted every JS service; missing icons were decoded on every
-frame; a page's XHR and bus ids could collide with the next page's. Not changed: the
-wallpapers' encoding and the App Catalog package (codepoet).
-
-**2026-09-26: webOS Accounts, install scripts and App Catalog installs.** Three apps, each
-measured beside the reference TouchPad; every fix is in [fix-log.md](fix-log.md).
-
-- *App Catalog is the bundled catalogue,* first on DOWNLOADS, in place of the App Museum
-  (codepoet). Notify Test and the Enyo samples are test apps now, in the APK only with
-  `./gradlew assembleDebug -PtestApps`.
-
-- *A webOS root filesystem.* Services and package scripts now see a real `/`: a ROM from the
-  TouchPad (the service frameworks, its own palmprofile and accounts services and their db8
-  kinds), busybox's commands, Lunacy's `luna-send` and curl. A file a script changed survives
-  an APK update. See [architecture.md](architecture.md), "The webOS root".
-- *Install scripts run,* as Preware ran them. The webOS Community Account Manager installs
-  from its Museum package, and signing in with a webOS Account works; Check Mate restores
-  its log-in from the account. New on the bus: keymanager, deviceprofile, the private bus for
-  `com.palm.*` apps, and systemservice's locale.
-- *App Catalog installs,* through HP's own `com.palm.appInstallService` path, which Lunacy now
-  provides (with `listPackages`, `launchPointChanges`, `queryInstallCapacity` and the `.ipk`
-  handler list). App Catalog 6.2 (webOS Archive's revival) installs with its own progress on
-  Lunacy, and by itself on webOS for packages without scripts; App Catalog Phones 3.1 and the
-  App Museum 2.9.9 hand packages to whichever app handles `.ipk` files. Those three live in
-  their own repositories.
-- *Engine:* `"use strict"` does nothing, as on the TouchPad (a serve-time transform), and a
-  cookie is on disk right after it is written.
-
-Open: App Catalog 6.2 as Lunacy's pack-in; phones catalog not yet run on a phone; cookies are
-shared between apps' origins (`.media.cryptofs.apps`); a package whose script put its app in
-the rootfs can't be removed from the launcher; the Enyo libraries other than `networkproxy`
-are upstream's, not the TouchPad's newer ones.
-
-**2026-09-23: 0.2.5, a community preview of fixes from the first community bug reports.**
-Reproduced on an Android 14 tablet, a Nexus 5 (Android 6) and the reference HP, each against
-the reference TouchPad; every fix is in [fix-log.md](fix-log.md).
-
-- *Screens other than the HP's:* on a screen that isn't about 768 px on its short side (shell
-  scale 2 or 3), cards were drawn too large - centred content on the right, the bottom out of
-  reach - because the viewport named the card in device pixels and pinned the scale at 1. The
-  viewport is now in TouchPad px, and its scale is measured into place, exact to the pixel on
-  Chromium 37 and WebView 131.
-- *Dashboards:* Mojo dashboards got no viewport at all (a 52 px window fell under a 64 px
-  floor), so drPodder's player controls were off the edge; app windows also no longer draw
-  Android's scrollbars.
-- *Phones:* an app without `uiRevision` 2 no longer opens in the Pre3 emulator frame on a phone,
-  where apps are already told they are on a Pre3.
-- *Touch:* Mojo buttons and menu items answer a real finger again. A finger's moves are held
-  back inside the tap radius, as LunaSysMgr did; on a touchscreen that reports a move where
-  the finger lands, Mojo had taken every tap for the start of a drag.
-- *Enyo:* a flexed control's share is said with `flex-basis` on engines that count a 0 width,
-  so Clock's clock/alarm switch isn't squashed (patch 0003).
-- *Newer Android:* Lunacy and the keyboard target API 24 (minimum still 21), so Android 14
-  installs them with a plain `adb install` or a tap. Storage and "Modify system settings" are
-  asked for while the app runs on Android 6 and later; Android 5 is unchanged.
-
-Open from these reports: whether a phone should raise the keyboard when an app focuses a field
-itself (a Pre3 had a hardware keyboard), and the shell's own layout on phones.
-
-
-Apps now install from the App Museum and run: Apollo plays music, Plex plays direct and
-transcoded video, Sound Cloud Player streams through its JS service, AccuWeather and USA Today
-show live data. Per-app results and every fix, with the layer it landed in, are in
-[fix-log.md](fix-log.md).
-
-**2026-09-22, the evening: [luna-deltas.md](luna-deltas.md)'s A and B lists, released as the
-0.2.0 community preview.** Every item was measured on the reference TouchPad before and after,
-with two new probes (`winprobe`, which drives every app-facing window call from its launch
-parameters, and `headprobe`, a `noWindow` app). What came of it:
-
-- *For apps:* full-screen cards, a card fixing the screen's orientation, `statusBarColor`,
-  banner and notification sounds, low-memory notices, paste/copy/cut through Android's
-  clipboard, and a slow app's card waiting in the card view with its icon pulsing until the app
-  is ready - each as the device does it, several of them corrected by the measurement.
-- *The card view:* cards dim when they stop being active, an app's cards stack in fanned
-  groups, a held card can be walked through and between groups, and a card pulled off the
-  bottom closes. Found on the way: Chromium 37's WebView draws nothing when turned the "wrong"
-  way or faded, so those cards are drawn from a layer.
-- *The status bar:* animated as LunaSysMgr did, with the Bluetooth, rotation-lock, mute,
-  airplane and VPN icons, and the start of the system menu (date, battery, brightness).
-- *Dashboards:* the drop-down scrolls, a dragged row shows its backing, Enyo dashboards swipe
-  their own layers.
-- *The launcher:* installed apps on DOWNLOADS, the device's column spacing and scrolling, the
-  empty page, install progress, and LunaCE's tab editing and app folders.
-- *Just Type:* the pill opens it; launch results and "Search DuckDuckGo" (the rest of Just
-  Type is for later, codepoet's call).
-- *Phone-sized apps* get their chrome: title bar, back strip, keyboard button, corners.
-- *Sounds:* LunaSysMgr's own, copied from the device.
-
-Four A/B items turned out to be the device doing nothing, and one (a card at launch for a
-headless app) not to happen on the device at all; all are in luna-deltas.md's section D so
-nobody chases them. Still open there: A9 (what a free card reports as its orientation, which
-needs the TouchPad turned by hand) and A10 (a page's first script sees a 980-px layout).
-
-**2026-09-22, a day on Mojo fidelity.** codepoet ran the suite beside the reference TouchPad
-and reported what looked wrong, three times over as each round was fixed. Eleven differences,
-nine causes, and the pattern worth keeping is that **almost none of them was the engine**:
-they were Lunacy answering a question wrongly, a webOS idea this engine has never had, or -
-three times - a fix of mine from earlier the same day.
-
-*What Lunacy was telling apps, wrongly*
-
-- **`window.innerWidth` was a pixel wider than the page was laid out into**, and `screen` came
-  back in Android's density-independent pixels. On a device every one of them was the card's
-  own pixels. reddit sizes a pane from `innerWidth`, so one pixel dropped the whole article
-  below the fold.
-- **`PalmSystem.windowOrientation` answered "free"**, which is not an orientation: LunaSysMgr
-  reads the window's own out of that property and writes the app's *request* into a different
-  one. Mojo asks for "free" on every app's behalf, so every orientation branch in every Mojo
-  app fell through, and drPodder's playback slider was never sized.
-- **`uiRevision` was read and ignored**, so an app written for a Pre was stretched across a
-  tablet card instead of running in the phone-sized one a TouchPad gave it. Most of the
-  catalogue predates the TouchPad, so this is the common case.
-- **A launching card was blank** where webOS held its space with the app's own icon.
-
-*webOS ideas this engine hasn't got*
-
-- **`-webkit-palm-mouse-target: ignore`**, for an element that takes no touches. Mojo uses it
-  nineteen times and it is load-bearing: a page header's back icon sits under the title.
-  Translated to `pointer-events: none` - with a companion rule, because that one inherits and
-  webOS's did not.
-- **`-webkit-palm-overflow`**, webOS's scrolling model, which is what gives a Mojo scene its
-  height. Without it a scene whose content is all out of flow is zero pixels tall and every
-  percentage-height child collapses with it.
-- **extractfs**, the thumbnailer - a FUSE filesystem rather than a service, which is why it
-  was easy to miss. The card host serves its paths now.
-- **A card is the viewport.** This engine is a mobile browser underneath and shrinks a page
-  that lays out wider than its window; webOS let content hang off the edge. That is now
-  settled by declaring the viewport rather than leaving it to be inferred - see below.
-
-*Mine, from earlier the same day*
-
-The card-background fix was applied to every element rather than only the card's background,
-and it read its own output back on the next pass, so a rotated card kept the wrong size. The
-`pointer-events` translation was applied without its companion rule and made Mojo's menus
-untouchable. Each is recorded in [fix-log.md](fix-log.md) as it happened rather than quietly
-settled, because the measurement that decides each one is the useful part.
-
-*The viewport, which is the piece to know about*
-
-`useWideViewPort` was off, so the `<meta name="viewport">` every webOS app carries never
-reached the engine at all, and the engine worked the viewport out from the page's own layout
-width. It is now declared: the card's width and height and a scale pinned at 1, **merged into**
-what the app said rather than replacing it. That constraint is codepoet's and it is the right
-one - on webOS that meta is a statement about the *card* (`height=device-height` keeps a
-Pre-shaped app out of the Pre3's letterbox, as `"uiRevision": 2` keeps it out of the
-TouchPad's phone frame), so `device-width` and `device-height` are translated into this card's
-numbers and an app that names its own width or scale keeps it. The rules are in
-[architecture.md](architecture.md); [fix-log.md](fix-log.md) also lists the four Android-side
-levers that don't work, which are worth reading before anyone tries them again.
-
-It paid for itself twice over: it took ninety lines of compat layer back out, because fixed
-elements no longer need correcting one by one, and it is the lever the next screen size will
-need.
-
-*Left different, on purpose or for later*
-
-- An emulated card has no status bar, gesture strip or keyboard button of its own, and in card
-  view its thumbnail is a tablet-shaped card with a phone in it rather than a phone.
-- webOS held a launching card off the screen for 900 ms before showing it in the card view;
-  Lunacy shows it there at once and loads the page behind it ([luna-deltas.md](luna-deltas.md)
-  D, "The startup card").
-- drPodder's playback row comes out 17/65/17 where the device gives 20/60/20, and this
-  Prelude draws its title 300 px wide where the device draws it 290.
-
-*Two probe apps came out of it*, because the fastest way to tell an engine difference from an
-app one is to put the same markup on both machines: `…lunacy.cssprobe` (plain CSS and the
-window's own measurements) and `…lunacy.mojoprobe` (a Mojo app with real widgets), plus
-`…lunacy.emuprobe`, the one deliberately without a `uiRevision`.
-
-**2026-09-21, Mojo and fidelity.** The five Mojo apps codepoet named all run, and Palm's own
-Video Player with them (Mojo 2). Then a pass on how it *feels*, each fix measured against the
-reference TouchPad or against LunaCE's own source rather than guessed at: the active card now
-holds the page's focus (without it a WebView dispatches no focus events at all, so nothing an
-app focused itself raised the keyboard); putting the keyboard away takes the field's focus with
-it, as `IMEController::hideIME` did, which is the only way a Mojo app can tell; the keyboard's
-shift reaches the number row's symbols, as `TabletKeymap::map` says it should, while shift-lock
-does not, as `isShiftActive` against `isCapActive` says it should not; Device Info's
-rows take their metrics and their disabled grey from Mojo; and a framework's widget art is
-asked for before the page needs it, which is what stopped the widgets popping in. Two
-differences are recorded and accepted rather than fixed - the card animations' dropped frames,
-and the space the keyboard and Android's navigation bar cost a card. Both are in
-[fix-log.md](fix-log.md), with the numbers.
-
-- **Spike 1:** done, on Chromium 37 and 64, with a TouchPad reference probe. The probe
-  (`Workbench/probe`, 0.0.9 on the TouchPad) has since measured uncaught errors, the network
-  contract, media with an empty `src` and connection timeouts; `db8probe.sh` and
-  `db8watch.sh` measured db8.
-- **Corpus survey:** started. A scan of codepoet's package mirror (4,318 packages) found 121
-  with JS services and 45 with db8 configuration files. The ranking by `palm://` URIs is
-  still to do.
-- **Phase 0 (skeleton):** done.
-- **Phase 1 (Enyo runs):** mostly done.
-  - Done: touch-as-mouse input and flicks, `palmGetResource`, the PalmSystem surface,
-    Prelude, the border-image transform, window types, the app menu (relaunch with
-    `open-app-menu`, `PalmSystem.isActivated`), the keyboard (automatic and manual modes,
-    card resize), relaunch parameters, and the network shim (cross-origin XHR as the
-    TouchPad sent it, 9 s connect timeout, bundled Mozilla roots).
-  - Compat fixes from real apps: uncaught errors reach only the console, the TouchPad's user
-    agent and version (webOS CE 3.1.0), no service workers,
-    `webkitCancelRequestAnimationFrame`, media with an empty `src`, and `file:///media/internal`
-    URLs.
-  - The Enyo 1 contract was read end to end on 2026-09-20 - every `PalmSystem` member, every
-    `Mojo` call, every service and file the framework itself reaches for - and the gaps it
-    turned up are closed: g11n's formats, `enyo.WebView`, `applicationManager/open` and
-    `getAppBasePath`, the headset/media/display startup calls, and `tellurium_config.json`.
-  - Not yet: a test suite, runs on the factory WebView 37, and the border-image seams in Enyo
-    dialogs (see fix-log.md).
-- **Phase 2 (bus):** subscriptions and cancellation work. Answering: applicationManager
-  (launch, open, listApps, Preware installs), connectionmanager, preferences
-  `systemProperties/Get`, activitymanager (foreground activities), keys (headset and media),
-  display, and db8 and tempdb ([db8.md](db8.md)). Everything else returns webOS's own errors.
-  Not yet: zeroconf (codepoet: never worked, skip), background activities, the media indexer.
-  The download manager was added on 2026-09-22, measured method by method.
-- **Phase 3 (shell):** well along. Card view (with groups, reordering and dimming),
-  launcher, dock, status bar (with the start of the system menu), banners, dashboards, popup
-  alerts, Just Type's launch and web search, and the emulated card's chrome. The launcher has
-  the launch glow and edit mode: reordering, moving icons between tabs (with the tab
-  highlight), removing installed apps, arranging the dock (add, swap, reorder, drag up and out
-  to remove), LunaCE's tab editing and app folders - all checked against the TouchPad at the
-  same scale.
-- **Phase 4 (App Museum):** installs work through the Museum's own Preware route, from
-  `http` and `https`; apps can be removed from the launcher; packages' db8 kinds and
-  permissions register at install. Not yet: the compatibility score, activities from
-  packages.
-- **Phase 6 (JS services):** brought forward and running. Node 12 (nodejs-mobile 0.3.3) per
-  service package, Palm's mojoservice and foundations from the TouchPad, webOS paths, a curl
-  in JS, and a loopback media server for services' HLS. See "JS services" in the
-  architecture doc.
-- **The LunaCE spec revision landed.** [luna-shell-reference.md](luna-shell-reference.md) now
-  uses the reference TouchPad's own `/etc/palm` values as authoritative and marks what was
-  measured on the device. Where the doc and the code disagree, the code's comments give the
-  measured value.
-- **Ready to show (2026-09-20).** The project is laid out as one Gradle root building two
-  APKs into `out/` - `AndroidLuna` and `LunaKeyboard` - with the framework forks beside them
-  in `LunaRuntimes/`. A fresh install starts with Clock on APPS, the App Museum (now bundled)
-  on DOWNLOADS, nothing on GAMES and every settings app on SETTINGS, and a splash carries the
-  logo through the first run's unpacking. [BUILDING.md](../BUILDING.md) is the developers'
-  entry point; the README's "Using it" is the owners'.
-- **The keyboard, and somewhere to try it (2026-09-20).** A companion APK in
-  [LunaKeyboard/](../LunaKeyboard/README.md) puts the TouchPad's own keyboard on Android, scroll ball
-  and all; it is separate from Lunacy and optional. (The "Just type" pill was a text field
-  until Just Type itself arrived on 2026-09-22; typing now happens there.)
-- **Settings (2026-09-20).** Three cases, described under "Settings" in the architecture doc:
-  Lunacy's own app where webOS's reported a webOS device, Palm's own app where Lunacy can
-  answer it, and an icon that opens Android's screen where the setting belongs to Android.
-  - **Device Info** is Lunacy's own, in Enyo 1 (Palm's is Mojo), keeping Palm's id and icons.
-    It reports the device, Android, the WebView, Lunacy's version, Node and the display, from
-    `palm://org.webosarchive.lunacy/system/getEnvironment` - Lunacy's own service name.
-  - **Screen & Lock** is Palm's, unchanged: `com.palm.systemservice` (preferences and the
-    wallpaper store) and `com.palm.display/control` (Android's brightness and screen-off
-    timeout) answer it, and Change Wallpaper works end to end.
-  - **A file picker** at webOS's own system-UI path, so `enyo.FilePicker` works in every app.
-    Android's shared folders are mapped into `/media/internal` under webOS's own names, so it
-    shows the user's real files: Papyrus now imports and reads an ePub from Downloads.
-  - **Wi-Fi** is a shortcut to Android's settings. **Sounds & Alerts** is Lunacy's app in
-    Palm's layout: Sounds, Volume and System Sounds, and a button to Android's sound settings.
-  - An app its owner enables now shows its own exhibition view: the shell launches it with
-    `dockMode`, which is how webOS told an app to show that view rather than its ordinary one.
-  - **Help** is Palm's, unchanged, and runs; its articles need a path webOS Archive's help host
-    doesn't serve yet (see fix-log.md).
-  - Palm's settings apps stay in `local-assets/` for now: shipping Palm's code in the APK is
-    codepoet's call, like Mojo's.
-  - **Palm's Video Player is bundled (2026-09-21)**, on codepoet's call: it is platform
-    rather than an app someone chooses, and apps that play video launch it by id. It has no
-    launcher icon, because its `appinfo.json` says `"visible": "false"` and Lunacy now reads
-    that, as webOS did.
-- **Mojo runs (2026-09-20).** Flying Toasters, a Mojo app installed from a package, runs and
-  works as an Exhibition app. Phase 5 is open early; see below.
-- **The Mojo suite runs (2026-09-21).** drPodder Redux, IAmA reddit, MeTube, Check Mate and
-  SimpleChat - the apps codepoet named as the ones that must work - all run, and so does
-  Palm's own **Video Player**, which is a **Mojo 2** app and which MeTube hands every video
-  to. MeTube works end to end: search, the server-side conversion, and playback in the Video
-  Player's own card. Check Mate creates an account, logs in and syncs a task; SimpleChat
-  shows the live chat log; both updated themselves from the App Museum on the way (each
-  update changes the app id, so the old copy stays until it is removed). Nine fixes, all in
-  general layers, three of them settled by measuring the reference TouchPad: what webOS's
-  parser does with `<script src="x" />`, what WebSQL's `openDatabase` and `SQLError.message`
-  look like there, and what `PalmSystem.runTextIndexer` returns. [mojo.md](mojo.md) has them;
-  [fix-log.md](fix-log.md) has the rest, and the services these apps still ask for that
-  nobody answers.
-- **Exhibition (2026-09-20).** Palm's Clock and Exhibition apps are bundled and run unchanged.
-  The Exhibition app's Start Exhibition button puts the shell into webOS's dock mode, where it
-  draws the Time face itself as LunaSysMgr did - all four of the reference TouchPad's faces,
-  swipeable, and an app's own exhibition view when it has one: AccuWeather, Flying Toasters
-  and Glimpse all exhibit.
-- **Exhibition is Android's screen saver (2026-09-20).** Lunacy offers itself as a Daydream;
-  choosing it means the tablet on its charger shows what a TouchPad on its Touchstone showed,
-  the chosen app included. Verified on the reference tablet: the dream starts the shell, the
-  gear in Android's settings opens Palm's Exhibition app, coming off the charger leaves the
-  mode, and leaving returns to whatever the screen saver interrupted.
-- **The Pre3 measured (2026-09-21).** A reference Pre3 was connected and surveyed:
-  [pre3.md](pre3.md). It settles the phone profile's values, and several of the community's
-  records it was built from are wrong (`PRODoID` is `HSTNH-F30CN`, not `P160UNA`; the user
-  agent carries a `Linux; ` prefix). It also shows the Pre3 runs LunaSysMgr's **tablet UI
-  path** at `ScaleFactor=1.5`, not the old phone shell, with its own card ratios (0.659/0.61).
-  `DeviceProfile.PRE3` is corrected from it, and the TouchPad profile's output is unchanged.
-  The user agent and `X-Palm-Carrier` were read off the wire from an app: the phone's product
-  token is `webOSSystem`, not the TouchPad's `wOSSystem`, so it could not have been reasoned
-  out. Two discrepancies in the *TouchPad* profile turned up on the way and are left alone,
-  corrected too: `bluetoothAvailable` and `dockModeEnabled` both disagreed with the reference
-  device. The TouchPad profile now reproduces that device's `deviceInfo` member for member,
-  checked on the HP 10 G2 against the reference device's recorded output.
-- **Stock 3.0.5 compared with CE 3.1.0 (2026-09-21).** A bone-stock TouchPad was connected
-  and its `/etc/palm` diffed against the reference device's. Every shell config file is
-  **byte-identical**; CE's only change is three added lines in `defaultPreferences.txt`
-  (the custom carrier string, which reads "webOS CE", and a virtual-keyboard setting). So the
-  geometry and easing values [luna-shell-reference.md](luna-shell-reference.md) takes from the
-  reference device are HP's own, not LunaCE's - a standing doubt in that doc, now closed.
-  `PRODoID` (`HSTNH-I29C`) and `boardType` (`topaz-Wifi-pvt\n`, newline included) are the same
-  on both; only `com.palm.properties.version` differs (`HP webOS 3.0.5` against
-  `webOS CE 3.1.0`).
-- **Next candidates** (the full list of what still differs from LunaCE, with pointers into both
-  trees, is [luna-deltas.md](luna-deltas.md)):
-  - **Next priority (codepoet, 2026-09-22): Palm's App Catalog**, `com.palm.app.enyo-findapps`
-    6.1.2923 (the webOS Doctor CE pre-install, `AddToImage/PreInstall/`). This version talks to
-    webOS Archive's servers, which serve both the magazine and the catalog listings, so every
-    failure is Lunacy's. Installed on the tablet, it stops at its loading spinner; its log
-    names `com.palm.accountservices` (the Google property ID), `applicationManager/
-    launchPointChanges`, `connectCellularDataService` (for its proxy), and the magazine
-    edition request failing and then reading a null reply (`'nom' of null`).
-  - **Then Sounds & Alerts (codepoet, 2026-09-22).** Done 2026-09-26 for what the shell
-    plays (the master switch, the system volume, system sounds); the notification and alert
-    tones are still Android's. The original note: Now that the shell plays webOS's own sounds (B8, A5), Lunacy should offer
-    control of them itself: Palm's Sounds & Alerts app, answered through `com.palm.audio` and
-    `com.palm.systemservice` preferences the shell honours (system sounds on/off, the
-    notification and alert tones, volumes), rather than a shortcut. Measure the app's
-    calls on the reference TouchPad first.
-  - `activitymanager`'s scheduled activities and `com.palm.power/timeout`, which are one want
-    and not two: the Clock's alarms, SimpleChat's half-hourly refresh, reddit's message check
-    and drPodder's feed update all ask for them, and Android's `AlarmManager` backs them all;
-  - the emulated card's chrome turning with the screen (the strip and bar go to the sides in
-    landscape);
-  - the media indexer's db8 kinds;
-  - the rest of the settings apps: Date & Time, Language, Backup, Accounts, Updates, Location
-    (each is one of the three cases above);
-  - the border-image seams in Enyo dialogs;
-  - a test suite from the apps in fix-log.md, run on WebView 37 and 64;
-  - the rest of the system menu: Wi-Fi, VPN, Bluetooth, airplane mode, rotation lock and mute
-    (date, battery and brightness are in), per spec §4.3 and the device's QML;
-  - the rest of Just Type (the filter tabs, "Search using…", contacts, content, actions) and
-    the bus side it needs: `applicationManager/searchApps` and `listLaunchPoints`,
-    `com.palm.universalsearch`;
-  - A9 and A10 in luna-deltas.md;
-  - the one remaining seam inside the Sampler's radio-button graphic.
+- **Chat:** longevity on the devices; webOS CE's startup hang (PmLogLib's semaphore; take CE's
+  fix if it lands in the transport); the Add Buddy invitation message, which the transport drops.
+- **Exchange:** a real server's policy, tasks, attachments.
+- **Email:** attachments; the Android 5 devices untried; PmLogLib's levels need PmLogDaemon's
+  shared memory (only errors are logged unless a service is started with `files/pdk/args`).
+- **Calendar:** repeats, snooze. **Contacts:** vCards, favorites. Both untried beyond the A7 Lite.
+- **Hybrid apps:** a visible plugin's picture; callable collections on Chromium 37.
+- **PDK:** OpenSSL 0.9.8 and curl for the apps that link them; the other ten apkenv ports; on
+  the A7 Lite's 64-bit build Where's My Water levels take 20 to 65 s to load under qemu;
+  `palm-install` of a 24 MB package was reset by the relay.
+- **SDK:** compare `palm-log` output for the Web app's plugin calls with the TouchPad's; Mojo
+  samples don't open in a desktop browser (webos-sdk-redux FRAMEWORKS.md).
+- **Web app:** the download manager's history; the TouchPad's default bookmarks.
+- **Mojo:** the `WebView` widget (`BrowserAdapter`), so Quick Tip Calculator's first scene is
+  an empty panel.
+- **WebSQL:** the copy-in of a WebView's own WebSQL files is untested; not yet run on the
+  32-bit build's devices.
+- **Phones:** whether a focused field should raise the keyboard when an app focuses it itself
+  (a Pre3 had a hardware keyboard). First Use not yet run on the HP 10 G2.
+- **Installs and accounts:** App Catalog 6.2 as Lunacy's pack-in; the phones catalog on a phone;
+  cookies are shared between apps' origins (`.media.cryptofs.apps`); an app a package script put
+  in the rootfs can't be removed from the launcher; Enyo's libraries other than `networkproxy`
+  are upstream's, not the TouchPad's newer ones.
+- **Shell (the 2026-09-22 candidates list):** the emulated card's chrome turning with the
+  screen; the rest of the settings apps (Date & Time, Language, Backup, Accounts, Updates,
+  Location); the rest of the system menu (Wi-Fi, VPN, Bluetooth, airplane, rotation lock,
+  mute); the rest of Just Type (filter tabs, "Search using…", contacts, content, actions, and
+  `searchApps`/`listLaunchPoints`/`universalsearch`); the border-image seams in Enyo dialogs
+  and the Sampler's radio button; a test suite from the apps in fix-log.md, on WebView 37 and
+  a current one; luna-deltas A9 and A10.
 
 ## Before phase 0: two checks
 

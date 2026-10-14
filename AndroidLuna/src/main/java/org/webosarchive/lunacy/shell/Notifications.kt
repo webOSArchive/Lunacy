@@ -80,6 +80,27 @@ class Notifications(
         if (current?.window == window) hideCurrent()
     }
 
+    /** A banner carried over from a rebuilt shell's bar, already heard once: shown again without its sound. */
+    private var quiet: Banner? = null
+
+    /**
+     * The shell is being rebuilt for the other layout (ShellActivity.reshell): stops here, and
+     * hands back the banner on show and those waiting, for the new bar to show.
+     */
+    fun handOverBanners(): List<Banner> {
+        main.removeCallbacks(hideRunnable)
+        anim?.removeAllListeners(); anim?.cancel(); anim = null
+        val out = listOfNotNull(current) + queue
+        queue.clear(); current = null
+        return out
+    }
+
+    /** Banners from the bar this one replaces, in order; the first was on show, and isn't heard again. */
+    fun takeBanners(list: List<Banner>) {
+        quiet = list.firstOrNull()
+        list.forEach { addBanner(it) }
+    }
+
     fun tapBanner(): Boolean {
         val b = current ?: return false
         onBannerTap(b)
@@ -91,7 +112,8 @@ class Notifications(
         val b = queue.removeFirstOrNull() ?: run { current = null; statusBar.banner = null; return }
         current = b
         statusBar.banner = b
-        onBannerShown(b)
+        if (b !== quiet) onBannerShown(b)
+        quiet = null
         hold = if (queue.isEmpty()) HOLD_ALONE_MS else HOLD_QUEUED_MS
         shownAt = System.currentTimeMillis()
         animate(0f, 1f, 1f, SHOW_MS, Easing.OutCubic) { main.postDelayed(hideRunnable, hold) }
@@ -122,6 +144,8 @@ class Notifications(
     // ---- dashboards ----
 
     val hasDashboards get() = icons.isNotEmpty()
+    /** The dashboards, oldest first, for a rebuilt shell to take (ShellActivity.reshell). */
+    val dashboards: List<AppWindow> get() = icons.keys.toList()
 
     fun addDashboard(w: AppWindow, icon: Bitmap?) {
         icons[w] = icon
@@ -375,5 +399,7 @@ class PopupLayer(context: Context, private val luna: Luna) : FrameLayout(context
     }
 
     val showing get() = frames.isNotEmpty()
+    /** The alerts on show, oldest first, for a rebuilt shell to take (ShellActivity.reshell). */
+    val windows: List<AppWindow> get() = frames.keys.toList()
     fun newest(): AppWindow? = frames.keys.lastOrNull()
 }

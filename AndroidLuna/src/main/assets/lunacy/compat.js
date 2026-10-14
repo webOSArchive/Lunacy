@@ -1217,7 +1217,9 @@ window.__lunacyWatchProgress = (function () {
 		// laid out 800 x 1312 at 0.7515 and 800 x 1311 at 0.7520.
 		// Measured: WebView 131, 1340 px card, the guess is exact; 800 px card, the guess gave
 		// 801. Chromium 37, 320 px dashboard, the guess is exact.
-		var pin = null, key = size.width + "x" + size.height;
+		// The scale is part of the key: a foldable folded or opened can keep the card's size in
+		// TouchPad px and change the device px in each.
+		var pin = null, key = size.width + "x" + size.height + "@" + size.scale;
 		if (!named) {
 			pin = fitted[key] || Math.ceil(size.width * (size.scale || 1) / (window.devicePixelRatio || 1) - 0.001) / size.width;
 			if (!has(list, "minimum-scale")) { list.push(["minimum-scale", "@"]); }

@@ -33,7 +33,8 @@ instead.
 
 - **Screen & Lock's Layout group**, a Screen Layout selector (Automatic, Phone, Tablet) on
   its main view between the screen settings and Wallpaper, with a note saying what the
-  screen reads as. Choosing a layout that differs from the one showing restarts the shell.
+  screen reads as. Choosing a layout that differs from the one showing rebuilds the shell
+  in it, with its cards kept (§1, "Foldables").
   This is codepoet's exception to rules 0 and 5 (2026-10-03): a TouchPad's Screen & Lock
   had no such group, and the app is otherwise Palm's, unchanged (its NOTICE says so; the
   addition is marked `[Lunacy]` in its source). It moved here from Device Info because a
@@ -48,14 +49,31 @@ instead.
   opens the width (§4).
 - `palm://org.webosarchive.lunacy/system/setLayout {"layout": "phone", "appLayoutWidth": 640}`
   on the bus, Lunacy's own apps only; `system/getEnvironment` reports `layout` with the
-  clues. The shell takes a change up when it next starts (the choice fixes `Luna.density`
-  and every view's sizes at construction).
+  clues. A change that alters the layout rebuilds the shell, with its cards kept (the choice
+  fixes `Luna.density` and every view's sizes at construction, so the views are made again).
 - Over adb: `am start -n org.webosarchive.lunacy/.shell.ShellActivity --es layout phone`
-  (the shell restarts itself).
+  (the shell rebuilds itself).
 
 Measured: the Nexus 5 (1080 × 1920 at 480 dpi) reads short side 360 dp, 5.0 in, 1.78:1,
 a phone by all three. The Pixel Tablet (2560 × 1600 at 320 dpi) and the HP 10 G2 read as
 tablets on all three.
+
+**Foldables.** A foldable's two screens are on either side of the line: the Galaxy Z Fold3's
+outer screen (840 × 2289 at 420 dpi, as set) reads short side 320 dp, a phone, and its inner
+one (1768 × 2208) about 673 dp, a tablet. The shell decides again whenever the screen changes
+size, and when the answer changes it rebuilds itself in the other layout
+(`ShellActivity.reshell`, 2026-10-14; until then the layout was fixed at startup, and a
+Fold3 started open kept a tablet's launcher squeezed onto its outer screen when folded).
+Only the shell's views are made again. Every card keeps its running page, its group and its
+state, and is drawn at the new scale; each page is told the new scale (its viewport written
+again, and a page that names its own scale, like Palm's Clock, zoomed to it). What was open
+over the cards (the launcher, Just Type, a menu, Exhibition) closes, as a home press would.
+A window keeps the device it was told about when it opened (a Pre3 or a TouchPad); windows
+opened after the switch are told the new one, and so are the services that answer per call.
+Checked on the Fold3 (2026-10-14): folded and opened by hand, Phone → Tablet → Phone → Tablet
+with Clock and Memos running throughout, and with the setting. Each shell activity compares
+the screen with its own layout: with Lunacy as the home app, Android can run a second one
+in the process beside one started from adb, and `FormFactor.shown` is only the newest's.
 
 ## 2. The launcher (`Launcher.Phone`)
 

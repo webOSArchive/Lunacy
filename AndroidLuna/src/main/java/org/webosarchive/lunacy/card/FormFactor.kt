@@ -14,7 +14,8 @@ import kotlin.math.sqrt
  * there and a TouchPad on a tablet ([DeviceProfile.forScreen]), so the two can never disagree.
  *
  * Decided from the screen - its size, its pixel count and its shape, which are the clues a
- * screen gives - unless the owner has said which they want: the `layout` preference,
+ * screen gives, decided again whenever the screen changes size (a foldable folded or opened) -
+ * unless the owner has said which they want: the `layout` preference,
  * "auto", "phone" or "tablet", set from Screen & Lock (`system/setLayout` on Lunacy's own
  * service; Device Info shows it) or over adb (`--es layout phone`). [describe] says what was decided and why,
  * for Device Info to show.
@@ -46,7 +47,7 @@ object FormFactor {
     fun setting(context: Context): String =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, AUTO) ?: AUTO
 
-    /** Stores a setting; returns false for a value that isn't one. Takes effect when the shell restarts. */
+    /** Stores a setting; returns false for a value that isn't one. The shell takes it up when it next rebuilds (ShellActivity.reshell). */
     fun setSetting(context: Context, value: String): Boolean {
         if (value != AUTO && value != PHONE && value != TABLET) return false
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, value).apply()
@@ -68,8 +69,22 @@ object FormFactor {
     fun setAppLayoutWidth(context: Context, width: Int) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putInt(APP_WIDTH_KEY, width.coerceIn(0, 2048)).apply()
 
-    /** What the shell is: the setting if there is one, else what the screen says. */
-    fun of(context: Context): Kind = when (setting(context)) {
+    /**
+     * The layout the shell is showing, once it has decided one ([decide]); everything an app
+     * is told follows it, so a page never hears "Pre3" from a shell drawn as a TouchPad.
+     * Null until the shell is up.
+     */
+    @Volatile var shown: Kind? = null
+
+    /** What the shell is: the layout it is showing, else what it would decide. */
+    fun of(context: Context): Kind = shown ?: decide(context)
+
+    /**
+     * What the shell should be now: the setting if there is one, else what the screen says. A
+     * foldable's screen changes under the shell, and the shell rebuilds itself when this comes
+     * out different from [shown] (ShellActivity.reshell).
+     */
+    fun decide(context: Context): Kind = when (setting(context)) {
         PHONE -> Kind.PHONE
         TABLET -> Kind.TABLET
         else -> detect(context)

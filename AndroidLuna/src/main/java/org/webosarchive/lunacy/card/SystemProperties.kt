@@ -15,13 +15,14 @@ import org.json.JSONObject
  * A subscription gets the one reply and no updates, as on the TouchPad.
  */
 class SystemProperties(private val context: Context) {
-    private val profile = DeviceProfile.forScreen(context)
+    /** The layout's, read at each call: a foldable can change it while Lunacy runs (FormFactor.shown). */
+    private val profile get() = DeviceProfile.forScreen(context)
     /** Read afresh each time: the device id can be changed while Lunacy is running. */
     private val live: Map<String, () -> String> = mapOf(
         "com.palm.properties.nduid" to { DeviceProfile.nduid(context) },
         "com.palm.properties.ProdSN" to { DeviceProfile.serial(context, profile) },
     )
-    private val values: Map<String, String> = mapOf(
+    private val values: Map<String, String> get() = mapOf(
         "com.palm.properties.version" to profile.versionString,
         "com.palm.properties.deviceName" to profile.deviceName,
         "com.palm.properties.deviceNameShort" to profile.deviceNameShort,

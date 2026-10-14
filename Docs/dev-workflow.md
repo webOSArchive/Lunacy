@@ -71,6 +71,7 @@ more than one device is attached. The test devices:
 | Nexus 7 2012 (Android 5.1.1) | `192.168.10.198:5555` | the same |
 | Pixel Tablet (Android 17, arm64 only) | `192.168.10.153:5555` | `adb tcpip` as above (it answered on 5555 on 2026-10-03); wireless debugging's pairing port varies per reboot, so prefer tcpip |
 | HP 10 G2 (Android 5.0.1, the reference) | `192.168.10.34:5555` | `adb tcpip` over the cable after a reboot (it answered there on 2026-10-04) |
+| Galaxy Z Fold3 (Android 15, foldable) | `192.168.10.175:44439` | wireless debugging, paired once on 2026-10-14; the connect port changes after a reboot, pairing holds |
 
 - `--es install <url or path>` installs a package through the same path the App Museum
   uses. To install from a local copy of the package host, serve it and forward the port:
@@ -88,7 +89,7 @@ more than one device is attached. The test devices:
   no `send-trim-memory`): 10 is `RUNNING_LOW`, 15 `RUNNING_CRITICAL`. Apps hear it as
   `Mojo.lowMemoryNotification`, and "normal" follows once 30 s pass without another.
 - `--es layout auto|phone|tablet` sets the FormFactor preference ([phone.md](phone.md)) and
-  restarts the shell; `--ez launcher true` opens the launcher, for screenshots over adb.
+  rebuilds the shell in that layout, its cards kept; `--ez launcher true` opens the launcher, for screenshots over adb.
 - `--es sh '<command>'` runs a command through the package-script runner, in the webOS root
   and under the app's own sandbox, with its output in the log; `--es rawsh '<command>'` the
   same through Android's shell with no environment of Lunacy's. For telling the sandbox's

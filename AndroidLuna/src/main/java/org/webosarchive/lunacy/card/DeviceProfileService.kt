@@ -16,7 +16,8 @@ import org.json.JSONObject
  * them out), HP's product numbers, and HP's device-management credentials (the dmSets, nonces
  * and passwords its update servers issued), which were never issued to Lunacy.
  */
-class DeviceProfileService(private val context: Context, private val profile: DeviceProfile) {
+class DeviceProfileService(private val context: Context, private val profileOf: () -> DeviceProfile) {
+    private val profile get() = profileOf()
     fun register(bus: Bus) {
         bus.register(SERVICE, "getDeviceProfile", Bus.CallHandler { c ->
             c.reply(if (!c.privateBus) absent() else Bus.ok(mapOf("deviceInfo" to deviceInfo())))

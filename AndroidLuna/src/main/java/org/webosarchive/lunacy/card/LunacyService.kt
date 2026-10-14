@@ -306,7 +306,8 @@ class LunacyService(
      * `appLayoutWidth`, the width in px a phone lays an app's page out at (0: the card's own).
      * Lunacy's own apps only: Device Info, and Screen & Lock, where the layout is a setting
      * of the screen (codepoet, 2026-10-03). A layout that comes out different from what the
-     * shell is showing restarts the shell, once the reply is on its way; the width is taken
+     * shell is showing rebuilds the shell, its cards kept, once the reply is on its way
+     * (ShellActivity.reshell); the width is taken
      * up when an app next loads a page.
      */
     private fun setLayout(caller: String, p: JSONObject): String {
@@ -316,7 +317,7 @@ class LunacyService(
             return Bus.error("layout is auto, phone or tablet")
         }
         if (p.has("appLayoutWidth")) FormFactor.setAppLayoutWidth(context, p.optInt("appLayoutWidth"))
-        val restart = FormFactor.of(context) != before
+        val restart = FormFactor.decide(context) != before
         if (restart) main.postDelayed({ onLayoutChanged() }, RESTART_DELAY_MS)
         return Bus.ok(mapOf("layout" to FormFactor.describe(context).put("appLayoutWidth", FormFactor.appLayoutWidth(context)), "restart" to restart))
     }

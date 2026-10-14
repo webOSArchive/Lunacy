@@ -399,6 +399,25 @@ open class AppWindow(
     open fun sendBack() = evaluateJavascript(
         "(function(){function k(t){var e=document.createEvent('Events');e.initEvent(t,true,true);e.keyCode=27;e.which=27;(document.activeElement||document).dispatchEvent(e);}k('keydown');k('keyup');})()", null)
 
+    /**
+     * The shell's scale has changed under the page (a foldable folded or opened, and the shell
+     * rebuilt for the other layout; ShellActivity.reshell): the compat layer writes the
+     * viewport again from [Native.cardSize], as it does on a resize - a card whose size in
+     * device px didn't change gets no resize of its own to do it. A page that names its own
+     * scale (Palm's Clock: initial-scale=1.0) is shown at the scale the engine was given when
+     * it loaded (setInitialScale above), which a loaded page doesn't take again, so it is
+     * zoomed there.
+     */
+    fun rescale() {
+        val target = pageScale
+        setInitialScale(Math.round(target * 100))
+        evaluateJavascript("try{window.__lunacyViewport&&window.__lunacyViewport()}catch(e){}") {
+            if (destroyed) return@evaluateJavascript
+            @Suppress("DEPRECATION") val now = scale
+            if (now > 0f && Math.abs(target / now - 1f) > 0.005f) zoomBy((target / now).coerceIn(0.02f, 50f))
+        }
+    }
+
     /** Device px per CSS px in this window's page: the shell's scale, less the phone's app scale. */
     val pageScale: Float get() = host.pixelScale * fit(width, height)
 

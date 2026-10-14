@@ -100,9 +100,14 @@ Lunacy (Android app)
 
 ## Shell
 
-**Phone or tablet** is decided once, by `FormFactor` (the screen's size in dp, its size in
+**Phone or tablet** is decided by `FormFactor` (the screen's size in dp, its size in
 inches and its shape, or the owner's setting), and both the shell's layout and the device
-apps are told about follow it. On a phone the shell draws the TouchPad's parts tightened for
+apps are told about follow it. It is decided at startup and again whenever the screen
+changes size or the setting changes: a foldable folded onto its outer screen or opened out.
+When the answer changes, `ShellActivity.reshell` rebuilds the shell's own views at the new
+scale and moves every card into them, its page still running, in its group and its state;
+dashboards, alerts and banners move too. A window keeps the device it was told about when it
+opened, and windows opened after the switch are told the new one. On a phone the shell draws the TouchPad's parts tightened for
 the width, and lays app pages out wider than the card, scaled to fit: [phone.md](phone.md).
 
 The shell is a **simulator**: native Android Views that recreates the webOS experience. The

@@ -67,6 +67,16 @@ class Card(
         return old
     }
 
+    /**
+     * Takes the page out of the card, for a card of the rebuilt shell's to hold
+     * (ShellActivity.reshell): the page runs on, and only its frame is drawn again.
+     */
+    fun release(): AppWindow {
+        removeView(window)
+        window.scaleX = 1f; window.scaleY = 1f
+        return window
+    }
+
     /** What a tap on an emulated card's chrome asks for. */
     enum class ChromeAction { APP_MENU, BACK, KEYBOARD }
     var onChrome: (ChromeAction) -> Unit = {}
@@ -110,6 +120,8 @@ class Card(
      * blank keeps it until there is something to show. Does nothing once it has gone.
      */
     private fun lift() { if (ready && drawn) splash?.dismiss() }
+    /** The placeholder is still over the page: a card remade for a rebuilt shell gets one too. */
+    val splashing get() = splash != null && !(ready && drawn)
 
     /**
      * The phone an emulated card's page sits in, drawn centred on the page exactly as
@@ -714,6 +726,59 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         addView(card)
         card.visibility = View.VISIBLE
         setActiveGroup(g)
+    }
+
+    /**
+     * Everything the layer holds, for the layer that replaces it when the shell is rebuilt for
+     * the other layout (a foldable folded or opened; ShellActivity.reshell): the groups in
+     * order, each one's active card, which group is active, and the maximized card.
+     */
+    class Handover internal constructor(
+        internal val groups: List<List<Card>>, internal val actives: List<Card?>, internal val activeGroup: Int,
+        val maximized: Card?, internal val launching: Set<Card>, internal val lastLaunched: Card?,
+    ) {
+        val cards: List<Card> get() = groups.flatten()
+    }
+
+    /** Stops whatever is moving and says what is where; the cards stay until [takeOver] has their pages. */
+    fun handOver(): Handover {
+        anim?.cancel(); anim = null
+        endReorder(animate = false)
+        drag = Drag.NONE; dragCard = null
+        return Handover(groups.map { it.cards.toList() }, groups.map { it.active }, groups.indexOf(activeGroup),
+            maximized ?: activating, launching.toSet(), lastLaunched)
+    }
+
+    /**
+     * The old layer's cards, each remade by [remake] for this layer's scale, in the same groups
+     * and the same state: maximized stays maximized, the card view stays the card view, and a
+     * card still loading goes on waiting. They are placed at this layer's first layout.
+     */
+    fun takeOver(h: Handover, remake: (Card) -> Card) {
+        val made = HashMap<Card, Card>()
+        h.groups.forEachIndexed { i, list ->
+            val g = Group()
+            for (old in list) {
+                val c = remake(old)
+                made[old] = c
+                c.group = g; c.dimming = old.dimming
+                g.cards += c
+                addView(c)
+            }
+            g.active = h.actives[i]?.let { made[it] }
+            groups += g
+        }
+        launching += h.launching.mapNotNull { made[it] }
+        lastLaunched = h.lastLaunched?.let { made[it] }
+        val max = h.maximized?.let { made[it] }
+        maximized = max
+        topCard = max
+        current = groups.getOrNull(h.activeGroup)?.active
+        activeGroup = groups.getOrNull(h.activeGroup)
+        cards.forEach { it.visibility = if (max == null || it == max) View.VISIBLE else View.INVISIBLE }
+        max?.chromeShown = true
+        restack()
+        requestLayout()
     }
 
     /**

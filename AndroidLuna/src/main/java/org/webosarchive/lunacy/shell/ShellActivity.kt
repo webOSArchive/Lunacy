@@ -79,19 +79,31 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var wallpaperView: ImageView
     /** /media/cryptofs/apps: installed packages first, then the apps bundled in the APK. */
     private lateinit var files: AppFiles
-    /** The webOS device Lunacy answers as, for every app-visible surface. */
-    private val profile by lazy { org.webosarchive.lunacy.card.DeviceProfile.forScreen(this) }
-    /** The PDK runtime (Docs/pdk.md): present in the 32-bit build, absent in the 64-bit one. */
-    private val pdkRuntime by lazy {
+    /**
+     * The webOS device Lunacy answers as, for every app-visible surface: the layout's, so it
+     * follows a foldable folded or opened (reshell). A window keeps the one it started with.
+     */
+    private val profile get() = org.webosarchive.lunacy.card.DeviceProfile.forScreen(this)
+    private var pdkRuntimeOf: Pair<org.webosarchive.lunacy.card.DeviceProfile, org.webosarchive.lunacy.card.PdkRuntime>? = null
+    /**
+     * The PDK runtime (Docs/pdk.md): present in the 32-bit build, absent in the 64-bit one.
+     * One per profile: a native app started after the layout changed sees the new device's
+     * screen, and one already running keeps its own.
+     */
+    private val pdkRuntime: org.webosarchive.lunacy.card.PdkRuntime get() {
         val d = profile
+        pdkRuntimeOf?.takeIf { it.first == d }?.let { return it.second }
         // A PDK app saw its device's own screen, whatever way it was held: the TouchPad's
         // 1024 x 768 landscape panel, the Pre3's 480 x 800 portrait one. The card scales it.
         val (w, h, dpi) = if (d == org.webosarchive.lunacy.card.DeviceProfile.PRE3) Triple(480, 800, 260) else Triple(1024, 768, 132)
-        org.webosarchive.lunacy.card.PdkRuntime(this, java.io.File(filesDir, "cryptofs/apps/usr/palm/applications"),
+        return org.webosarchive.lunacy.card.PdkRuntime(this, java.io.File(filesDir, "cryptofs/apps/usr/palm/applications"),
             w, h, dpi, d.platformVersion, d.modelNameAscii, org.webosarchive.lunacy.card.DeviceProfile.nduid(this))
+            .also { pdkRuntimeOf = d to it }
     }
-    /** Proof of concept: Android's own apps in the launcher, for Lunacy as the home screen. */
-    private val androidApps by lazy { AndroidApps(this, files, luna.px(Launcher.Params.ICON.toInt())) }
+    private var androidAppsAt: AndroidApps? = null
+    /** Proof of concept: Android's own apps in the launcher, for Lunacy as the home screen. Its icons are at the shell's scale. */
+    private val androidApps: AndroidApps get() =
+        androidAppsAt ?: AndroidApps(this, files, luna.px(Launcher.Params.ICON.toInt())).also { androidAppsAt = it }
     private var androidById: Map<String, AppInfo> = emptyMap()
     /** Whether the shell is on screen (between onStart and onStop): a Home press then is Lunacy's own. */
     private var started = false
@@ -187,7 +199,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
         WebView.setWebContentsDebuggingEnabled(true)
-        luna = Luna(this)
+        org.webosarchive.lunacy.card.FormFactor.shown = org.webosarchive.lunacy.card.FormFactor.decide(this)
+        luna = Luna(this, org.webosarchive.lunacy.card.FormFactor.shown == org.webosarchive.lunacy.card.FormFactor.Kind.PHONE)
         val installed = java.io.File(filesDir, "cryptofs/apps")
         // The webOS root filesystem services and package scripts see as /. Its ROM is laid down
         // (again after an update) off the main thread, below; a service's first call and a
@@ -224,6 +237,48 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             runOnUiThread { jsServices.reload(); nativeServices.reload(); appsChanged(); activityManager.enable(); powerService.enable(); afterFirstUse(); FontWarmer(this, server).warmWhenIdle() }
         }, "webos-root").start()
 
+        sounds.preload()
+        registerReceiver(packageReceiver, android.content.IntentFilter().apply {
+            addAction(android.content.Intent.ACTION_PACKAGE_ADDED)
+            addAction(android.content.Intent.ACTION_PACKAGE_REMOVED)
+            addAction(android.content.Intent.ACTION_PACKAGE_CHANGED)
+            addAction(android.content.Intent.ACTION_PACKAGE_REPLACED)
+            addDataScheme("package")
+        })
+        buildShell()
+        // The splash was the window's background (Theme.Lunacy.Splash), which is what Android
+        // painted while this was all being set up. The shell covers it now, so let the logo go
+        // rather than hold the bitmap behind an opaque wallpaper for the rest of the session.
+        shellRoot?.post { window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK)) }
+        reportedOrientation = screenOrientation()
+        (getSystemService(DISPLAY_SERVICE) as android.hardware.display.DisplayManager)
+            .registerDisplayListener(displayListener, android.os.Handler(android.os.Looper.getMainLooper()))
+        seedMediaInternal()
+        onCardView()
+        goImmersive()
+
+        // First Use, as a webOS device put it in front of a new owner: once, on the first
+        // start, it asks for Android's permissions (LunacyService). After it has run, the
+        // shell asks for storage itself if it is still missing, as it did before First Use.
+        if (!org.webosarchive.lunacy.card.LunacyService.firstUseDone(this)) {
+            cards.post { launch(org.webosarchive.lunacy.card.LunacyService.FIRST_USE_APP) }
+        } else {
+            askForStorage()
+        }
+
+        handleIntent(intent)
+    }
+
+    /** The shell's own root view, under the wallpaper: what [buildShell] lays out and [reshell] replaces. */
+    private var shellRoot: FrameLayout? = null
+
+    /**
+     * The shell's views, at [luna]'s scale and in its layout: wallpaper, cards, launcher, pill,
+     * dock, notifications, menus, status bar. Built once at startup, and again by [reshell]
+     * when the layout changes; everything else - the services, the bus, the apps' windows -
+     * is the activity's own and outlives it.
+     */
+    private fun buildShell() {
         // The dock draws an icon being dragged out of it above its own bounds.
         val root = FrameLayout(this).apply { clipChildren = false }
         wallpaperView = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
@@ -242,7 +297,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             phone = luna.phone
             // The TouchPad's landscape turned end for end, which Lunacy calls "left".
             upsideDown = { screenOrientation() == "left" } }
-        sounds.preload()
         root.addView(cards, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
 
         // Overlays, bottom to top as in LunaCE's OverlayWindowManager: launcher, pill, dock.
@@ -251,13 +305,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         launcher.onRemove = { app -> remove(app) }
         launcher.appTitle = { id -> registry.get(id)?.title }
         launcher.setApps(launchPoints())
-        registerReceiver(packageReceiver, android.content.IntentFilter().apply {
-            addAction(android.content.Intent.ACTION_PACKAGE_ADDED)
-            addAction(android.content.Intent.ACTION_PACKAGE_REMOVED)
-            addAction(android.content.Intent.ACTION_PACKAGE_CHANGED)
-            addAction(android.content.Intent.ACTION_PACKAGE_REPLACED)
-            addDataScheme("package")
-        })
         launcher.dockHeight = luna.px(QuickLaunch.barHeight(luna.phone)).toFloat()
         launcher.visibility = View.INVISIBLE
         root.addView(launcher, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
@@ -375,29 +422,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
         fitCutout(screen, root)
         setContentView(screen)
-        // The splash was the window's background (Theme.Lunacy.Splash), which is what Android
-        // painted while this was all being set up. The shell covers it now, so let the logo go
-        // rather than hold the bitmap behind an opaque wallpaper for the rest of the session.
-        root.post { window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK)) }
-        reportedOrientation = screenOrientation()
-        (getSystemService(DISPLAY_SERVICE) as android.hardware.display.DisplayManager)
-            .registerDisplayListener(displayListener, android.os.Handler(android.os.Looper.getMainLooper()))
-        seedMediaInternal()
+        screen.requestApplyInsets()
         watchKeyboard(root)
         statusBar.onTitleTap = { if (exhibitionOn) toggleExhibitionMenu() else toggleAppMenu() }
-        onCardView()
-        goImmersive()
-
-        // First Use, as a webOS device put it in front of a new owner: once, on the first
-        // start, it asks for Android's permissions (LunacyService). After it has run, the
-        // shell asks for storage itself if it is still missing, as it did before First Use.
-        if (!org.webosarchive.lunacy.card.LunacyService.firstUseDone(this)) {
-            cards.post { launch(org.webosarchive.lunacy.card.LunacyService.FIRST_USE_APP) }
-        } else {
-            askForStorage()
-        }
-
-        handleIntent(intent)
+        shellRoot = root
     }
 
     override fun onDestroy() {
@@ -449,14 +477,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     /**
      * Android's screen saver asking for Exhibition (ExhibitionDream), and extras for
      * development over adb: launch <appid> [params <json>], install <url or path>, layout
-     * auto|phone|tablet (the FormFactor setting; the shell restarts), launcher (opens it).
+     * auto|phone|tablet (the FormFactor setting; the shell is rebuilt, reshell), launcher (opens it).
      * The shell is exported to every app on the device, so the ones that install a package
      * or run a command - install, sh, rawsh - are a debug build's only ([devBuild]).
      */
     private fun handleIntent(intent: android.content.Intent) {
         if (devBuild) intent.getStringExtra("install")?.let { install(it) }
         intent.getStringExtra("layout")?.let { v ->
-            if (org.webosarchive.lunacy.card.FormFactor.setSetting(this, v)) { intent.removeExtra("layout"); recreate() }
+            if (org.webosarchive.lunacy.card.FormFactor.setSetting(this, v)) { intent.removeExtra("layout"); if (::cards.isInitialized) reshell() }
             else Log.w(AppServer.TAG, "layout: $v is not auto, phone or tablet")
         }
         if (intent.hasExtra("launcher")) { intent.removeExtra("launcher"); if (started && !launcherOpen) openLauncher() }
@@ -669,7 +697,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     /** The app is up and running with no card of its own: the placeholder goes, and the root goes on headless. */
     private fun withdrawPlaceholder(window: AppWindow) {
-        cards.postDelayed({
+        // On the activity's window rather than the card layer, which a rebuild replaces (reshell).
+        this.window.decorView.postDelayed({
             val card = placeholderOf(window) ?: return@postDelayed
             Log.i(AppServer.TAG, "launch ${window.appId}: no card opened; the placeholder goes")
             card.awaitingWindow = false
@@ -698,7 +727,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             w.loadUrl(url)
         }
         pendingLoads[w] = load
-        cards.postDelayed(load, CardLayer.Params.SLIDE_MS + 50)
+        // On the activity's window rather than the card layer, which a rebuild replaces (reshell).
+        window.decorView.postDelayed(load, CardLayer.Params.SLIDE_MS + 50)
     }
 
     /** Card view, while a launching card waits in it: the dock and the pill stay away, as on a device. */
@@ -710,11 +740,26 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     private fun showAsCard(w: AppWindow, parent: AppWindow? = null, placeholder: Boolean = false, splash: Boolean = true) {
+        val card = newCard(w, splash)
+        card.fullScreen = w.fullScreen && !w.emulated
+        card.awaitingWindow = placeholder
+        // A card an app opens while its own card is up joins that card's group, and so does
+        // one an app opens for another app that launched it while that app's card was up
+        // (CardWindowManager::prepareAddWindowSibling: the active card is focused and the
+        // window's launching app is its app). Closing it then comes back to that card.
+        val launcher = launchers.remove(w.appId)
+        val up = cards.maximized?.takeIf { (parent != null && it.window.appId == w.appId) || (launcher != null && it.window.appId == launcher) }
+        cards.add(card, up)
+        cards.openLaunching(card)
+    }
+
+    /** A card for [w], drawn at the shell's scale. */
+    private fun newCard(w: AppWindow, splash: Boolean): Card {
         // An app that never said it was laid out for a tablet gets the phone-sized card a
         // TouchPad gave it, rather than being stretched across the whole one.
         val emu = if (!w.emulated) null else Pair(
             luna.px(org.webosarchive.lunacy.card.EmulatedCard.WIDTH.toFloat()).toInt(),
-            luna.px((org.webosarchive.lunacy.card.EmulatedCard.HEIGHT - profile.positiveSpaceTopPadding).toFloat()).toInt())
+            luna.px((org.webosarchive.lunacy.card.EmulatedCard.HEIGHT - org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD.positiveSpaceTopPadding).toFloat()).toInt())
         val card = Card(this, w, luna.px(CardLayer.Params.CORNER), emu,
             if (emu == null) null else luna.image("emucard-device-frame.png"),
             // webOS held the card's space with the app's own icon until it had drawn.
@@ -729,16 +774,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 Card.ChromeAction.KEYBOARD -> { w.requestFocus(); imm.showSoftInput(w, android.view.inputmethod.InputMethodManager.SHOW_FORCED) }
             }
         }
-        card.fullScreen = w.fullScreen && !w.emulated
-        card.awaitingWindow = placeholder
-        // A card an app opens while its own card is up joins that card's group, and so does
-        // one an app opens for another app that launched it while that app's card was up
-        // (CardWindowManager::prepareAddWindowSibling: the active card is focused and the
-        // window's launching app is its app). Closing it then comes back to that card.
-        val launcher = launchers.remove(w.appId)
-        val up = cards.maximized?.takeIf { (parent != null && it.window.appId == w.appId) || (launcher != null && it.window.appId == launcher) }
-        cards.add(card, up)
-        cards.openLaunching(card)
+        return card
     }
 
     /** appinfo.json's requestedWindowOrientation, which every card of the app starts with. */
@@ -1393,11 +1429,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * and Mojo.keyboardShown(false) follows, and the page's input focus goes with the
      * keyboard, which is how webOS put it away (AppWindow.removeInputFocus).
      */
-    private fun watchKeyboard(root: View) = root.viewTreeObserver.addOnGlobalLayoutListener {
+    private var keyboardWatch: android.view.ViewTreeObserver.OnGlobalLayoutListener? = null
+    private fun watchKeyboard(root: View) = android.view.ViewTreeObserver.OnGlobalLayoutListener {
         val r = android.graphics.Rect()
         root.getWindowVisibleDisplayFrame(r)
         val h = (root.rootView.height - r.bottom).let { if (it > root.rootView.height / 6) it else 0 }
-        if (h == keyboardHeight) return@addOnGlobalLayoutListener
+        if (h == keyboardHeight) return@OnGlobalLayoutListener
         keyboardHeight = h
         val w = cards.maximized?.window
         val lp = cards.layoutParams as FrameLayout.LayoutParams
@@ -1414,7 +1451,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             w?.removeInputFocus()
             goImmersive()  // Android shows its bars with the keyboard and leaves them up
         }
-    }
+    }.also { keyboardWatch = it; root.viewTreeObserver.addOnGlobalLayoutListener(it) }
 
     private fun hideKeyboard() {
         if (keyboardHeight > 0) imm.hideSoftInputFromWindow(window.decorView.windowToken, 0)
@@ -1609,6 +1646,77 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
         updateOrientation()
+        goImmersive()
+        // A foldable folded or opened: the screen may now call for the other layout. Once the
+        // display has its new size (the configuration can arrive first).
+        window.decorView.post { if (shownKind() != org.webosarchive.lunacy.card.FormFactor.decide(this)) reshell() }
+    }
+
+    /**
+     * The shell rebuilt in the layout the screen now calls for - a foldable folded onto its
+     * narrow outer screen, or opened out - or that the owner has just chosen (Screen & Lock,
+     * `--es layout`). The phone or tablet decision and the shell's scale were made once, at
+     * startup, and a folded phone kept a tablet's launcher squeezed onto its outer screen.
+     *
+     * Only the shell's own views are rebuilt. The apps run on through it: every card keeps its
+     * page, its place in its group and its state (maximized, in the card view, still loading),
+     * and its frame is drawn again at the new scale; dashboards, alerts and banners move to the
+     * new bar. What was open over the cards - the launcher, Just Type, a menu, Exhibition - was
+     * the old layout's and closes, as a press of home would. A page is told its new scale (its
+     * viewport written again); what a window was told about the device when it opened, a Pre3
+     * or a TouchPad, it keeps, and the next window opened is told the new one.
+     */
+    /**
+     * The layout this shell is drawn in. Its own rather than FormFactor.shown: Android can run
+     * a second shell activity in the process (Lunacy as the home app, beside one started
+     * another way), and the newer one's decision mustn't stop this one rebuilding.
+     */
+    private fun shownKind() = if (luna.phone) org.webosarchive.lunacy.card.FormFactor.Kind.PHONE else org.webosarchive.lunacy.card.FormFactor.Kind.TABLET
+
+    private fun reshell() {
+        val kind = org.webosarchive.lunacy.card.FormFactor.decide(this)
+        if (kind == shownKind()) return
+        val old = shellRoot ?: return
+        Log.i(AppServer.TAG, "layout: ${shownKind()} -> $kind; the shell is rebuilt, its cards kept")
+        if (exhibitionOn) setExhibition(false)
+        hideKeyboard()
+        keyboardWatch?.let { old.viewTreeObserver.removeOnGlobalLayoutListener(it) }
+        keyboardWatch = null
+        keyboardHeight = 0
+        launcherOpen = false
+        dockShown = null
+
+        // What the old views hold, before they go.
+        val handover = cards.handOver()
+        val dashboards = notifications.dashboards
+        val alerts = notifications.popups.windows
+        val banners = notifications.handOverBanners()
+        val headless = (0 until hidden.childCount).map { hidden.getChildAt(it) }
+        // Every page out of the old views but the cards' own, which come out as their new cards take them.
+        for (w in running.values.flatten()) if (w.parent !is Card) (w.parent as? android.view.ViewGroup)?.removeView(w)
+
+        org.webosarchive.lunacy.card.FormFactor.shown = kind
+        luna = Luna(this, kind == org.webosarchive.lunacy.card.FormFactor.Kind.PHONE)
+        androidAppsAt = null
+        buildShell()
+
+        cards.takeOver(handover) { c ->
+            val splashing = c.splashing
+            newCard(c.release(), splashing).also { n ->
+                n.fullScreen = c.fullScreen; n.awaitingWindow = c.awaitingWindow
+                n.drawn = c.drawn; n.ready = c.ready
+            }
+        }
+        headless.forEach { hidden.addView(it, FrameLayout.LayoutParams(1, 1)) }
+        for (w in dockWindows.values) {
+            dockLayer.addView(w, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
+        }
+        dashboards.forEach { notifications.addDashboard(it, icon(it.attributes.optString("icon"), it.appId)) }
+        alerts.forEach { notifications.popups.show(it, it.attributes.optInt("height", 200)) }
+        notifications.takeBanners(banners)
+        // Once the pages are laid out in their new cards: the viewport is written from the card's size.
+        cards.post { running.values.flatten().forEach { it.rescale() } }
+        cards.maximized?.let { onMaximized(it) } ?: onCardView()
         goImmersive()
     }
 
@@ -2047,14 +2155,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // Lunacy's own service, on its own name: the environment it really runs in, and
         // Android's settings screens for the settings Android owns.
         org.webosarchive.lunacy.card.LunacyService(this, registry, jsServices, jsServices.root, { displayInfo() }, ::askPermissions,
-            { intent -> runCatching { startActivityForResult(intent, 200) }.isSuccess }, onLayoutChanged = { recreate() },
+            { intent -> runCatching { startActivityForResult(intent, 200) }.isSuccess }, onLayoutChanged = { reshell() },
             wallpaper = ::wallpaperSource, onFirstUseDone = ::afterFirstUse).register(bus)
         val connections = org.webosarchive.lunacy.card.ConnectionManager(this) { sleepWake.blocked }.also { it.register(bus) }
         sleepWake.onBlockedChanged = connections::changed
         sleepWake.onBlocked = activityManager::networkBlocked
         // Secrets, where the accounts service keeps each account's credentials.
         org.webosarchive.lunacy.card.KeyManager(java.io.File(filesDir, "keymanager.json")).register(bus)
-        org.webosarchive.lunacy.card.DeviceProfileService(this, profile).register(bus)
+        org.webosarchive.lunacy.card.DeviceProfileService(this) { profile }.register(bus)
         org.webosarchive.lunacy.card.NetTools(this).register(bus)
         // webOS's downloader, which apps hand every file fetch to: drPodder's episodes and
         // album art, MeTube's "download first". It writes into the webOS tree.

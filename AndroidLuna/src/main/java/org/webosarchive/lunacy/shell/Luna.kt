@@ -13,12 +13,13 @@ import android.graphics.Typeface
  * LunaCE's look: its images (assets/luna/images, Apache 2.0) and fonts. Sizes in the shell
  * are TouchPad pixels. See Docs/luna-shell-reference.md.
  */
-class Luna(private val context: Context) {
+class Luna(private val context: Context,
     /**
      * Whether the shell draws its phone layout (Docs/phone.md): tighter launcher grid, a
-     * scrolling tab bar, a four-icon dock. Decided once, by [FormFactor].
+     * scrolling tab bar, a four-icon dock. [FormFactor]'s decision; a shell rebuilt for the
+     * other layout gets a Luna of its own (ShellActivity.reshell).
      */
-    val phone: Boolean = org.webosarchive.lunacy.card.FormFactor.isPhone(context)
+    val phone: Boolean) {
     /**
      * Android pixels per TouchPad pixel. On tablets the screen's short side is about 768
      * TouchPad px, as on a TouchPad, so the shell keeps the TouchPad's proportions whatever the

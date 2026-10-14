@@ -246,7 +246,7 @@ open class AppWindow(
         }
         webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? =
-                LocalNet.serve(req, profile.userAgent) ?: host.server.serve(req.url)
+                LocalNet.serve(req, profile.userAgent) ?: host.server.serve(req.url, ExifOrientation.isImageLoad(req))
             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                 page++; net.reset(); sql.reset(); endCalls()
                 // A new page: the old one's native web views go with it.

@@ -839,9 +839,12 @@ answers the kind from the files themselves (codepoet's design, a deliberate delt
 
 ### Photos and videos
 
-Palm's Photos & Videos 3.1.8001 is bundled, unchanged, from the reference TouchPad; Palm's
-photos service (`com.palm.service.photos`) runs as a system JS service from the webOS root.
-The app lists what webOS's media index holds and shows the thumbnails the service makes.
+webOS CE's Photos & Videos 3.2.0 is bundled, unchanged, from the webOS CE tree: Palm's app
+with CE's changes, among them a rotate and crop editor. Palm's photos service
+(`com.palm.service.photos`) runs as a system JS service from the webOS root, and so does
+CE's `org.webosarchive.photos.service`, which writes what the editor saves (it takes only
+Photos' calls, for `.jpg`, `.jpeg` and `.png` files under `/media/internal`). The app lists
+what webOS's media index holds and shows the thumbnails the service makes.
 
 - **`MediaIndex.kt`** answers the media index from the files, as `FileIndex.kt` answers
   documents ([luna-deltas.md](luna-deltas.md) A16): `com.palm.media.image.file:1` (JPEG, PNG,
@@ -865,11 +868,23 @@ The app lists what webOS's media index holds and shows the thumbnails the servic
   `/media/internal/.photosApp/Generated`, where the app finds it; opening a picture makes
   a 1024-px "screennail" the same way. Videos carry no thumbnail of their own (only Palm's
   camera embedded one), so the grid shows the app's video placeholder, as the TouchPad did.
+- **Editing.** The editor draws the picture on a canvas, reading its EXIF orientation itself
+  (an XHR of the file) and applying it, then hands the encoded bytes to the edit service in
+  chunks and polls the index for the saved file. Two general pieces make that work as on the
+  TouchPad: a file rewritten in place is filed as a new record with a new `_id`, as
+  filenotifyd did (`Db8.mirror`'s stamp: the file's time and size), so Replace Original shows
+  the new picture; and the card host serves a JPEG to an image load with its orientation
+  reading normal (`ExifOrientation.kt`), because webOS's WebKit ignored EXIF orientation and
+  Chromium from 81 on honours it, in a canvas too, where no style turns it off. An XHR gets
+  the file as it is.
+- **Videos** go to webOS CE's Videos app (`com.palm.app.videos`); Lunacy doesn't bundle it, so
+  the launch fails and Photos plays the video in its own player, as stock did.
 - **extractfs** (`Extractfs.kt`) is the card host's and the services' alike, with both
   forms of path measured on the TouchPad; see the JS services section for how a service
   reads it.
-- **Not yet:** the account sources (Facebook, Photobucket, Snapfish: their services are
-  long dead), the welcome page's "Find More…" (it lists the account templates the device
+- **Not yet:** whether the TouchPad's thumbnailer turned a sideways (EXIF-rotated) photo's
+  thumbnail upright (`Extractfs.kt` doesn't; unmeasured); the account sources (Facebook,
+  Photobucket, Snapfish: their services are long dead), the welcome page's "Find More…" (it lists the account templates the device
   has, and Lunacy has none for photos), and printing.
 
 ### System UI

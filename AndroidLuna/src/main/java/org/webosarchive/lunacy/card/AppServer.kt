@@ -128,7 +128,8 @@ class AppServer(
             ByteArrayInputStream(s.toByteArray()))
     }
 
-    fun serve(uri: Uri): WebResourceResponse? {
+    /** [image]: the engine is loading it to draw it, which decides a JPEG's EXIF orientation ([ExifOrientation]). */
+    fun serve(uri: Uri, image: Boolean = false): WebResourceResponse? {
         val host = uri.host ?: return null
         if (!host.endsWith(HOST_SUFFIX)) return null  // real network
         // A run of slashes is one, as the TouchPad's filesystem read a file:// path: Email
@@ -187,6 +188,7 @@ class AppServer(
             else -> null
         }
         if (resp != null) noteArt(app, path) else Log.w(TAG, "404 $uri")
+        if (image && resp?.mimeType == "image/jpeg" && resp.data != null) resp.data = ExifOrientation.ignored(resp.data)
         return resp ?: WebResourceResponse("text/plain", "utf-8", 404, "Not Found", emptyMap(),
             ByteArrayInputStream(ByteArray(0)))
     }

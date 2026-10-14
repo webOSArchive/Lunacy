@@ -74,6 +74,11 @@ starting; some may have been settled since without a note.
 - **Exchange:** a real server's policy, tasks, attachments.
 - **Email:** attachments; the Android 5 devices untried; PmLogLib's levels need PmLogDaemon's
   shared memory (only errors are logged unless a service is started with `files/pdk/args`).
+- **Photos & Videos 3.2.0:** the editor dragged with a finger, and on the 32-bit build's
+  devices (Chromium 37); on a 320-px-wide card (the Fold3's cover screen) its toolbars and
+  the single-photo toolbar run off the right edge, the app's own layout; whether the
+  TouchPad's thumbnails of EXIF-rotated photos were upright (architecture, "Photos and
+  videos"); Replace Original on an Android 11+ photo another app owns.
 - **Calendar:** repeats, snooze. **Contacts:** vCards, favorites. Both untried beyond the A7 Lite.
 - **Hybrid apps:** a visible plugin's picture; callable collections on Chromium 37.
 - **PDK:** OpenSSL 0.9.8 and curl for the apps that link them; the other ten apkenv ports; on

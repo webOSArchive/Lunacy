@@ -1,3 +1,0 @@
-describe('Album Tests', function(){
-
-});

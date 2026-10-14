@@ -269,6 +269,15 @@ Palm's photos service, copied from /usr/palm/services on the reference TouchPad 
 3.1.0), without its developer install script. Copyright Palm, Inc. / Hewlett-Packard. Never
 released under an open licence; distributed by Lunacy as abandonware, like Mojo.
 NOTICE
+# webOS CE's photo edit service, which writes what Photos & Videos 3.2.0's rotate and crop
+# editor saves (Docs/architecture.md, "Photos and videos"); Workbench/vendor/webos-ce/COMMIT
+# says from which commit.
+cp -r $V/webos-ce/apps/org.webosarchive.photos.service $R/usr/palm/services/
+cat > $R/usr/palm/services/org.webosarchive.photos.service/NOTICE <<'NOTICE'
+webOS Archive's photo edit service for Photos & Videos 3.2.0, from the webOS CE project's tree
+(https://github.com/webOSArchive/webOS-Community-Edition/tree/main/apps/org.webosarchive.photos.service),
+unchanged.
+NOTICE
 # The system's own account template, which the accounts service reads: webOS CE's, named
 # "webOS Account" (Workbench/vendor/webos-ce, the CE project's system/).
 cp -r $V/webos-ce/system/usr/palm/public/accounts/com.palm.palmprofile $R/usr/palm/public/accounts/

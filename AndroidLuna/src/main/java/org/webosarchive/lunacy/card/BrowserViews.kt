@@ -691,7 +691,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
 
             // An app's own pages, on its origin, come from Lunacy's server as its card's do.
             override fun shouldInterceptRequest(view: WebView, req: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {
-                if (req.url.host.orEmpty().endsWith(AppServer.HOST_SUFFIX)) return owner.server.serve(req.url)
+                if (req.url.host.orEmpty().endsWith(AppServer.HOST_SUFFIX)) return owner.server.serve(req.url, ExifOrientation.isImageLoad(req))
                 // The file cache and user storage by their webOS paths (an email's inline images).
                 if (req.url.scheme == "file") {
                     val p = req.url.path.orEmpty()

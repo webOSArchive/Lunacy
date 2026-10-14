@@ -117,8 +117,11 @@ class MediaIndex(private val webosRoot: File) {
             val ext = f.name.substringAfterLast('.', "").lowercase(Locale.US)
             if (ext !in IMAGES && ext !in VIDEOS || !f.isFile || !paths.add(p)) continue
             val old = seen[p]
+            // A file rewritten in place (the photo editor's Replace Original) is a new record, as
+            // filenotifyd filed it: the stamp tells db8 (Db8.mirror).
             val record = if (old != null && old.modified == f.lastModified() && old.size == f.length()) old.record
-                else (if (ext in IMAGES) image(p, f) else video(p, f)).also { seen[p] = Seen(f.lastModified(), f.length(), it) }
+                else (if (ext in IMAGES) image(p, f) else video(p, f))?.put(Db8.STAMP, "${f.lastModified()}:${f.length()}")
+                    .also { seen[p] = Seen(f.lastModified(), f.length(), it) }
             if (record != null) out += record
             if (out.size >= MAX_FILES) return
         }

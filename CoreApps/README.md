@@ -25,7 +25,7 @@ changes is marked `[Lunacy]` in its source.
 | Help | `com.palm.app.help` | 2.0.0 | Palm, HP webOS 3.x, content host moved to help.webosarchive.org |
 | Messaging | `com.palm.app.messaging` | 3.2.0 | Palm, HP webOS 3.0.5 (abandonware), with the webOS CE project's changes |
 | Memos | `com.palm.app.notes` | 3.0.20 | Palm, HP webOS 3.x (abandonware) |
-| Photos & Videos | `com.palm.app.photos` | 3.1.8001 | Palm, from the reference TouchPad (abandonware) |
+| Photos & Videos | `com.palm.app.photos` | 3.2.0 | webOS Archive's modernized Photos & Videos (rotate and crop), from the webOS CE tree |
 | Screen & Lock | `com.palm.app.screenlock` | 1.0.0 | Palm, HP webOS 3.x (abandonware), with Lunacy's changes |
 | Sounds & Alerts | `com.palm.app.soundsandalerts` | 1.1.0 | Lunacy's own, in Palm's look |
 | Video Player | `com.palm.app.videoplayer` | 1.0.0 | Palm, HP webOS 3.x (abandonware); no icon, launched by other apps |
@@ -33,6 +33,6 @@ changes is marked `[Lunacy]` in its source.
 | First Use | `org.webosarchive.lunacy.firstuse` | 1.0.0 | Lunacy's own, in Palm's First Use look; no icon |
 
 These folders hold only the apps. The services they talk to (mail, Exchange, calendar,
-contacts, accounts) are the TouchPad's own, laid into Lunacy's webOS root by
+contacts, accounts, photos) are the TouchPad's own (Photos' edit service is webOS CE's), laid into Lunacy's webOS root by
 [AndroidLuna/fetch-assets.sh](../AndroidLuna/fetch-assets.sh) (see
 [Docs/dev-workflow.md](../Docs/dev-workflow.md)).

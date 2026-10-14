@@ -30,7 +30,11 @@ class Db8(private val service: String, file: File?,
     private val watches = ArrayList<Watch>()
     /** Kinds whose records are kept in line with a source of truth outside db8; see [mirror]. */
     private class Mirror(val source: () -> List<JSONObject>, val initial: Set<String>, val owns: (JSONObject) -> Boolean,
-                         val added: (() -> Unit)?) { var synced = 0L }
+                         val added: (() -> Unit)?) {
+        var synced = 0L
+        /** Each record's [STAMP] as the last pass saw it, by path. */
+        var stamps: Map<String, String> = emptyMap()
+    }
     private val mirrors = HashMap<String, Mirror>()
     private var mirrorTicker: java.util.concurrent.ScheduledExecutorService? = null
     private var rev = 0L
@@ -111,7 +115,9 @@ class Db8(private val service: String, file: File?,
      * [initial] names properties the source sets only on a new record, which others then own
      * (the photos service marks an image's thumbnails done). [owns] picks the records the source
      * speaks for; the rest are left alone (a photo album synced from an account has no folder).
-     * [added] runs, on db8's thread, after a pass that made new records.
+     * [added] runs, on db8's thread, after a pass that made new records. A source record may
+     * carry a [STAMP] (the file's version): when it differs from the last pass's, the file was
+     * rewritten, and its record is replaced by a new one with a new `_id`.
      */
     fun mirror(spec: JSONObject, permissions: JSONArray, initial: Set<String> = emptySet(), owns: (JSONObject) -> Boolean = { true },
                added: (() -> Unit)? = null, source: () -> List<JSONObject>) = worker.execute {
@@ -133,16 +139,24 @@ class Db8(private val service: String, file: File?,
         m.synced = now
         val files = try { m.source() } catch (e: Exception) { Log.w(AppServer.TAG, "$service: mirror $kind: $e"); return }
         val byPath = LinkedHashMap<String, JSONObject>()
-        for (f in files) byPath[f.optString("path")] = f
+        val stamps = HashMap<String, String>()
+        for (f in files) {
+            byPath[f.optString("path")] = f
+            (f.remove(STAMP) as? String)?.let { stamps[f.optString("path")] = it }
+        }
         val current = objects(kind).values.filter { !it.optBoolean("_del") && m.owns(it) }
+        val rewritten = ArrayList<JSONObject>()
         transaction {
             for (o in current) {
-                val f = byPath.remove(o.optString("path"))
+                val path = o.optString("path")
+                val f = byPath.remove(path)
                 if (f == null) { delOne(o, purge = true); continue }
+                val was = m.stamps[path]
+                if (was != null && stamps[path] != null && was != stamps[path]) { delOne(o, purge = true); rewritten += f; continue }
                 for (k in m.initial) f.remove(k)
                 if (f.keys().asSequence().any { k -> !same(o.opt(k), f.opt(k)) }) mergeOne(o, f)
             }
-            for (f in byPath.values) {
+            for (f in byPath.values + rewritten) {
                 val o = JSONObject(f.toString()).put("_kind", kind).put("_id", newId()).put("_rev", nextRev())
                 assignIds(o)
                 applyRevSets(null, o)
@@ -150,7 +164,8 @@ class Db8(private val service: String, file: File?,
                 changed(null, o)
             }
         }
-        if (byPath.isNotEmpty()) m.added?.invoke()
+        m.stamps = stamps
+        if (byPath.isNotEmpty() || rewritten.isNotEmpty()) m.added?.invoke()
     }
 
     /** Equal as a source says it: the _ids db8 gave objects inside a record aren't the source's. */
@@ -944,6 +959,8 @@ class Db8(private val service: String, file: File?,
         /** How often a mirrored kind is checked against its source while it is being used, and while watched. */
         private const val MIRROR_MS = 2000L
         private const val MIRROR_WATCH_MS = 5000L
+        /** A mirror source's record's version, which db8 doesn't store; see [mirror]. */
+        const val STAMP = "\u0000stamp"
         private val MIRRORED_OPS = setOf("find", "search", "watch", "get", "merge", "del")
         /** db8's page size cap. */
         const val MAX_LIMIT = 500

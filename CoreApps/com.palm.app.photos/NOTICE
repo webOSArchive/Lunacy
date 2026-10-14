@@ -1,11 +1,20 @@
-Palm's Photos & Videos (com.palm.app.photos 3.1.8001), as it is on the reference TouchPad
-(webOS CE 3.1.0), copied from /media/cryptofs/apps/usr/palm/applications.
+HP's Photos & Videos (com.palm.app.photos), as modernized by webOS Archive for webOS Community
+Edition: version 3.2.0, from the webOS CE project's tree
+(https://github.com/webOSArchive/webOS-Community-Edition/tree/main/apps/com.palm.app.photos,
+commit d3ccfed), without HP's development leftovers (spec/, Gemfile*, Rakefile, Makefile*,
+ci_build.sh, .rvmrc), which CE's packager drops too. Over Palm's 3.0.8001 it adds Synergy
+Revival cloud sources, the exhibition slideshow's clock and remembered timing, the file name in
+the single-photo toolbar, videos handed to the CE Videos app (or played in its own player when
+that app isn't installed), and a rotate and crop editor whose Save goes through webOS CE's
+org.webosarchive.photos.service (laid into the webOS root by AndroidLuna/fetch-assets.sh).
 
-Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence; distributed by
-Lunacy as abandonware, like Mojo, Palm's other bundled apps, the Prelude fonts and the
-TouchPad wallpapers: no owner has asserted rights since webOS was discontinued.
+The original is copyright Palm, Inc. / Hewlett-Packard, never released under an open licence;
+distributed by Lunacy as abandonware, like Mojo, the Prelude fonts and the TouchPad wallpapers:
+no owner has asserted rights since webOS was discontinued. The 3.2.0 changes are webOS
+Archive's.
 
-The app is here exactly as it was packaged, and Lunacy does not change it (rule 5 in
-CLAUDE.md). It lists what webOS's media index holds (MediaIndex.kt answers it from the files
-under /media/internal, Android's Pictures, DCIM and Movies among them) and shows the
-thumbnails Palm's photos service makes, which Lunacy also ships.
+The app's files are here exactly as the package carries them, and Lunacy does not change them
+(rule 5 in CLAUDE.md). It lists what webOS's media index holds (MediaIndex.kt answers it from
+the files under /media/internal, Android's Pictures, DCIM and Movies among them) and shows the
+thumbnails Palm's photos service makes, which Lunacy also ships. A change Lunacy needs in the
+app is made in the webOS CE project and comes here with its next release.

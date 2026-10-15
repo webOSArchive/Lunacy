@@ -709,6 +709,12 @@ offered them. `opendir`/`readdir` of `/media/internal` now add each mapped folde
 tree hasn't got, as directories after the real entries, as a TouchPad listed them. JS services
 (host.js) still list only Lunacy's own tree.
 
+**More fingers, and the screen (same day).** ScummVM's two- and three-finger swipes (menu,
+mouse mode) sum each finger's `xrel`/`yrel`; the driver gave fingers after the first none, so
+no swipe added up. Each finger's motion now carries its own. And a PDK app holds the screen on
+while its card has focus, as on the TouchPad (codepoet: "if the game is in focus, wake-lock is
+on"), unless it calls `PDL_ScreenTimeoutEnable(true)`; ScummVM never calls it.
+
 ## 7. Still to do on the first path
 
 - A visible hybrid plugin's picture, drawn over its object in the page (no app needing it

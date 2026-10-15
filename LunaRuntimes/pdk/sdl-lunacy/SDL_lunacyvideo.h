@@ -29,6 +29,7 @@ struct SDL_PrivateVideoData {
     int fb_fd;
     int sock;          /* the control socket, non-blocking; -1 until connected */
     int finger_down[16];
+    int finger_x[16], finger_y[16];   /* where each other finger was last, for its motion's xrel/yrel */
 };
 
 /* Shared by the event pump and the audio driver. */

@@ -59,6 +59,9 @@ static void touch(_THIS, uint32_t finger, int32_t action, int32_t x, int32_t y)
 		e.type = SDL_MOUSEMOTION;
 		e.motion.which = finger; e.motion.state = SDL_BUTTON_LMASK;
 		e.motion.x = x; e.motion.y = y;
+		/* Each finger's own movement, as SDL gives the mouse's: ScummVM's two- and
+		   three-finger swipes are the sums of these. */
+		e.motion.xrel = x - this->hidden->finger_x[finger]; e.motion.yrel = y - this->hidden->finger_y[finger];
 	} else {
 		e.type = action == 0 ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
 		e.button.which = finger; e.button.button = SDL_BUTTON_LEFT;
@@ -66,6 +69,7 @@ static void touch(_THIS, uint32_t finger, int32_t action, int32_t x, int32_t y)
 		e.button.x = x; e.button.y = y;
 	}
 	this->hidden->finger_down[finger] = action != 2;
+	this->hidden->finger_x[finger] = x; this->hidden->finger_y[finger] = y;
 	SDL_PushEvent(&e);
 }
 

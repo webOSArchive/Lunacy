@@ -191,6 +191,7 @@ class PdkWindow(
                 @Suppress("DEPRECATION")
                 (context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator)?.vibrate(request.optInt("duration", 50).toLong())
             }
+            "screenTimeout" -> { timeoutAllowed = request.optBoolean("on", false); holdScreen() }
             "keyboard" -> {
                 keyboardOn = request.optBoolean("on")
                 if (keyboardOn) imm.restartInput(this)
@@ -288,7 +289,16 @@ class PdkWindow(
      */
     private var toldActive: Boolean? = null
 
+    /**
+     * The screen stays on while a PDK app has focus, as on the TouchPad (codepoet, 2026-10-15),
+     * unless the app has let it time out (PDL_ScreenTimeoutEnable(true)).
+     */
+    private var focused = false
+    private var timeoutAllowed = false
+    private fun holdScreen() = shell.blockScreenTimeout(this, focused && !timeoutAllowed)
+
     override fun setStageActive(active: Boolean) {
+        focused = active; holdScreen()
         if (active) startAccel() else stopAccel()
         if (toldActive == null && !active) return
         if (toldActive == active) return
@@ -336,6 +346,7 @@ class PdkWindow(
 
     override fun destroy() {
         stopAccel()
+        shell.blockScreenTimeout(this, false)
         gl?.destroy(); gl = null
         host.stop()
         super.destroy()

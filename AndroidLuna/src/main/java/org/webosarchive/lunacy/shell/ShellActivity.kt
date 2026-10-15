@@ -97,7 +97,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // 1024 x 768 landscape panel, the Pre3's 480 x 800 portrait one. The card scales it.
         val (w, h, dpi) = if (d == org.webosarchive.lunacy.card.DeviceProfile.PRE3) Triple(480, 800, 260) else Triple(1024, 768, 132)
         return org.webosarchive.lunacy.card.PdkRuntime(this, java.io.File(filesDir, "cryptofs/apps/usr/palm/applications"),
-            w, h, dpi, d.platformVersion, d.modelNameAscii, org.webosarchive.lunacy.card.DeviceProfile.nduid(this))
+            w, h, dpi, d.platformVersion, d.modelNameAscii, org.webosarchive.lunacy.card.DeviceProfile.nduid(this), webos)
             .also { pdkRuntimeOf = d to it }
     }
     private var androidAppsAt: AndroidApps? = null

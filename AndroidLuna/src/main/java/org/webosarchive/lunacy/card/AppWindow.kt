@@ -168,7 +168,7 @@ open class AppWindow(
      * Mojo.positiveSpaceChanged reporting the space left (allowResizeOnPositiveSpaceChange).
      */
     @Volatile var keyboardResizes = true
-        private set
+        protected set
     private lateinit var net: NetShim
     /** The WebSQL polyfill's store (assets/lunacy/websql.js), on a WebView without WebSQL. */
     private lateinit var sql: WebSql

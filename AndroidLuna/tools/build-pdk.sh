@@ -292,6 +292,12 @@ done
 # app as its ptrace child and answers the calls seccomp refuses with -ENOSYS (32-bit build only;
 # named lib*.so so the installer puts it with the native libraries, where it can be exec'd).
 "$BIN/clang" --target=armv7a-linux-androideabi21 -O2 "$SRC/enosys/enosys.c" -o "$HERE/local-jni/armeabi-v7a/libenosys.so"
+# libexecpdk: the preload in busybox's sh that runs a start script's webOS binary through the
+# loader or qemu (Docs/pdk.md, "Start scripts"); bionic, for both ABIs.
+for abi in armeabi-v7a:armv7a-linux-androideabi21 arm64-v8a:aarch64-linux-android21; do
+  "$BIN/clang" --target="${abi##*:}" -O2 -shared -fPIC -Wl,-soname,libexecpdk.so "$SRC/execpdk/execpdk.c" -ldl \
+    -o "$HERE/local-jni/${abi%%:*}/libexecpdk.so"
+done
 # liblunacy-preload: /proc/self/exe as the app's binary, not the loader's (LD_PRELOAD).
 $CC -O2 -shared -fPIC -Wl,-soname,liblunacy-preload.so "$SRC/libpreload/preload.c" -o "$OUT/lib/liblunacy-preload.so" -ldl -lpthread
 # liblunaservice: the Luna bus client library native system services link (the TouchPad's

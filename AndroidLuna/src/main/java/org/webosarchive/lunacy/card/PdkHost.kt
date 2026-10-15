@@ -105,7 +105,11 @@ class PdkHost(
         // The installer keeps a package's files as they came; a PDK binary wants its
         // execute bit back (the loader runs it, qemu checks it).
         original.setExecutable(true, false)
-        val binary = PdkRuntime.runnable(original)
+        // A start script (ScummVM's `start`), which LunaSysMgr's exec ran with /bin/sh, runs in
+        // busybox's sh; the webOS binaries it runs go through the command below (libexecpdk).
+        val script = plugin == null && PdkRuntime.isScript(original)
+        val binary = if (script) runtime.scriptCopy(original, File(runtime.appsRoot, app.dir)) ?: return false
+            else PdkRuntime.runnable(original)
         val dataDir = File(context.filesDir, "pdk/data/$appId").also { it.mkdirs() }
         val webosRoot = File(context.filesDir, "webos")
         // A 32-bit CPU runs the binary through the loader; a 64-bit-only one runs it under
@@ -116,24 +120,31 @@ class PdkHost(
         // The runtime's libraries, then the webOS root's: the TouchPad's own that an app may link
         // by name and the runtime hasn't got (Quick Office's plugin: ICU 3.6, as the mail services).
         val libraryPath = "${lib.path}:${File(webosRoot, "usr/lib").path}"
-        val command = if (loader != null) listOfNotNull(enosys?.path, loader.path, "--library-path", libraryPath, binary.path)
+        val prefix = if (loader != null) listOfNotNull(enosys?.path, loader.path, "--library-path", libraryPath)
             // Under qemu the folders go by their real paths, as for native services: Termux's
             // qemu let glibc's loader decide the sysroot's "/lib" didn't exist once a library
             // wasn't in it, and Quick Office's plugin, whose first libraries are ICU's, then
             // couldn't find libpdl.so (2026-10-07).
             else listOf(emulator!!.path, "-L", lib.parentFile!!.path, "-E", "LD_LIBRARY_PATH=$libraryPath",
-                "-E", "LD_PRELOAD=/lib/liblunacy-preload.so", binary.path)
+                "-E", "LD_PRELOAD=/lib/liblunacy-preload.so")
+        // The root's /bin/sh, busybox by the name it dispatches on, as a package script's.
+        val command = if (script) listOf(File(runtime.webos!!.root, "bin/sh").path, binary.path) else prefix + binary.path
         // In the app's own folder, as LunaSysMgr started a native app; the binary may sit in a
         // subfolder (Transformers: transg1/transg1.exe) and still read its data from the top.
         val appDir = File(runtime.appsRoot, app.dir)
         val pb = ProcessBuilder(command).directory(appDir).redirectErrorStream(true)
         // qemu's own libraries (Termux's build), beside the runtime.
-        if (loader == null) runtime.qemuLibDir?.let { pb.environment()["LD_LIBRARY_PATH"] = it.path }
+        if (loader == null) runtime.qemuLibDir?.let { pb.environment()[if (script) "LUNACY_PDK_HOST_LIBS" else "LD_LIBRARY_PATH"] = it.path }
         // The preload (LunaRuntimes/pdk/libpreload): /proc/self/exe as the binary, not the
         // loader (Transformers G1 finds its data from it), and webOS's own paths (/usr/share/fonts,
         // /media/internal...) in the webOS root. Under qemu it goes to the guest by -E above.
         // libenosys is a bionic program, so it hands the preload on to the app itself.
-        if (loader != null) pb.environment()[if (enosys != null) "LUNACY_PDK_PRELOAD" else "LD_PRELOAD"] = File(lib, "liblunacy-preload.so").path
+        if (loader != null) pb.environment()[if (enosys != null) "LUNACY_PDK_PRELOAD" else if (script) "LUNACY_PDK_GUEST_PRELOAD" else "LD_PRELOAD"] =
+            File(lib, "liblunacy-preload.so").path
+        if (script) pb.environment().apply {
+            put("LD_PRELOAD", runtime.execPdk!!.path); put("LUNACY_PDK_EXEC", prefix.joinToString("\n"))
+            runtime.webos?.let { put("PATH", it.environment(appId).getValue("PATH")) }
+        }
         pb.environment()["LUNACY_PDK_EXE"] = binary.path
         pb.environment()["LUNACY_PDK_ROOT"] = File(context.filesDir, "webos").path
         pb.environment().apply {
@@ -167,7 +178,7 @@ class PdkHost(
         process = try { pb.start() } catch (e: Exception) {
             Log.w(AppServer.TAG, "pdk [$appId]: can't start ${binary.path}: $e"); stop(); return false
         }
-        Log.i(AppServer.TAG, "pdk [$appId]: started ${binary.name} through ${listOfNotNull(enosys, loader ?: emulator).joinToString(" and ") { it.name }}")
+        Log.i(AppServer.TAG, "pdk [$appId]: started ${binary.name} through ${listOfNotNull(runtime.busybox.takeIf { script }, enosys, loader ?: emulator).joinToString(" and ") { it.name }}")
         Thread({
             try {
                 process!!.inputStream.bufferedReader().forEachLine { Log.i(AppServer.TAG, "pdk [$appId] $it") }
@@ -411,11 +422,16 @@ class PdkHost(
  * finds an executable's interpreter (`-L`).
  */
 class PdkRuntime(private val context: Context, val appsRoot: File, val screenWidth: Int, val screenHeight: Int, val dpi: Int,
-                 val osVersion: String, val deviceName: String, val nduid: String) {
+                 val osVersion: String, val deviceName: String, val nduid: String,
+                 /** The webOS root a start script runs in: busybox's commands, webOS's paths. */
+                 val webos: WebosRoot? = null) {
     val loader: File? = File(context.applicationInfo.nativeLibraryDir, "libld-linux.so").takeIf { it.canExecute() }
     val emulator: File? = File(context.applicationInfo.nativeLibraryDir, "libqemu-arm.so").takeIf { it.canExecute() }
     /** The 32-bit build's guard for the native path on Android 10 and later (LunaRuntimes/pdk/enosys). */
     val enosys: File? = File(context.applicationInfo.nativeLibraryDir, "libenosys.so").takeIf { it.canExecute() }
+    /** A start script's shell, and the preload that runs the script's webOS binaries (LunaRuntimes/pdk/execpdk). */
+    val busybox: File? = File(context.applicationInfo.nativeLibraryDir, "libbusybox.so").takeIf { it.canExecute() }
+    val execPdk: File? = File(context.applicationInfo.nativeLibraryDir, "libexecpdk.so").takeIf { it.isFile }
     val libDir: File? by lazy { extract() }
     /** The emulator's own libraries, extracted beside the runtime (64-bit build). */
     val qemuLibDir: File? by lazy { libDir?.let { File(it.parentFile, "qemu-lib").takeIf { d -> d.isDirectory } } }
@@ -447,6 +463,14 @@ class PdkRuntime(private val context: Context, val appsRoot: File, val screenWid
          * ld-linux.so.3, which Lunacy doesn't have, so it exited at once on the Pixel Tablet
          * (2026-10-13). The native path runs the loader itself and never reads the name.
          */
+        /** Whether a package's file is a script (`#!`), run by its interpreter. */
+        fun isScript(f: File): Boolean = head(f, 2).contentEquals(byteArrayOf('#'.code.toByte(), '!'.code.toByte()))
+
+        private fun isElf(f: File): Boolean = head(f, 4).contentEquals(byteArrayOf(0x7f, 'E'.code.toByte(), 'L'.code.toByte(), 'F'.code.toByte()))
+
+        private fun head(f: File, n: Int): ByteArray =
+            runCatching { f.inputStream().use { s -> ByteArray(n).also { if (s.read(it) != n) return ByteArray(0) } } }.getOrDefault(ByteArray(0))
+
         fun runnable(original: File): File {
             try {
                 val bytes = original.readBytes()
@@ -485,6 +509,28 @@ class PdkRuntime(private val context: Context, val appsRoot: File, val screenWid
                 Log.w(AppServer.TAG, "pdk: couldn't read ${original.name}'s headers: $e"); return original
             }
         }
+    }
+
+    /**
+     * A start script readied to run as LunaSysMgr ran it, or null when this build can't: a copy
+     * beside it, `.lunacy.<name>` so its own folder is still `dirname $0`, with webOS's paths
+     * pointed into the webOS root as a package script's are ([WebosRoot.mapPaths]); and every
+     * webOS binary in the app's folder given its execute bit and, where it needs one, its
+     * runnable copy ([runnable]), since the script may run any of them.
+     */
+    fun scriptCopy(original: File, appDir: File): File? {
+        val root = webos ?: return null
+        root.prepare()
+        if (busybox == null || execPdk == null || !File(root.root, "bin/sh").exists()) {
+            Log.w(AppServer.TAG, "pdk: no shell for ${original.name} in this build"); return null
+        }
+        appDir.walkTopDown().filter { it.isFile && !it.name.startsWith(".lunacy.") && !it.name.contains(".so") && isElf(it) }.forEach {
+            it.setExecutable(true, false); runnable(it)
+        }
+        val copy = File(original.parentFile, ".lunacy." + original.name)
+        copy.writeText(root.mapPaths(original.readText()))
+        copy.setExecutable(true, false)
+        return copy
     }
 
     /** The "alias target" lines of an asset, as symlinks in dir. */

@@ -9,9 +9,14 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.SurfaceTexture
 import android.util.Log
+import android.text.InputType
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.TextureView
 import android.view.View
+import android.view.inputmethod.BaseInputConnection
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
 import android.widget.AbsoluteLayout
 import org.json.JSONObject
 
@@ -67,6 +72,9 @@ class PdkWindow(
         // A PDK app had the whole screen on webOS, no status bar (codepoet); the shell slides
         // the bar away while the card is maximized, as for PalmSystem.enableFullScreenMode.
         fullScreen = true
+        // The app's screen is the size it set; the keyboard comes up over it rather than
+        // shrinking the card (unmeasured on the reference TouchPad).
+        keyboardResizes = false
     }
 
     /**
@@ -183,8 +191,84 @@ class PdkWindow(
                 @Suppress("DEPRECATION")
                 (context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator)?.vibrate(request.optInt("duration", 50).toLong())
             }
+            "keyboard" -> {
+                keyboardOn = request.optBoolean("on")
+                if (keyboardOn) imm.restartInput(this)
+                shell.keyboard(this, keyboardOn)
+            }
             else -> Log.i(AppServer.TAG, "pdk [$appId] PDL $request")
         }
+    }
+
+    // ---- the keyboard (PDL_SetKeyboardState), its keys as SDL's ----
+
+    /** Whether the app has asked for the keyboard. */
+    private var keyboardOn = false
+    private val imm get() = context.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+
+    override fun onCheckIsTextEditor() = keyboardOn
+
+    /**
+     * What the keyboard types goes to the app as key presses, each with its unicode, as webOS's
+     * keyboard reached an SDL app. The field is a password-style one so a keyboard commits
+     * each character as it is typed; text a keyboard still composes is typed and retyped.
+     */
+    override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
+        if (!keyboardOn) return null
+        outAttrs.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_ACTION_NONE
+        return object : BaseInputConnection(this, false) {
+            private var composing = 0
+            private fun replaceComposing(text: CharSequence?) {
+                repeat(composing) { press(SDLK_BACKSPACE, 8) }
+                text?.forEach { type(it) }
+            }
+            override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean { replaceComposing(text); composing = 0; return true }
+            override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
+                replaceComposing(text); composing = text?.length ?: 0; return true
+            }
+            override fun finishComposingText(): Boolean { composing = 0; return true }
+            override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
+                repeat(beforeLength) { press(SDLK_BACKSPACE, 8) }
+                repeat(afterLength) { press(SDLK_DELETE, 127) }
+                return true
+            }
+            override fun sendKeyEvent(event: KeyEvent): Boolean { sdlKey(event); return true }
+            override fun performEditorAction(actionCode: Int): Boolean { press(SDLK_RETURN, 13); return true }
+        }
+    }
+
+    /** A hardware keyboard's keys too, while the card has focus; the back key stays the shell's. */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean =
+        if (event.keyCode != KeyEvent.KEYCODE_BACK && sdlKey(event)) true else super.dispatchKeyEvent(event)
+
+    /** An Android key as SDL's: false when it has no SDL key. */
+    private fun sdlKey(e: KeyEvent): Boolean {
+        val down = when (e.action) { KeyEvent.ACTION_DOWN -> true; KeyEvent.ACTION_UP -> false; else -> return false }
+        val sym = when (e.keyCode) {
+            KeyEvent.KEYCODE_DEL -> SDLK_BACKSPACE; KeyEvent.KEYCODE_FORWARD_DEL -> SDLK_DELETE
+            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> SDLK_RETURN; KeyEvent.KEYCODE_TAB -> 9
+            KeyEvent.KEYCODE_ESCAPE -> PdkHost.SDLK_ESCAPE; KeyEvent.KEYCODE_SPACE -> 32
+            KeyEvent.KEYCODE_DPAD_UP -> 273; KeyEvent.KEYCODE_DPAD_DOWN -> 274
+            KeyEvent.KEYCODE_DPAD_RIGHT -> 275; KeyEvent.KEYCODE_DPAD_LEFT -> 276
+            else -> -1
+        }
+        val c = e.unicodeChar
+        if (sym >= 0) { host.key(down, sym, if (sym < 128) sym else 0); return true }
+        if (c == 0 || c and android.view.KeyCharacterMap.COMBINING_ACCENT != 0) return false
+        host.key(down, symOf(c.toChar()), c)
+        return true
+    }
+
+    private fun type(c: Char) = if (c == '\n') press(SDLK_RETURN, 13) else press(symOf(c), c.code)
+
+    private fun press(sym: Int, unicode: Int) { host.key(true, sym, unicode); host.key(false, sym, 0) }
+
+    /** SDL 1.2's keysym for a character: its ASCII code, lower case for a letter; 0 beyond ASCII (the unicode carries it). */
+    private fun symOf(c: Char) = if (c.code < 128) c.lowercaseChar().code else 0
+
+    private companion object {
+        const val SDLK_BACKSPACE = 8; const val SDLK_RETURN = 13; const val SDLK_DELETE = 127
     }
 
     override fun onExit(code: Int) { shell.onWindowClosed(this) }

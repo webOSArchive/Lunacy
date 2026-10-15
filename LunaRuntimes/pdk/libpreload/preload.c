@@ -207,7 +207,122 @@ int __lxstat64(int v, const char *path, struct stat64 *st) { REAL(__lxstat64); M
    40...), which Android's app seccomp policy refuses, and the TouchPad's file cache could make
    no file. The *at forms are the calls bionic itself uses. */
 int access(const char *path, int how) { MAPPED(path); return faccessat(AT_FDCWD, mp_, how, 0); }
-DIR *opendir(const char *path) { REAL(opendir); MAPPED(path); return real_opendir(mp_); }
+
+/*
+ * /media/internal's own listing names its mapped folders too (downloads, documents, music...),
+ * as a TouchPad's listed its own: a file browser (ScummVM's) finds them where the user looks,
+ * not only by a path typed in. They come after the real entries, each one Lunacy's own tree
+ * hasn't got (that one is already listed). A few listings at once; more are left as they are.
+ */
+#define MEDIA_LISTINGS 8
+static struct { DIR *dir; const char *next; struct dirent ent; struct dirent64 ent64; } listings[MEDIA_LISTINGS];
+static pthread_mutex_t listings_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static int is_media_internal(const char *path)
+{
+	static const char m[] = "/media/internal";
+	if (!path || strncmp(path, m, sizeof m - 1) != 0) return 0;
+	for (path += sizeof m - 1; *path == '/'; path++) ;
+	return *path == 0;
+}
+
+/* The next mapped folder for this listing, or NULL: its name in name[NAME_MAX + 1]. */
+static int next_mapped(DIR *d, char *name)
+{
+	size_t root_len;
+	const char *root = webos_root(&root_len);
+	int found = 0;
+	pthread_mutex_lock(&listings_lock);
+	for (int i = 0; i < MEDIA_LISTINGS; i++) {
+		if (listings[i].dir != d) continue;
+		const char *at = listings[i].next;
+		while (at && *at && !found) {
+			const char *end = at + strcspn(at, ":"), *eq = memchr(at, '=', end - at);
+			size_t n = eq ? (size_t)(eq - at) : 0;
+			char own[PATH_MAX];
+			struct stat st;
+			if (n && n <= NAME_MAX && root && root_len + n + 17 < sizeof own) {
+				snprintf(own, sizeof own, "%s/media/internal/%.*s", root, (int)n, at);
+				if (fstatat(AT_FDCWD, own, &st, AT_SYMLINK_NOFOLLOW) != 0) { memcpy(name, at, n); name[n] = 0; found = 1; }
+			}
+			at = *end ? end + 1 : end;
+		}
+		listings[i].next = at;
+		break;
+	}
+	pthread_mutex_unlock(&listings_lock);
+	return found;
+}
+
+static int listing_slot(DIR *d)
+{
+	for (int i = 0; i < MEDIA_LISTINGS; i++) if (listings[i].dir == d) return i;
+	return -1;
+}
+
+DIR *opendir(const char *path)
+{
+	REAL(opendir); MAPPED(path);
+	DIR *d = real_opendir(mp_);
+	const char *spec = getenv("LUNACY_PDK_MEDIA");
+	if (d && spec && is_media_internal(path)) {
+		pthread_mutex_lock(&listings_lock);
+		int i = listing_slot(NULL);
+		if (i >= 0) { listings[i].dir = d; listings[i].next = spec; }
+		pthread_mutex_unlock(&listings_lock);
+	}
+	return d;
+}
+
+struct dirent *readdir(DIR *d)
+{
+	REAL(readdir);
+	int e = errno;
+	struct dirent *r = real_readdir(d);
+	char name[NAME_MAX + 1];
+	if (r || errno != e || !next_mapped(d, name)) return r;
+	pthread_mutex_lock(&listings_lock);
+	int i = listing_slot(d);
+	struct dirent *ent = i >= 0 ? &listings[i].ent : NULL;
+	if (ent) { memset(ent, 0, sizeof *ent); ent->d_ino = 1; ent->d_type = DT_DIR; ent->d_reclen = sizeof *ent; strcpy(ent->d_name, name); }
+	pthread_mutex_unlock(&listings_lock);
+	return ent;
+}
+
+struct dirent64 *readdir64(DIR *d)
+{
+	REAL(readdir64);
+	int e = errno;
+	struct dirent64 *r = real_readdir64(d);
+	char name[NAME_MAX + 1];
+	if (r || errno != e || !next_mapped(d, name)) return r;
+	pthread_mutex_lock(&listings_lock);
+	int i = listing_slot(d);
+	struct dirent64 *ent = i >= 0 ? &listings[i].ent64 : NULL;
+	if (ent) { memset(ent, 0, sizeof *ent); ent->d_ino = 1; ent->d_type = DT_DIR; ent->d_reclen = sizeof *ent; strcpy(ent->d_name, name); }
+	pthread_mutex_unlock(&listings_lock);
+	return ent;
+}
+
+void rewinddir(DIR *d)
+{
+	REAL(rewinddir);
+	real_rewinddir(d);
+	pthread_mutex_lock(&listings_lock);
+	int i = listing_slot(d);
+	if (i >= 0) listings[i].next = getenv("LUNACY_PDK_MEDIA");
+	pthread_mutex_unlock(&listings_lock);
+}
+
+int closedir(DIR *d)
+{
+	REAL(closedir);
+	pthread_mutex_lock(&listings_lock);
+	int i = listing_slot(d);
+	if (i >= 0) listings[i].dir = NULL;
+	pthread_mutex_unlock(&listings_lock);
+	return real_closedir(d);
+}
 
 /*
  * dlopen by a webOS path: libpurple loads its protocol plugins from /usr/lib/purple-2 (through

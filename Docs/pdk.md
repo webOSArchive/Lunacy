@@ -672,13 +672,49 @@ pages through them; Quick Office opens .doc, .docx, .xls, .xlsx, .ppt, .pptx and
 desk harness `Workbench/probe/plugin-desk.py` runs a plugin under `qemu-arm-static` and calls
 its handlers as a page would, which is how the plugins' needs above were found.
 
+## 6d. Start scripts: ScummVM, 2026-10-15
+
+An app's `main` can be a shell script rather than its binary. ScummVM 2.6.1's `start` makes
+`/media/internal/ScummVM/{Games,Saves,Screenshots}`, copies a default `scummvmrc` there, and
+`exec`s `bin/scummvm`. LunaSysMgr exec'd `main` and the kernel ran the script with `/bin/sh`;
+Lunacy handed it to qemu as a binary and it ended at once ("Exec format error", on the Galaxy
+Z Fold3). The native path would have failed the same way in the loader.
+
+`PdkHost` now treats a `main` starting with `#!` as LunaSysMgr's kernel did:
+
+- The script runs as a `.lunacy.` copy beside it (so `dirname $0` is still the app's folder),
+  with webOS's paths pointed into the webOS root by the rule package scripts get
+  (`WebosRoot.mapPaths`), in the root's `/bin/sh` (busybox's ash) with the root's `PATH`.
+- Every webOS binary in the app's folder gets its execute bit and its runnable copy first
+  (`PdkRuntime.runnable`), since the script may run any of them.
+- `libexecpdk.so` (LunaRuntimes/pdk/execpdk) is the shell's `LD_PRELOAD`: an `execve` of a
+  32-bit ARM binary whose interpreter isn't Android's goes through the command a PDK binary is
+  started with (the loader, or qemu), given in `LUNACY_PDK_EXEC`, with the glibc preload and
+  qemu's libraries handed to the binary rather than the shell. Every other exec is untouched.
+
+A hybrid app's plugin is still always a binary.
+
+**The keyboard (same day).** ScummVM asks for it with `PDL_SetKeyboardState` when a text field
+is tapped; the shell had only logged the call. `PdkWindow` now shows Android's keyboard through
+the shell's own `keyboard()` (active card only, as for a web card) and sends what it types to
+the app as SDL key presses with their unicode: committed and composing text, backspace and
+delete, Enter, and a hardware keyboard's keys (the back key stays the shell's). The keyboard
+covers the bottom of the card rather than shrinking it; how the TouchPad placed it over a PDK
+app is not yet measured.
+
+**`/media/internal`'s listing (same day).** The preload already sent `/media/internal/downloads/…`
+to Android's Download folder (and documents, music, photos, video, camera to theirs), but a
+listing of `/media/internal` showed only Lunacy's own tree, so ScummVM's Add Game browser never
+offered them. `opendir`/`readdir` of `/media/internal` now add each mapped folder Lunacy's own
+tree hasn't got, as directories after the real entries, as a TouchPad listed them. JS services
+(host.js) still list only Lunacy's own tree.
+
 ## 7. Still to do on the first path
 
 - A visible hybrid plugin's picture, drawn over its object in the page (no app needing it
   has turned up yet).
 
 - The bus for `PDL_ServiceCall` through the host, as JS services have it.
-- A keyboard for apps that want one (`PDL_SetKeyboardState`).
 - The launcher's icon for a `pdk` app shows it as runnable only where the runtime is
   present; the banner says so where it isn't.
 - More of the TouchPad's SDL behaviours a game may depend on (which events `which`

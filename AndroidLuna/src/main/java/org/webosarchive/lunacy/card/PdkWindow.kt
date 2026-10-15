@@ -73,7 +73,7 @@ class PdkWindow(
         // the bar away while the card is maximized, as for PalmSystem.enableFullScreenMode.
         fullScreen = true
         // The app's screen is the size it set; the keyboard comes up over it rather than
-        // shrinking the card (unmeasured on the reference TouchPad).
+        // shrinking the card, as on the TouchPad (codepoet, 2026-10-15).
         keyboardResizes = false
     }
 

@@ -699,8 +699,8 @@ is tapped; the shell had only logged the call. `PdkWindow` now shows Android's k
 the shell's own `keyboard()` (active card only, as for a web card) and sends what it types to
 the app as SDL key presses with their unicode: committed and composing text, backspace and
 delete, Enter, and a hardware keyboard's keys (the back key stays the shell's). The keyboard
-covers the bottom of the card rather than shrinking it; how the TouchPad placed it over a PDK
-app is not yet measured.
+covers the bottom of the card rather than shrinking it, as on the TouchPad (codepoet,
+2026-10-15).
 
 **`/media/internal`'s listing (same day).** The preload already sent `/media/internal/downloads/…`
 to Android's Download folder (and documents, music, photos, video, camera to theirs), but a

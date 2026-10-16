@@ -1249,13 +1249,27 @@ window.__lunacyWatchProgress = (function () {
 			return true;
 		}
 		if (!write(pin || 1) || pin === null || fitted[key]) { return; }
-		var first = document.documentElement.clientWidth, step = first > size.width ? 0.0002 : -0.0002;
-		for (var tries = 0, laid = first; laid && laid !== size.width && tries < 20; tries++) {
+		// The layout width as laid out, fraction and all: clientWidth rounds it. A device px
+		// is a whole one, so where the card's width isn't a whole number of them the layout
+		// can't be exactly the card - 884 px at a ratio of 2.625 is 2320.5 device px, and
+		// Chromium laid the page out 883.81 px wide, which clientWidth called 884. Two floats
+		// of 40% and 60% then came to a hair more than the page, and IAmA reddit's right pane
+		// fell below the screen (a Galaxy Z Fold3, 2026-10-16). So what fits is at least the
+		// card's width and under a pixel more: the extra is a fraction of a device px.
+		var W = size.width;
+		function laidWidth() { return document.documentElement.getBoundingClientRect().width || document.documentElement.clientWidth; }
+		function fits(w) { return w > W - 0.001 && w < W + 1; }
+		var first = laidWidth(), step = first >= W + 1 ? 0.0002 : -0.0002;
+		for (var tries = 0, laid = first; laid && !fits(laid) && tries < 20; tries++) {
 			pin += step;
 			write(pin);
-			laid = document.documentElement.clientWidth;
-			// Walked past it without landing on it: the step before was as close as it gets.
-			if ((step > 0) !== (laid > size.width)) { break; }
+			laid = laidWidth();
+			// Walked past it without landing in it: the step before was as close as it gets
+			// from that side, and from above the step back is the one that isn't narrower.
+			if ((step > 0) !== (laid >= W + 1)) {
+				if (step > 0 && laid <= W - 0.001) { pin -= step; write(pin); }
+				break;
+			}
 		}
 		fitted[key] = pin;
 	}

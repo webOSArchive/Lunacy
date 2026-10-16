@@ -346,6 +346,48 @@ device never drew this layout.
 Files: `framework/source/palm/containers/SlidingPane.js`,
 `framework/source/base/layout/FlexLayout.js`, `framework/build/enyo-build.js`.
 
+### 0011-webview-holes-paint-order.patch
+
+A positioned element counts as drawn over a native `WebView` (0005's holes) only if it paints
+above the view's box, not under it.
+
+0005 leaves the native view out wherever the page draws over its box, so the Web app's load
+progress and the copy and paste popup show over the web content as they did over the plugin's.
+What it counted as "over" was any positioned element that overlapped the box and wasn't inside
+it or holding it, whatever its place in the painting order. Email's message view is a
+`SlidingPane` view over the folder and message-list views, all three `position: relative` with
+no `z-index`, the message view last; in a stacked layout the two under it lie under its box, so
+the native view was cut away where they lay and the list's background showed instead of the
+message. On a Galaxy Z Fold3's 320 px cover screen that was all of it (an open message showed
+its header and nothing below); opened out to 884 px, the left 320 px of the message.
+
+The check now places each side the way CSS paints it, under the element the two share: the
+outermost element with a `z-index` on that side gives its level (it makes a stacking context, so
+nothing inside gets out), else 0 if anything on that side is positioned, else below everything
+positioned; the higher level is above, and on a tie the later in the document
+(`level`, `above` in `BasicWebView`). Transforms and opacity make stacking contexts too and are
+taken as level 0, which is where their `z-index: auto` puts them.
+
+Measured on 2026-10-16 on the Galaxy Z Fold3 (Android 15, WebView 155): before, the message's
+left 320 px showed the list pane's background, opened out, and folded the message showed no body at all;
+after, the whole message shows both ways (codepoet, at the device).
+
+Files: `framework/source/palm/controls/BasicWebView.js`, `framework/build/enyo-build.js`.
+
+### 0012-webview-place-each-frame.patch
+
+A native `WebView` follows its box every frame while the box moves, not five times a second.
+
+0005 looks at where the box is every 200 ms, since layout moves it without telling anyone. On
+the TouchPad the plugin drew into the page, so it moved with a sliding pane exactly; here
+Email's message jumped along behind its pane in steps (a Galaxy Z Fold3, 2026-10-16). Now a
+look that finds the box moved asks for another on the next animation frame, and the frames stop
+once one finds it where it was; the 200 ms looks go on underneath. Lunacy's side
+(`BrowserViews.place`) shifts the view where it is drawn when only its position changed, and
+lays it out again only for a new size, so following a slide costs no layout.
+
+Files: `framework/source/palm/controls/BasicWebView.js`, `framework/build/enyo-build.js`.
+
 ## Added
 
 Nothing, since the rebase. `lib/networkproxy` (HP's network-proxy settings library, which the

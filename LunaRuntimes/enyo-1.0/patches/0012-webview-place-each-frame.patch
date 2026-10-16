@@ -1,0 +1,60 @@
+--- a/framework/source/palm/controls/BasicWebView.js
++++ b/framework/source/palm/controls/BasicWebView.js
+@@ -888,15 +888,25 @@
+ 		if (inForce || key != this._lunacyKey) {
+ 			this._lunacyKey = key;
+ 			N.webViewPlace(this._lunacyId, key);
++			return true;
+ 		}
++		return false;
+ 	};
+ 
++	// While a box is moving it is looked at every frame, so the view goes with it - a pane
++	// sliding, as Email's message does - where the plugin, drawn into the page, moved with it
++	// exactly. Once a frame finds it where it was, the looks go back to a few a second.
++	var frame = null;
++	var nextFrame = window.requestAnimationFrame || function (f) { return setTimeout(f, 16); };
++	function onFrame() { frame = null; placeAll(); }
++
+ 	function placeAll() {
+-		var any = false;
++		var any = false, moved = false;
+ 		for (var id in live) {
+ 			any = true;
+-			live[id]._lunacyPlace();
++			if (live[id]._lunacyPlace()) { moved = true; }
+ 		}
++		if (moved && !frame) { frame = nextFrame(onFrame); }
+ 		if (!any && timer) {
+ 			clearInterval(timer);
+ 			timer = null;
+--- a/framework/build/enyo-build.js
++++ b/framework/build/enyo-build.js
+@@ -13657,15 +13657,25 @@
+ 		if (inForce || key != this._lunacyKey) {
+ 			this._lunacyKey = key;
+ 			N.webViewPlace(this._lunacyId, key);
++			return true;
+ 		}
++		return false;
+ 	};
+ 
++	// While a box is moving it is looked at every frame, so the view goes with it - a pane
++	// sliding, as Email's message does - where the plugin, drawn into the page, moved with it
++	// exactly. Once a frame finds it where it was, the looks go back to a few a second.
++	var frame = null;
++	var nextFrame = window.requestAnimationFrame || function (f) { return setTimeout(f, 16); };
++	function onFrame() { frame = null; placeAll(); }
++
+ 	function placeAll() {
+-		var any = false;
++		var any = false, moved = false;
+ 		for (var id in live) {
+ 			any = true;
+-			live[id]._lunacyPlace();
++			if (live[id]._lunacyPlace()) { moved = true; }
+ 		}
++		if (moved && !frame) { frame = nextFrame(onFrame); }
+ 		if (!any && timer) {
+ 			clearInterval(timer);
+ 			timer = null;

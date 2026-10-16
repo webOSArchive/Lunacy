@@ -1,0 +1,98 @@
+--- a/framework/source/palm/controls/BasicWebView.js
++++ b/framework/source/palm/controls/BasicWebView.js
+@@ -823,12 +823,45 @@
+ 		for (var c = inEl.firstElementChild; c; c = c.nextElementSibling) { holesOf(c, inBox, inOut, inDepth + 1); }
+ 	}
+ 
++	// Where one side of the page stands in CSS's painting order, under the element the box and
++	// the overlay share: its outermost element with a z-index, which makes a stacking context
++	// so nothing inside it gets out; else 0, if anything on that side is positioned; else below
++	// every positioned element, as content in the flow is.
++	function level(inTop, inLeaf) {
++		var chain = [], positioned = false;
++		for (var e = inLeaf; e; e = e.parentNode) { chain.unshift(e); if (e === inTop) { break; } }
++		for (var i = 0; i < chain.length; i++) {
++			var s = getComputedStyle(chain[i]);
++			if (s.position == "static") { continue; }
++			var z = parseInt(s.zIndex, 10);
++			if (!isNaN(z)) { return z; }
++			positioned = true;
++		}
++		return positioned ? 0 : -0.5;
++	}
++
++	// Whether a positioned element paints over the box, not under it: the higher level, or on
++	// a tie the later in the document. Email's message view is a sliding pane over the folder
++	// and message list panes, all three positioned and none with a z-index; the two under it
++	// cut the native view away where they lay, and the message was hidden behind the list's
++	// background (a Galaxy Z Fold3, 2026-10-16).
++	function above(inEl, inBox) {
++		var common = inEl, oTop = inEl;
++		while (common && !common.contains(inBox)) { oTop = common; common = common.parentNode; }
++		if (!common) { return true; }
++		var bTop = inBox;
++		while (bTop.parentNode && bTop.parentNode !== common) { bTop = bTop.parentNode; }
++		var lo = level(oTop, inEl), lb = level(bTop, inBox);
++		if (lo != lb) { return lo > lb; }
++		return !!(bTop.compareDocumentPosition(oTop) & Node.DOCUMENT_POSITION_FOLLOWING);
++	}
++
+ 	function holesOver(inNode, inBox) {
+ 		if (!overlays) { overlays = findOverlays(inNode); }
+ 		var out = [];
+ 		for (var i = 0; i < overlays.length; i++) {
+ 			var o = overlays[i];
+-			if (document.documentElement.contains(o) && seen(o.parentNode)) { holesOf(o, inBox, out, 0); }
++			if (document.documentElement.contains(o) && seen(o.parentNode) && above(o, inNode)) { holesOf(o, inBox, out, 0); }
+ 		}
+ 		return out;
+ 	}
+--- a/framework/build/enyo-build.js
++++ b/framework/build/enyo-build.js
+@@ -13592,12 +13592,45 @@
+ 		for (var c = inEl.firstElementChild; c; c = c.nextElementSibling) { holesOf(c, inBox, inOut, inDepth + 1); }
+ 	}
+ 
++	// Where one side of the page stands in CSS's painting order, under the element the box and
++	// the overlay share: its outermost element with a z-index, which makes a stacking context
++	// so nothing inside it gets out; else 0, if anything on that side is positioned; else below
++	// every positioned element, as content in the flow is.
++	function level(inTop, inLeaf) {
++		var chain = [], positioned = false;
++		for (var e = inLeaf; e; e = e.parentNode) { chain.unshift(e); if (e === inTop) { break; } }
++		for (var i = 0; i < chain.length; i++) {
++			var s = getComputedStyle(chain[i]);
++			if (s.position == "static") { continue; }
++			var z = parseInt(s.zIndex, 10);
++			if (!isNaN(z)) { return z; }
++			positioned = true;
++		}
++		return positioned ? 0 : -0.5;
++	}
++
++	// Whether a positioned element paints over the box, not under it: the higher level, or on
++	// a tie the later in the document. Email's message view is a sliding pane over the folder
++	// and message list panes, all three positioned and none with a z-index; the two under it
++	// cut the native view away where they lay, and the message was hidden behind the list's
++	// background (a Galaxy Z Fold3, 2026-10-16).
++	function above(inEl, inBox) {
++		var common = inEl, oTop = inEl;
++		while (common && !common.contains(inBox)) { oTop = common; common = common.parentNode; }
++		if (!common) { return true; }
++		var bTop = inBox;
++		while (bTop.parentNode && bTop.parentNode !== common) { bTop = bTop.parentNode; }
++		var lo = level(oTop, inEl), lb = level(bTop, inBox);
++		if (lo != lb) { return lo > lb; }
++		return !!(bTop.compareDocumentPosition(oTop) & Node.DOCUMENT_POSITION_FOLLOWING);
++	}
++
+ 	function holesOver(inNode, inBox) {
+ 		if (!overlays) { overlays = findOverlays(inNode); }
+ 		var out = [];
+ 		for (var i = 0; i < overlays.length; i++) {
+ 			var o = overlays[i];
+-			if (document.documentElement.contains(o) && seen(o.parentNode)) { holesOf(o, inBox, out, 0); }
++			if (document.documentElement.contains(o) && seen(o.parentNode) && above(o, inNode)) { holesOf(o, inBox, out, 0); }
+ 		}
+ 		return out;
+ 	}

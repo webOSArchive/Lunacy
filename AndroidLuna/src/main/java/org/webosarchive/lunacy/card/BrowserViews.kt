@@ -197,6 +197,8 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         private var lastImage: String? = null
         /** The box, in the card's px, and the card's px per CSS px. */
         private var box = Rect()
+        /** Where the view was last laid out; a move since is a translation ([place]). */
+        private var laid = Rect()
         private var scale = 1f
         private var shown = false
         private var cover = false
@@ -250,7 +252,15 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 px(x + p.optDouble("w")) + window.scrollX, px(y + p.optDouble("h")) + window.scrollY)
             if (r != box) {
                 box = r
-                layoutParams = AbsoluteLayout.LayoutParams(r.width(), r.height(), r.left, r.top)
+                // Moved but the same size - a pane sliding, every frame of it - the view is
+                // shifted where it is drawn and nothing is laid out again; a new size lays it out.
+                if (r.width() == laid.width() && r.height() == laid.height() && !laid.isEmpty) {
+                    translationX = (r.left - laid.left).toFloat(); translationY = (r.top - laid.top).toFloat()
+                } else {
+                    laid = Rect(r)
+                    translationX = 0f; translationY = 0f
+                    layoutParams = AbsoluteLayout.LayoutParams(r.width(), r.height(), r.left, r.top)
+                }
             }
             shown = p.optBoolean("visible") && r.width() > 0 && r.height() > 0
             val h = ArrayList<Rect>()
@@ -595,7 +605,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
          * draws itself, so while there are holes the view is drawn into a layer of its own
          * first, and the layer is what gets clipped.
          */
-        fun holesInCard(): List<Rect> = holes.map { Rect(it).apply { offset(this@Browser.left, this@Browser.top) } }
+        fun holesInCard(): List<Rect> = holes.map { Rect(it).apply { offset(box.left, box.top) } }
 
         override fun dispatchTouchEvent(e: MotionEvent): Boolean {
             if (e.actionMasked == MotionEvent.ACTION_DOWN) passing = (headerCss > 0 && e.y < clipTop()) ||

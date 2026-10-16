@@ -105,14 +105,16 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private val androidApps: AndroidApps get() =
         androidAppsAt ?: AndroidApps(this, files, luna.px(Launcher.Params.ICON.toInt())).also { androidAppsAt = it }
     private var androidById: Map<String, AppInfo> = emptyMap()
+    /** Shortcuts other apps pinned to the home screen, among Android's tiles. */
+    private val pinned by lazy { PinnedShortcuts(this, files, luna.px(Launcher.Params.ICON.toInt())) }
     /** Whether the shell is on screen (between onStart and onStop): a Home press then is Lunacy's own. */
     private var started = false
     override fun onStart() { super.onStart(); started = true; sleepWake.check("shell") }
     override fun onStop() { started = false; super.onStop() }
 
-    /** Every app the launcher could show: webOS apps, the launch points they added, then Android's. */
+    /** Every app the launcher could show: webOS apps, the launch points they added, then Android's and the shortcuts pinned to it. */
     private fun allLaunchPoints(): List<AppInfo> {
-        val android = androidApps.list()
+        val android = androidApps.list() + pinned.list()
         androidById = android.associateBy { it.id }
         return registry.launchPoints + addedTiles() + android
     }
@@ -164,6 +166,30 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             showDock()
         }
     }
+    /** A shortcut was pinned or unpinned, or its app changed it: the tiles follow, with new icons. */
+    private fun shortcutsChanged() {
+        androidById.keys.filter { it.startsWith(PinnedShortcuts.PREFIX) }.forEach { luna.forgetIcons(it) }
+        setLauncherApps()
+        showDock()
+    }
+
+    /** From Android 8 an app can change or withdraw the shortcuts it pinned; LauncherApps says so. */
+    private var shortcutWatch: Any? = null
+    @android.annotation.TargetApi(26)
+    private fun watchShortcuts() {
+        val cb = object : android.content.pm.LauncherApps.Callback() {
+            override fun onPackageRemoved(p: String, u: android.os.UserHandle) {}
+            override fun onPackageAdded(p: String, u: android.os.UserHandle) {}
+            override fun onPackageChanged(p: String, u: android.os.UserHandle) {}
+            override fun onPackagesAvailable(p: Array<out String>, u: android.os.UserHandle, r: Boolean) {}
+            override fun onPackagesUnavailable(p: Array<out String>, u: android.os.UserHandle, r: Boolean) {}
+            override fun onShortcutsChanged(p: String, s: MutableList<android.content.pm.ShortcutInfo>, u: android.os.UserHandle) {
+                pinned.forget(p); shortcutsChanged()
+            }
+        }
+        runCatching { (getSystemService(LAUNCHER_APPS_SERVICE) as android.content.pm.LauncherApps).registerCallback(cb) }.onSuccess { shortcutWatch = cb }
+    }
+
     private lateinit var statusBar: StatusBar
     private lateinit var cards: CardLayer
     private lateinit var justType: JustType
@@ -318,6 +344,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // Overlays, bottom to top as in LunaCE's OverlayWindowManager: launcher, pill, dock.
         // The icon glows first; the launch follows a frame later, so the glow is seen.
         launcher = Launcher(this, luna) { app -> launcher.postDelayed({ launch(app.id); closeLauncher() }, LAUNCH_DELAY_MS) }
+        PinnedShortcuts.onChanged = ::shortcutsChanged
+        if (android.os.Build.VERSION.SDK_INT >= 26) watchShortcuts()
         launcher.onRemove = { app -> remove(app) }
         launcher.appTitle = { id -> registry.get(id)?.title }
         setLauncherApps()
@@ -449,6 +477,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             .unregisterDisplayListener(displayListener)
         if (watchingPower) { unregisterReceiver(powerReceiver); watchingPower = false }
         if (::launcher.isInitialized) unregisterReceiver(packageReceiver)
+        if (PinnedShortcuts.onChanged == ::shortcutsChanged) PinnedShortcuts.onChanged = null
+        shortcutWatch?.let { if (android.os.Build.VERSION.SDK_INT >= 26) (getSystemService(LAUNCHER_APPS_SERVICE) as android.content.pm.LauncherApps).unregisterCallback(it as android.content.pm.LauncherApps.Callback) }
         if (watchingSystem) { unregisterReceiver(systemReceiver); watchingSystem = false }
         // Everything that would outlive the activity: the apps' pages (each a renderer in this
         // process), the services' Node processes, the luna-send socket and the players. Android
@@ -632,7 +662,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (launcher != null && launcher != appId) launchers[appId] = launcher else launchers.remove(appId)
         // An added launch point launches its app with its own params.
         addedById[appId]?.launchPoint?.let { lp -> launch(lp.appId, lp.paramsObject(), startupCard); return }
-        androidById[appId]?.let { a -> if (!androidApps.launch(a)) systemBanner("", "Couldn't open ${a.title}"); return }
+        androidById[appId]?.let { a ->
+            val opened = if (a.androidShortcut != null) pinned.launch(a) else androidApps.launch(a)
+            if (!opened) systemBanner("", "Couldn't open ${a.title}")
+            return
+        }
         val app = registry.get(appId) ?: run { Log.w(AppServer.TAG, "launch: no app $appId"); return }
         // A shortcut to one of Android's settings screens: no window, no pretending that
         // Lunacy owns the setting. Only apps Lunacy ships declare this.
@@ -2313,6 +2347,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * goes, and the launcher, services and db8 kinds are reloaded.
      */
     private fun remove(app: AppInfo) {
+        // A pinned shortcut is unpinned; the app that pinned it stays.
+        if (app.androidShortcut != null) { pinned.remove(app); return }
         if (app.androidComponent != null) { androidApps.uninstall(app); return }
         app.launchPoint?.let { lp -> removeLaunchPoint(lp.launchPointId); return }
         running[app.id]?.toList()?.forEach { w -> onWindowClosed(w) }

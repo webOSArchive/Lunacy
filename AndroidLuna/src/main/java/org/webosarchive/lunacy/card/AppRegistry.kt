@@ -66,6 +66,11 @@ class AppInfo(
      * of its own, and it launches [LaunchPoint.appId] with its params. Null for an app.
      */
     val launchPoint: LaunchPoint? = null,
+    /**
+     * Set for a shortcut another app pinned (shell/PinnedShortcuts.kt): its id, with
+     * [androidComponent] naming the app that pinned it. Null otherwise.
+     */
+    val androidShortcut: String? = null,
 ) {
     companion object {
         /** What a dynamic launch point's tile is known by in the launcher and the dock. */

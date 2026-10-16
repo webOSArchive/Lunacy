@@ -96,5 +96,21 @@
         <!-- The gear beside that entry: opens Palm's Exhibition app, which owns the choice. -->
         <activity android:name=".shell.ExhibitionSettingsActivity" android:exported="true"
             android:theme="@android:style/Theme.NoDisplay" />
+        <!-- Shortcuts pinned by other apps (a browser's "Add to Home screen") while Lunacy is
+             the home screen: Android 8's pin request, and the broadcast before it, which only
+             apps holding INSTALL_SHORTCUT can send (shell/PinnedShortcuts.kt). -->
+        <activity android:name=".shell.PinShortcutActivity" android:exported="true"
+            android:excludeFromRecents="true" android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
+            </intent-filter>
+        </activity>
+        <receiver android:name=".shell.InstallShortcutReceiver" android:exported="true"
+            android:permission="com.android.launcher.permission.INSTALL_SHORTCUT">
+            <intent-filter>
+                <action android:name="com.android.launcher.action.INSTALL_SHORTCUT" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

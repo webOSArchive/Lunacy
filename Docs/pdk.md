@@ -718,8 +718,7 @@ on"), unless it calls `PDL_ScreenTimeoutEnable(true)`; ScummVM never calls it.
 ## 6e. Native on 64-bit, and Fruit Ninja and Temple Run 2, 2026-10-16
 
 On a Galaxy Z Fold3 (Android 15, Adreno 660) the two apkenv ports codepoet installed didn't start;
-Fruit Ninja now plays, and Temple Run 2 runs its engine but draws flat grey. Six changes, each
-general.
+Fruit Ninja and Temple Run 2 now play. The changes, each general.
 
 **Native on 64-bit.** The 64-bit build ran every PDK app under qemu, though most 64-bit phones
 still run 32-bit code (the Fold does; the Pixel Tablet doesn't). It now carries the glibc
@@ -786,6 +785,17 @@ is gone on the Fold (Adreno 660) and was the same on the Nexus 5 (Adreno 330); t
 still grey there, its intro a run of what look like extreme close-ups (a pale frame, a brown
 gradient, blue-grey, then grey), so more of the state apkenv saves and puts back is still read
 back wrong or not at all.
+
+**Names handed out.** It wasn't state. Read back through a scratch framebuffer (the dump now does
+this for a few textures, with their size and format where the driver can say, and reads the middle
+of the bound framebuffer after every draw), apkenv's portrait framebuffer texture was 4 x 4.
+Unity 3.5 never calls `glGenTextures`: it numbers its textures itself from 1 and binds them, as
+GLES allows. The client handed out generated names from one counter starting at 1, so apkenv's
+framebuffer texture, generated as 5, became Unity's 4 x 4 texture 5, and the game drew into 16
+pixels that apkenv stretched over the screen. On the TouchPad the driver's names didn't meet
+Unity's. Generated names now start at 0x30000000 (`libGLES_CM.so`) and 0x40000000
+(`libGLESv2.so`), far above what an app counts to and apart from each other
+(`client_transport.h`). Temple Run 2's menu draws on the Fold (codepoet, 2026-10-16).
 
 ## 7. Still to do on the first path
 

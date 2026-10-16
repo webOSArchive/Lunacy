@@ -59,7 +59,14 @@ static size_t batch_len;
 static int tracing = -1;
 
 static GLenum gl_error = GL_NO_ERROR;
-static GLuint next_name = 1;
+/* The names glGen* and glCreate* hand out. Textures and buffers go to the driver as they are,
+   and GLES lets an app bind a name it never generated: Unity 3.5 never calls glGenTextures and
+   numbers its textures itself from 1, so apkenv's portrait framebuffer, generated here as 5, was
+   Unity's 4 x 4 texture 5 a moment later, and Temple Run 2 drew into 4 x 4 pixels that apkenv
+   stretched over the screen (flat grey, on every device; Docs/pdk.md 6e). On the TouchPad the
+   driver's names didn't meet Unity's. So they start far above what an app counts to, a range
+   for each library (STREAM_VERSION: 1 is libGLES_CM.so, 2 libGLESv2.so). */
+static GLuint next_name = STREAM_VERSION == 2 ? 0x40000000u : 0x30000000u;
 static GLint viewport[4] = { 0, 0, 1024, 768 };
 static GLint scissor[4] = { 0, 0, 1024, 768 };
 static GLint unpack_alignment = 4, pack_alignment = 4;

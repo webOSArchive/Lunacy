@@ -273,8 +273,9 @@ static int compressed_upload(int sub, GLenum target, GLint level, GLint xoff, GL
 }
 
 /* ---- the app's framebuffer and the card ---- */
-/* The colour texture's name is one the app can't reach (its own come from a counter starting
-   at 1, libGLES_CM); textures may be named without glGenTextures in GLES 1.1. Framebuffers
+/* The colour texture's name is one the app can't reach (the client generates from 0x30000000
+   and 0x40000000, client_transport.h, and apps number their own from 1); textures may be named
+   without glGenTextures. Framebuffers
    and renderbuffers may not, on Adreno at least: those are generated, and mapped below. */
 #define APP_TEX   0x7FFFFF02u
 #define LPDK_GL_PIXELS 7
@@ -755,6 +756,33 @@ static void app_swap(struct ctx *c)
 {
 	double t0 = now();
 	if (c->dump) {
+#if GLES_VERSION == 2
+		/* A few textures' first texels, through a scratch framebuffer: did the image arrive? */
+		{
+			GLint prev = 0; GLuint tmp = 0; glGetIntegerv(0x8CA6, &prev); gen_fb(1, &tmp); bind_fb(GL_FRAMEBUFFER, tmp);
+			const GLuint names[] = { 0x5, 0x11, 0x17, 0x19, 0x1d, 0x27, 0x2b, 0x3f, 0x50, 0x60 };
+			for (size_t k = 0; k < sizeof names / sizeof *names; k++) {
+				if (!glIsTexture(names[k])) { LOGI("pdk gl dump: texture %#x isn't one", names[k]); continue; }
+				glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, names[k], 0);
+				GLenum st = fb_status(GL_FRAMEBUFFER);
+				unsigned char px[8 * 8 * 4] = { 0 }; char line[160]; int n = 0;
+				if (st == GL_FRAMEBUFFER_COMPLETE) glReadPixels(0, 0, 8, 8, GL_RGBA, GL_UNSIGNED_BYTE, px);
+				for (int i = 0; i < 8 * 8 * 4 && n < (int)sizeof line - 12; i += 36) n += snprintf(line + n, sizeof line - n, " %02x%02x%02x%02x", px[i], px[i + 1], px[i + 2], px[i + 3]);
+				GLint tw = -1, th = -1, tf = -1; GLint prevtex = 0;
+				static void (*level_param)(GLenum, GLint, GLenum, GLint *);
+				if (!level_param) *(void **)&level_param = (void *)eglGetProcAddress("glGetTexLevelParameteriv");
+				if (level_param) {
+					glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevtex); glBindTexture(GL_TEXTURE_2D, names[k]);
+					level_param(GL_TEXTURE_2D, 0, 0x1000 /* WIDTH */, &tw); level_param(GL_TEXTURE_2D, 0, 0x1001 /* HEIGHT */, &th);
+					level_param(GL_TEXTURE_2D, 0, 0x1003 /* INTERNAL_FORMAT */, &tf);
+					glBindTexture(GL_TEXTURE_2D, (GLuint)prevtex);
+				}
+				LOGI("pdk gl dump: texture %#x %d x %d format 0x%x status 0x%x:%s (error 0x%x)", names[k], tw, th, tf, st, line, glGetError());
+			}
+			bind_fb(GL_FRAMEBUFFER, (GLuint)prev);
+			glDeleteFramebuffers(1, &tmp);
+		}
+#endif
 		dump_pixels("the app's framebuffer 0", app_fb, c->game_w, c->game_h);
 		for (int i = 0; i < fb_names.n; i++) {
 			GLuint real = fb_names.real[i];
@@ -854,6 +882,14 @@ static void replay(struct ctx *c, const uint8_t *data, size_t len)
 #endif
 			default: break;
 			}
+		}
+		/* With a dump, the middle of what is bound after each draw: how the picture builds up. */
+		if (c->dump && op < sizeof op_names / sizeof *op_names && strncmp(op_names[op], "glDraw", 6) == 0) {
+			GLint vp[4] = { 0 }; unsigned char px[4] = { 0 }, q[4] = { 0 };
+			glGetIntegerv(GL_VIEWPORT, vp);
+			glReadPixels(vp[0] + vp[2] / 2, vp[1] + vp[3] / 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+			glReadPixels(vp[0] + vp[2] / 4, vp[1] + vp[3] * 3 / 4, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, q);
+			LOGI("pdk gl dump:   -> middle %02x%02x%02x%02x, upper left %02x%02x%02x%02x", px[0], px[1], px[2], px[3], q[0], q[1], q[2], q[3]);
 		}
 		/* The first errors, with the command that made them: checked closely at first, then now
 		   and then, so an error after the first 200 frames is named with the command it was

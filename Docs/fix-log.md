@@ -312,6 +312,7 @@ fixed-viewport fallback is allowed).
 | 2026-10-16 | Killed with SIGSYS (exit 159) as Mono starts | Temple Run 2 (apkenv, Unity 3.5 Mono 2.6.5) | `semget`: webOS had System V IPC, Android's seccomp kills the caller | compat (PDK preload: System V semaphores in the process) |
 | 2026-10-16 | Told "OpenGL ES-CM 1.1" by a GLES 2 context | Temple Run 2, Fruit Ninja (apkenv) | apkenv reaches GLES 2 calls through `libGLES_CM.so`; on the TouchPad both libraries were one driver acting on the current context | compat (`libGLES_CM.so` hands GLES 2's functions to `libGLESv2.so` under a GLES 2 context) |
 | 2026-10-16 | The second GLES 2 PDK app in a session shows a black card | Fruit Ninja after Temple Run 2, and the other way round | The GL server's blit program was a `static` from the first app's context | shell (GL server: the program per context) |
+| 2026-10-16 | Flat grey 3D after a run of close-up colours | Temple Run 2 (apkenv, Unity 3.5), on every device | The client generated GL names from 1; Unity numbers its own textures from 1 without `glGenTextures`, so its texture 5 replaced apkenv's framebuffer texture 5 (4 x 4); also, queries answered with the driver's names for programs and framebuffers | compat (PDK GL client: generated names from 0x30000000 and 0x40000000; queries answer with the app's names) |
 
 ## Known gaps, by the layer they belong to
 

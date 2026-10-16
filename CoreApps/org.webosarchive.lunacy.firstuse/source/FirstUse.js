@@ -17,7 +17,8 @@ enyo.kind({
 	kind: "VFlexBox",
 	className: "firstuse",
 	components: [
-		{kind: "Pane", name: "pane", flex: 1, className: "pages", transitionKind: "enyo.transitions.LeftRightFlyin", components: [
+		// Fade, as Palm's First Use did, between pages that each carry the background (firstuse.css).
+		{kind: "Pane", name: "pane", flex: 1, className: "pages", transitionKind: "enyo.transitions.Fade", components: [
 			{name: "welcome", kind: "VFlexBox", className: "page", align: "center", pack: "center", components: [
 				{content: $L("Welcome"), className: "title"},
 				{kind: "VFlexBox", className: "contentDefaults box", components: [

@@ -12,6 +12,9 @@
  * hidden app comes back.
  *
  * Each row's controls sit in one box on the right, where a second action can join the switch.
+ * Each tab is its own list in a Pane, as Palm's were, so each keeps its own place, and each has
+ * its own background (enyo-bg), as Palm's did: Enyo's Fade brings the new view in over the old
+ * one without fading the old one out, so a transparent view shows both lists at once.
  */
 enyo.kind({
 	name: "SoftwareManager",
@@ -29,13 +32,23 @@ enyo.kind({
 					{label: $L("Android"), value: "android"}
 				]}
 			]},
-			{kind: "Scroller", flex: 1, components: [
-				{className: "managerbox-outer item-center", components: [
-					{name: "spinner", kind: "HFlexBox", pack: "center", components: [{kind: "SpinnerLarge", showing: true}]},
-					{name: "noApps", className: "no-apps", showing: false},
-					{name: "list"}
+			{name: "pane", kind: "Pane", flex: 1, components: [
+				{name: "webos", kind: "Scroller", className: "enyo-bg", components: [
+					{className: "managerbox-outer item-center", components: [
+						{name: "noApps_webos", className: "no-apps", showing: false},
+						{name: "list_webos"}
+					]}
+				]},
+				{name: "android", kind: "Scroller", className: "enyo-bg", components: [
+					{className: "managerbox-outer item-center", components: [
+						{name: "noApps_android", className: "no-apps", showing: false},
+						{name: "list_android"}
+					]}
 				]}
 			]}
+		]},
+		{name: "scrim", kind: "Scrim", layoutKind: "VFlexLayout", align: "center", pack: "center", showing: true, components: [
+			{kind: "SpinnerLarge", showing: true}
 		]},
 		{kind: "PalmService", service: "palm://org.webosarchive.lunacy/", components: [
 			{name: "listApps", method: "launcher/listApps", subscribe: true, onSuccess: "gotApps", onFailure: "listFailed"},
@@ -59,7 +72,7 @@ enyo.kind({
 			var x = a.title.toLowerCase(), y = b.title.toLowerCase();
 			return x < y ? -1 : (x > y ? 1 : 0);
 		});
-		this.$.spinner.hide();
+		this.$.scrim.hide();
 		// The same apps as before, one hidden or shown: only the switches change, so the list
 		// doesn't jump back to its top.
 		if (this.sameApps(apps)) {
@@ -68,20 +81,25 @@ enyo.kind({
 			return;
 		}
 		this.apps = apps;
-		this.renderList();
+		this.switches = {};
+		this.renderList("webos");
+		this.renderList("android");
+		this.rendered = true;
+		this.sizeSwitches();
 	},
 	listFailed: function(inSender, r) {
-		this.$.spinner.hide();
-		this.$.noApps.setContent((r && r.errorText) || $L("The apps couldn't be listed."));
-		this.$.noApps.show();
+		this.$.scrim.hide();
+		var text = (r && r.errorText) || $L("The apps couldn't be listed.");
+		this.$.noApps_webos.setContent(text); this.$.noApps_webos.show();
+		this.$.noApps_android.setContent(text); this.$.noApps_android.show();
 	},
 	tabChanged: function() {
 		this.tab = this.$.tabs.getValue();
-		this.renderList();
+		this.$.pane.selectViewByName(this.tab);
+		this.sizeSwitches();
 	},
-	shown: function() {
-		var tab = this.tab;
-		return this.apps.filter(function(a) { return a.kind === tab; });
+	appsOf: function(kind) {
+		return this.apps.filter(function(a) { return a.kind === kind; });
 	},
 	sameApps: function(apps) {
 		var old = this.apps;
@@ -91,11 +109,10 @@ enyo.kind({
 		}
 		return true;
 	},
-	//* One row per app: the framed icon, the title, the vendor and version, and its switch.
-	renderList: function() {
-		var list = this.$.list, apps = this.shown();
+	//* One row per app in a tab's list: the framed icon, the title, the vendor and version, and its switch.
+	renderList: function(kind) {
+		var list = this.$["list_" + kind], apps = this.appsOf(kind);
 		list.destroyControls();
-		this.switches = {};
 		for (var i = 0; i < apps.length; i++) {
 			var a = apps[i];
 			var details = a.vendor ? a.vendor + (a.version ? " · " + a.version : "") : a.version;
@@ -107,18 +124,16 @@ enyo.kind({
 					{content: enyo.string.escapeHtml(details || ""), className: "appVendor enyo-text-ellipsis"}
 				]},
 				{kind: "HFlexBox", align: "center", components: [
-					{name: "switch_" + i, kind: "ToggleButton", onLabel: $L("Show"), offLabel: $L("Hide"),
+					{name: "switch_" + kind + "_" + i, kind: "ToggleButton", onLabel: $L("Show"), offLabel: $L("Hide"),
 						state: !a.hidden, disabled: !a.canHide, appId: a.id, onChange: "switched"}
 				]}
 			]}, {owner: this});
-			this.switches[a.id] = this.$["switch_" + i];
+			this.switches[a.id] = this.$["switch_" + kind + "_" + i];
 		}
-		var empty = this.tab === "android" ? $L("No Android apps are shown in the launcher.") : $L("You have no apps installed.");
-		this.$.noApps.setContent(empty);
-		this.$.noApps.setShowing(apps.length === 0);
+		var noApps = this.$["noApps_" + kind];
+		noApps.setContent(kind === "android" ? $L("No Android apps are shown in the launcher.") : $L("You have no apps installed."));
+		noApps.setShowing(apps.length === 0);
 		list.render();
-		this.rendered = true;
-		this.sizeSwitches();
 	},
 	/**
 	 * Every switch as wide as its wider label. Enyo sizes the bar by the label it shows, and
@@ -127,8 +142,11 @@ enyo.kind({
 	 */
 	sizeSwitches: function() {
 		if (this.switchRule) { return; }
-		var first;
-		for (var id in this.switches) { first = this.switches[id]; break; }
+		// A switch in the tab on screen: the other tab's are in a hidden view and measure 0.
+		var first, tab = this.tab;
+		for (var i = 0; i < this.apps.length && !first; i++) {
+			if (this.apps[i].kind === tab) { first = this.switches[this.apps[i].id]; }
+		}
 		var on = first && first.$.labelOn.hasNode(), off = first && first.$.labelOff.hasNode();
 		if (!on || !off) { return; }
 		var shown = [on.style.display, off.style.display];
@@ -141,7 +159,7 @@ enyo.kind({
 		document.head.appendChild(this.switchRule);
 	},
 	updateSwitches: function() {
-		var apps = this.shown();
+		var apps = this.apps;
 		for (var i = 0; i < apps.length; i++) {
 			var s = this.switches && this.switches[apps[i].id];
 			if (s && s.getState() === Boolean(apps[i].hidden)) { s.setState(!apps[i].hidden); }

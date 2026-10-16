@@ -102,6 +102,10 @@ body {
 	height: 100%;
 	-webkit-box-sizing: border-box;
 	padding: 0 12px;
+	/* Each page carries the body's background: Enyo's Fade brings the new page in over the old
+	   one without fading the old one out, so a transparent page showed both pages' text. */
+	background: #26427a url(../images/bg_body_p.png) no-repeat 50% 50%;
+	background-size: 100%;
 }
 .firstuse .buttons {
 	-webkit-box-orient: horizontal;

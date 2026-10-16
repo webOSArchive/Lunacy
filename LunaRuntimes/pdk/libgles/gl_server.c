@@ -83,6 +83,7 @@ struct ctx {
 	   static, the second PDK app in Lunacy's process showed nothing (Fruit Ninja black after
 	   Temple Run 2, and the other way round, on a Galaxy Z Fold3, 2026-10-16). */
 	GLuint blit_prog; GLint blit_pos, blit_uv, blit_tex;
+	int check_all;              /* files/pdk/glerrors: every command checked for an error */
 };
 
 static struct ctx *cur;   /* the context the replay is for (one app at a time per thread) */
@@ -642,9 +643,50 @@ static void check_compile(GLuint shader)
 	for (char *p = src; *p; p++) if (*p == '\n') *p = ' ';
 	LOGW("pdk gl: a shader didn't compile: %s; source: %.400s", log, src);
 }
+static int trace_programs;   /* files/pdk/glerrors: programs' lives logged too */
+
+/* The app's name for a driver's object, for a query that answers with one. The app's names
+   for programs, shaders, framebuffers and renderbuffers aren't the driver's (map_name), and a
+   name read back is used again: apkenv saves GL_CURRENT_PROGRAM around its present and
+   puts it back, and Unity's Temple Run 2, handed the driver's name, was put back on another
+   program, then on a shader (glUseProgram -> 0x502 every frame), and drew flat grey
+   (a Galaxy Z Fold3 and a Nexus 5, 2026-10-16). */
+static GLuint app_name(struct names *t, GLuint real)
+{
+	if (t->fb == FB_NAMES && real == app_fb) return 0;
+	for (int i = 0; i < t->n; i++) if (t->real[i] == real) return t->app[i];
+	return real;
+}
+static struct names *names_for(GLenum pname)
+{
+	switch (pname) {
+	case GL_CURRENT_PROGRAM: return &prog_names;
+	case GL_FRAMEBUFFER_BINDING: return &fb_names;
+	case GL_RENDERBUFFER_BINDING: return &rb_names;
+	default: return NULL;
+	}
+}
+static void unmap_integers(GLenum pname, GLint *v)
+{
+	struct names *t = names_for(pname);
+	if (t && (*v || t == &fb_names)) *v = (GLint)app_name(t, (GLuint)*v);
+}
+static void unmap_floats(GLenum pname, GLfloat *v)
+{
+	struct names *t = names_for(pname);
+	if (t) *v = (GLfloat)app_name(t, (GLuint)*v);
+}
+static void unmap_attachment(GLenum target, GLenum attachment, GLenum pname, GLint *v)
+{
+	GLint type = 0;
+	if (pname != GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME) return;
+	glGetFramebufferAttachmentParameteriv(target, attachment, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &type);
+	if (type == GL_RENDERBUFFER) *v = (GLint)app_name(&rb_names, (GLuint)*v);
+}
 static void check_link(GLuint program)
 {
 	GLint ok = 1; glGetProgramiv(program, GL_LINK_STATUS, &ok);
+	if (trace_programs) { GLint n = 0; glGetProgramiv(program, GL_ATTACHED_SHADERS, &n); LOGI("pdk gl: program %u linked: %d, %d shaders", program, ok, n); }
 	if (ok) return;
 	char log[512] = ""; glGetProgramInfoLog(program, sizeof log, NULL, log);
 	LOGW("pdk gl: a program didn't link: %s", log);
@@ -813,10 +855,18 @@ static void replay(struct ctx *c, const uint8_t *data, size_t len)
 			default: break;
 			}
 		}
-		/* The first errors, with the command that made them: checked closely at first, then now and then. */
-		if (c->errors < 20 && (c->frames < 200 || (c->frames & 63) == 0)) {
+		/* The first errors, with the command that made them: checked closely at first, then now
+		   and then, so an error after the first 200 frames is named with the command it was
+		   seen after, not the one that made it. A dev switch, files/pdk/glerrors, checks after
+		   every command and logs its first arguments: slow, for finding the one that fails. */
+		if (c->errors < (c->check_all ? 200 : 20) && (c->check_all || c->frames < 200 || (c->frames & 63) == 0)) {
 			GLenum e = glGetError();
-			if (e) { c->errors++; LOGW("pdk gl: %s -> error 0x%x (frame %d)", op < sizeof op_names / sizeof *op_names ? op_names[op] : "?", e, c->frames); }
+			if (e) {
+				char args[100] = ""; int n = 0; struct reader a = body;
+				for (int i = 0; i < 6 && a.p + 4 <= a.end && n < (int)sizeof args - 12; i++) n += snprintf(args + n, sizeof args - n, " %x", get_u32(&a));
+				c->errors++;
+				LOGW("pdk gl: %s%s -> error 0x%x (frame %d)", op < sizeof op_names / sizeof *op_names ? op_names[op] : "?", c->check_all ? args : "", e, c->frames);
+			}
 		}
 	}
 }
@@ -865,6 +915,10 @@ static int create_contexts(struct ctx *c)
 	if (!current) { LOGW("pdk gl: make current failed (0x%x)", err); return 0; }
 	if (!make_app_framebuffer(c)) return 0;
 	fb_bound = app_fb;
+	c->check_all = access("/data/data/org.webosarchive.lunacy/files/pdk/glerrors", F_OK) == 0;
+#if GLES_VERSION == 2
+	trace_programs = c->check_all;
+#endif
 	LOGI("pdk gl: GLES %d on %s, the app's framebuffer %d x %d", GLES_VERSION, glGetString(GL_RENDERER), c->game_w, c->game_h);
 	return 1;
 }

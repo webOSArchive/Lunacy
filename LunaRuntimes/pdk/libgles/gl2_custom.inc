@@ -4,12 +4,14 @@ case OP_glCreateShader: {
 	GLenum type = get_u32(&rd_); GLuint name = get_u32(&rd_);
 	GLuint real = glCreateShader(type);
 	if (real) add_name(&prog_names, name, real);
+	if (trace_programs) LOGI("pdk gl: shader %u is %u", name, real);
 	break;
 }
 case OP_glCreateProgram: {
 	GLuint name = get_u32(&rd_);
 	GLuint real = glCreateProgram();
 	if (real) add_name(&prog_names, name, real);
+	if (trace_programs) LOGI("pdk gl: program %u is %u", name, real);
 	break;
 }
 case OP_glShaderSource: {

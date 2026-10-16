@@ -773,6 +773,20 @@ apkenv's present, uniform array sizes, `glBindAttribLocation`, the texture uploa
 `glUseProgram` 0x502 at frames 448 and 512. Next: the same game on the HP 10 G2 (native, an older
 Mali) and the Pixel Tablet (emulated), to tell the Fold's driver from the stream.
 
+**Names read back.** Those errors were sampled: after frame 200 the server looks for an error only
+every 64th frame and names the command it was seen after. With every command checked
+(`files/pdk/glerrors`, which also logs each failing command's first arguments and each program's
+and shader's creation, link and deletion), one remained, every frame from 281: `glUseProgram` of
+an app name that was a shader. A query answered with the driver's name for an object the app knows
+by another: `GL_CURRENT_PROGRAM`, which apkenv saves around its present and puts back, so the
+game was put back on whatever its own numbering called the driver's number, another program and
+then a shader. `glGetIntegerv`, `glGetFloatv` and `glGetFramebufferAttachmentParameteriv` now
+answer with the app's names for programs, framebuffers and renderbuffers (`app_name`). The error
+is gone on the Fold (Adreno 660) and was the same on the Nexus 5 (Adreno 330); the picture is
+still grey there, its intro a run of what look like extreme close-ups (a pale frame, a brown
+gradient, blue-grey, then grey), so more of the state apkenv saves and puts back is still read
+back wrong or not at all.
+
 ## 7. Still to do on the first path
 
 - A visible hybrid plugin's picture, drawn over its object in the page (no app needing it

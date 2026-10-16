@@ -262,6 +262,7 @@ def gen_server(protos):
             continue
         if name in ('glDeleteProgram', 'glDeleteShader'):
             arg = ps[0][1]
+            print(f'    if (trace_programs) LOGI("pdk gl: {name} %u", {arg});')
             print(f'    if ({arg}) {name}({arg}); forget_name(&prog_names, {arg}); break;\n}}')
             continue
         if name in ('glDrawArrays', 'glDrawElements'):
@@ -283,6 +284,13 @@ def gen_server(protos):
         if k == 'query':
             print(f'    uint32_t ret_ = 0;')
             print(f'    {"ret_ = (uint32_t)" if ret != "void" else ""}{call};')
+            # A name the app reads back is its own, not the driver's (gl_server.c, app_name).
+            if name == 'glGetIntegerv':
+                print('    if (params_v) unmap_integers(pname, (GLint *)out_params);')
+            if name == 'glGetFloatv':
+                print('    if (params_v) unmap_floats(pname, (GLfloat *)out_params);')
+            if name == 'glGetFramebufferAttachmentParameteriv':
+                print('    if (params_v) unmap_attachment(target, attachment, pname, (GLint *)out_params);')
             print('    answer_begin(ret_);')
             for t, n in ps:
                 if is_ptr(t) and n in outs:

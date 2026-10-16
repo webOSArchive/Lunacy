@@ -24,6 +24,8 @@ import java.io.File
  * - `android/openSettings` hands a setting that belongs to the host OS to Android's own UI.
  * - `permissions/status` and `permissions/request` are Android's runtime permissions, for
  *   Lunacy's First Use; `firstUse/done` is how First Use says it has run.
+ * - `launcher/listApps` and `launcher/setHidden` are for Software Manager: every app the
+ *   launcher can show, webOS and Android, and whether the user has hidden it ([HiddenApps]).
  *
  * [requestPermissions] is the shell's: a runtime permission is asked for by an Activity, and
  * answered to it, with whether Android would put the question again (from Android 11 a
@@ -45,6 +47,12 @@ class LunacyService(
     private val wallpaper: () -> () -> java.io.InputStream = { { throw java.io.FileNotFoundException("no wallpaper") } },
     /** First Use has just finished: what a webOS device did at the next boot follows (ShellActivity.afterFirstUse). */
     private val onFirstUseDone: () -> Unit = {},
+    /** The apps the user has hidden from the launcher. */
+    private val hidden: HiddenApps? = null,
+    /** Every app the launcher could show, hidden or not: webOS, the launch points they added, then Android's. Asked on the main thread. */
+    private val launcherApps: () -> List<AppInfo> = { emptyList() },
+    /** An app's launcher icon, as the launcher draws it. Asked on the main thread. */
+    private val appIcon: (AppInfo) -> android.graphics.Bitmap? = { null },
 ) {
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     /** The two answers that take real time - Node's version is asked of Node, and a listing walks a folder - come from here. */
@@ -64,6 +72,79 @@ class LunacyService(
         bus.register(SERVICE, "permissions/status") { _, _, reply -> reply(permissionsStatus()) }
         bus.register(SERVICE, "permissions/request") { caller, p, reply -> requestPermission(caller, p, reply) }
         bus.register(SERVICE, "firstUse/done") { caller, _, reply -> reply(firstUseDone(caller)) }
+        bus.register(SERVICE, "launcher/listApps", Bus.CallHandler { call -> listLauncherApps(call) })
+        bus.register(SERVICE, "launcher/setHidden") { caller, p, reply -> reply(setHidden(caller, p)) }
+    }
+
+    // ---- the launcher's apps, for Software Manager ----
+
+    private val launcherWatchers = LinkedHashSet<Bus.Call>()
+    /** Each icon as a data: URL, by app id and version: Android's icons have no file a page could load. */
+    private val iconUrls = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /**
+     * Every app the launcher can show, in its order, with `hidden` for the ones the user has
+     * taken off it. A subscription hears the list again whenever it changes: an app installed
+     * or removed, or one hidden or shown.
+     */
+    private fun listLauncherApps(call: Bus.Call) {
+        if (!ownApp(call.appId)) return call.reply(Bus.error("Only Lunacy's own apps can list the launcher's apps (asked by ${call.appId})", -1))
+        sendLauncherApps(listOf(call))
+        if (call.subscribe && !call.cancelled) {
+            launcherWatchers += call
+            call.onCancel { main.post { launcherWatchers.remove(call) } }
+        }
+    }
+
+    /** The launcher's apps changed: whoever is watching hears the new list. */
+    fun launcherAppsChanged() { if (launcherWatchers.isNotEmpty()) sendLauncherApps(launcherWatchers.toList()) }
+
+    private fun sendLauncherApps(to: List<Bus.Call>) {
+        // The list and the icons are the shell's and are read here, on the main thread; turning
+        // forty-odd icons into PNGs is not, so that happens on the worker.
+        val apps = launcherApps().map { app ->
+            val key = app.id + ":" + app.version
+            Triple(app, key, if (iconUrls.containsKey(key)) null else appIcon(app))
+        }
+        val hiddenNow = hidden?.all().orEmpty()
+        worker.execute {
+            val list = org.json.JSONArray()
+            for ((app, key, bmp) in apps) {
+                val icon = iconUrls[key] ?: bmp?.let { dataUrl(it) }?.also { iconUrls[key] = it } ?: ""
+                val android = app.androidComponent != null
+                list.put(JSONObject()
+                    .put("id", app.id).put("title", app.title)
+                    .put("vendor", if (android) app.androidComponent!!.packageName else app.appinfo.optString("vendor", ""))
+                    // A launch point's version carries its icon, for the launcher's cache: AppInfo.forLaunchPoint.
+                    .put("version", if (app.launchPoint != null) app.version.substringBefore(':') else app.version).put("icon", icon)
+                    .put("kind", if (android) "android" else "webos")
+                    .put("hidden", app.id in hiddenNow)
+                    // Software Manager is how an app comes back, so it can't hide itself.
+                    .put("canHide", app.id != SOFTWARE_MANAGER))
+            }
+            val r = Bus.ok(mapOf("apps" to list))
+            main.post { to.forEach { it.reply(r) } }
+        }
+    }
+
+    /** A launcher icon as a PNG data: URL, at most 128 px on a side. */
+    private fun dataUrl(bmp: android.graphics.Bitmap): String {
+        val side = maxOf(bmp.width, bmp.height)
+        val scaled = if (side <= 128) bmp else android.graphics.Bitmap.createScaledBitmap(bmp, bmp.width * 128 / side, bmp.height * 128 / side, true)
+        val out = java.io.ByteArrayOutputStream()
+        scaled.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+        return "data:image/png;base64," + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
+    }
+
+    private fun setHidden(caller: String, p: JSONObject): String {
+        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can hide an app (asked by $caller)", -1)
+        val id = p.optString("id")
+        if (id.isEmpty() || !p.has("hidden")) return Bus.error("setHidden needs an id and hidden", -1)
+        if (id == SOFTWARE_MANAGER) return Bus.error("Software Manager can't be hidden: it is how hidden apps come back", -1)
+        val store = hidden ?: return Bus.error("Hiding apps is not available", -1)
+        if (launcherApps().none { it.id == id }) return Bus.error("No launcher app $id", -1)
+        store.set(id, p.optBoolean("hidden"))
+        return Bus.ok()
     }
 
     // ---- Android's permissions, for First Use ----
@@ -377,7 +458,8 @@ class LunacyService(
      * with the same id replaces the bundled app, so the registry has the last word.
      */
     private fun ownApp(appId: String): Boolean {
-        val known = appId == "com.palm.app.deviceinfo" || appId == "com.palm.app.screenlock" || appId.startsWith("org.webosarchive.lunacy")
+        val known = appId == "com.palm.app.deviceinfo" || appId == "com.palm.app.screenlock" || appId == SOFTWARE_MANAGER ||
+            appId.startsWith("org.webosarchive.lunacy")
         return known && registry.get(appId)?.userInstalled == false
     }
 
@@ -469,6 +551,8 @@ class LunacyService(
         const val SERVICE = "org.webosarchive.lunacy"
         /** Lunacy's First Use app, launched by the shell on the first start (ShellActivity). */
         const val FIRST_USE_APP = "org.webosarchive.lunacy.firstuse"
+        /** Software Manager, which hides and shows the launcher's apps. */
+        const val SOFTWARE_MANAGER = "com.palm.app.swmanager"
         private val STORAGE = listOf(android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
         /** Long enough for the setting app's reply to land and its selector to close before the shell goes. */
         const val RESTART_DELAY_MS = 400L

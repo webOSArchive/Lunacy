@@ -402,15 +402,39 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         invalidate()
     }
 
-    /** Each page's designator, name and apps, in order: the tabs themselves are the user's now. */
-    private fun saveOrder() = prefs.edit().putString("tabs", JSONArray(pages.map { p ->
-        JSONObject().put("designator", p.designator).put("name", p.title).put("apps", JSONArray(p.tiles.map { t ->
-            when (t) {
-                is Tile.App -> t.app.id
-                is Tile.Group -> JSONObject().put("group", t.name).put("uid", t.id).put("apps", JSONArray(t.members.map { it.id }))
+    /**
+     * The apps the user has hidden ([org.webosarchive.lunacy.card.HiddenApps]). They aren't
+     * in [setApps]'s list, but they keep their saved place: see [saveOrder].
+     */
+    var hidden: Set<String> = emptySet()
+
+    /**
+     * Each page's designator, name and apps, in order: the tabs themselves are the user's now.
+     * A hidden app isn't on the page, so it is put back where the last save had it, in its tab
+     * or its group, to come back there when it is shown again.
+     */
+    private fun saveOrder() {
+        val old = runCatching { JSONArray(prefs.getString("tabs", null) ?: "") }.getOrNull()
+        val oldTabs = (0 until (old?.length() ?: 0)).mapNotNull { old!!.optJSONObject(it) }.associateBy { it.optString("designator") }
+        fun ids(a: JSONArray?) = (0 until (a?.length() ?: 0)).map { a!!.opt(it) }
+        prefs.edit().putString("tabs", JSONArray(pages.map { p ->
+            val entries: MutableList<Any> = p.tiles.map { t ->
+                when (t) {
+                    is Tile.App -> t.app.id
+                    is Tile.Group -> {
+                        val members = t.members.map { it.id }.toMutableList()
+                        val was = ids(oldTabs[p.designator]?.optJSONArray("apps")).filterIsInstance<JSONObject>().firstOrNull { it.optString("uid") == t.id }
+                        ids(was?.optJSONArray("apps")).forEachIndexed { i, id -> if (id is String && id in hidden && id !in members) members.add(minOf(i, members.size), id) }
+                        JSONObject().put("group", t.name).put("uid", t.id).put("apps", JSONArray(members))
+                    }
+                }
+            }.toMutableList()
+            ids(oldTabs[p.designator]?.optJSONArray("apps")).forEachIndexed { i, id ->
+                if (id is String && id in hidden && id !in entries) entries.add(minOf(i, entries.size), id)
             }
-        }))
-    }).toString()).apply()
+            JSONObject().put("designator", p.designator).put("name", p.title).put("apps", JSONArray(entries))
+        }).toString()).apply()
+    }
 
     // ---- launch feedback ----
 

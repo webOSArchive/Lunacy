@@ -1,0 +1,19 @@
+Lunacy's Software Manager.
+
+Palm's own Software Manager (com.palm.app.swmanager 3.0.3400, webOS 3.x) listed the apps on
+a webOS device, deleted them, and offered updates from HP's App Catalog. Lunacy's lists every
+app its launcher can show, webOS and Android, and lets the user hide any of them from the
+launcher, the dock and Just Type: an Android device ships apps that can't be removed, and a
+hidden app is simply left out. It keeps Palm's app id, so it sits where webOS users expect to
+find it, and Palm's look and icons, so it belongs.
+
+The app's code is Lunacy's, under the same terms as the rest of Lunacy. Its stylesheet
+carries Palm's rules for the header and the app rows (from main/SWManager.css), marked there.
+These files are not Lunacy's:
+
+- icon.png, icon-256x256.png, images/swmanager_48x48.png
+
+  Copyright Palm, Inc. / Hewlett-Packard, from com.palm.app.swmanager 3.0.3400 as shipped on
+  the reference TouchPad (webOS 3.0.5). Never released under an open licence; distributed by
+  Lunacy as abandonware, like Mojo and the Prelude fonts (no owner has asserted rights since
+  webOS was discontinued).

@@ -1,0 +1,75 @@
+/*
+ * Palm's rules, from Software Manager 3.0.3400's main/SWManager.css: the header, the tab
+ * buttons' row, and the app rows with their framed icon. Lunacy's additions are marked.
+ */
+.swManager {
+	font-family: Prelude, 'Prelude Medium', 'Segoe UI', Arial, Helvetica, sans-serif;
+}
+
+.page-header {
+	height: 58px;
+}
+
+.header-icon {
+	width: 48px;
+	height: 48px;
+	background: url(../images/swmanager_48x48.png);
+	margin-top: -9px;
+}
+
+.appIcon {
+	height: 50px;
+	width: 50px;
+	background-size: 100%;
+	background-color: #FFFFFF;
+	background-repeat: no-repeat;
+	margin: 0px 17px 0px 5px;
+	border: 1px solid #6c6c6c;
+	-webkit-border-radius: 4px;
+}
+
+.appTitle {
+	color: #333333;
+}
+
+.appVendor {
+	font-size: 14px;
+	color: #707070;
+}
+
+.managerbox-outer {
+	margin: 20px auto;
+}
+
+/* Palm's 500 px column; [Lunacy] narrower where the card is (a phone), as Enyo's layouts are. */
+.item-center {
+	width: 500px;
+	max-width: 100%;
+	margin-left: auto;
+	margin-right: auto;
+	-webkit-box-sizing: border-box;
+}
+
+.app-row {
+	padding: 8px;
+	height: 70px;
+	-webkit-box-sizing: border-box;
+	border-right: 1px solid silver;
+	border-left: 1px solid silver;
+}
+
+/* [Lunacy] The vendor and version share the second line, as there is a switch on the right. */
+.app-details {
+	min-width: 0;
+}
+
+.app-tabs {
+	width: 314px;
+	padding: 18px 0;
+}
+
+.no-apps {
+	padding-top: 5%;
+	text-align: center;
+	color: #707070;
+}

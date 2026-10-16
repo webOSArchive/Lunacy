@@ -28,6 +28,7 @@ changes is marked `[Lunacy]` in its source.
 | Photos & Videos | `com.palm.app.photos` | 3.2.0 | webOS Archive's modernized Photos & Videos (rotate and crop), from the webOS CE tree |
 | Screen & Lock | `com.palm.app.screenlock` | 1.0.0 | Palm, HP webOS 3.x (abandonware), with Lunacy's changes |
 | Sounds & Alerts | `com.palm.app.soundsandalerts` | 1.1.0 | Lunacy's own, in Palm's look |
+| Software Manager | `com.palm.app.swmanager` | 1.0.0 | Lunacy's own, in Palm's look: shows or hides each launcher app ([luna-deltas A25](../Docs/luna-deltas.md)) |
 | Video Player | `com.palm.app.videoplayer` | 1.0.0 | Palm, HP webOS 3.x (abandonware); no icon, launched by other apps |
 | Wi-Fi | `com.palm.app.wifi` | 1.0.0 | Lunacy's shortcut to Android's Wi-Fi settings |
 | First Use | `org.webosarchive.lunacy.firstuse` | 1.0.0 | Lunacy's own, in Palm's First Use look; no icon |

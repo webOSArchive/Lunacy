@@ -110,12 +110,28 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     override fun onStart() { super.onStart(); started = true; sleepWake.check("shell") }
     override fun onStop() { started = false; super.onStop() }
 
-    /** What the launcher shows: webOS apps, the launch points they added, then Android's. */
-    private fun launchPoints(): List<AppInfo> {
+    /** Every app the launcher could show: webOS apps, the launch points they added, then Android's. */
+    private fun allLaunchPoints(): List<AppInfo> {
         val android = androidApps.list()
         androidById = android.associateBy { it.id }
         return registry.launchPoints + addedTiles() + android
     }
+
+    /** The apps the user has hidden with Software Manager: out of the launcher, the dock and Just Type. */
+    private val hiddenApps by lazy {
+        org.webosarchive.lunacy.card.HiddenApps(this).also { h -> h.onChanged = { setLauncherApps(); showDock() } }
+    }
+
+    /** What the launcher shows: [allLaunchPoints] less the ones the user has hidden. */
+    private fun launchPoints(): List<AppInfo> = allLaunchPoints().filter { it.id !in hiddenApps }
+
+    /** The launcher's apps, again, and Software Manager hears it. */
+    private fun setLauncherApps() {
+        launcher.hidden = hiddenApps.all()
+        launcher.setApps(launchPoints())
+        lunacyService?.launcherAppsChanged()
+    }
+    private var lunacyService: org.webosarchive.lunacy.card.LunacyService? = null
 
     /** The tiles of the added launch points whose app is installed, by tile id. */
     private var addedById: Map<String, AppInfo> = emptyMap()
@@ -144,7 +160,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             if (pkg == packageName) return
             androidApps.forget(pkg)
             androidById.keys.filter { it.startsWith("${AndroidApps.PREFIX}$pkg/") }.forEach { luna.forgetIcons(it) }
-            launcher.setApps(launchPoints())
+            setLauncherApps()
             showDock()
         }
     }
@@ -304,7 +320,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         launcher = Launcher(this, luna) { app -> launcher.postDelayed({ launch(app.id); closeLauncher() }, LAUNCH_DELAY_MS) }
         launcher.onRemove = { app -> remove(app) }
         launcher.appTitle = { id -> registry.get(id)?.title }
-        launcher.setApps(launchPoints())
+        setLauncherApps()
         launcher.dockHeight = luna.px(QuickLaunch.barHeight(luna.phone)).toFloat()
         launcher.visibility = View.INVISIBLE
         root.addView(launcher, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
@@ -927,7 +943,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         configurator.run()
         securityPolicy.load()
         Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "apps rescanned in ${System.currentTimeMillis() - start} ms")
-        launcher.setApps(launchPoints())
+        setLauncherApps()
         dockMode.launchPointsChanged()
         val after = registry.launchPoints.associateBy { it.id }
         for ((id, app) in after) if (id !in before) launchPointChanged(app, "added")
@@ -1078,7 +1094,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     /** The launcher, the dock and Just Type after an added launch point came, went or changed. */
     private fun addedLaunchPointsChanged() {
-        launcher.setApps(launchPoints())
+        setLauncherApps()
         showDock()
     }
 
@@ -1143,7 +1159,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             val updated = (if (icon.startsWith("/")) null else registry.setIcon(app.id, icon))
                 ?: return Bus.error("Unable to update launch point's icon")
             luna.forgetIcons(app.id)
-            launcher.setApps(launchPoints())
+            setLauncherApps()
             showDock()
             launchPointChanged(updated, "updated")
             return Bus.ok()
@@ -2165,9 +2181,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         audio.register(bus)
         // Lunacy's own service, on its own name: the environment it really runs in, and
         // Android's settings screens for the settings Android owns.
-        org.webosarchive.lunacy.card.LunacyService(this, registry, jsServices, jsServices.root, { displayInfo() }, ::askPermissions,
+        lunacyService = org.webosarchive.lunacy.card.LunacyService(this, registry, jsServices, jsServices.root, { displayInfo() }, ::askPermissions,
             { intent -> runCatching { startActivityForResult(intent, 200) }.isSuccess }, onLayoutChanged = { reshell() },
-            wallpaper = ::wallpaperSource, onFirstUseDone = ::afterFirstUse).register(bus)
+            wallpaper = ::wallpaperSource, onFirstUseDone = ::afterFirstUse,
+            hidden = hiddenApps, launcherApps = ::allLaunchPoints, appIcon = { luna.appIcon(it) }).also { it.register(bus) }
         val connections = org.webosarchive.lunacy.card.ConnectionManager(this) { sleepWake.blocked }.also { it.register(bus) }
         sleepWake.onBlockedChanged = connections::changed
         sleepWake.onBlocked = activityManager::networkBlocked
@@ -2328,13 +2345,19 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         return (0 until a.length()).map { a.optString(it).removeSuffix("_default") }.take(quickLaunch.maxItems)
     }
 
+    /**
+     * The dock as arranged, from [shownDock]'s ids. A hidden app keeps its slot, so it comes
+     * back where it was when it is shown again, while there is room for it.
+     */
     private fun setDock(ids: List<String>) {
-        dockPrefs.edit().putString("dock", org.json.JSONArray(ids.distinct().take(quickLaunch.maxItems)).toString()).apply()
+        val all = ids.distinct().toMutableList()
+        dock().forEachIndexed { i, id -> if (id in hiddenApps && id !in all && all.size < quickLaunch.maxItems) all.add(minOf(i, all.size), id) }
+        dockPrefs.edit().putString("dock", org.json.JSONArray(all.take(quickLaunch.maxItems)).toString()).apply()
         showDock()
     }
 
-    /** The dock's ids that are still apps, in the order they are drawn. */
-    private fun shownDock() = dock().filter { appById(it) != null }
+    /** The dock's ids that are still apps and aren't hidden, in the order they are drawn. */
+    private fun shownDock() = dock().filter { appById(it) != null && it !in hiddenApps }
 
     private fun showDock() { quickLaunch.apps = shownDock().mapNotNull { appById(it) } }
 
@@ -2491,7 +2514,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun openJustType(initial: String = "") {
         if (cards.maximized != null) return
         if (launcherOpen) closeLauncher()
-        justTypePanel.apps = registry.launchPoints + addedById.values + androidById.values
+        justTypePanel.apps = (registry.launchPoints + addedById.values + androidById.values).filter { it.id !in hiddenApps }
         justTypePanel.open(initial)
         fade(justType, false); showDock(false)
         statusBar.setMode(StatusBar.Mode.APP)

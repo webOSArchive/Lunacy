@@ -823,7 +823,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         else if (maximized == null && activating == null) slide()
     }
 
-    fun maximize(card: Card) {
+    fun maximize(card: Card, ms: Long = Params.MAXIMIZE_MS) {
         val g = card.group ?: return
         if (card != restoreAfter) { restoreTo = null; restoreAfter = null }
         maximized?.takeIf { it != card }?.chromeShown = false
@@ -834,7 +834,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         activating = card
         topCard = card
         restack()
-        run(maximizedLayout(card).map { (c, p) -> Move(c, p, Params.MAXIMIZE_MS, Easing.OutQuart, Params.MAXIMIZE_MS, Easing.OutQuart) }) {
+        run(maximizedLayout(card).map { (c, p) -> Move(c, p, ms, Easing.OutQuart, ms, Easing.OutQuart) }) {
             activating = null
             maximized = card
             cards.forEach { if (it != card) it.visibility = View.INVISIBLE }
@@ -882,6 +882,17 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         launching += card
         lastLaunched = card
         toCardView(card)
+    }
+
+    /**
+     * A launch from a webOS app's icon on Android's home screen (HomeScreenPins): the card owns
+     * the screen at once, with the app's icon on it until the page has drawn, and the card view
+     * is never shown. Lunacy's own delta: on webOS every launch came through the card view.
+     */
+    fun openMaximized(card: Card) {
+        if (width == 0) { post { openMaximized(card) }; return }
+        launching.remove(card)
+        maximize(card, 0L)
     }
 
     /** The launching card slides up into the card view, and the shell shows the card view around it. */

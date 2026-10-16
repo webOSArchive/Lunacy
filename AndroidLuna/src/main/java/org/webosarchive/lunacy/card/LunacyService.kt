@@ -26,6 +26,8 @@ import java.io.File
  *   Lunacy's First Use; `firstUse/done` is how First Use says it has run.
  * - `launcher/listApps` and `launcher/setHidden` are for Software Manager: every app the
  *   launcher can show, webOS and Android, and whether the user has hidden it ([HiddenApps]).
+ *   `launcher/pinStatus` and `launcher/pin` put a webOS app on Android's own home screen, when
+ *   Lunacy isn't the home app (shell/HomeScreenPins.kt).
  *
  * [requestPermissions] is the shell's: a runtime permission is asked for by an Activity, and
  * answered to it, with whether Android would put the question again (from Android 11 a
@@ -53,6 +55,10 @@ class LunacyService(
     private val launcherApps: () -> List<AppInfo> = { emptyList() },
     /** An app's launcher icon, as the launcher draws it. Asked on the main thread. */
     private val appIcon: (AppInfo) -> android.graphics.Bitmap? = { null },
+    /** Whether Lunacy is the home app, and whether the home app takes pins: {lunacyIsHome, canPin}. */
+    private val pinStatus: () -> JSONObject = { JSONObject().put("returnValue", true).put("lunacyIsHome", false).put("canPin", false) },
+    /** Asks Android's home app to pin a webOS app; null when asked, else what went wrong. */
+    private val pinToHome: (AppInfo, android.graphics.Bitmap?) -> String? = { _, _ -> "Pinning is not available" },
 ) {
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     /** The two answers that take real time - Node's version is asked of Node, and a listing walks a folder - come from here. */
@@ -74,6 +80,10 @@ class LunacyService(
         bus.register(SERVICE, "firstUse/done") { caller, _, reply -> reply(firstUseDone(caller)) }
         bus.register(SERVICE, "launcher/listApps", Bus.CallHandler { call -> listLauncherApps(call) })
         bus.register(SERVICE, "launcher/setHidden") { caller, p, reply -> reply(setHidden(caller, p)) }
+        bus.register(SERVICE, "launcher/pinStatus") { caller, _, reply ->
+            reply(if (ownApp(caller)) pinStatus().toString() else Bus.error("Only Lunacy's own apps can pin apps (asked by $caller)", -1))
+        }
+        bus.register(SERVICE, "launcher/pin") { caller, p, reply -> reply(pin(caller, p)) }
     }
 
     // ---- the launcher's apps, for Software Manager ----
@@ -134,6 +144,15 @@ class LunacyService(
         val out = java.io.ByteArrayOutputStream()
         scaled.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
         return "data:image/png;base64," + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
+    }
+
+    /** A webOS app on Android's home screen: its icon there opens it straight away. */
+    private fun pin(caller: String, p: JSONObject): String {
+        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can pin apps (asked by $caller)", -1)
+        val id = p.optString("id")
+        val app = launcherApps().firstOrNull { it.id == id } ?: return Bus.error("No launcher app $id", -1)
+        if (app.androidComponent != null) return Bus.error("${app.title} is Android's own: it is on Android's launcher already", -1)
+        return pinToHome(app, appIcon(app))?.let { Bus.error(it, -1) } ?: Bus.ok()
     }
 
     private fun setHidden(caller: String, p: JSONObject): String {

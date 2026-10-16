@@ -105,6 +105,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private val androidApps: AndroidApps get() =
         androidAppsAt ?: AndroidApps(this, files, luna.px(Launcher.Params.ICON.toInt())).also { androidAppsAt = it }
     private var androidById: Map<String, AppInfo> = emptyMap()
+    /** webOS apps pinned to Android's own home screen, when Lunacy isn't it. */
+    private val homeScreenPins by lazy { HomeScreenPins(this) }
     /** Shortcuts other apps pinned to the home screen, among Android's tiles. */
     private val pinned by lazy { PinnedShortcuts(this, files, luna.px(Launcher.Params.ICON.toInt())) }
     /** Whether the shell is on screen (between onStart and onStop): a Home press then is Lunacy's own. */
@@ -552,6 +554,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // Say so and launch without them rather than throwing: the activity is singleTask, so
         // a bad `params` would otherwise be replayed on every restart and the shell could
         // never start again. Quoting one of these on a command line is easy to get wrong.
+        // A webOS app's icon on Android's home screen. Taken once: the activity is singleTask
+        // and a re-created one would otherwise open it again.
+        if (intent.action == HomeScreenPins.ACTION_OPEN_APP) {
+            intent.getStringExtra(HomeScreenPins.EXTRA_APP)?.let { openDirect(it) }
+            intent.action = null
+        }
         intent.getStringExtra("launch")?.let { id ->
             val raw = intent.getStringExtra("params")
             val params = raw?.let {
@@ -687,7 +695,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (dock && !app.isWeb) { Log.w(AppServer.TAG, "exhibition: $appId is a native app"); return }
         if (!app.isWeb) {
             // A PDK app: its own process, in a card of its own kind (Docs/pdk.md).
-            if (windows != null) { cards.cards.firstOrNull { it.window.appId == appId }?.let { cards.maximize(it) }; return }
+            if (windows != null) { cards.cards.firstOrNull { it.window.appId == appId }?.let { cards.maximize(it, maximizeMs(appId)) }; return }
             if (!pdkRuntime.available) {
                 systemBanner(appId, "${app.title} is a native app; it needs Lunacy's 32-bit build on a 32-bit ARM device")
                 return
@@ -705,7 +713,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 Log.i(AppServer.TAG, "relaunch $appId $params handled=$handled")
                 // A relaunch for the dock leaves the card view alone: the app answers it with
                 // a dockMode window, or the dock shows nothing of it, as on a device.
-                if (!handled && !dock) cards.cards.firstOrNull { it.window.appId == appId }?.let { cards.maximize(it) }
+                if (!handled && !dock) cards.cards.firstOrNull { it.window.appId == appId }?.let { cards.maximize(it, maximizeMs(appId)) }
             }
             return
         }
@@ -800,7 +808,27 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val launcher = launchers.remove(w.appId)
         val up = cards.maximized?.takeIf { (parent != null && it.window.appId == w.appId) || (launcher != null && it.window.appId == launcher) }
         cards.add(card, up)
-        cards.openLaunching(card)
+        if (w.appId == directApp) cards.openMaximized(card) else cards.openLaunching(card)
+    }
+
+    /**
+     * The app opened from its icon on Android's home screen (HomeScreenPins), while its card is
+     * the one up: it opened straight away, and leaving it goes back to Android rather than to
+     * Lunacy's card view, so Lunacy's launcher never shows. Null otherwise.
+     */
+    private var directApp: String? = null
+    /** Whether [directApp]'s card has been maximized: only then does going to the card view mean leaving. */
+    private var directShown = false
+
+    /** A running app's card comes up at once for its icon on Android's home screen, from the card view otherwise. */
+    private fun maximizeMs(appId: String) = if (appId == directApp) 0L else CardLayer.Params.MAXIMIZE_MS
+
+    /** Opens [appId] for its icon on Android's home screen. With Lunacy as the home app it is an ordinary launch. */
+    private fun openDirect(appId: String) {
+        if (homeScreenPins.lunacyIsHome()) { launch(appId); return }
+        directApp = appId
+        directShown = false
+        launch(appId)
     }
 
     /** A card for [w], drawn at the shell's scale. */
@@ -2218,7 +2246,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         lunacyService = org.webosarchive.lunacy.card.LunacyService(this, registry, jsServices, jsServices.root, { displayInfo() }, ::askPermissions,
             { intent -> runCatching { startActivityForResult(intent, 200) }.isSuccess }, onLayoutChanged = { reshell() },
             wallpaper = ::wallpaperSource, onFirstUseDone = ::afterFirstUse,
-            hidden = hiddenApps, launcherApps = ::allLaunchPoints, appIcon = { luna.appIcon(it) }).also { it.register(bus) }
+            hidden = hiddenApps, launcherApps = ::allLaunchPoints, appIcon = { luna.appIcon(it) },
+            pinStatus = { homeScreenPins.status() }, pinToHome = homeScreenPins::pin).also { it.register(bus) }
         val connections = org.webosarchive.lunacy.card.ConnectionManager(this) { sleepWake.blocked }.also { it.register(bus) }
         sleepWake.onBlockedChanged = connections::changed
         sleepWake.onBlocked = activityManager::networkBlocked
@@ -2419,6 +2448,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     override fun onMaximized(card: Card) {
+        if (card.window.appId == directApp) directShown = true
         pendingLoads[card.window]?.run()
         quickLaunch.cancelLaunchFeedback()
         if (justTypePanel.showing) justTypePanel.close()
@@ -2498,6 +2528,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     override fun onCardView() {
+        // Leaving an app opened from Android's home screen goes back there (HomeScreenPins).
+        if (directApp != null && directShown) {
+            directApp = null; directShown = false
+            moveTaskToBack(true)
+        }
         hideKeyboard()
         statusBar.title = StatusBar.CARRIER_TEXT
         statusBar.setMode(if (launcherOpen) StatusBar.Mode.LAUNCHER else StatusBar.Mode.CARDS)

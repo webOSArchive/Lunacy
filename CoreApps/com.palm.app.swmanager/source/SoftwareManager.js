@@ -11,7 +11,9 @@
  * shown elsewhere turns up here at once. Software Manager can't hide itself: it is how a
  * hidden app comes back.
  *
- * Each row's controls sit in one box on the right, where a second action can join the switch.
+ * When Lunacy isn't Android's home app, a webOS app's row offers Pin in place of the switch:
+ * launcher/pin asks Android's home screen for an icon that opens the app straight away, and
+ * someone who keeps Android's launcher never needs Lunacy's, so there is nothing to hide.
  * Each tab is its own list in a Pane, as Palm's were, so each keeps its own place, and each has
  * its own background (enyo-bg), as Palm's did: Enyo's Fade brings the new view in over the old
  * one without fading the old one out, so a transparent view shows both lists at once.
@@ -21,6 +23,7 @@ enyo.kind({
 	kind: "VFlexBox",
 	className: "swManager",
 	components: [
+		{kind: "ApplicationEvents", onWindowActivated: "askPinStatus"},
 		{kind: "Header", pack: "center", className: "page-header", components: [
 			{className: "header-icon"},
 			{content: $L("Software Manager"), style: "padding-left: 10px;"}
@@ -52,7 +55,9 @@ enyo.kind({
 		]},
 		{kind: "PalmService", service: "palm://org.webosarchive.lunacy/", components: [
 			{name: "listApps", method: "launcher/listApps", subscribe: true, onSuccess: "gotApps", onFailure: "listFailed"},
-			{name: "setHidden", method: "launcher/setHidden", onSuccess: "hiddenSet", onFailure: "hiddenSet"}
+			{name: "setHidden", method: "launcher/setHidden", onSuccess: "hiddenSet", onFailure: "hiddenSet"},
+			{name: "pinStatus", method: "launcher/pinStatus", onSuccess: "gotPinStatus"},
+			{name: "pin", method: "launcher/pin", onSuccess: "pinned", onFailure: "pinned"}
 		]},
 		{name: "errorDialog", kind: "ModalDialog", caption: $L("Software Manager"), components: [
 			{name: "errorText", className: "enyo-paragraph"},
@@ -64,7 +69,19 @@ enyo.kind({
 		this.apps = [];
 		this.tab = "webos";
 		this.$.tabs.setValue(this.tab);
+		this.pinning = false;
+		this.askPinStatus();
 		this.$.listApps.call({subscribe: true});
+	},
+	//* Whether to offer Pin: Lunacy isn't the home app, and the home app takes pins. Asked again each time the card comes back, as the home app may have changed.
+	askPinStatus: function() {
+		this.$.pinStatus.call({});
+	},
+	gotPinStatus: function(inSender, r) {
+		var pinning = Boolean(r && !r.lunacyIsHome && r.canPin);
+		if (pinning === this.pinning) { return; }
+		this.pinning = pinning;
+		if (this.rendered) { this.renderList("webos"); }
 	},
 	gotApps: function(inSender, r) {
 		var apps = r.apps || [];
@@ -123,12 +140,13 @@ enyo.kind({
 					{content: enyo.string.escapeHtml(a.title), className: "appTitle enyo-text-ellipsis"},
 					{content: enyo.string.escapeHtml(details || ""), className: "appVendor enyo-text-ellipsis"}
 				]},
-				{kind: "HFlexBox", align: "center", components: [
+				{kind: "HFlexBox", align: "center", components: [this.pinning && kind === "webos" ?
+					{kind: "Button", caption: $L("Pin"), className: "pin-button", appId: a.id, onclick: "pinClicked"} :
 					{name: "switch_" + kind + "_" + i, kind: "ToggleButton", onLabel: $L("Show"), offLabel: $L("Hide"),
 						state: !a.hidden, disabled: !a.canHide, appId: a.id, onChange: "switched"}
 				]}
 			]}, {owner: this});
-			this.switches[a.id] = this.$["switch_" + kind + "_" + i];
+			if (this.$["switch_" + kind + "_" + i]) { this.switches[a.id] = this.$["switch_" + kind + "_" + i]; }
 		}
 		var noApps = this.$["noApps_" + kind];
 		noApps.setContent(kind === "android" ? $L("No Android apps are shown in the launcher.") : $L("You have no apps installed."));
@@ -164,6 +182,13 @@ enyo.kind({
 			var s = this.switches && this.switches[apps[i].id];
 			if (s && s.getState() === Boolean(apps[i].hidden)) { s.setState(!apps[i].hidden); }
 		}
+	},
+	pinClicked: function(inSender) {
+		this.$.pin.call({id: inSender.appId});
+	},
+	pinned: function(inSender, r) {
+		// Android's home screen asks the user itself; only a refusal is said here.
+		if (!r || !r.returnValue) { this.showError((r && r.errorText) || $L("The app couldn't be pinned.")); }
 	},
 	switched: function(inSender, inState) {
 		this.$.setHidden.call({id: inSender.appId, hidden: !inState});

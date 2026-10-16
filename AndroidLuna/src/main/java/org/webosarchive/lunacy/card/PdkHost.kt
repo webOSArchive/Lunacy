@@ -425,9 +425,16 @@ class PdkRuntime(private val context: Context, val appsRoot: File, val screenWid
                  val osVersion: String, val deviceName: String, val nduid: String,
                  /** The webOS root a start script runs in: busybox's commands, webOS's paths. */
                  val webos: WebosRoot? = null) {
-    val loader: File? = File(context.applicationInfo.nativeLibraryDir, "libld-linux.so").takeIf { it.canExecute() }
+    /**
+     * The 32-bit glibc loader, for the native path. Both builds carry it; the 64-bit one uses
+     * it only where the device can still run 32-bit code (a Galaxy Z Fold3 can, a Pixel Tablet
+     * can't), and otherwise runs the app under qemu. Native is the TouchPad's own way and much
+     * the faster, and qemu fails some apps a device runs (Docs/pdk.md, "Native on 64-bit").
+     */
+    val loader: File? = File(context.applicationInfo.nativeLibraryDir, "libld-linux.so")
+        .takeIf { it.canExecute() && android.os.Build.SUPPORTED_32_BIT_ABIS.isNotEmpty() && !forceEmulated(context) }
     val emulator: File? = File(context.applicationInfo.nativeLibraryDir, "libqemu-arm.so").takeIf { it.canExecute() }
-    /** The 32-bit build's guard for the native path on Android 10 and later (LunaRuntimes/pdk/enosys). */
+    /** The native path's guard on Android 10 and later (LunaRuntimes/pdk/enosys). */
     val enosys: File? = File(context.applicationInfo.nativeLibraryDir, "libenosys.so").takeIf { it.canExecute() }
     /** A start script's shell, and the preload that runs the script's webOS binaries (LunaRuntimes/pdk/execpdk). */
     val busybox: File? = File(context.applicationInfo.nativeLibraryDir, "libbusybox.so").takeIf { it.canExecute() }
@@ -440,6 +447,12 @@ class PdkRuntime(private val context: Context, val appsRoot: File, val screenWid
     val how get() = when { loader != null -> "native"; emulator != null -> "emulated"; else -> "unavailable" }
 
     companion object {
+        /**
+         * A development switch: `files/pdk/emulate` present runs PDK apps under qemu even where
+         * the device runs 32-bit code, so the emulated path can be worked on with a device that
+         * runs both (and compared with native on the same machine).
+         */
+        fun forceEmulated(context: Context) = File(context.filesDir, "pdk/emulate").exists()
         private const val PT_GNU_STACK = 0x6474e551L
         private const val PT_INTERP = 3L
         private const val PF_X = 1

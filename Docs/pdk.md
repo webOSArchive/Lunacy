@@ -715,6 +715,64 @@ no swipe added up. Each finger's motion now carries its own. And a PDK app holds
 while its card has focus, as on the TouchPad (codepoet: "if the game is in focus, wake-lock is
 on"), unless it calls `PDL_ScreenTimeoutEnable(true)`; ScummVM never calls it.
 
+## 6e. Native on 64-bit, and Fruit Ninja and Temple Run 2, 2026-10-16
+
+On a Galaxy Z Fold3 (Android 15, Adreno 660) the two apkenv ports codepoet installed didn't start;
+Fruit Ninja now plays, and Temple Run 2 runs its engine but draws flat grey. Six changes, each
+general.
+
+**Native on 64-bit.** The 64-bit build ran every PDK app under qemu, though most 64-bit phones
+still run 32-bit code (the Fold does; the Pixel Tablet doesn't). It now carries the glibc
+loader and libenosys too (`build-pdk.sh` copies both into `local-jni/arm64-v8a`; they are 32-bit
+programs, exec'd as the 32-bit build execs them), and `PdkRuntime.loader` is used wherever
+`Build.SUPPORTED_32_BIT_ABIS` isn't empty; elsewhere qemu, as before. The native webOS services
+(mail, the IM transport) follow the same rule. `files/pdk/emulate`, present, forces qemu, so the
+emulated path can be worked on with a device that runs both.
+
+**One driver, two libraries.** On the TouchPad `libGLES_CM.so` and `libGLESv2.so` were faces of
+Qualcomm's one driver, so a function both have acted on the current context: `glGetString` in
+`libGLES_CM.so` answered "OpenGL ES 2.0" with a GLES 2 context. apkenv reaches some of a GLES 2
+game's calls through `libGLES_CM.so`, and Temple Run 2 was told "OpenGL ES-CM 1.1". Lunacy's
+`libGLES_CM.so` now hands each of the 58 functions in `GLES2/gl2.h` to `libGLESv2.so` while the
+SDL driver's context is GLES 2 (`LUNACY_gl_major`; `gen_gles1.py`, `client_prelude.c`).
+
+**System V semaphores.** Temple Run 2's Mono (Unity's 2.6.5) sets up its shared handles with
+`semget`. webOS's kernel had System V IPC; Android's seccomp policy kills an app that asks
+(SIGSYS: exit 159, "seccomp prevented call to disallowed arm64 system call 190" under qemu),
+and a kernel without it answers `ENOSYS`, on which Mono retries for ever. The preload keeps
+semaphores in the process with System V's semantics (`semget`, `semop`, `semtimedop`, `semctl`):
+a set per key, an operation list applied whole or not at all, waiting, `IPC_NOWAIT`, the timeout.
+No other PDK app shared them on webOS, so private to the process loses nothing.
+
+**stdio buffers on a page.** Fruit Ninja quit with `std::bad_alloc` natively and under qemu. Its
+libzip (in `libmortargame.so`) was built against bionic's `stdio.h`, which tests `ferror()` and
+`feof()` inline: bits 0x40 and 0x20 of a 16-bit field at offset 12 of the `FILE`. apkenv hands it
+glibc's `FILE`, where offset 12 is the low half of the buffer's address. The TouchPad's glibc 2.8
+mmap'd each stream's buffer, so it began on a page and the bits were 0; Debian's mallocs it. The
+zip reader saw an error after every good read of its APK, opened nothing, and asked for -1
+entries. The preload now gives every stream a page-aligned buffer of its own (`setvbuf` on
+`fopen`, `fopen64`, `fdopen`, `freopen`; unmapped at `fclose`), as the device did; a terminal
+keeps glibc's line buffering.
+
+**The blit's program per context.** The GL server kept its GLES 2 blit program in `static`s, made
+in the first PDK app's context. The next app in Lunacy's process has a context of its own,
+without that program: `glUseProgram` failed (0x501, then 0x502) and its frames never reached the
+card. Whichever of the two games ran second was black. It now lives in the context.
+
+**Dev tools.** `files/pdk/gldump` also logs each app framebuffer's real name, completeness and
+attachments, five pixels of each, and writes each whole as `files/pdk/fb<real name>.raw` (RGBA,
+bottom row first); the error log names the op after which an error was seen, which for the
+blit's failures was the first op of the next frame.
+
+**Temple Run 2, still open.** On the Fold its engine runs at 60 frames/s, plays its sound and
+takes touches, and its frames reach the card, but the 3D is flat grey: each surface about one
+colour, with faint shading, after a pale first frame. Ruled out: shader compile and link
+(none failed), the portrait framebuffer, its 16-bit depth renderbuffer and the name maps,
+apkenv's present, uniform array sizes, `glBindAttribLocation`, the texture upload path (232
+`glTexImage2D`, no compressed uploads, none skipped). Two errors are logged, `glBindBuffer` and
+`glUseProgram` 0x502 at frames 448 and 512. Next: the same game on the HP 10 G2 (native, an older
+Mali) and the Pixel Tablet (emulated), to tell the Fold's driver from the stream.
+
 ## 7. Still to do on the first path
 
 - A visible hybrid plugin's picture, drawn over its object in the page (no app needing it

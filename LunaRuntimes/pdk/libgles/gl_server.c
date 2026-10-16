@@ -78,6 +78,11 @@ struct ctx {
 	double t_mark, last_swap;   /* for the frame rate, and the 60-a-second pace */
 	int frames;
 	int show_failures;          /* window swaps that failed, logged */
+	/* The blit's program (GLES 2), made in this context the first time a frame is shown.
+	   Each app gets a new context, and a program from an earlier one isn't in it: kept in a
+	   static, the second PDK app in Lunacy's process showed nothing (Fruit Ninja black after
+	   Temple Run 2, and the other way round, on a Galaxy Z Fold3, 2026-10-16). */
+	GLuint blit_prog; GLint blit_pos, blit_uv, blit_tex;
 };
 
 static struct ctx *cur;   /* the context the replay is for (one app at a time per thread) */
@@ -523,7 +528,7 @@ static void show(struct ctx *c)
 	static const GLfloat uv[] = { 0, 0,  1, 0,  0, 1,  1, 1 };
 #if GLES_VERSION == 2
 	/* The same quad, turned on the CPU: GLES 2 has no matrix stack. */
-	static GLuint prog; static GLint at_pos, at_uv, un_tex;
+	GLuint prog = c->blit_prog; GLint at_pos = c->blit_pos, at_uv = c->blit_uv, un_tex = c->blit_tex;
 	if (!prog) {
 		static const char *vs = "attribute vec2 pos; attribute vec2 uv; varying vec2 v; void main() { v = uv; gl_Position = vec4(pos, 0.0, 1.0); }";
 		static const char *fs = "precision mediump float; varying vec2 v; uniform sampler2D tex; void main() { gl_FragColor = texture2D(tex, v); }";
@@ -531,6 +536,7 @@ static void show(struct ctx *c)
 		glShaderSource(a, 1, &vs, NULL); glCompileShader(a); glShaderSource(b, 1, &fs, NULL); glCompileShader(b);
 		prog = glCreateProgram(); glAttachShader(prog, a); glAttachShader(prog, b); glLinkProgram(prog);
 		at_pos = glGetAttribLocation(prog, "pos"); at_uv = glGetAttribLocation(prog, "uv"); un_tex = glGetUniformLocation(prog, "tex");
+		c->blit_prog = prog; c->blit_pos = at_pos; c->blit_uv = at_uv; c->blit_tex = un_tex;
 	}
 	float rad = (float)-c->turn * 3.14159265f / 180.0f, cs = cosf(rad), sn = sinf(rad);
 	GLfloat ndc[8];
@@ -678,10 +684,56 @@ static int uniform_count(GLuint program, GLint location)
 
 static double now(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_sec + ts.tv_nsec / 1e9; }
 
+/* With a frame dump, five pixels of a framebuffer (the middle, then the quarters): what the
+   app drew, as against what reached the card. */
+static void dump_pixels(const char *what, GLuint fb, int w, int h)
+{
+	GLint prev = 0; unsigned char px[4] = { 0 }; char line[200]; int n = 0;
+	const int pts[5][2] = { { w / 2, h / 2 }, { w / 4, h / 4 }, { 3 * w / 4, h / 4 }, { w / 4, 3 * h / 4 }, { 3 * w / 4, 3 * h / 4 } };
+	glGetIntegerv(0x8CA6 /* GL_FRAMEBUFFER_BINDING */, &prev);
+	bind_fb(GL_FRAMEBUFFER_OES, fb);
+	for (int i = 0; i < 5; i++) {
+		glReadPixels(pts[i][0], pts[i][1], 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+		n += snprintf(line + n, sizeof line - n, " %02x%02x%02x%02x", px[0], px[1], px[2], px[3]);
+	}
+	LOGI("pdk gl dump: pixels of %s (fb %u, %d x %d):%s (error 0x%x)", what, fb, w, h, line, glGetError());
+	/* And the whole of it, raw RGBA, as files/pdk/fb<real name>.raw. */
+	unsigned char *all = malloc((size_t)w * h * 4);
+	if (all) {
+		char path[128]; snprintf(path, sizeof path, "/data/data/org.webosarchive.lunacy/files/pdk/fb%u.raw", fb);
+		glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, all);
+		FILE *f = fopen(path, "wb"); if (f) { fwrite(all, 4, (size_t)w * h, f); fclose(f); }
+		free(all);
+	}
+	bind_fb(GL_FRAMEBUFFER_OES, (GLuint)prev);
+}
+
 /* The app's swap: its frame goes to the card, and is acknowledged. */
 static void app_swap(struct ctx *c)
 {
 	double t0 = now();
+	if (c->dump) {
+		dump_pixels("the app's framebuffer 0", app_fb, c->game_w, c->game_h);
+		for (int i = 0; i < fb_names.n; i++) {
+			GLuint real = fb_names.real[i];
+			GLint type = 0, obj = 0, prev = 0;
+			glGetIntegerv(0x8CA6, &prev);
+			bind_fb(GL_FRAMEBUFFER_OES, real);
+#if GLES_VERSION == 2
+			glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &type);
+			glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &obj);
+			GLint dtype = 0, dobj = 0, dbits = 0;
+			glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &dtype);
+			glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME, &dobj);
+			glGetIntegerv(GL_DEPTH_BITS, &dbits);
+			LOGI("pdk gl dump: depth 0x%x %d, %d bits; renderbuffers mapped %d", dtype, dobj, dbits, rb_names.n);
+			for (int k = 0; k < rb_names.n; k++) LOGI("pdk gl dump: app renderbuffer %u is %u", rb_names.app[k], rb_names.real[k]);
+#endif
+			LOGI("pdk gl dump: app framebuffer %u is %u: status 0x%x, colour 0x%x %d", fb_names.app[i], real, fb_status(GL_FRAMEBUFFER_OES), type, obj);
+			bind_fb(GL_FRAMEBUFFER_OES, (GLuint)prev);
+			dump_pixels("that framebuffer", real, 768, 1024);
+		}
+	}
 	/* A card that stays black: the app's pauses (Where's My Water loads a level for 20 to
 	   65 s under qemu on a Galaxy Tab A7 Lite, drawing nothing), and the card's failures. */
 	if (c->last_swap > 0 && t0 - c->last_swap > 2) LOGI("pdk gl: frame %d came %.1f s after the last", c->frames + 1, t0 - c->last_swap);

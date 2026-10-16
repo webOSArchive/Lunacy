@@ -171,25 +171,93 @@ int creat(const char *path, mode_t mode)
 	REAL(creat);
 	MAPPED(path); return real_creat(mp_, mode);
 }
+/* ---- stdio buffers on a page, as the TouchPad's glibc had them ----
+ *
+ * The TouchPad's glibc (2.8) mmap'd each stream's buffer, so it began on a page; Debian's
+ * mallocs it. Code that reads a FILE's insides relies on what was there without knowing it:
+ * an Android library built against bionic's stdio.h tests ferror() and feof() inline, as
+ * bits 0x40 and 0x20 of a 16-bit field at offset 12 - in glibc's FILE, the low half of the
+ * buffer's address. On a page those bits are 0; malloc'd they are whatever the address is.
+ * Fruit Ninja's zip reader (libzip in libmortargame.so, under apkenv) saw a read error after
+ * every good read of its APK, opened nothing and asked for -1 entries (std::bad_alloc;
+ * Docs/pdk.md, 6e). So each stream gets a page-aligned buffer of
+ * its own, as on the device, before anything reads or writes it; a terminal keeps glibc's
+ * own line buffering. The buffer goes when the stream does. */
+#include <sys/mman.h>
+#define STDIO_BUF 8192
+#define STDIO_STREAMS 256
+static struct { FILE *f; void *buf; } stdio_bufs[STDIO_STREAMS];
+static pthread_mutex_t stdio_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/* Takes a stream's buffer out of the table; the caller unmaps it once glibc is done with it. */
+static void *stdio_take(FILE *f)
+{
+	void *buf = NULL;
+	pthread_mutex_lock(&stdio_lock);
+	for (int i = 0; i < STDIO_STREAMS; i++) if (stdio_bufs[i].f == f) { buf = stdio_bufs[i].buf; stdio_bufs[i].f = NULL; break; }
+	pthread_mutex_unlock(&stdio_lock);
+	return buf;
+}
+static void stdio_release(FILE *f) { void *buf = stdio_take(f); if (buf) munmap(buf, STDIO_BUF); }
+
+static FILE *stdio_paged(FILE *f)
+{
+	int slot = -1, fd;
+	void *buf;
+	if (!f) return f;
+	fd = fileno(f);
+	if (fd >= 0 && isatty(fd)) return f;
+	buf = mmap(NULL, STDIO_BUF, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (buf == MAP_FAILED) return f;
+	pthread_mutex_lock(&stdio_lock);
+	for (int i = 0; i < STDIO_STREAMS && slot < 0; i++) if (!stdio_bufs[i].f) slot = i;
+	if (slot >= 0) { stdio_bufs[slot].f = f; stdio_bufs[slot].buf = buf; }
+	pthread_mutex_unlock(&stdio_lock);
+	if (slot < 0 || setvbuf(f, buf, _IOFBF, STDIO_BUF) != 0) {
+		if (slot >= 0) stdio_release(f); else munmap(buf, STDIO_BUF);
+	}
+	return f;
+}
+
 FILE *fopen(const char *path, const char *how)
 {
 	REAL(fopen);
-	MAPPED(path); return real_fopen(mp_, how);
+	MAPPED(path); return stdio_paged(real_fopen(mp_, how));
 }
 FILE *fopen64(const char *path, const char *how)
 {
 	REAL(fopen64);
-	MAPPED(path); return real_fopen64(mp_, how);
+	MAPPED(path); return stdio_paged(real_fopen64(mp_, how));
 }
 FILE *freopen(const char *path, const char *how, FILE *f)
 {
 	REAL(freopen);
-	MAPPED(path); return real_freopen(mp_, how, f);
+	void *old = stdio_take(f);
+	MAPPED(path); FILE *r = real_freopen(mp_, how, f);
+	if (old) munmap(old, STDIO_BUF);
+	return stdio_paged(r);
 }
 FILE *freopen64(const char *path, const char *how, FILE *f)
 {
 	REAL(freopen64);
-	MAPPED(path); return real_freopen64(mp_, how, f);
+	void *old = stdio_take(f);
+	MAPPED(path); FILE *r = real_freopen64(mp_, how, f);
+	if (old) munmap(old, STDIO_BUF);
+	return stdio_paged(r);
+}
+FILE *fdopen(int fd, const char *how)
+{
+	REAL(fdopen);
+	return stdio_paged(real_fdopen(fd, how));
+}
+int fclose(FILE *f)
+{
+	REAL(fclose);
+	/* Out of the table first: once closed, the FILE's address can be another stream's. */
+	void *buf = stdio_take(f);
+	int r = real_fclose(f);
+	if (buf) munmap(buf, STDIO_BUF);
+	return r;
 }
 
 /* stat: the functions a binary built against today's glibc calls, and the __xstat ones a
@@ -755,4 +823,155 @@ struct hostent *gethostbyname(const char *name)
 	}
 	webos_nameservers();
 	return real_gethostbyname(name);
+}
+
+/* ---- System V semaphores ----
+ *
+ * webOS's kernel had System V IPC, and Mono 2.6's io-layer (Unity games under apkenv: Temple
+ * Run 2) sets up its shared handles with semget, semctl and semop. Android forbids the calls:
+ * from Android 8 its seccomp filter kills an app that makes one (SIGSYS; under qemu the guest's
+ * call reaches the host as arm64 semget, 190), and before that its kernels lack them (ENOSYS,
+ * on which Mono's semget retries for ever). The semaphores are kept here, inside the process,
+ * with System V's semantics: a set per key, each operation list applied whole or not at all,
+ * waiting until it can be (or failing at once with IPC_NOWAIT), semtimedop's timeout. Nothing
+ * on webOS shared them with another PDK app, so being private to the process loses nothing a
+ * game could see. SEM_UNDO is accepted; the undo is the process's exit, as it was there. */
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <time.h>
+
+#define SEM_SETS 32
+#define SEM_MAX 64
+static struct semset { int used; key_t key; int nsems; unsigned short val[SEM_MAX]; pid_t pid[SEM_MAX]; struct semid_ds ds; } semsets[SEM_SETS];
+static pthread_mutex_t sem_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t sem_changed = PTHREAD_COND_INITIALIZER;
+#define SEM_ID(i) ((i) + 1)   /* never 0, never -1 */
+
+static struct semset *semset_of(int id)
+{
+	return id >= 1 && id <= SEM_SETS && semsets[id - 1].used ? &semsets[id - 1] : NULL;
+}
+
+int semget(key_t key, int nsems, int flags)
+{
+	int i, free_slot = -1, id = -1;
+	pthread_mutex_lock(&sem_lock);
+	for (i = 0; i < SEM_SETS; i++) {
+		if (!semsets[i].used) { if (free_slot < 0) free_slot = i; continue; }
+		if (key != IPC_PRIVATE && semsets[i].key == key) {
+			if ((flags & IPC_CREAT) && (flags & IPC_EXCL)) errno = EEXIST;
+			else if (nsems > semsets[i].nsems) errno = EINVAL;
+			else id = SEM_ID(i);
+			goto out;
+		}
+	}
+	if (!(flags & IPC_CREAT) && key != IPC_PRIVATE) { errno = ENOENT; goto out; }
+	if (nsems <= 0 || nsems > SEM_MAX) { errno = EINVAL; goto out; }
+	if (free_slot < 0) { errno = ENOSPC; goto out; }
+	memset(&semsets[free_slot], 0, sizeof semsets[free_slot]);
+	semsets[free_slot].used = 1; semsets[free_slot].key = key; semsets[free_slot].nsems = nsems;
+	semsets[free_slot].ds.sem_nsems = (unsigned long)nsems;
+	semsets[free_slot].ds.sem_perm.__key = key;
+	semsets[free_slot].ds.sem_perm.mode = (unsigned short)(flags & 0777);
+	semsets[free_slot].ds.sem_perm.uid = semsets[free_slot].ds.sem_perm.cuid = getuid();
+	semsets[free_slot].ds.sem_perm.gid = semsets[free_slot].ds.sem_perm.cgid = getgid();
+	semsets[free_slot].ds.sem_ctime = time(NULL);
+	id = SEM_ID(free_slot);
+out:
+	pthread_mutex_unlock(&sem_lock);
+	return id;
+}
+
+/* Whether the whole list can be applied now; -1 if an operation is out of range. */
+static int sem_ready(struct semset *s, struct sembuf *ops, size_t n)
+{
+	int want[SEM_MAX];
+	size_t i;
+	for (i = 0; i < (size_t)s->nsems; i++) want[i] = s->val[i];
+	for (i = 0; i < n; i++) {
+		if (ops[i].sem_num >= s->nsems) return -1;
+		if (ops[i].sem_op == 0) { if (want[ops[i].sem_num] != 0) return 0; }
+		else if (want[ops[i].sem_num] + ops[i].sem_op < 0) return 0;
+		else want[ops[i].sem_num] += ops[i].sem_op;
+		if (want[ops[i].sem_num] > 32767) return -2;
+	}
+	return 1;
+}
+
+int semtimedop(int id, struct sembuf *ops, size_t n, const struct timespec *timeout)
+{
+	struct timespec until;
+	int r = 0, nowait = 0;
+	size_t i;
+	if (!ops || n == 0) { errno = EINVAL; return -1; }
+	for (i = 0; i < n; i++) if (ops[i].sem_flg & IPC_NOWAIT) nowait = 1;
+	if (timeout) {
+		clock_gettime(CLOCK_REALTIME, &until);
+		until.tv_sec += timeout->tv_sec; until.tv_nsec += timeout->tv_nsec;
+		if (until.tv_nsec >= 1000000000L) { until.tv_sec++; until.tv_nsec -= 1000000000L; }
+	}
+	pthread_mutex_lock(&sem_lock);
+	for (;;) {
+		struct semset *s = semset_of(id);
+		int ready;
+		if (!s) { errno = EIDRM; r = -1; break; }
+		ready = sem_ready(s, ops, n);
+		if (ready == -1) { errno = EFBIG; r = -1; break; }
+		if (ready == -2) { errno = ERANGE; r = -1; break; }
+		if (ready) {
+			for (i = 0; i < n; i++) { s->val[ops[i].sem_num] += ops[i].sem_op; s->pid[ops[i].sem_num] = getpid(); }
+			s->ds.sem_otime = time(NULL);
+			pthread_cond_broadcast(&sem_changed);
+			break;
+		}
+		if (nowait) { errno = EAGAIN; r = -1; break; }
+		if (timeout ? pthread_cond_timedwait(&sem_changed, &sem_lock, &until) == ETIMEDOUT
+				: pthread_cond_wait(&sem_changed, &sem_lock) != 0) {
+			if (timeout) { errno = EAGAIN; r = -1; break; }
+		}
+	}
+	pthread_mutex_unlock(&sem_lock);
+	return r;
+}
+
+int semop(int id, struct sembuf *ops, size_t n) { return semtimedop(id, ops, n, NULL); }
+
+union lunacy_semun { int val; struct semid_ds *buf; unsigned short *array; };
+
+int semctl(int id, int num, int cmd, ...)
+{
+	union lunacy_semun arg = { 0 };
+	struct semset *s;
+	int r = 0, i;
+	va_list ap;
+	va_start(ap, cmd);
+	if (cmd == SETVAL || cmd == SETALL || cmd == GETALL || cmd == IPC_STAT || cmd == IPC_SET || cmd == SEM_STAT)
+		arg = va_arg(ap, union lunacy_semun);
+	va_end(ap);
+	pthread_mutex_lock(&sem_lock);
+	s = semset_of(id);
+	if (!s) { errno = EINVAL; r = -1; goto out; }
+	if ((cmd == GETVAL || cmd == SETVAL || cmd == GETPID || cmd == GETNCNT || cmd == GETZCNT) && (num < 0 || num >= s->nsems)) {
+		errno = EINVAL; r = -1; goto out;
+	}
+	switch (cmd) {
+	case IPC_RMID: s->used = 0; pthread_cond_broadcast(&sem_changed); break;
+	case IPC_STAT: case SEM_STAT: if (arg.buf) *arg.buf = s->ds; break;
+	case IPC_SET: if (arg.buf) s->ds.sem_perm.mode = arg.buf->sem_perm.mode & 0777; s->ds.sem_ctime = time(NULL); break;
+	case GETVAL: r = s->val[num]; break;
+	case GETPID: r = s->pid[num]; break;
+	case GETNCNT: case GETZCNT: r = 0; break;
+	case SETVAL:
+		if (arg.val < 0 || arg.val > 32767) { errno = ERANGE; r = -1; break; }
+		s->val[num] = (unsigned short)arg.val; s->ds.sem_ctime = time(NULL);
+		pthread_cond_broadcast(&sem_changed); break;
+	case GETALL: if (arg.array) for (i = 0; i < s->nsems; i++) arg.array[i] = s->val[i]; break;
+	case SETALL:
+		if (arg.array) for (i = 0; i < s->nsems; i++) s->val[i] = arg.array[i];
+		s->ds.sem_ctime = time(NULL); pthread_cond_broadcast(&sem_changed); break;
+	default: errno = EINVAL; r = -1; break;
+	}
+out:
+	pthread_mutex_unlock(&sem_lock);
+	return r;
 }

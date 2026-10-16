@@ -2,8 +2,9 @@
 # Builds the PDK runtime (Docs/pdk.md): the glibc a PDK app's binary was linked against,
 # SDL 1.2 with Lunacy's drivers, and Lunacy's libpdl, for 32-bit ARM. The runtime lives in
 # local-assets/pdk/ (the libraries, extracted to the app's files at first use) and
-# local-jni/armeabi-v7a/libld-linux.so (the dynamic loader, which has to be exec'd and so
-# lives with the native libraries). Both are gitignored, like fetch-assets.sh's output.
+# local-jni/<abi>/libld-linux.so (the dynamic loader, which has to be exec'd and so lives with
+# the native libraries; the 64-bit build carries it too, for a 64-bit device that can still run
+# 32-bit code). Both are gitignored, like fetch-assets.sh's output.
 #
 # Needs: the NDK's clang (r28c), qemu-arm-static (optional, for the host test), curl, dpkg-deb.
 # The glibc, libgcc, libstdc++ and zlib come from Debian bookworm's armel packages: soft-float
@@ -289,9 +290,11 @@ for abi in armeabi-v7a:armv7a-linux-androideabi21 arm64-v8a:aarch64-linux-androi
     -lEGL -lGLESv2 -landroid -llog -lm -o "$HERE/local-jni/${abi%%:*}/liblunacygl2.so"
 done
 # libenosys: the native path's guard on Android 10 and later, a bionic program that runs the
-# app as its ptrace child and answers the calls seccomp refuses with -ENOSYS (32-bit build only;
-# named lib*.so so the installer puts it with the native libraries, where it can be exec'd).
+# app as its ptrace child and answers the calls seccomp refuses with -ENOSYS (named lib*.so so
+# the installer puts it with the native libraries, where it can be exec'd). A 32-bit program in
+# both builds: the 64-bit one runs the native path too where the device runs 32-bit code.
 "$BIN/clang" --target=armv7a-linux-androideabi21 -O2 "$SRC/enosys/enosys.c" -o "$HERE/local-jni/armeabi-v7a/libenosys.so"
+mkdir -p "$JNI64"; cp "$HERE/local-jni/armeabi-v7a/libenosys.so" "$JNI64/libenosys.so"
 # libexecpdk: the preload in busybox's sh that runs a start script's webOS binary through the
 # loader or qemu (Docs/pdk.md, "Start scripts"); bionic, for both ABIs.
 for abi in armeabi-v7a:armv7a-linux-androideabi21 arm64-v8a:aarch64-linux-android21; do
@@ -370,6 +373,9 @@ cp $WORK/sysroot/usr/lib/arm-linux-gnueabi/libstdc++.so.6 "$OUT/lib/"
 # A build id, so that an installed Lunacy refreshes the extracted runtime when it changes.
 date -u +%Y-%m-%dT%H:%M:%SZ > "$OUT/BUILD"
 cp $WORK/sysroot/lib/ld-linux.so.3 "$JNI/libld-linux.so"
+# In the 64-bit build too, for the native path on a 64-bit device that runs 32-bit code
+# (PdkRuntime.loader); one that can't still runs the app under qemu.
+cp $WORK/sysroot/lib/ld-linux.so.3 "$JNI64/libld-linux.so"
 # The loader again, by its own name, for the emulated path: qemu loads the program and finds
 # its interpreter at /lib/ld-linux.so.3 under the runtime folder it is given as a sysroot.
 cp $WORK/sysroot/lib/ld-linux.so.3 "$OUT/lib/ld-linux.so.3"

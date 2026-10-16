@@ -14,6 +14,29 @@ typedef void *GLeglImageOES;
 
 #define STREAM_VERSION 1
 #include "client_transport.h"
+#include <dlfcn.h>
+
+/* ---- one driver, two libraries ----
+ * On the TouchPad libGLES_CM.so and libGLESv2.so were two faces of Qualcomm's one driver, and
+ * a function both APIs have acted on whichever context was current: glGetString in
+ * libGLES_CM.so answered "OpenGL ES 2.0" with a GLES 2 context. Here each library is its own
+ * stream, so with a GLES 2 context (Lunacy's SDL driver keeps the version asked for, as
+ * LUNACY_gl_major) such a call is handed to libGLESv2.so. apkenv's ports reach some of their
+ * GLES 2 calls through this library: Temple Run 2 was told "OpenGL ES-CM 1.1" and Fruit Ninja
+ * was told "OpenGL ES-CM 1.1" too (Docs/pdk.md, 6e). */
+static int live_es2(void)
+{
+	static int *major; static int looked;
+	if (!looked) { major = (int *)dlsym(RTLD_DEFAULT, "LUNACY_gl_major"); looked = 1; }
+	return major && *major == 2;
+}
+static void *es2_forward(const char *name)
+{
+	static void *h;
+	if (!h) h = dlopen("libGLESv2.so", RTLD_LAZY | RTLD_NOLOAD);
+	if (!h) h = dlopen("libGLESv2.so", RTLD_LAZY);
+	return h ? dlsym(h, name) : NULL;
+}
 
 static int client_unit;
 

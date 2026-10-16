@@ -241,7 +241,11 @@ reports is written up in [pre3.md](pre3.md).
   date is stock, and a patched file leaves a `.webosinternals.orig` beside it. Read the
   `.orig`.
 - **`systemProperties/Get` takes one `key`** on 2.2.4, not the TouchPad's `keys` array.
-- **No `takeScreenShot`** was tried here; the TouchPad's screenshot route is untested on 2.2.4.
+- **Screenshots work** as on the TouchPad: `TP_DEVICE=mantaray-linux Workbench/tpshot.sh <name> 0`
+  (480 x 800, upright with rotation 0). Checked 2026-10-16.
+- **Installed for measuring:** `org.webosarchive.lunacy.notifprobe` (Workbench/probe), a Mojo
+  app that opens banners, dashboards, a popup alert or a full-screen card from its launch
+  parameters (2026-10-16, [phone.md](phone.md) §7).
 
 ## The SDK's tools against Lunacy
 

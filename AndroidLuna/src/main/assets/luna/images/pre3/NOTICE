@@ -1,0 +1,13 @@
+dashboard-mask-top.png and dashboard-mask-bottom.png: the scroll fades over a phone's open
+notification area (LunaSysMgr's DashboardWindowContainer, the phone path), copied on
+2026-10-16 from /usr/palm/sysmgr/images/1.5/ on the reference Pre3 (AT&T, HP webOS 2.2.4,
+stock files). They are drawn for the Pre3's ScaleFactor of 1.5, and Lunacy decodes them at
+that density (Luna.pre3Image). HP webOS system images, not in LunaCE's repository; shipped
+as abandonware, like the Prelude fonts and the TouchPad wallpapers.
+
+mojo/dashboard-container.png, dashboard-container-active.png and dashboard-container-sprite.png:
+Mojo's dashboard boxes as the Pre3 drew them, copied on 2026-10-16 from
+/usr/palm/frameworks/mojo/submissions/383/images/ on the same Pre3. The TouchPad's Mojo ships
+these three transparent (its dashboards sit in the drop-down with no box); every other
+notification image is byte-identical between the two. In phone mode the app server serves
+these in place of mojocommon's (AppServer.asset). HP webOS framework images, abandonware.

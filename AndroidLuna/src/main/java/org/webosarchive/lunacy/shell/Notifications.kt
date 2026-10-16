@@ -25,15 +25,46 @@ import kotlin.math.abs
 class Banner(val id: Int, val window: AppWindow?, val appId: String, val text: String, val icon: Bitmap?, val params: String,
              val soundClass: String = "", val soundFile: String = "", val soundDuration: Int = 0)
 
+/** Where banners and the dashboards' icons are drawn: the status bar on a tablet, [NotificationArea]'s bar on a phone. */
+interface BannerSurface {
+    var banner: Banner?
+    /** 0…1: how far the banner on show has come in. */
+    var bannerProgress: Float
+    var bannerAlpha: Float
+    fun invalidate()
+    fun addNotificationIcon(key: Any, icon: Bitmap?)
+    fun removeNotificationIcon(key: Any)
+}
+
+/** Where the dashboards are: the drop-down on a tablet, [NotificationArea] on a phone. */
+interface DashboardHost {
+    val isOpen: Boolean
+    fun add(w: AppWindow)
+    fun remove(w: AppWindow)
+    fun open()
+    fun close()
+}
+
+/** Where popup alerts are: [PopupLayer] on a tablet, [NotificationArea] on a phone. */
+interface AlertHost {
+    val showing: Boolean
+    /** The alerts on show, oldest first, for a rebuilt shell to take (ShellActivity.reshell). */
+    val windows: List<AppWindow>
+    fun show(w: AppWindow, height: Int)
+    fun remove(w: AppWindow)
+    fun newest(): AppWindow?
+}
+
 /**
  * Banners, dashboards and popup alerts: Docs/luna-shell-reference.md §5. On the TouchPad banners
- * scroll inside the status bar; dashboards live in a drop-down under it.
+ * scroll inside the status bar; dashboards live in a drop-down under it. On a phone all three
+ * are the Pre3's area along the bottom of the screen ([NotificationArea], Docs/phone.md §7).
  */
 class Notifications(
     private val luna: Luna,
-    private val statusBar: StatusBar,
-    val menu: DashboardMenu,
-    val popups: PopupLayer,
+    private val statusBar: BannerSurface,
+    val menu: DashboardHost,
+    val popups: AlertHost,
     private val onBannerTap: (Banner) -> Unit,
     /** The last dashboard went away: the shell closes the drop-down (and its tap catcher). */
     private val onNoDashboards: () -> Unit = {},
@@ -153,6 +184,13 @@ class Notifications(
         statusBar.addNotificationIcon(w, icon)
     }
 
+    /** A dashboard's icon drawn again: the owner chose colour or grey (NotificationIcons). */
+    fun setIcon(w: AppWindow, icon: Bitmap?) {
+        if (!icons.containsKey(w)) return
+        icons[w] = icon
+        statusBar.addNotificationIcon(w, icon)
+    }
+
     fun removeDashboard(w: AppWindow) {
         if (!icons.containsKey(w)) return
         icons.remove(w)
@@ -169,7 +207,7 @@ class Notifications(
  * (DashboardWindowContainer::layoutAllWindowsInMenu). Rows swipe right to dismiss.
  */
 @SuppressLint("ViewConstructor")
-class DashboardMenu(context: Context, private val luna: Luna, private val onDismiss: (AppWindow) -> Unit) : FrameLayout(context) {
+class DashboardMenu(context: Context, private val luna: Luna, private val onDismiss: (AppWindow) -> Unit) : FrameLayout(context), DashboardHost {
     companion object {
         const val CONTENT_W = 320
         const val ROW_H = 52
@@ -208,7 +246,7 @@ class DashboardMenu(context: Context, private val luna: Luna, private val onDism
     private val scroller = object : android.widget.ScrollView(context) {
         override fun onScrollChanged(l: Int, t: Int, oldl: Int, oldt: Int) { super.onScrollChanged(l, t, oldl, oldt); updateMasks() }
     }.apply { isVerticalScrollBarEnabled = false; overScrollMode = OVER_SCROLL_NEVER }
-    var isOpen = false
+    override var isOpen = false
         private set
 
     init {
@@ -221,7 +259,7 @@ class DashboardMenu(context: Context, private val luna: Luna, private val onDism
         alpha = 0f
     }
 
-    fun add(w: AppWindow) {
+    override fun add(w: AppWindow) {
         val row = Row(w)
         // Newest first.
         rows.addView(row, 0, LinearLayout.LayoutParams(luna.px(CONTENT_W), luna.px(ROW_H)).apply {
@@ -238,7 +276,7 @@ class DashboardMenu(context: Context, private val luna: Luna, private val onDism
 
     private fun divider() = luna.image("menu-divider.png")?.height ?: luna.px(2)
 
-    fun remove(w: AppWindow) {
+    override fun remove(w: AppWindow) {
         for (i in 0 until rows.childCount) {
             val r = rows.getChildAt(i) as Row
             if (r.window == w) { r.removeView(w); rows.removeViewAt(i); break }
@@ -247,7 +285,7 @@ class DashboardMenu(context: Context, private val luna: Luna, private val onDism
         requestLayout()
     }
 
-    fun open() {
+    override fun open() {
         if (rows.childCount == 0) return
         isOpen = true
         focusAll(true)
@@ -258,7 +296,7 @@ class DashboardMenu(context: Context, private val luna: Luna, private val onDism
         post { updateMasks() }
     }
 
-    fun close() {
+    override fun close() {
         if (!isOpen) return
         isOpen = false
         focusAll(false)
@@ -375,12 +413,12 @@ class DashboardMenu(context: Context, private val luna: Luna, private val onDism
  * calendar reminder's dark body ends 15 px from the right edge and starts 15 px below the bar.
  */
 @SuppressLint("ViewConstructor")
-class PopupLayer(context: Context, private val luna: Luna) : FrameLayout(context) {
+class PopupLayer(context: Context, private val luna: Luna) : FrameLayout(context), AlertHost {
     companion object { const val WIDTH = 320; const val FRAME = 20; const val INSET = 5 }
 
     private val frames = LinkedHashMap<AppWindow, FrameLayout>()
 
-    fun show(w: AppWindow, height: Int) {
+    override fun show(w: AppWindow, height: Int) {
         val frame = object : FrameLayout(context) {
             init { setWillNotDraw(false) }
             override fun onDraw(c: Canvas) = luna.nine(c, "popup-bg.png", RectF(0f, 0f, width.toFloat(), this.height.toFloat()), FRAME, FRAME, FRAME, FRAME)
@@ -393,13 +431,12 @@ class PopupLayer(context: Context, private val luna: Luna) : FrameLayout(context
         frames[w] = frame
     }
 
-    fun remove(w: AppWindow) {
+    override fun remove(w: AppWindow) {
         val f = frames.remove(w) ?: return
         f.removeView(w); removeView(f)
     }
 
-    val showing get() = frames.isNotEmpty()
-    /** The alerts on show, oldest first, for a rebuilt shell to take (ShellActivity.reshell). */
-    val windows: List<AppWindow> get() = frames.keys.toList()
-    fun newest(): AppWindow? = frames.keys.lastOrNull()
+    override val showing get() = frames.isNotEmpty()
+    override val windows: List<AppWindow> get() = frames.keys.toList()
+    override fun newest(): AppWindow? = frames.keys.lastOrNull()
 }

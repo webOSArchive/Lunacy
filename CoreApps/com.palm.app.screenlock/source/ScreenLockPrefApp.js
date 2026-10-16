@@ -50,6 +50,15 @@ enyo.kind({
 	        		]}
 	        	]},
 	        	{name:"layoutText", content: $L("Lunacy will restart to apply."), className:"accounts-gestures-text"},
+	        	// [Lunacy] Apps' icons in the notifications in colour, as on webOS phones, or grey,
+	        	// as on the TouchPad: the owner's choice, on every layout (codepoet, 2026-10-16).
+	        	{kind: "RowGroup", caption:$L("Notifications"), components: [
+	        		{kind: "Item", tapHighlight: false, layoutKind: "HFlexLayout", components: [
+	        			{flex:1, content: $L("App Icons")},
+	        			{kind: "ToggleButton", name:"colourNotificationIcons", state:true, onLabel:$L("Color"), offLabel:$L("Gray"), onChange:"toggleNotificationIcons"}
+	        		]}
+	        	]},
+	        	{content: $L("Apps' icons in notifications show in color, as on webOS phones, or gray, as on the TouchPad."), className:"accounts-gestures-text"},
 	        	{kind: "RowGroup", caption:$L("Wallpaper"),
 	        		components: [
 	        		             {kind: "Item", tapHighlight: true, layoutKind: "HFlexLayout", onclick:"launchFilePicker", components: [{content: $L("Change Wallpaper")}]},
@@ -130,7 +139,8 @@ enyo.kind({
 					{kind:"PalmService", service:"palm://org.webosarchive.lunacy/", components:[
 						{name:"getEnvironment", method:"system/getEnvironment", onResponse:"handleGetEnvironment"},
 						{name:"setLayout", method:"system/setLayout", onResponse:"handleSetLayout"},
-						{name:"setHostWallpaper", method:"system/setHostWallpaper", onResponse:"handleSetHostWallpaper"}
+						{name:"setHostWallpaper", method:"system/setHostWallpaper", onResponse:"handleSetHostWallpaper"},
+						{name:"setNotificationIcons", method:"system/setNotificationIcons", onResponse:"handleSetNotificationIcons"}
 					]},
 						{name:'imagePicker', kind: "FilePicker", fileType:["image"], onPickFile: "selectedImageFile"},                  
 	    				{kind:"SetPasswordDialog", lazy:false, onCancel:"handleSetPasswordCancel", onDone:"handleSetPasswordDone"},                 
@@ -208,6 +218,9 @@ enyo.kind({
 		if (inResponse && inResponse.hostWallpaper !== undefined) {
 			this.$.hostWallpaper.setState(inResponse.hostWallpaper);
 		}
+		if (inResponse && inResponse.colourNotificationIcons !== undefined) {
+			this.$.colourNotificationIcons.setState(inResponse.colourNotificationIcons);
+		}
 		var y = inResponse && inResponse.layout;
 		if (!y) { return; }
 		var name = {phone: $L("phone"), tablet: $L("tablet")};
@@ -231,6 +244,16 @@ enyo.kind({
 	handleSetHostWallpaper: function(inSender, inResponse) {
 		if (!inResponse || !inResponse.returnValue) {
 			this.showDialog((inResponse && inResponse.errorText) || $L("Unable to set Android's wallpaper"));
+			this.$.getEnvironment.call({});
+		}
+	},
+	// [Lunacy] Notification icons in colour or grey.
+	toggleNotificationIcons: function(inSender, inEvent) {
+		this.$.setNotificationIcons.call({colour: inSender.getState()});
+	},
+	handleSetNotificationIcons: function(inSender, inResponse) {
+		if (!inResponse || !inResponse.returnValue) {
+			this.showDialog((inResponse && inResponse.errorText) || $L("Unable to set the notification icons"));
 			this.$.getEnvironment.call({});
 		}
 	},

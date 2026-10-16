@@ -18,7 +18,9 @@ Enyo/Mojo frameworks and a simulated Luna service bus. Read [README.md](README.m
    moving the work, never by changing what the screen does (the 2026-09-26 launching card:
    the card waits in the card view as on a device, and the page loads behind it). Where the
    engine forces a difference, it is measured, recorded in `Docs/luna-deltas.md`, and kept
-   as small as the engine allows. codepoet decides every exception.
+   as small as the engine allows. codepoet decides every exception. In phone mode the
+   reference is the Pre3 (HP webOS 2.2.4) wherever it has an equivalent, measured on it the
+   same way (codepoet, 2026-10-16; first case: notifications at the bottom of the screen).
 1. **No per-app hacks.** Fix the modernized framework or the global compat layer. If an app
    seems to need a special case, find the general fix. The only allowed per-app setting is the
    fixed-viewport fallback.

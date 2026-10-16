@@ -202,6 +202,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var groupOverlay: GroupOverlay
     private var launcherOpen = false
     private lateinit var notifications: Notifications
+    /** A phone's notifications, along the bottom of the screen (the Pre3's); null on a tablet. */
+    private var area: NotificationArea? = null
+    /** The TouchPad's hosts, from the bar: a tablet's, and a phone's in landscape. */
+    private lateinit var barMenu: DashboardMenu
+    private lateinit var barPopups: PopupLayer
+    /** Whether the notifications are in [area] now: a phone held upright. */
+    private var notificationsAtBottom = false
     private lateinit var systemMenu: SystemMenu
     /** Exhibition mode: webOS's dock-mode clock, over everything, while it is on. */
     private lateinit var exhibition: ExhibitionLayer
@@ -347,6 +354,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // The icon glows first; the launch follows a frame later, so the glow is seen.
         launcher = Launcher(this, luna) { app -> launcher.postDelayed({ launch(app.id); closeLauncher() }, LAUNCH_DELAY_MS) }
         PinnedShortcuts.onChanged = ::shortcutsChanged
+        org.webosarchive.lunacy.card.NotificationIcons.onChanged = ::notificationIconsChanged
         if (android.os.Build.VERSION.SDK_INT >= 26) watchShortcuts()
         launcher.onRemove = { app -> remove(app) }
         launcher.appTitle = { id -> registry.get(id)?.title }
@@ -438,12 +446,20 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         root.addView(menu, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
             topMargin = luna.px(StatusBar.HEIGHT); gravity = android.view.Gravity.TOP or android.view.Gravity.START
         })
-        notifications = Notifications(luna, statusBar, menu, popups, onBannerTap = { b ->
-            closeMenu()
-            launch(b.appId, try { JSONObject(b.params) } catch (e: Exception) { null })
-        }, onNoDashboards = { closeMenu() }, onBannerShown = { b ->
-            sounds.play(b.appId, b.soundClass, b.soundFile, b.soundDuration)
-        })
+        // A phone's are the Pre3's, in an area along the bottom that the shell's root gives way
+        // to (NotificationArea, Docs/phone.md §7); a tablet's are the TouchPad's, from the bar.
+        area = if (!luna.phone) null else NotificationArea(this, luna) { w -> notifications.removeDashboard(w); closeWindow(w) }.also { a ->
+            screen.addView(a, FrameLayout.LayoutParams(MATCH_PARENT, 0).apply { gravity = android.view.Gravity.BOTTOM })
+            a.onSpace = { px ->
+                (root.layoutParams as FrameLayout.LayoutParams).let { lp -> if (lp.bottomMargin != px) { lp.bottomMargin = px; root.layoutParams = lp } }
+            }
+            a.onNotificationTap = { if (!notifications.tapBanner()) toggleMenu() }
+            statusBar.onSlide = { hidden -> a.fullScreen = hidden }
+        }
+        barMenu = menu; barPopups = popups
+        notificationsAtBottom = wantNotificationsAtBottom()
+        org.webosarchive.lunacy.card.FormFactor.pre3Dashboards = notificationsAtBottom
+        notifications = newNotifications()
         statusBar.onNotificationTap = { if (!notifications.tapBanner()) toggleMenu() }
         // The system menu, right-aligned under the bar, its edge 11 px past the screen's.
         systemMenu = SystemMenu(this, luna)
@@ -480,6 +496,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (watchingPower) { unregisterReceiver(powerReceiver); watchingPower = false }
         if (::launcher.isInitialized) unregisterReceiver(packageReceiver)
         if (PinnedShortcuts.onChanged == ::shortcutsChanged) PinnedShortcuts.onChanged = null
+        if (org.webosarchive.lunacy.card.NotificationIcons.onChanged == ::notificationIconsChanged) org.webosarchive.lunacy.card.NotificationIcons.onChanged = null
         shortcutWatch?.let { if (android.os.Build.VERSION.SDK_INT >= 26) (getSystemService(LAUNCHER_APPS_SERVICE) as android.content.pm.LauncherApps).unregisterCallback(it as android.content.pm.LauncherApps.Callback) }
         if (watchingSystem) { unregisterReceiver(systemReceiver); watchingSystem = false }
         // Everything that would outlive the activity: the apps' pages (each a renderer in this
@@ -903,7 +920,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      */
     private fun icon(url: String?, appId: String): android.graphics.Bitmap? {
         if (!url.isNullOrEmpty()) server.serve(android.net.Uri.parse(url))?.takeIf { it.statusCode == 200 }?.let { luna.decode(it.data)?.let { b -> return b } }
-        return registry.get(appId)?.let { luna.miniIcon(it) }
+        return registry.get(appId)?.let { luna.miniIcon(it, org.webosarchive.lunacy.card.NotificationIcons.colour(this)) }
     }
 
     override fun addBanner(window: AppWindow, message: String, params: String, icon: String, soundClass: String, soundFile: String, duration: Int): Int {
@@ -1258,7 +1275,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun openMenu() {
         if (!notifications.hasDashboards || notifications.popups.showing) return
         statusBar.systemMenuOpen = false; systemMenu.close()
-        val menu = notifications.menu
+        // A phone's open over the bottom; a tap above them closes them (the soft dismiss).
+        if (notificationsAtBottom) { menuScrim.visibility = View.VISIBLE; notifications.menu.open(); return }
+        val menu = notifications.menu as DashboardMenu
         menu.measure(0, 0)
         (menu.layoutParams as FrameLayout.LayoutParams).leftMargin =
             // 15 px past the group's right edge, measured against the reference TouchPad.
@@ -1267,6 +1286,52 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         menuScrim.visibility = View.VISIBLE
         statusBar.menuOpen = true
         menu.open()
+    }
+
+    /**
+     * A phone held upright has the Pre3's notifications along the bottom; turned on its side
+     * it is short, so they go to the bar as on a tablet (a delta: the Pre3 kept them at the
+     * bottom; codepoet, 2026-10-16; Docs/luna-deltas.md B12).
+     */
+    private fun wantNotificationsAtBottom() =
+        area != null && resources.configuration.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
+    private fun newNotifications(): Notifications {
+        val a = area?.takeIf { notificationsAtBottom }
+        return Notifications(luna, a ?: statusBar, a ?: barMenu, a ?: barPopups, onBannerTap = { b ->
+            closeMenu()
+            launch(b.appId, try { JSONObject(b.params) } catch (e: Exception) { null })
+        }, onNoDashboards = { closeMenu() }, onBannerShown = { b ->
+            sounds.play(b.appId, b.soundClass, b.soundFile, b.soundDuration)
+        })
+    }
+
+    /** The owner chose colour or grey icons: the dashboards showing are drawn again. */
+    private fun notificationIconsChanged() {
+        notifications.dashboards.forEach { notifications.setIcon(it, icon(it.attributes.optString("icon"), it.appId)) }
+    }
+
+    /** The phone turned: its dashboards, alerts and banners move between the area and the bar. */
+    private fun placeNotifications() {
+        val bottom = wantNotificationsAtBottom()
+        if (bottom == notificationsAtBottom) return
+        closeMenu()
+        val old = notifications
+        val dashboards = old.dashboards
+        val alerts = old.popups.windows
+        val banners = old.handOverBanners()
+        dashboards.forEach { old.removeDashboard(it) }
+        alerts.forEach { old.popups.remove(it) }
+        (if (notificationsAtBottom) area!! as BannerSurface else statusBar).let { it.banner = null; it.invalidate() }
+        notificationsAtBottom = bottom
+        org.webosarchive.lunacy.card.FormFactor.pre3Dashboards = bottom
+        notifications = newNotifications()
+        dashboards.forEach { notifications.addDashboard(it, icon(it.attributes.optString("icon"), it.appId)) }
+        alerts.forEach { notifications.popups.show(it, it.attributes.optInt("height", 200)) }
+        notifications.takeBanners(banners)
+        statusBar.post { (dashboards + alerts).forEach { it.rescale() } }
+        // Their boxes are the other kind now (FormFactor.pre3Dashboards).
+        dashboards.forEach { it.evaluateJavascript(AppServer.REFETCH_LAYOUT_IMAGES, null) }
     }
 
     private fun closeMenu() {
@@ -1523,6 +1588,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         keyboardHeight = h
         val w = cards.maximized?.window
         val lp = cards.layoutParams as FrameLayout.LayoutParams
+        // A phone's notification area steps aside for the keyboard and comes back after it.
+        area?.suspended = h > 0
         if (h > 0) {
             w?.callMojo("keyboardShown", "true")
             if (w == null || w.keyboardResizes) { lp.bottomMargin = h; cards.layoutParams = lp }
@@ -1734,7 +1801,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         goImmersive()
         // A foldable folded or opened: the screen may now call for the other layout. Once the
         // display has its new size (the configuration can arrive first).
-        window.decorView.post { if (shownKind() != org.webosarchive.lunacy.card.FormFactor.decide(this)) reshell() }
+        window.decorView.post { if (shownKind() != org.webosarchive.lunacy.card.FormFactor.decide(this)) reshell() else placeNotifications() }
     }
 
     /**
@@ -1801,6 +1868,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         notifications.takeBanners(banners)
         // Once the pages are laid out in their new cards: the viewport is written from the card's size.
         cards.post { running.values.flatten().forEach { it.rescale() } }
+        // Pages loaded under the other layout fetch the images served by layout again.
+        running.values.flatten().forEach { it.evaluateJavascript(AppServer.REFETCH_LAYOUT_IMAGES, null) }
         cards.maximized?.let { onMaximized(it) } ?: onCardView()
         goImmersive()
     }

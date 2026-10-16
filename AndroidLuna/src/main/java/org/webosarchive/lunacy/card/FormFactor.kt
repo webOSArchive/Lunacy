@@ -76,6 +76,13 @@ object FormFactor {
      */
     @Volatile var shown: Kind? = null
 
+    /**
+     * Whether the shell's dashboards are in the Pre3's area along the bottom (a phone held
+     * upright), so Mojo's dashboard boxes are served as the Pre3's (AppServer.asset); in the
+     * TouchPad's drop-down - a tablet, or a phone on its side - they are the TouchPad's.
+     */
+    @Volatile var pre3Dashboards = false
+
     /** What the shell is: the layout it is showing, else what it would decide. */
     fun of(context: Context): Kind = shown ?: decide(context)
 

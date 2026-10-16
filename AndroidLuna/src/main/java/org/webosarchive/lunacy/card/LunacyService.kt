@@ -21,6 +21,7 @@ import java.io.File
  *
  * - `system/getEnvironment` reports what Lunacy actually runs on, for Lunacy's Device Info.
  * - `system/setHostWallpaper` is the opt-in to Android's wallpaper following webOS's.
+ * - `system/setNotificationIcons` chooses colour or grey app icons in the notifications.
  * - `android/openSettings` hands a setting that belongs to the host OS to Android's own UI.
  * - `permissions/status` and `permissions/request` are Android's runtime permissions, for
  *   Lunacy's First Use; `firstUse/done` is how First Use says it has run.
@@ -71,6 +72,7 @@ class LunacyService(
         bus.register(SERVICE, "system/setLayout") { caller, p, reply -> reply(setLayout(caller, p)) }
         bus.register(SERVICE, "system/setFixedViewport") { caller, p, reply -> reply(setFixedViewport(caller, p)) }
         bus.register(SERVICE, "system/setHostWallpaper") { caller, p, reply -> setHostWallpaper(caller, p, reply) }
+        bus.register(SERVICE, "system/setNotificationIcons") { caller, p, reply -> reply(setNotificationIcons(caller, p)) }
         bus.register(SERVICE, "android/openSettings") { _, p, reply -> reply(openSettings(p.optString("panel"))) }
         bus.register(SERVICE, "android/settingsPanels") { _, _, reply ->
             reply(Bus.ok(mapOf("panels" to org.json.JSONArray(PANELS.keys.sorted()))))
@@ -303,6 +305,7 @@ class LunacyService(
         j.put("display", display())
         j.put("layout", FormFactor.describe(context).put("appLayoutWidth", FormFactor.appLayoutWidth(context)))
         j.put("hostWallpaper", HostWallpaper.isOn(context))
+        j.put("colourNotificationIcons", NotificationIcons.colour(context))
         j.put("software", FixedViewport.describe(context, registry.apps.filter { it.androidComponent == null }.sortedBy { it.title.lowercase() }))
         return j.toString()
     }
@@ -433,6 +436,17 @@ class LunacyService(
         val app = registry.get(id) ?: return Bus.error("No app $id")
         FixedViewport.set(context, id, if (p.has("on")) p.optBoolean("on") else null)
         return Bus.ok(mapOf("id" to id, "on" to FixedViewport.isOn(context, id), "default" to FixedViewport.default(id), "title" to app.title))
+    }
+
+    /**
+     * Whether apps' icons in the notifications show in colour or grey ([NotificationIcons]):
+     * `colour` true or false. Lunacy's own apps only (Screen & Lock). The icons showing change at once.
+     */
+    private fun setNotificationIcons(caller: String, p: JSONObject): String {
+        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can set the notification icons (asked by $caller)", -1)
+        if (!p.has("colour")) return Bus.error("colour is true or false")
+        NotificationIcons.setColour(context, p.optBoolean("colour"))
+        return Bus.ok(mapOf("colour" to NotificationIcons.colour(context)))
     }
 
     /**

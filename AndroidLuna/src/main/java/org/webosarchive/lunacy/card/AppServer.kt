@@ -44,6 +44,21 @@ class AppServer(
         private val FRAMEWORK = Regex("(?:^|.*/)usr/palm/frameworks/enyo/[^/]+/(.*)")
         /** Mojo has no version folder: apps load /usr/palm/frameworks/mojo/mojo.js directly. */
         private val MOJO = Regex("(?:^|.*/)usr/palm/frameworks/mojo/(.*)")
+        private const val MOJO_IMAGES = "fw/mojocommon/images/"
+        /** Mojo's images that the Pre3 drew differently from the TouchPad (luna/images/pre3/NOTICE). */
+        private val PRE3_MOJO_IMAGES = setOf("dashboard-container.png", "dashboard-container-active.png", "dashboard-container-sprite.png")
+        /**
+         * Run in a page when the layout changes (a fold): its style rules that use the images
+         * above point at them again with a new query, so a page loaded under the other layout
+         * fetches the ones it is now served. A page keeps an image it has loaded until then.
+         */
+        val REFETCH_LAYOUT_IMAGES = "try{(function(r,t){var ss=document.styleSheets;" +
+            "for(var i=0;i<ss.length;i++){var c;try{c=ss[i].cssRules}catch(e){continue}if(!c)continue;" +
+            "for(var j=0;j<c.length;j++){var s=c[j].style;if(!s)continue;" +
+            "for(var k=0;k<s.length;k++){var p=s[k],v=s.getPropertyValue(p);" +
+            "if(v&&r.test(v)){r.lastIndex=0;s.setProperty(p,v.replace(r,'$1?layout='+t),s.getPropertyPriority(p))}r.lastIndex=0}}}" +
+            "})(/(images\\/(?:" + PRE3_MOJO_IMAGES.joinToString("|") { it.replace(".", "\\.") } +
+            "))(?:\\?layout=\\d+)?/g,Date.now())}catch(e){}"
         /** mojocommon sits beside Mojo; the submission's resources and images link into it. */
         private val MOJO_COMMON = Regex("(?:^|.*/)usr/palm/frameworks/mojocommon/(.*)")
         /**
@@ -250,7 +265,13 @@ class AppServer(
     }
 
     private fun asset(assetPath: String, name: String, resource: Boolean = false): WebResourceResponse? {
-        val path = if (assetPath.startsWith("fw/")) "fw/" + followLinks(assetPath.removePrefix("fw/")) else assetPath
+        var path = if (assetPath.startsWith("fw/")) "fw/" + followLinks(assetPath.removePrefix("fw/")) else assetPath
+        // Dashboards in a phone's bottom area wear the Pre3's boxes: the TouchPad's Mojo ships
+        // these three transparent, its dashboards sitting in the drop-down (Docs/phone.md §7).
+        // One rule for every app, by where the dashboards are, as the frameworks are served.
+        if (FormFactor.pre3Dashboards && path.startsWith(MOJO_IMAGES) && path.removePrefix(MOJO_IMAGES) in PRE3_MOJO_IMAGES) {
+            path = "luna/images/pre3/mojo/" + path.removePrefix(MOJO_IMAGES)
+        }
         val stream: InputStream = try { assets.open(path) } catch (e: IOException) { return null }
         return respond(stream, name, resource)
     }

@@ -33,7 +33,7 @@ import java.util.Date
  * cross-fades, the title's ▾ fades with whether an app is up, and icons slide in and out.
  */
 @SuppressLint("ViewConstructor")
-class StatusBar(context: Context, private val luna: Luna) : View(context) {
+class StatusBar(context: Context, private val luna: Luna) : View(context), BannerSurface {
     companion object {
         const val HEIGHT = 28  // TouchPad px; statusBar/status-bar-background.png is 28 high
         /** LunaCE's custom carrier string (sysUiCarrierString), shown when no app is maximized. */
@@ -135,12 +135,12 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
      * ones to its left (StatusBarNotificationArea paints its list from the right).
      */
     private val notif = LinkedHashMap<Any, SlidingIcon>()
-    fun addNotificationIcon(key: Any, icon: Bitmap?) {
+    override fun addNotificationIcon(key: Any, icon: Bitmap?) {
         val first = notif.values.none { it.shown }
         notif[key] = SlidingIcon(icon).also { it.set(true) }
         if (first) fadeNotificationGroup(true)
     }
-    fun removeNotificationIcon(key: Any) {
+    override fun removeNotificationIcon(key: Any) {
         val i = notif[key] ?: return
         i.set(false) {
             notif.remove(key)
@@ -161,10 +161,10 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
     }
 
     /** The banner scrolling in the notification area, and its animation state. */
-    var banner: Banner? = null
+    override var banner: Banner? = null
         set(v) { field = v; invalidate() }
-    var bannerProgress = 0f
-    var bannerAlpha = 1f
+    override var bannerProgress = 0f
+    override var bannerAlpha = 1f
     /** Tap on the notification area (banner or dashboard icons). */
     var onNotificationTap: () -> Unit = {}
     /** The title (with its ▾) was tapped while an app is up: the app menu. */
@@ -299,11 +299,15 @@ class StatusBar(context: Context, private val luna: Luna) : View(context) {
         }
     }
 
+    /** Told as the bar goes for a full-screen card or comes back: a phone's notification area goes with it. */
+    var onSlide: (hidden: Boolean) -> Unit = {}
+
     /**
      * A full-screen card is up: the bar slides off the top, and back when it isn't. 400 ms
      * OutCubic, as LunaSysMgr animated the positive space. [done] runs once it is back.
      */
     fun slide(hidden: Boolean, done: () -> Unit = {}) {
+        onSlide(hidden)
         val to = if (hidden) -height.toFloat() else 0f
         animate().cancel()
         if (translationY == to) { done(); return }

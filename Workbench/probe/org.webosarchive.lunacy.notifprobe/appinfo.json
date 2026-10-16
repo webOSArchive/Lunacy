@@ -1,0 +1,10 @@
+{
+	"id": "org.webosarchive.lunacy.notifprobe",
+	"version": "0.0.3",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Notification Probe",
+	"icon": "icon.png",
+	"noWindow": true
+}

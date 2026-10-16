@@ -7,6 +7,12 @@ webOS 3 shell to its phones and never got to it; this is Lunacy's reading of wha
 have been, the TouchPad's own parts tightened rather than another shell (codepoet: neither the
 Pre3's launcher nor LuneOS's is the model; the TouchPad's is).
 
+**Since 2026-10-16 the Pre3 is the reference wherever it has an equivalent** (codepoet: "rule 0
+now expands to cover Pre3 look and feel in phone mode, where applicable"). It is measured the
+way the TouchPad is: the reference Pre3 is `mantaray-linux` on novacom, and
+`palm://com.palm.systemmanager/takeScreenShot` works on it (`Workbench/tpshot.sh` with
+`TP_DEVICE=mantaray-linux`). The first part taken from it is the notifications (§7).
+
 Everything here is in TouchPad px, the shell's unit (one of them is `Luna.density` device
 px: 3 on a Nexus 5). Nothing here changes a tablet.
 
@@ -199,7 +205,61 @@ Two general fixes, nothing per app; neither changes a tablet.
   an Enyo patch and withdrawn the same day). codepoet expects most apps already bring their
   panels on themselves; Email and Photos were HP's unfinished ones.
 
-## 7. Not yet measured
+## 7. Notifications: the Pre3's (`NotificationArea`)
+
+A phone's banners, dashboards and popup alerts are the Pre3's, in an area along the bottom of
+the screen, not the TouchPad's status-bar icons and drop-down. Measured on the reference Pre3
+(HP webOS 2.2.4, 480 x 800 at its ScaleFactor of 1.5) on 2026-10-16 with
+`Workbench/probe/org.webosarchive.lunacy.notifprobe`, a Mojo app that opens banners,
+dashboards, a full-screen card and a popup alert on demand; the rules are LunaSysMgr's
+DashboardWindowManager where the dashboard owns the negative space, which Palm's 3.0 source
+keeps beside the TouchPad's (`!isOverlay()`). Pre3 px are given first, then shell px (÷ 1.5).
+
+| | Pre3 | Lunacy |
+|---|---|---|
+| Closed, with dashboards or a banner | a black bar 42 px high (PositiveSpaceBottomPadding) | 28 |
+| Its icons | packed against the right edge, newest rightmost, no gap, at most the bar's height (BannerWindow::paint); the app's icon in colour when the dashboard names none | the same; the mini icon stays in colour on a phone (`Luna.miniIcon`) |
+| A banner | rises into the bar from below over 1 s OutCubic and goes back down, linear, to 25 % (VerticalScroll); icon 7.5 px in, text after it, Prelude 24 px; the icons are hidden while it shows | the same timings as the tablet's banner; icon 24, text 16 |
+| Opened (the bar tapped) | each dashboard the full width and 78 px high (52 css), oldest at the top, newest at the bottom, under 10 px of padding; a new one joins at the bottom and the area grows upward | 52 per row, 6.7 padding |
+| Its most | 513 of 800 px, measured over Calculator; the oldest rows scroll off the top, with `dashboard-mask-top.png` where the list meets the card (and the bottom mask when there is more below) | `MAX_RATIO` 513 / 800 of the screen's height; a drag scrolls and snaps to a whole row, as restoreNonDeletedItems did |
+| A dashboard dismissed | swiped either way past a quarter of its width (codepoet, on the Pre3); it goes on off that side by 1.5 widths in 200 ms | the same; a `webosDragMode: "manual"` dashboard keeps all but its 50 px badge |
+| A tap on a row | opens its app with its launch parameters, the app's own doing | the same |
+| A tap above the area | closes it | the shell's scrim |
+| The rest of the shell | the card, launcher and card view end where the area begins; the area moves over 400 ms OutCubic (positiveSpaceChange) | the shell's root view gives up the area's height; see below |
+| A popup alert | the full width, at its own height, in the area | the same |
+| Over a full-screen card | no bar; a banner shows in a black bar laid over the page's bottom | the same |
+| Mojo's dashboard boxes | translucent rounded boxes (`dashboard-container*.png`) | the TouchPad's Mojo ships those three images transparent; on a phone the app server serves the Pre3's (`AppServer.asset`), the only notification images that differ. A page keeps an image it has loaded, so when the layout changes (a fold) `reshell` runs `AppServer.REFETCH_LAYOUT_IMAGES` in every open page, which points the rules using these three at a new URL and fetches them again |
+
+**The resize, moved off the screen.** On a device the positive space animated with the area.
+Here the area's top edge carries it over 400 ms, and the shell is told once (`onSpace`): when
+the area starts to shrink, so the card grows behind it, and when it has finished growing, so the
+card shrinks behind it. A page is laid out once per change, never every frame, and the screen
+never shows the gap. The list keeps its open height while closed so its pages are drawn before
+it opens.
+
+**The keyboard.** webOS phones had a hardware keyboard; LunaSysMgr put a keyboard device's
+notifications at the top (`dashboardOwnsNegativeSpace` is false with a virtual keyboard). Here
+the area steps aside while Android's keyboard is up and comes back after it.
+
+**On its side.** A phone turned to landscape is short and wide, more like a tablet, so its
+notifications go to the status bar and the TouchPad's drop-down, and come back down when it is
+turned upright again (codepoet, 2026-10-16; a delta, [luna-deltas.md](luna-deltas.md) B12).
+The dashboards, alerts and banners move with it (`ShellActivity.placeNotifications`), and
+Mojo's dashboard boxes follow where the dashboards are, not the layout. The Pre3 kept them at
+the bottom.
+
+**Icons.** An app's icon in the notifications is in colour or grey as the owner chooses in
+Screen & Lock, on every layout ([luna-deltas.md](luna-deltas.md) B13).
+
+**Left as they are, for now.**
+- The Pre3 rounds the card's corners where it meets the area and the status bar
+  (`wm-corner-*.png`, MenuWindowManager::showOrHideRoundedCorners); a phone's maximized card is
+  still the TouchPad's plain rectangle.
+- codepoet's idea for Android's noisier notifications: past five or six rows, stack the rest
+  as a row of icons. A delta from the Pre3 if taken; nothing yet feeds Android's own
+  notifications to the area.
+
+## 8. Not yet measured
 
 - Nothing here has been put beside a Pre3 or a TouchPad in the same state; the TouchPad in
   portrait was at its lock screen when the first screenshots were taken.

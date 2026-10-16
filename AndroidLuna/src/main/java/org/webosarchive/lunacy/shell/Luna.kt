@@ -59,6 +59,18 @@ class Luna(private val context: Context,
         } catch (e: Exception) { null }
     }
 
+    /**
+     * An image from the Pre3 (images/pre3/), drawn at its ScaleFactor of 1.5: decoded so that
+     * 1.5 of its px are one shell px, as a phone's shell px is the Pre3's own (see [density]).
+     */
+    fun pre3Image(name: String): Bitmap? = bitmaps.memo("pre3/$name") {
+        try {
+            context.assets.open("luna/images/pre3/$name").use {
+                BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inDensity = 240; inTargetDensity = targetDpi; inScaled = true })
+            }
+        } catch (e: Exception) { null }
+    }
+
     /** Decodes an image stream drawn in TouchPad px (app icons, dashboard icons) at shell scale. */
     fun decode(stream: java.io.InputStream?): Bitmap? = try {
         stream?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inDensity = 160; inTargetDensity = targetDpi; inScaled = true }) }
@@ -98,16 +110,18 @@ class Luna(private val context: Context,
     /**
      * An app's mini icon, which a dashboard or banner without an icon of its own shows in the
      * status bar: the app's `miniicon`, or else - as ApplicationDescription::miniIcon made one -
-     * its launcher icon squeezed to positiveSpaceBottomPadding (28 px) square and turned grey,
-     * each pixel the average of its red, green and blue. Measured on the reference TouchPad:
-     * a dashboard from an app without a mini icon shows its icon grey.
+     * its launcher icon squeezed to positiveSpaceBottomPadding (28 px) square, and turned grey
+     * unless [colour], each pixel the average of its red, green and blue. Measured: the reference
+     * TouchPad shows it grey, the reference Pre3 (webOS 2.2.4) in colour; which is the owner's
+     * choice (NotificationIcons).
      */
-    fun miniIcon(app: org.webosarchive.lunacy.card.AppInfo): Bitmap? =
-        bitmaps.memo("mini:${app.id}:${app.version}") {
+    fun miniIcon(app: org.webosarchive.lunacy.card.AppInfo, colour: Boolean): Bitmap? =
+        bitmaps.memo("mini:${app.id}:${app.version}:$colour") {
             decode(app.openMiniIcon())?.let { return@memo it }
             val icon = decode(app.openIcon()) ?: return@memo null
             val size = px(28)
             val b = Bitmap.createScaledBitmap(icon, size, size, true).copy(Bitmap.Config.ARGB_8888, true)
+            if (colour) return@memo b
             val px = IntArray(size * size)
             b.getPixels(px, 0, size, 0, 0, size, size)
             for (i in px.indices) {

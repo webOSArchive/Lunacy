@@ -157,6 +157,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         const val ICON_DY = -10f
         const val LABEL_W = 80f
         const val LABEL_PX = 13f          // the TouchPad's 14 px bold read heavy under a 56 px icon (codepoet, 2026-10-03)
+        const val LABEL_GAP = 5f          // the TouchPad's 2 sat too close under full-bleed icons and groups (codepoet, 2026-10-16)
         const val LEFT_MARGIN = 6f
         const val TOP_MARGIN = 18f
         const val ROW_GAP = 9f
@@ -173,6 +174,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private val icon = if (phone) Phone.ICON else Params.ICON
     private val iconDy = if (phone) Phone.ICON_DY else Params.ICON_DY
     private val labelW = if (phone) Phone.LABEL_W else Params.LABEL_W
+    private val labelGap = if (phone) Phone.LABEL_GAP else Params.LABEL_GAP
     private val leftMargin = if (phone) Phone.LEFT_MARGIN else Params.LEFT_MARGIN
     private val topMargin = if (phone) Phone.TOP_MARGIN else Params.TOP_MARGIN
     private val rowGap = if (phone) Phone.ROW_GAP else Params.ROW_GAP
@@ -460,7 +462,11 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private fun rowPitch() = luna.px(rowH + rowGap)
     private fun cellCentre(i: Int): PointF {
         val n = columns()
-        val x = luna.px(leftMargin) + (i % n) * columnPitch() + luna.px(cell) / 2
+        // A phone's cells sit in the middle of their column, the spare width split either side,
+        // so the grid is centred whatever number of columns fits. The tablet keeps the
+        // TouchPad's left margin, as measured.
+        val inset = if (phone) luna.px(columnLayout().second.toFloat()) / 2 else 0f
+        val x = luna.px(leftMargin) + inset + (i % n) * columnPitch() + luna.px(cell) / 2
         val y = pageTop() + luna.px(topMargin) + (i / n) * rowPitch() + luna.px(rowH) / 2
         return PointF(x, y)
     }
@@ -588,7 +594,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val faded = Paint(Paint.FILTER_BITMAP_FLAG).apply { alpha = 128 }
         luna.image("default-app-icon.png")?.let { c.drawBitmap(it, null, RectF(centre.x - half, iy - half, centre.x + half, iy + half), faded) }
         val layout = labels.getOrPut("installing:" + inst.title) { twoLineLabel(inst.title) }
-        c.save(); c.translate(centre.x - layout.width / 2f, iy + half + luna.px(Params.LABEL_GAP)); layout.draw(c); c.restore()
+        c.save(); c.translate(centre.x - layout.width / 2f, iy + half + luna.px(labelGap)); layout.draw(c); c.restore()
         val frame = (inst.progress * (Params.INSTALL_FRAMES - 1) / 100).coerceIn(0, Params.INSTALL_FRAMES - 1)
         luna.sprite(c, "loading-strip.png", centre.x + luna.px(Params.INSTALL_DX), centre.y + luna.px(Params.INSTALL_DY), 0, frame * 32, 32, 32)
     }
@@ -612,10 +618,13 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             luna.image("launcher3/launcher-touch-feedback.png")?.let { c.drawBitmap(it, null, RectF(cx - gh, iy - gh, cx + gh, iy + gh), null) }
         }
         val composite = groupComposites.getOrPut(g.id + ":" + g.members.joinToString(",") { it.id }) { GroupArt.composite(luna, g.members) }
-        val half = composite.width / 2f
-        c.drawBitmap(composite, cx - half, iy - composite.height / 2f, null)
+        // On a phone the art shrinks with the icons (seven-eighths), and the label goes under
+        // the art, which stands taller than an icon.
+        val scale = icon / Params.ICON
+        val hw = composite.width * scale / 2f; val hh = composite.height * scale / 2f
+        c.drawBitmap(composite, null, RectF(cx - hw, iy - hh, cx + hw, iy + hh), null)
         val layout = labels.getOrPut("group:" + g.name) { twoLineLabel(g.name) }
-        c.save(); c.translate(cx - layout.width / 2f, iy + luna.px(icon) / 2 + luna.px(Params.LABEL_GAP)); layout.draw(c); c.restore()
+        c.save(); c.translate(cx - layout.width / 2f, iy + (if (phone) max(luna.px(icon) / 2, hh) else luna.px(icon) / 2) + luna.px(labelGap)); layout.draw(c); c.restore()
     }
     private val groupComposites = HashMap<String, android.graphics.Bitmap>()
 
@@ -632,7 +641,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val bmp = luna.appIcon(app) ?: luna.image("default-app-icon.png")
         bmp?.let { c.drawBitmap(it, null, RectF(cx - half, iy - half, cx + half, iy + half), null) }
         val layout = labels.getOrPut(app.id) { twoLineLabel(app.title) }
-        c.save(); c.translate(cx - layout.width / 2f, iy + half + luna.px(Params.LABEL_GAP)); layout.draw(c); c.restore()
+        c.save(); c.translate(cx - layout.width / 2f, iy + half + luna.px(labelGap)); layout.draw(c); c.restore()
         if (editing && app.removable && (dragging as? Tile.App)?.app != app) {
             val d = deleteCentre(centre)
             drawDelete(c, d.x, d.y, pressed = pressedDelete == app.id)
@@ -655,11 +664,20 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private fun drawDone(c: Canvas, r: RectF, pressed: Boolean) =
         luna.sprite(c, "launcher3/edit-button-done.png", r.centerX(), r.centerY(), 1, if (pressed) 42 else 2, 98, 34)
 
-    /** Centred, wrapped to at most two lines, the second elided with "…" (API 21 has no maxLines). */
+    /**
+     * Centred, wrapped to at most two lines, the second elided with "…" (API 21 has no maxLines).
+     * The TouchPad wraps at a word boundary or anywhere (IconBase::redoLabelTextLayout), so a word too
+     * wide for the label breaks mid-word, as it does here on a tablet. A phone's narrower label
+     * hits that far more often ("Authenticato" over "r"), so there a word that won't fit on a
+     * line is elided on its own line instead (codepoet, 2026-10-16).
+     */
     @Suppress("DEPRECATION")
-    private fun twoLineLabel(text: String): StaticLayout {
+    private fun twoLineLabel(title: String): StaticLayout {
         val w = luna.px(labelW).toInt()
         fun make(t: CharSequence) = StaticLayout(t, label, w, Layout.Alignment.ALIGN_CENTER, 1f, 0f, false)
+        val text = if (!phone) title else title.split(' ').joinToString(" ") {
+            if (label.measureText(it) <= w) it else TextUtils.ellipsize(it, label, w.toFloat(), TextUtils.TruncateAt.END).toString()
+        }
         val full = make(text)
         if (full.lineCount <= 2) return full
         val second = text.substring(full.getLineStart(1))

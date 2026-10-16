@@ -397,6 +397,7 @@ arrived. Lunacy 0.7.2 (build 249) was already installed.
 | Screen timeout and stay-on (2026-10-14) | `settings put system screen_off_timeout 1800000` and `svc power stayon true` while testing; put back to 30000 and `stayon false` afterwards | |
 | Screens captured (2026-10-14) | `screencap -d <id>`: 4630947232161729155 is the cover screen, 4630947232161729154 the inner one | Without `-d` it warns and picks the first. |
 | Build 266 (2026-10-16) | adb now answers on `192.168.10.175:5555` (tcpip; 44439 refused); the arm64 debug build 266 installed with `adb install -r` over build 264, at codepoet's request | Data kept |
+| Launcher tweaks (2026-10-16) | Three arm64 debug builds (266 plus the centred phone grid, elided long words, label spacing) installed with `adb install -r`; Lunacy started with its HOME intent; the launcher opened and its tabs scrolled with `input tap`/`swipe`; cover-screen screenshots | Data kept |
 
 When the phone doesn't show in `adb devices` although it is on USB with debugging on, restart
 the adb server (`adb kill-server`).

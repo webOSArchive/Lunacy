@@ -969,13 +969,24 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
 
     private class DialogLayout(val frame: RectF, val title: StaticLayout, val titleY: Float, val message: StaticLayout, val messageY: Float, val buttons: List<RectF>)
 
+    /** An Android app's own name, for the shortcut it pinned; its package if it has none. */
+    private fun androidAppTitle(pkg: String): String = runCatching {
+        val pm = context.packageManager
+        pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+    }.getOrDefault(pkg)
+
     private fun dialogLayout(app: AppInfo): DialogLayout {
         val edge = luna.px(Params.DIALOG_EDGE); val margin = luna.px(Params.DIALOG_MARGIN)
-        // LauncherObject::appDeleteDecoratorActivated: a launch point an app added is a shortcut.
+        // LauncherObject::appDeleteDecoratorActivated: a launch point an app added is a shortcut,
+        // and so is one an Android app pinned (PinnedShortcuts), named by the app that pinned it.
         val lp = app.launchPoint
-        val title = dialogText(if (lp != null) "Remove Shortcut?" else "Remove Application?", dialogTitle)
-        val message = dialogText(if (lp != null) app.title + " (" + (appTitle(lp.appId) ?: lp.appId) + ")"
-            else app.title + " - v." + app.version, dialogMessage)
+        val pinnedBy = app.androidShortcut?.let { androidAppTitle(app.androidComponent!!.packageName) }
+        val title = dialogText(if (lp != null || pinnedBy != null) "Remove Shortcut?" else "Remove Application?", dialogTitle)
+        val message = dialogText(when {
+            lp != null -> app.title + " (" + (appTitle(lp.appId) ?: lp.appId) + ")"
+            pinnedBy != null -> "${app.title} ($pinnedBy)"
+            else -> app.title + " - v." + app.version
+        }, dialogMessage)
         val bh = luna.px(Params.DIALOG_BUTTON_H)
         val w = luna.px(Params.DIALOG_W)
         val h = title.height + message.height + 2 * bh + 2 * edge + 4 * margin + luna.px(Params.DIALOG_TOP)

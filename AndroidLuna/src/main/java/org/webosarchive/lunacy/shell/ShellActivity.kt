@@ -1244,6 +1244,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     private fun closeWindow(w: AppWindow) {
         pendingLoads.remove(w)
+        // A window that closes while holding the screen on lets it go.
+        if (screenAwake.remove(w)) holdScreen()
         val list = running[w.appId] ?: return
         list.remove(w)
         (w.parent as? android.view.ViewGroup)?.removeView(w)
@@ -1389,10 +1391,15 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     override fun blockScreenTimeout(window: AppWindow, block: Boolean) {
         if (block) screenAwake.add(window) else screenAwake.remove(window)
-        if (screenAwake.isEmpty()) {
-            this.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        holdScreen()
+    }
+
+    /** The screen stays on while exhibiting (the point of a dock) or while a window asks. */
+    private fun holdScreen() {
+        if (exhibitionOn || screenAwake.isNotEmpty()) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         } else {
-            this.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
 
@@ -1998,8 +2005,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             statusBar.setMode(StatusBar.Mode.APP)
             statusBar.slide(false)
             applyOrientation(null)
-            // The screen is meant to stay on while it is exhibiting: that is the point of a dock.
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            holdScreen()
         } else {
             closeExhibitionMenu()
             exhibition.animate().cancel()
@@ -2016,7 +2022,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             dockLayer.visibility = View.GONE
             exhibition.alpha = 1f
             cards.visibility = View.VISIBLE
-            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            holdScreen()
             if (dreamExhibition) endDreamExhibition()
             if (cards.maximized != null) onMaximized(cards.maximized!!) else onCardView()
         }

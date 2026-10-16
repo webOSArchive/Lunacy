@@ -377,6 +377,7 @@ Added to reproduce a community report. Since 2026-10-02 the phone layout's test 
 | Build 249 and a threader check (2026-10-13) | On the **Galaxy Tab A7 Lite** (Wi-Fi adb): the arm32 debug build 249 (0.7.2, commit 10c5550, chat threader 1.1.0.3) installed with `adb install -r`; Messaging opened, and an incoming message from an unknown sender (`lunacycheck`) written over DevTools as the transport writes one: the threader made a conversation and filed it; the message and the conversation were then purged | Nothing left behind |
 | Build 249 on the Pixel (2026-10-13) | On the **Pixel Tablet**, at codepoet's request: the arm64 release build 249 (0.7.2, commit 10c5550) installed over build 247 with `adb install -r` | Data kept |
 | Build 252 on the Pixel (2026-10-14) | On the **Pixel Tablet**, at codepoet's request: the arm64 release build 252 (uncommitted work on 10c5550's successor: the layout rebuild on a fold, Memos filling its card, the World Today row wiggle fix) installed over build 249 with `adb install -r` | Data kept |
+| Build 266 on the Pixel (2026-10-16) | On the **Pixel Tablet**, at codepoet's request: the arm64 release build 266 (uncommitted work on 5e651d2: a closed card lets go of the screen) installed with `adb install -r` over build 252; read-only `dumpsys power`/`window`, a screenshot | Data kept. Build 252 had held the screen on (a card's `blockScreenTimeout` outlived the card); after the install no screen wake lock is held |
 
 ## Galaxy Z Fold3, Android 15 (2026-10-14)
 
@@ -395,7 +396,20 @@ arrived. Lunacy 0.7.2 (build 249) was already installed.
 | Display size changed and reset (2026-10-14) | `wm size 1768x2208` as a stand-in for the inner screen, then `wm size 840x2289`, then `wm size reset` | **Not put back as it was.** The cover screen had an override of 840 x 2289 when the device arrived. Setting it again with `wm size` left it in force on display 0 once the phone was opened, so the inner screen showed Lunacy 840 px wide; `wm size reset` cleared it, and with it the original override. Don't use `wm size` on this device: display 0 is whichever panel is in use. |
 | Screen timeout and stay-on (2026-10-14) | `settings put system screen_off_timeout 1800000` and `svc power stayon true` while testing; put back to 30000 and `stayon false` afterwards | |
 | Screens captured (2026-10-14) | `screencap -d <id>`: 4630947232161729155 is the cover screen, 4630947232161729154 the inner one | Without `-d` it warns and picks the first. |
+| Build 266 (2026-10-16) | adb now answers on `192.168.10.175:5555` (tcpip; 44439 refused); the arm64 debug build 266 installed with `adb install -r` over build 264, at codepoet's request | Data kept |
 
 When the phone doesn't show in `adb devices` although it is on USB with debugging on, restart
 the adb server (`adb kill-server`).
 
+
+## Onyx Boox Go Color 7, Android 12L (2026-10-16)
+
+Added as the first e-ink test device, over USB (serial 6DB54121).
+
+**Device:** Onyx Boox Go Color 7 (`GoColor7`), Android 12L (API 32, firmware
+2026-05-19_23-44_4.2-rel_0519_c76f35ce8), `arm64-v8a` with 32-bit support, 3.6 GB of RAM,
+WebView 153.0.8010.57. Colour e-ink screen, 1264 x 1680 at 300 dpi. No Lunacy before.
+
+| Change | How | Note |
+|---|---|---|
+| Lunacy 0.7.2 (build 266) installed | `adb install` of the signed arm32 release, then `adb install -r` of the signed arm64 release over it, at codepoet's request | Boox disables a package installed over adb (`enabled=3`, `pm list packages -d`): `am start` says the activity "does not exist". `pm enable org.webosarchive.lunacy` turned it on, and it opens on First Use. |

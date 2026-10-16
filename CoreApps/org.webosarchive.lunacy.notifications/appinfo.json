@@ -1,0 +1,11 @@
+{
+	"id": "org.webosarchive.lunacy.notifications",
+	"version": "1.0.0",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Android Notifications",
+	"noWindow": true,
+	"visible": false,
+	"uiRevision": 2
+}

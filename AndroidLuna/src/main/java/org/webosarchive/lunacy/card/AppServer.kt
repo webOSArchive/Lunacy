@@ -160,6 +160,13 @@ class AppServer(
         if (path == "__lunacy/warm.html") return html(WARM_PAGE)
         if (path == "__lunacy/fonts-ready.js") return fontsReady(uri)
         if (path.startsWith("__lunacy/fonts/")) return font(path.removePrefix("__lunacy/fonts/"))
+        // An Android app's icon, for the Android Notifications app's dashboards only, and only
+        // while that app has a notification showing.
+        if (path.startsWith(AndroidNotifications.ICON_PATH.trimStart('/'))) {
+            val bytes = if (app == AndroidNotifications.APP_ID) AndroidNotifications.dashboardIcon(path.removePrefix(AndroidNotifications.ICON_PATH.trimStart('/')).removeSuffix(".svg")) else null
+            return bytes?.let { WebResourceResponse("image/svg+xml", "utf-8", 200, "OK", emptyMap(), ByteArrayInputStream(it)) }
+                ?: WebResourceResponse("text/plain", "utf-8", 404, "Not Found", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+        }
         if (path.startsWith("__lunacy/")) return asset("lunacy/" + path.removePrefix("__lunacy/"), path)
         // The TouchPad answers this one with 200 and an empty body; Enyo's Tellurium hooks
         // read it while starting, and a 404 makes them throw where a device doesn't.

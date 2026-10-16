@@ -121,16 +121,7 @@ class Luna(private val context: Context,
             val icon = decode(app.openIcon()) ?: return@memo null
             val size = px(28)
             val b = Bitmap.createScaledBitmap(icon, size, size, true).copy(Bitmap.Config.ARGB_8888, true)
-            if (colour) return@memo b
-            val px = IntArray(size * size)
-            b.getPixels(px, 0, size, 0, 0, size, size)
-            for (i in px.indices) {
-                val c = px[i]
-                val avg = (((c shr 16) and 0xFF) + ((c shr 8) and 0xFF) + (c and 0xFF)) / 3
-                px[i] = (c and 0xFF000000.toInt()) or (avg shl 16) or (avg shl 8) or avg
-            }
-            b.setPixels(px, 0, size, 0, 0, size, size)
-            b
+            if (colour) b else grey(b)
         }
 
     /**
@@ -213,6 +204,21 @@ class Luna(private val context: Context,
     }
 
     companion object {
+        /** [b] in grey, its alpha kept: the owner's choice for icons in the notifications (NotificationIcons). Returns a copy unless [b] is mutable. */
+        fun grey(b: Bitmap): Bitmap {
+            val g = if (b.isMutable && b.config == Bitmap.Config.ARGB_8888) b else b.copy(Bitmap.Config.ARGB_8888, true)
+            val w = g.width; val h = g.height
+            val px = IntArray(w * h)
+            g.getPixels(px, 0, w, 0, 0, w, h)
+            for (i in px.indices) {
+                val c = px[i]
+                val avg = (((c shr 16) and 0xFF) + ((c shr 8) and 0xFF) + (c and 0xFF)) / 3
+                px[i] = (c and 0xFF000000.toInt()) or (avg shl 16) or (avg shl 8) or avg
+            }
+            g.setPixels(px, 0, w, 0, 0, w, h)
+            return g
+        }
+
         /** The wallpaper the reference TouchPad uses. Choosing one comes with the settings UI. */
         const val DEFAULT_WALLPAPER = "22.jpg"
 

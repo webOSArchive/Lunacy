@@ -96,6 +96,17 @@
             </intent-filter>
             <meta-data android:name="android.service.dream" android:resource="@xml/dream" />
         </service>
+        <!-- Android's notifications, as webOS dashboards (card/AndroidNotifications.kt). Only
+             Android may bind it, and only once the owner allows it on Android's Notification
+             access screen; until then Lunacy sees nothing. -->
+        <service android:name=".card.AndroidNotificationListener"
+            android:exported="true"
+            android:label="Lunacy"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
         <!-- The gear beside that entry: opens Palm's Exhibition app, which owns the choice. -->
         <activity android:name=".shell.ExhibitionSettingsActivity" android:exported="true"
             android:theme="@android:style/Theme.NoDisplay" />

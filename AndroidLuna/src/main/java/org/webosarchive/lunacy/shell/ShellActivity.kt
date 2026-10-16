@@ -111,8 +111,23 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private val pinned by lazy { PinnedShortcuts(this, files, luna.px(Launcher.Params.ICON.toInt())) }
     /** Whether the shell is on screen (between onStart and onStop): a Home press then is Lunacy's own. */
     private var started = false
-    override fun onStart() { super.onStart(); started = true; sleepWake.check("shell") }
-    override fun onStop() { started = false; super.onStop() }
+    override fun onStart() {
+        super.onStart(); started = true; sleepWake.check("shell")
+        coveredCard?.let { w -> if (cards.maximized?.window == w) w.setStageActive(true) }
+        coveredCard = null
+    }
+    override fun onStop() {
+        // Another Android app has come over the shell with the screen on (Android's own
+        // settings, from Screen & Lock): the card on show has left the screen, as a card
+        // minimized to the card view had on webOS, and hears so; it is activated again on the
+        // way back, so a page that reads its state on activation finds what changed there.
+        // The screen going off leaves it as it was.
+        val interactive = (getSystemService(POWER_SERVICE) as android.os.PowerManager).isInteractive
+        if (interactive && ::cards.isInitialized) cards.maximized?.window?.let { it.setStageActive(false); coveredCard = it }
+        started = false; super.onStop()
+    }
+    /** The maximized card that another Android app covered, to be activated again ([onStop]). */
+    private var coveredCard: org.webosarchive.lunacy.card.AppWindow? = null
 
     /** Every app the launcher could show: webOS apps, the launch points they added, then Android's and the shortcuts pinned to it. */
     private fun allLaunchPoints(): List<AppInfo> {
@@ -163,6 +178,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             if (intent.action == android.content.Intent.ACTION_PACKAGE_REMOVED && intent.getBooleanExtra(android.content.Intent.EXTRA_REPLACING, false)) return
             if (pkg == packageName) return
             androidApps.forget(pkg)
+            org.webosarchive.lunacy.card.AndroidNotifications.forget(pkg)
             androidById.keys.filter { it.startsWith("${AndroidApps.PREFIX}$pkg/") }.forEach { luna.forgetIcons(it) }
             setLauncherApps()
             showDock()
@@ -285,7 +301,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "webOS root ready in ${System.currentTimeMillis() - t} ms")
             // What the ROM brought: its services and their db8 kinds, and any system apps.
             // Activities run once the root's services are on the bus, as webOS's waited for boot.
-            runOnUiThread { jsServices.reload(); nativeServices.reload(); appsChanged(); activityManager.enable(); powerService.enable(); afterFirstUse(); FontWarmer(this, server).warmWhenIdle() }
+            runOnUiThread { jsServices.reload(); nativeServices.reload(); appsChanged(); activityManager.enable(); powerService.enable(); afterFirstUse(); androidNotificationsChanged(); FontWarmer(this, server).warmWhenIdle() }
         }, "webos-root").start()
 
         sounds.preload()
@@ -355,6 +371,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         launcher = Launcher(this, luna) { app -> launcher.postDelayed({ launch(app.id); closeLauncher() }, LAUNCH_DELAY_MS) }
         PinnedShortcuts.onChanged = ::shortcutsChanged
         org.webosarchive.lunacy.card.NotificationIcons.onChanged = ::notificationIconsChanged
+        org.webosarchive.lunacy.card.AndroidNotifications.onChanged = ::androidNotificationsChanged
         if (android.os.Build.VERSION.SDK_INT >= 26) watchShortcuts()
         launcher.onRemove = { app -> remove(app) }
         launcher.appTitle = { id -> registry.get(id)?.title }
@@ -497,6 +514,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (::launcher.isInitialized) unregisterReceiver(packageReceiver)
         if (PinnedShortcuts.onChanged == ::shortcutsChanged) PinnedShortcuts.onChanged = null
         if (org.webosarchive.lunacy.card.NotificationIcons.onChanged == ::notificationIconsChanged) org.webosarchive.lunacy.card.NotificationIcons.onChanged = null
+        if (org.webosarchive.lunacy.card.AndroidNotifications.onChanged == ::androidNotificationsChanged) org.webosarchive.lunacy.card.AndroidNotifications.onChanged = null
         shortcutWatch?.let { if (android.os.Build.VERSION.SDK_INT >= 26) (getSystemService(LAUNCHER_APPS_SERVICE) as android.content.pm.LauncherApps).unregisterCallback(it as android.content.pm.LauncherApps.Callback) }
         if (watchingSystem) { unregisterReceiver(systemReceiver); watchingSystem = false }
         // Everything that would outlive the activity: the apps' pages (each a renderer in this
@@ -919,8 +937,24 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * icon, as LunaSysMgr fell back for both (DashboardWindow::icon, BannerMessageHandler::generateIcon).
      */
     private fun icon(url: String?, appId: String): android.graphics.Bitmap? {
-        if (!url.isNullOrEmpty()) server.serve(android.net.Uri.parse(url))?.takeIf { it.statusCode == 200 }?.let { luna.decode(it.data)?.let { b -> return b } }
-        return registry.get(appId)?.let { luna.miniIcon(it, org.webosarchive.lunacy.card.NotificationIcons.colour(this)) }
+        val colour = org.webosarchive.lunacy.card.NotificationIcons.colour(this)
+        if (url != null && url.startsWith("data:")) {
+            // How the Android Notifications app gives an Android app's icon: a launcher icon,
+            // so sized, and grey or not, as the mini icon made from one (Luna.miniIcon). A
+            // webOS icon's art fills about nine tenths of its square and Android's all of it,
+            // so it is drawn that much smaller in the middle, or it would fill the bar edge to edge.
+            runCatching {
+                android.util.Base64.decode(url.substringAfter(','), android.util.Base64.DEFAULT).let { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size) }
+            }.getOrNull()?.let {
+                val side = luna.px(28)
+                val sized = android.graphics.Bitmap.createBitmap(side, side, android.graphics.Bitmap.Config.ARGB_8888)
+                val inset = side * (1f - ANDROID_ICON_ART) / 2f
+                android.graphics.Canvas(sized).drawBitmap(it, null, android.graphics.RectF(inset, inset, side - inset, side - inset),
+                    android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG))
+                return if (colour) sized else Luna.grey(sized)
+            }
+        } else if (!url.isNullOrEmpty()) server.serve(android.net.Uri.parse(url))?.takeIf { it.statusCode == 200 }?.let { luna.decode(it.data)?.let { b -> return b } }
+        return registry.get(appId)?.let { luna.miniIcon(it, colour) }
     }
 
     override fun addBanner(window: AppWindow, message: String, params: String, icon: String, soundClass: String, soundFile: String, duration: Int): Int {
@@ -1311,6 +1345,22 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         notifications.dashboards.forEach { notifications.setIcon(it, icon(it.attributes.optString("icon"), it.appId)) }
     }
 
+    /**
+     * Android's notifications changed (AndroidNotifications): the Android Notifications app
+     * hears it, or, not running, is started to show them, headless, as a service starts an app
+     * on webOS. It ends again once its last dashboard goes. Not before the webOS root is up and
+     * First Use has run.
+     */
+    private fun androidNotificationsChanged() {
+        val service = lunacyService ?: return
+        service.notificationsChanged()
+        if (service.notificationsWatched || running.containsKey(ANDROID_NOTIFICATIONS_APP)) return
+        if (!org.webosarchive.lunacy.card.AndroidNotifications.any()) return
+        if (!::webos.isInitialized || !org.webosarchive.lunacy.card.LunacyService.firstUseDone(this)) return
+        if (registry.get(ANDROID_NOTIFICATIONS_APP) == null) return
+        launch(ANDROID_NOTIFICATIONS_APP, null, startupCard = false)
+    }
+
     /** The phone turned: its dashboards, alerts and banners move between the area and the bar. */
     private fun placeNotifications() {
         val bottom = wantNotificationsAtBottom()
@@ -1393,15 +1443,24 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         list.remove(w)
         (w.parent as? android.view.ViewGroup)?.removeView(w)
         w.destroy()
-        // An app ends when its last visible window closes; its headless root goes with it.
+        // An app ends when its last visible window closes; its headless root goes with it, a
+        // moment later: a dashboard swiped away tells the root as it unloads (Enyo's
+        // onUserClose), and the root acts on it, so it must still be there to hear it. A window
+        // it opens meanwhile keeps it.
         val app = registry.get(w.appId)
-        val visible = list.filter { it.parent != hidden }
-        if (visible.isEmpty() && (app?.noWindow == true || list.isEmpty())) {
-            list.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }
-            running.remove(w.appId)
-            endAppActivity(w.appId)
+        if (list.isEmpty()) endApp(w.appId, list)
+        else if (app?.noWindow == true && list.none { it.parent != hidden }) {
+            window.decorView.postDelayed({
+                if (running[w.appId] === list && list.none { it.parent != hidden }) endApp(w.appId, list)
+            }, HEADLESS_LINGER_MS)
         }
         if (cards.cards.isEmpty() && !exhibitionOn) onCardView()
+    }
+
+    private fun endApp(appId: String, list: MutableList<AppWindow>) {
+        list.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }
+        running.remove(appId)
+        endAppActivity(appId)
     }
 
     /**
@@ -2789,6 +2848,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         const val MEMORY_CHECK_MS = 10_000L
         /** WindowedWebApp's kShowWindowTimeoutMs: how long a loaded page gets to call stageReady. */
         const val SHOW_WINDOW_TIMEOUT_MS = 3000L
+        /** How long a headless app outlives its last visible window: long enough to hear that window go. */
+        const val HEADLESS_LINGER_MS = 1000L
+        /** How much of a webOS launcher icon's square its art fills (Lunacy's bundled apps' icons: 0.88 to 0.97): an Android icon in the bar is drawn this size. */
+        const val ANDROID_ICON_ART = 0.9f
+        /** Lunacy's app that shows Android's notifications as dashboards. */
+        const val ANDROID_NOTIFICATIONS_APP = "org.webosarchive.lunacy.notifications"
         /** How long after a headless app is up its placeholder card waits for it to open one. */
         const val PLACEHOLDER_GRACE_MS = 1000L
         const val MEMORY_CALM_MS = 30_000L

@@ -56,9 +56,16 @@ enyo.kind({
 	        		{kind: "Item", tapHighlight: false, layoutKind: "HFlexLayout", components: [
 	        			{flex:1, content: $L("App Icons")},
 	        			{kind: "ToggleButton", name:"colourNotificationIcons", state:true, onLabel:$L("Color"), offLabel:$L("Gray"), onChange:"toggleNotificationIcons"}
+	        		]},
+	        		// [Lunacy] Android's notifications as dashboards: on once the owner allows it on
+	        		// Android's own Notification access screen, which the switch opens either way.
+	        		{kind: "Item", tapHighlight: false, layoutKind: "HFlexLayout", components: [
+	        			{flex:1, content: $L("Android Apps")},
+	        			{kind: "ToggleButton", name:"androidNotifications", state:false, onChange:"toggleAndroidNotifications"}
 	        		]}
 	        	]},
 	        	{content: $L("Apps' icons in notifications show in color, as on webOS phones, or gray, as on the TouchPad."), className:"accounts-gestures-text"},
+	        	{content: $L("Android apps' notifications show here once you allow Lunacy on Android's Notification access screen. Lunacy only shows them: it keeps none and sends none anywhere."), className:"accounts-gestures-text"},
 	        	{kind: "RowGroup", caption:$L("Wallpaper"),
 	        		components: [
 	        		             {kind: "Item", tapHighlight: true, layoutKind: "HFlexLayout", onclick:"launchFilePicker", components: [{content: $L("Change Wallpaper")}]},
@@ -140,8 +147,11 @@ enyo.kind({
 						{name:"getEnvironment", method:"system/getEnvironment", onResponse:"handleGetEnvironment"},
 						{name:"setLayout", method:"system/setLayout", onResponse:"handleSetLayout"},
 						{name:"setHostWallpaper", method:"system/setHostWallpaper", onResponse:"handleSetHostWallpaper"},
-						{name:"setNotificationIcons", method:"system/setNotificationIcons", onResponse:"handleSetNotificationIcons"}
+						{name:"setNotificationIcons", method:"system/setNotificationIcons", onResponse:"handleSetNotificationIcons"},
+						{name:"openAndroidSettings", method:"android/openSettings", onResponse:"handleOpenAndroidSettings"}
 					]},
+					// [Lunacy] Back from Android's Notification access screen: the switch shows what was chosen there.
+					{kind:"ApplicationEvents", onWindowActivated:"refreshEnvironment"},
 						{name:'imagePicker', kind: "FilePicker", fileType:["image"], onPickFile: "selectedImageFile"},                  
 	    				{kind:"SetPasswordDialog", lazy:false, onCancel:"handleSetPasswordCancel", onDone:"handleSetPasswordDone"},                 
 	    				{kind:"PasswordUnlock", lazy:false, onCancelClick:"handleSetPasswordCancel", onPasswordVerified:"handleVerifyPasswordDone"},
@@ -221,6 +231,9 @@ enyo.kind({
 		if (inResponse && inResponse.colourNotificationIcons !== undefined) {
 			this.$.colourNotificationIcons.setState(inResponse.colourNotificationIcons);
 		}
+		if (inResponse && inResponse.androidNotifications !== undefined) {
+			this.$.androidNotifications.setState(inResponse.androidNotifications);
+		}
 		var y = inResponse && inResponse.layout;
 		if (!y) { return; }
 		var name = {phone: $L("phone"), tablet: $L("tablet")};
@@ -256,6 +269,19 @@ enyo.kind({
 			this.showDialog((inResponse && inResponse.errorText) || $L("Unable to set the notification icons"));
 			this.$.getEnvironment.call({});
 		}
+	},
+	// [Lunacy] Android's notifications: Android alone grants Lunacy access, on its own screen.
+	toggleAndroidNotifications: function(inSender, inEvent) {
+		this.$.openAndroidSettings.call({panel: "notificationaccess"});
+	},
+	handleOpenAndroidSettings: function(inSender, inResponse) {
+		if (!inResponse || !inResponse.returnValue) {
+			this.showDialog((inResponse && inResponse.errorText) || $L("Unable to open Android's Notification access settings"));
+		}
+		this.$.getEnvironment.call({});
+	},
+	refreshEnvironment: function() {
+		this.$.getEnvironment.call({});
 	},
 	launchFilePicker: function(inSender, inEvent) {	
 		this.$.imagePicker.pickFile();

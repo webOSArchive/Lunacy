@@ -380,8 +380,6 @@ corpus survey says how many apps this phase can reach, and whether it is worth d
   it still lacks, none of it started:
   - **Running Android apps have no cards.** Switching between them is Android's Recents,
     so "alongside webOS cards" isn't met. This is the largest gap.
-  - **Android's notifications don't reach Lunacy's notification area.** It needs a
-    `NotificationListenerService`, which the user grants on Android's own settings screen.
   - **Android apps are listed whether or not Lunacy is the home screen**, and the favorites
     page is renamed "android" for everyone. Decide whether both should follow being the
     default home screen.

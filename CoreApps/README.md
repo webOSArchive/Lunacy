@@ -32,6 +32,7 @@ changes is marked `[Lunacy]` in its source.
 | Video Player | `com.palm.app.videoplayer` | 1.0.0 | Palm, HP webOS 3.x (abandonware); no icon, launched by other apps |
 | Wi-Fi | `com.palm.app.wifi` | 1.0.0 | Lunacy's shortcut to Android's Wi-Fi settings |
 | First Use | `org.webosarchive.lunacy.firstuse` | 1.0.0 | Lunacy's own, in Palm's First Use look; no icon |
+| Android Notifications | `org.webosarchive.lunacy.notifications` | 1.0.0 | Lunacy's own: Android's notifications as Enyo dashboards ([luna-deltas B14](../Docs/luna-deltas.md)); headless, no icon |
 
 These folders hold only the apps. The services they talk to (mail, Exchange, calendar,
 contacts, accounts, photos) are the TouchPad's own (Photos' edit service is webOS CE's), laid into Lunacy's webOS root by

@@ -22,6 +22,8 @@ import java.io.File
  * - `system/getEnvironment` reports what Lunacy actually runs on, for Lunacy's Device Info.
  * - `system/setHostWallpaper` is the opt-in to Android's wallpaper following webOS's.
  * - `system/setNotificationIcons` chooses colour or grey app icons in the notifications.
+ * - `android/notifications`, `android/openNotification` and `android/dismissNotifications`
+ *   are Android's notifications, for Lunacy's Android Notifications app ([AndroidNotifications]).
  * - `android/openSettings` hands a setting that belongs to the host OS to Android's own UI.
  * - `permissions/status` and `permissions/request` are Android's runtime permissions, for
  *   Lunacy's First Use; `firstUse/done` is how First Use says it has run.
@@ -86,6 +88,52 @@ class LunacyService(
             reply(if (ownApp(caller)) pinStatus().toString() else Bus.error("Only Lunacy's own apps can pin apps (asked by $caller)", -1))
         }
         bus.register(SERVICE, "launcher/pin") { caller, p, reply -> reply(pin(caller, p)) }
+        bus.register(SERVICE, "android/notifications", Bus.CallHandler { call -> watchNotifications(call) })
+        bus.register(SERVICE, "android/openNotification") { caller, p, reply -> reply(openNotification(caller, p)) }
+        bus.register(SERVICE, "android/dismissNotifications") { caller, p, reply -> reply(dismissNotifications(caller, p)) }
+    }
+
+    // ---- Android's notifications, for the Android Notifications app ----
+
+    private val notificationWatchers = LinkedHashSet<Bus.Call>()
+
+    /**
+     * Every Android notification Lunacy shows, by app, with `alerts` for the ones just come
+     * in that want a banner, and `access` for whether the owner has allowed Lunacy to read
+     * them. A subscription hears it again whenever they change. Lunacy's own apps only.
+     */
+    private fun watchNotifications(call: Bus.Call) {
+        if (!ownApp(call.appId)) return call.reply(Bus.error("Only Lunacy's own apps can read Android's notifications (asked by ${call.appId})", -1))
+        call.reply(AndroidNotifications.snapshot(context, consume = true).toString())
+        if (call.subscribe && !call.cancelled) {
+            notificationWatchers += call
+            call.onCancel { main.post { notificationWatchers.remove(call) } }
+        }
+    }
+
+    /** Android's notifications changed: whoever is watching hears them; a banner is told once. */
+    fun notificationsChanged() {
+        if (notificationWatchers.isEmpty()) return
+        val r = AndroidNotifications.snapshot(context, consume = true).toString()
+        notificationWatchers.toList().forEach { it.reply(r) }
+    }
+
+    /** Whether the Android Notifications app is listening: if not, the shell starts it. */
+    val notificationsWatched get() = notificationWatchers.isNotEmpty()
+
+    /** A notification tapped: `key`. Its own intent is sent, as Android's shade does. */
+    private fun openNotification(caller: String, p: JSONObject): String {
+        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can open Android's notifications (asked by $caller)", -1)
+        val key = p.optString("key").ifEmpty { return Bus.error("key is required") }
+        return AndroidNotifications.open(context, key)?.let { Bus.error(it) } ?: Bus.ok()
+    }
+
+    /** Notifications swiped away: `keys`. They go from Android too. */
+    private fun dismissNotifications(caller: String, p: JSONObject): String {
+        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can dismiss Android's notifications (asked by $caller)", -1)
+        val a = p.optJSONArray("keys") ?: return Bus.error("keys is required")
+        AndroidNotifications.dismiss((0 until a.length()).map { a.optString(it) }.filter { it.isNotEmpty() })
+        return Bus.ok()
     }
 
     // ---- the launcher's apps, for Software Manager ----
@@ -306,6 +354,7 @@ class LunacyService(
         j.put("layout", FormFactor.describe(context).put("appLayoutWidth", FormFactor.appLayoutWidth(context)))
         j.put("hostWallpaper", HostWallpaper.isOn(context))
         j.put("colourNotificationIcons", NotificationIcons.colour(context))
+        j.put("androidNotifications", AndroidNotifications.accessGranted(context))
         j.put("software", FixedViewport.describe(context, registry.apps.filter { it.androidComponent == null }.sortedBy { it.title.lowercase() }))
         return j.toString()
     }
@@ -616,6 +665,9 @@ class LunacyService(
             "settings" to Settings.ACTION_SETTINGS,
             "input" to Settings.ACTION_INPUT_METHOD_SETTINGS,
             "battery" to Intent.ACTION_POWER_USAGE_SUMMARY,
+            // Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS, public from Android 5.1; the
+            // screen is there on 5.0 under the same action.
+            "notificationaccess" to "android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS",
         )
     }
 }

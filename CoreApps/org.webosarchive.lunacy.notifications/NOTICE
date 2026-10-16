@@ -1,0 +1,15 @@
+Lunacy's Android Notifications.
+
+With Lunacy as Android's home screen, Android's own notification shade is out of sight. This
+app shows Android's notifications the webOS way: one dashboard per Android app, its
+notifications stacked as the dashboard's layers, with a banner for the ones Android ranks as
+urgent. It has no window of its own; Lunacy starts it when there is something to show, and it
+ends when the last of its dashboards goes.
+
+The notifications come from palm://org.webosarchive.lunacy/android/notifications, which
+Lunacy only answers for its own apps, and only once the owner has allowed Lunacy to read
+Android's notifications on Android's Notification access screen. They are kept in memory
+while Android has them, and never written down or sent anywhere.
+
+The app's code is Lunacy's, under the same terms as the rest of Lunacy. Its dashboards are
+Enyo's own (enyo.Dashboard); it carries no art of its own.

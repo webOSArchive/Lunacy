@@ -96,7 +96,31 @@ class PdkWindow(
         val o = if (landscapeDevice) "right" else "up"
         if (o != fixedOrientation) { fixedOrientation = o; shell.orientationRequested(this) }
         gl?.turn(turn)
+        fitGl()
         frameView.invalidate()
+    }
+
+    /**
+     * The GL picture's view covers only the letterboxed picture, not the whole card. When the
+     * card changes shape - the screen turning for it on a tablet held the other way - a
+     * TextureView stretches its last frame to its new size until the next one comes, and an
+     * app loading draws none for seconds: over the whole card, Temple Run 2's splash stayed
+     * squashed into the card's old shape (HP 10 G2, 2026-10-16). Sized to the picture, the
+     * stretch keeps its shape.
+     */
+    private fun fitGl() {
+        val v = glView ?: return
+        val r = placement().first
+        @Suppress("DEPRECATION")
+        val lp = v.layoutParams as? AbsoluteLayout.LayoutParams ?: return
+        if (lp.x == r.left && lp.y == r.top && lp.width == r.width() && lp.height == r.height()) return
+        lp.x = r.left; lp.y = r.top; lp.width = r.width(); lp.height = r.height()
+        v.layoutParams = lp
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
+        super.onSizeChanged(w, h, ow, oh)
+        fitGl()
     }
 
     /** Starts the process. False if the runtime isn't in this build. */
@@ -158,6 +182,7 @@ class PdkWindow(
         @Suppress("DEPRECATION")
         addView(view, AbsoluteLayout.LayoutParams(AbsoluteLayout.LayoutParams.MATCH_PARENT, AbsoluteLayout.LayoutParams.MATCH_PARENT, 0, 0))
         frameView.bringToFront()
+        fitGl()
         orient()
     }
 
@@ -312,9 +337,14 @@ class PdkWindow(
     private var accelListener: android.hardware.SensorEventListener? = null
 
     /**
-     * Readings in the device's frame - the screen as the card holds it, x right, y up - and
-     * webOS's units, measured on the TouchPad: 1 g = 32768, y positive toward the top of the
-     * screen, z into it (the opposite of Android's z).
+     * Readings as webOS gave them (Workbench/probe/accelprobe on the reference TouchPad and
+     * turnprobe on the Pre3; Docs/pdk.md): 1 g = 32768, in the device's own hardware frame,
+     * which is portrait on both - the TouchPad's landscape screen doesn't turn it. With the
+     * TouchPad held landscape, home button on the right, axis 0 was -1 g upright and axis 1
+     * +0.5 g with the right edge lowered (2026-10-16); on the Pre3 axis 0 is positive with the
+     * right edge down. So against the screen, with g the way gravity pulls (x right, y up, z
+     * out of the screen): the TouchPad's axes are (gy, gx, gz), the Pre3's (gx, -gy, gz).
+     * Android's readings are the other way from gravity, in the card's frame.
      */
     private fun startAccel() {
         if (accelListener != null) return
@@ -330,8 +360,12 @@ class PdkWindow(
                     android.view.Surface.ROTATION_270 -> y to -x
                     else -> x to y
                 }
+                // Gravity in the card's frame is (-sx, -sy, -z). Sent as Android's axes were, every
+                // tilt game steered backwards, and sideways on the tablet profile.
                 val k = 32768f / android.hardware.SensorManager.GRAVITY_EARTH
-                host.accel((sx * k).toInt(), (sy * k).toInt(), (-z * k).toInt())
+                val gx = -sx * k; val gy = -sy * k; val gz = -z * k
+                if (landscapeDevice) host.accel(gy.toInt(), gx.toInt(), gz.toInt())
+                else host.accel(gx.toInt(), (-gy).toInt(), gz.toInt())
             }
             override fun onAccuracyChanged(s: android.hardware.Sensor, a: Int) {}
         }

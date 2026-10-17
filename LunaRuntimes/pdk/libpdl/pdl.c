@@ -193,12 +193,53 @@ double PDL_GetParamDouble(PDL_ServiceParameters *parms, const char *name) { retu
 PDL_bool PDL_GetParamBool(PDL_ServiceParameters *parms, const char *name) { return PDL_FALSE; }
 const char *PDL_GetParamJson(PDL_ServiceParameters *parms) { return "{}"; }
 
-/* ---- sensors: none yet ---- */
+/* ---- sensors: the accelerometer ----
+ *
+ * PDL_Sensors.h, as the reference TouchPad answered it (Workbench/probe/accelprobe, an
+ * installed PDK app, 2026-10-16): the accelerometer exists and enables; each reading is one
+ * event, about 40 a second, in g, in the screen's frame; a poll with nothing new answers
+ * PDL_NOERROR with the event's type PDL_SENSOR_NONE. Read at the same moment as SDL's
+ * joystick 0 on the stand, PDL gave (0.024, -0.772, -0.689) and the joystick (794, 25352,
+ * -22573): the same reading over 32768, its y the other way. So it comes from the same
+ * readings the shell sends the joystick (LPDK_ACCEL, SDL_lunacyjoystick.c). The other
+ * sensors aren't backed: they don't exist. Temple Run 2's port steers through this, and
+ * without it fell back to the joystick with apkenv's own axes, which steered backwards.
+ */
 
-PDL_bool PDL_SensorExists(PDL_SensorType sensor) { return PDL_FALSE; }
-PDL_Err PDL_EnableSensor(PDL_SensorType sensor, PDL_bool bEnable) { return PDL_NOTALLOWED; }
-PDL_Err PDL_PollSensor(PDL_SensorType sensor, PDL_SensorEvent *event) { return PDL_NOTALLOWED; }
-PDL_Err PDL_PollActiveSensors(PDL_SensorEvent *event) { return PDL_NOTALLOWED; }
+extern int LUNACY_accel[3], LUNACY_accel_count;   /* SDL_lunacyjoystick.c, written as SDL pumps events */
+static int accel_on, accel_seen;
+
+PDL_bool PDL_SensorExists(PDL_SensorType sensor) { return sensor == PDL_SENSOR_ACCELEROMETER ? PDL_TRUE : PDL_FALSE; }
+
+PDL_Err PDL_EnableSensor(PDL_SensorType sensor, PDL_bool bEnable)
+{
+	if (sensor != PDL_SENSOR_ACCELEROMETER) return PDL_NOTALLOWED;
+	accel_on = bEnable != PDL_FALSE;
+	accel_seen = LUNACY_accel_count;
+	return PDL_NOERROR;
+}
+
+static PDL_Err poll_accel(PDL_SensorEvent *event)
+{
+	if (!event) return PDL_INVALIDINPUT;
+	event->type = PDL_SENSOR_NONE;
+	if (!accel_on || LUNACY_accel_count == accel_seen) return PDL_NOERROR;
+	accel_seen = LUNACY_accel_count;
+	event->type = PDL_SENSOR_ACCELEROMETER;
+	event->accelerometer.type = PDL_SENSOR_ACCELEROMETER;
+	event->accelerometer.x = LUNACY_accel[0] / 32768.0f;
+	event->accelerometer.y = -LUNACY_accel[1] / 32768.0f;
+	event->accelerometer.z = LUNACY_accel[2] / 32768.0f;
+	return PDL_NOERROR;
+}
+
+PDL_Err PDL_PollSensor(PDL_SensorType sensor, PDL_SensorEvent *event)
+{
+	if (sensor != PDL_SENSOR_ACCELEROMETER) { if (event) event->type = PDL_SENSOR_NONE; return PDL_NOERROR; }
+	return poll_accel(event);
+}
+
+PDL_Err PDL_PollActiveSensors(PDL_SensorEvent *event) { return poll_accel(event); }
 
 /* ---- the JS side of a hybrid app (Docs/pdk.md, "Hybrid apps") ----
  *

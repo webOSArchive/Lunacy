@@ -431,6 +431,34 @@ The card reads Android's accelerometer while it is the active card, turns it int
 device's frame and those units, and sends it (`LPDK_ACCEL`); `SDL_lunacyjoystick.c` replaces
 SDL's Linux joystick driver. Readings are coalesced, latest wins.
 
+**Correction, 2026-10-16: the frame is the hardware's, not the screen's.** That measurement
+was taken with the TouchPad standing in portrait (codepoet), so "toward the top" was the
+portrait top. `Workbench/probe/accelprobe`, an installed PDK app, read PDL's accelerometer
+and joystick 0 together with the TouchPad held landscape, home button on the right:
+
+| | PDL (g) | joystick 0 |
+|---|---|---|
+| upright | (-0.806, 0.044, -0.690) | (-26413, -1435, -22605) |
+| right edge lowered | (-0.809, -0.505, -0.306) | (-26510, 16554, -10015) |
+| left edge lowered | (-0.893, 0.361, -0.442) | (-29247, -11841, -14471) |
+| standing in portrait | (0.024, -0.772, -0.689) | (794, 25352, -22573) |
+
+So both are in the TouchPad's own portrait frame, which its landscape PDK screen doesn't
+turn. Writing g for gravity's pull against the screen (x right, y up, z out of it), the
+TouchPad's joystick is (gy, gx, gz) x 32768 and PDL's accelerometer (gy, -gx, gz) in g: the
+joystick's reading with y the other way. The Pre3 (portrait screen, portrait hardware) gave
+axis 0 positive with the right edge down, so its joystick is (gx, -gy, gz). The card had
+sent Android's axes in the screen's frame, which steered tilt games backwards on phones and
+sideways on tablets (Temple Run 2, codepoet, every device); `PdkWindow` now sends each
+profile's frame.
+
+**PDL's sensors** (`PDL_Sensors.h`), as the TouchPad answered: the accelerometer exists
+and enables; each reading is one event, about 40 a second; a poll with nothing new answers
+`PDL_NOERROR` with the event's type `PDL_SENSOR_NONE`. Lunacy's libpdl answers from the
+joystick's readings, the accelerometer only. apkenv's ports read tilt through PDL (it found
+no joystick on webOS 3.0.5), and without it fell back to the joystick with apkenv's own
+axis swap.
+
 Everything the shell sends the app now goes from a thread of its own: Android's
 `LocalSocket.flush()` waits until the other end has read every byte, and a game reads its
 events only when it polls, so the accelerometer's 50 writes a second from the main thread
@@ -449,7 +477,7 @@ splash between about 3 and 8 seconds, then waits for taps on a black sky. Neithe
 Lunacy fault. On the phone profile, a TouchPad-only app sees a Pre3's screen, as it would have
 on a Pre3.
 
-Open (since done: hybrid apps, §6c): OpenSSL 0.9.8 and curl (about 50 apps); the accelerometer's x sign; PDL_ServiceCall to the bus.
+Open (since done: hybrid apps, §6c; the accelerometer's frame, above): OpenSSL 0.9.8 and curl (about 50 apps); PDL_ServiceCall to the bus.
 
 ## 6. Seen on the Nexus 5, 2026-10-02
 

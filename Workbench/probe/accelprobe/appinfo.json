@@ -1,0 +1,1 @@
+{"id": "org.webosarchive.lunacy.accelprobe", "version": "0.0.1", "vendor": "Lunacy", "type": "pdk", "main": "accelprobe", "title": "Accel Probe", "icon": "icon.png", "requiredMemory": 10}

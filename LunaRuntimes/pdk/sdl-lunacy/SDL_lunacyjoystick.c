@@ -16,6 +16,7 @@
 #include "../SDL_joystick_c.h"
 
 int LUNACY_accel[3];   /* written by the event reader (SDL_lunacyevents.c) */
+int LUNACY_accel_count;   /* readings so far, so libpdl can tell a new one */
 
 int SDL_SYS_JoystickInit(void) { return 1; }
 

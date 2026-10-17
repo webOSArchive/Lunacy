@@ -138,6 +138,7 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
     override fun addNotificationIcon(key: Any, icon: Bitmap?) {
         val first = notif.values.none { it.shown }
         notif[key] = SlidingIcon(icon).also { it.set(true) }
+        if (first && banner == null) { notifIconsAnim?.cancel(); notifIconsOpacity = 1f }
         if (first) fadeNotificationGroup(true)
     }
     override fun removeNotificationIcon(key: Any) {
@@ -175,14 +176,16 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
     /**
      * The ▾ and dashboard icons fade out while banners are queued and back after the last
      * (StatusBarNotificationArea::bmViewMessageCountUpdated, setIconsShown: 300 ms, linear, to
-     * 0), so the banner never draws over them. With no icons up the change is immediate.
+     * 0), so the banner never draws over them. With no icons up, they go to 0 at once and stay
+     * there after the banner, until the next dashboard arrives (slotDashboardWindowAdded), so
+     * the ▾ never shows while the emptied group fades out.
      */
     private var notifIconsOpacity = 1f
     private var notifIconsAnim: ValueAnimator? = null
     private fun fadeNotificationIcons(show: Boolean) {
         notifIconsAnim?.cancel()
         val to = if (show) 1f else 0f
-        if (notif.isEmpty()) { notifIconsOpacity = to; return }
+        if (notif.isEmpty()) { if (!show) notifIconsOpacity = 0f; return }
         notifIconsAnim = ValueAnimator.ofFloat(notifIconsOpacity, to).apply {
             duration = GROUP_FADE_MS; interpolator = Easing.Linear
             addUpdateListener { notifIconsOpacity = it.animatedValue as Float; invalidate() }

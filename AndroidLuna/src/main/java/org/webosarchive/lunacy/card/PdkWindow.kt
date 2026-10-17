@@ -113,9 +113,18 @@ class PdkWindow(
         val r = placement().first
         @Suppress("DEPRECATION")
         val lp = v.layoutParams as? AbsoluteLayout.LayoutParams ?: return
-        if (lp.x == r.left && lp.y == r.top && lp.width == r.width() && lp.height == r.height()) return
-        lp.x = r.left; lp.y = r.top; lp.width = r.width(); lp.height = r.height()
-        v.layoutParams = lp
+        if (lp.x != r.left || lp.y != r.top || lp.width != r.width() || lp.height != r.height()) {
+            lp.x = r.left; lp.y = r.top; lp.width = r.width(); lp.height = r.height()
+            v.layoutParams = lp
+        }
+        // Placed here as well: called from onSizeChanged, inside the card's layout, the view
+        // was already measured at the old size, and the second pass the new params ask for
+        // never came on the Galaxy Z Fold3 - the picture kept its portrait size in the
+        // landscape place, in a corner (2026-10-16).
+        if (v.left != r.left || v.top != r.top || v.width != r.width() || v.height != r.height()) {
+            v.measure(View.MeasureSpec.makeMeasureSpec(r.width(), View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(r.height(), View.MeasureSpec.EXACTLY))
+            v.layout(r.left, r.top, r.right, r.bottom)
+        }
     }
 
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {

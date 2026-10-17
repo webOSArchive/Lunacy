@@ -5,7 +5,7 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-10-16)
 
-**0.7.4 release candidate, build 287** (pushed); codepoet tests it on 2026-10-17 and, if it
+**0.7.4 release candidate, build 289** (pushed); codepoet tests it on 2026-10-17 and, if it
 holds, releases it to the community for testing and feedback. Since 0.7.2 (build 249):
 
 - **Foldables:** the shell rebuilds in the phone or tablet layout when a foldable folds or
@@ -28,7 +28,7 @@ holds, releases it to the community for testing and feedback. Since 0.7.2 (build
   (webos-sdk-redux 5d77edc).
 
 Tested on the HP 10 G2, the Nexus 5, the Galaxy Z Fold3 and the Pixel Tablet; Temple Run 2's
-tilt confirmed right on all four by codepoet, its turn on the Fold3 fixed last.
+tilt confirmed right on all four by codepoet; on the Fold3 the picture took its new place at its old size after the turn, fixed in 289 (build 287 had it).
 
 Open from this round: the qemu path on the Pixel Tablet (to fix the emulator); Fruit Ninja is
 a little slow; `glGetAttachedShaders`; the A12 margin question for the TouchPad (does a

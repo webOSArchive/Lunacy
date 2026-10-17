@@ -515,15 +515,9 @@ static void restore_after_blit(const struct saved *s)
 /* The card: the app's picture drawn into the window, scaled to fit and turned. Framebuffer 0 is bound. */
 static void show(struct ctx *c)
 {
-	/* The window's own size, not EGL's: on the Galaxy Z Fold3 EGL kept answering the card's
-	 * size from before the screen turned, so the picture sat in a corner of the bigger
-	 * buffer (2026-10-16). The window says what the TextureView is now. */
-	EGLint vw = c->window ? ANativeWindow_getWidth(c->window) : 0;
-	EGLint vh = c->window ? ANativeWindow_getHeight(c->window) : 0;
-	if (vw <= 0 || vh <= 0) {
-		eglQuerySurface(c->display, c->window_surface, EGL_WIDTH, &vw);
-		eglQuerySurface(c->display, c->window_surface, EGL_HEIGHT, &vh);
-	}
+	EGLint vw = 0, vh = 0;
+	eglQuerySurface(c->display, c->window_surface, EGL_WIDTH, &vw);
+	eglQuerySurface(c->display, c->window_surface, EGL_HEIGHT, &vh);
 	if (vw != c->view_w || vh != c->view_h) {
 		c->view_w = vw; c->view_h = vh;
 		LOGI("pdk gl: card %d x %d, the app's %d x %d turned %d", vw, vh, c->game_w, c->game_h, c->turn);

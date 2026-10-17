@@ -146,6 +146,14 @@ def gen_client(protos):
         sig = ', '.join(f'{t} {n}' for t, n in ps) or 'void'
         print(f'GL_APICALL {ret} GL_APIENTRY {name}({sig}) {{')
         print(f'    trace("{name}");')
+        # A negative size or offset is GL_INVALID_VALUE and nothing else, as a driver answers
+        # (Cut the Rope HD asks glBufferData for -64 bytes, then draws -6 indices, as a level starts).
+        if name == 'glBufferData':
+            print('    if (size < 0) { gl_error = GL_INVALID_VALUE; return; }')
+        if name == 'glBufferSubData':
+            print('    if (size < 0 || offset < 0) { gl_error = GL_INVALID_VALUE; return; }')
+        if name in ('glDrawArrays', 'glDrawElements'):
+            print('    if (count < 0) { gl_error = GL_INVALID_VALUE; return; }')
         if k == 'local':
             for t, n in ps:
                 if is_ptr(t) and 'const' not in t and base(t) not in ('void', 'GLvoid'):

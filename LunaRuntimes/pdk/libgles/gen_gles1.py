@@ -234,6 +234,14 @@ def gen_client(protos, shared=frozenset()):
             print(f'    if (live_es2()) {{ static {ret} (*es2_)({sig}); if (!es2_) *(void **)&es2_ = es2_forward("{name}");')
             print(f'        if (es2_) {{ {"es2_(" + args + "); return;" if ret == "void" else "return es2_(" + args + ");"} }} }}')
         print(f'    trace("{name}");')
+        # A negative size or offset is GL_INVALID_VALUE and nothing else, as a driver answers
+        # (Cut the Rope HD asks glBufferData for -64 bytes, then draws -6 indices, as a level starts).
+        if name == 'glBufferData':
+            print('    if (size < 0) { gl_error = GL_INVALID_VALUE; return; }')
+        if name == 'glBufferSubData':
+            print('    if (size < 0 || offset < 0) { gl_error = GL_INVALID_VALUE; return; }')
+        if name in ('glDrawArrays', 'glDrawElements'):
+            print('    if (count < 0) { gl_error = GL_INVALID_VALUE; return; }')
         if name in LOCAL or any(k == 'unsupported' for _, k, _ in kinds):
             print(local_body(name, ret, ps))
             print('}')

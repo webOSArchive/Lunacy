@@ -153,6 +153,15 @@ class PdkHost(
             put("LUNACY_PDK_APP_DIR", appDir.path); put("LUNACY_PDK_DATA_DIR", dataDir.path)
             put("LUNACY_PDK_SCREEN_W", runtime.screenWidth.toString()); put("LUNACY_PDK_SCREEN_H", runtime.screenHeight.toString())
             put("LUNACY_PDK_DPI", runtime.dpi.toString())
+            put("LUNACY_PDK_HARDWARE_ID", runtime.hardwareId.toString())
+            // webOS 3's portability (libnapp): an app whose metadata.json names only other
+            // devices is shown one of them, its screen and its OpenGL surface, scaled to the card.
+            Portability.emulate(appDir, runtime.hardwareId)?.let { e ->
+                Log.i(AppServer.TAG, "pdk [$appId]: portability, emulating hardware ${e.id} (${e.width} x ${e.height})")
+                put("LUNACY_PDK_HARDWARE_ID", e.id.toString())
+                put("LUNACY_PDK_SCREEN_W", e.width.toString()); put("LUNACY_PDK_SCREEN_H", e.height.toString())
+                put("LUNACY_PDK_FORCE_OGL_W", e.width.toString()); put("LUNACY_PDK_FORCE_OGL_H", e.height.toString())
+            }
             put("LUNACY_PDK_OS_VERSION", runtime.osVersion); put("LUNACY_PDK_DEVICE_NAME", runtime.deviceName)
             put("LUNACY_PDK_NDUID", runtime.nduid)
             put("LUNACY_PDK_APPINFO_id", app.id); put("LUNACY_PDK_APPINFO_title", app.title); put("LUNACY_PDK_APPINFO_version", app.version)
@@ -421,6 +430,39 @@ class PdkHost(
  * laid out as a sysroot's /lib, with the loader in it by its own name, which is how qemu
  * finds an executable's interpreter (`-L`).
  */
+/**
+ * webOS 3's portability, as the TouchPad's libnapp did it: an app's `metadata.json`
+ * (`{"version": 1, "devices": [101]}`) lists the PDL hardware it was made for, and on a
+ * device not in the list the app is shown one that is: `PDL_GetHardwareID` answers that
+ * device, the screen is its screen, and its OpenGL surface is forced to that size
+ * (libnapp's `final_spoofing`, `final_ogl`), which the card turns and fits like any other-shape
+ * buffer. Measured with ExZeus (devices [101]) on the TouchPad, 2026-10-17: landscape, the
+ * whole picture, black bars. Which listed device libnapp picks is not measured: the first
+ * one with a known screen here. Only phones are emulated, so the phone profile still shows
+ * a TouchPad-only app its own screen, as before.
+ */
+object Portability {
+    class Device(val id: Int, val width: Int, val height: Int)
+
+    /** PDL_types.h's hardware, and the screen each had, held its own way up. */
+    private val screens = mapOf(
+        101 to (320 to 480), 102 to (320 to 480), 401 to (320 to 480),   // Pre, Pre Plus, Pre 2
+        201 to (320 to 400), 301 to (320 to 400),                         // Pixi, Veer
+        501 to (480 to 800))                                              // Pre3
+
+    fun emulate(appDir: File, native: Int): Device? {
+        val meta = File(appDir, "metadata.json").takeIf { it.isFile } ?: return null
+        val json = runCatching { JSONObject(meta.readText()) }.getOrNull() ?: return null
+        if (!json.has("version")) return null
+        val list = json.optJSONArray("devices") ?: return null
+        val devices = (0 until list.length()).map { list.optInt(it, -1) }
+        if (devices.isEmpty() || native in devices) return null
+        val id = devices.firstOrNull { it in screens } ?: return null
+        val (w, h) = screens.getValue(id)
+        return Device(id, w, h)
+    }
+}
+
 class PdkRuntime(private val context: Context, val appsRoot: File, val screenWidth: Int, val screenHeight: Int, val dpi: Int,
                  val osVersion: String, val deviceName: String, val nduid: String,
                  /** The webOS root a start script runs in: busybox's commands, webOS's paths. */
@@ -443,6 +485,8 @@ class PdkRuntime(private val context: Context, val appsRoot: File, val screenWid
     /** The emulator's own libraries, extracted beside the runtime (64-bit build). */
     val qemuLibDir: File? by lazy { libDir?.let { File(it.parentFile, "qemu-lib").takeIf { d -> d.isDirectory } } }
     val available get() = loader != null || emulator != null
+    /** PDL_GetHardwareID: HARDWARE_TOUCHPAD (601) on the TouchPad profile, HARDWARE_PRE_3 (501) on the phone one. */
+    val hardwareId get() = if (screenWidth >= screenHeight) 601 else 501
     /** How this build runs a PDK app, for Device Info and the log. */
     val how get() = when { loader != null -> "native"; emulator != null -> "emulated"; else -> "unavailable" }
 

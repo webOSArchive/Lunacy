@@ -90,7 +90,7 @@ PDL_Err PDL_GetOSVersion(PDL_OSVersion *v)
 	return PDL_NOERROR;
 }
 
-int PDL_GetHardwareID(void) { return atoi(env_or("LUNACY_PDK_HARDWARE_ID", "101")); }   /* HARDWARE_TOUCHPAD */
+int PDL_GetHardwareID(void) { return atoi(env_or("LUNACY_PDK_HARDWARE_ID", "601")); }   /* HARDWARE_TOUCHPAD */
 const char *PDL_GetHardware(void) { return env_or("LUNACY_PDK_HARDWARE", "TouchPad"); }
 PDL_Err PDL_GetDeviceName(char *buffer, int bufferLen) { return copy_out(buffer, bufferLen, env_or("LUNACY_PDK_DEVICE_NAME", "TouchPad")); }
 PDL_Err PDL_GetUniqueID(char *buffer, int bufferLen) { return copy_out(buffer, bufferLen, env_or("LUNACY_PDK_NDUID", "")); }

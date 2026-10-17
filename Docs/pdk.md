@@ -825,6 +825,34 @@ Unity's. Generated names now start at 0x30000000 (`libGLES_CM.so`) and 0x4000000
 (`libGLESv2.so`), far above what an app counts to and apart from each other
 (`client_transport.h`). Temple Run 2's menu draws on the Fold (codepoet, 2026-10-16).
 
+## 6f. Portability: ExZeus, 2026-10-17
+
+ExZeus (com.hyperdevbox.exzeus) is a Pre game: 1.0.3, a community build, is the stock binary
+with `requiredMemory` raised and a `metadata.json` of `{"version":1,"devices":[101]}`. On the
+reference TouchPad it plays landscape, the whole picture with black bars (codepoet, by eye; a
+screenshot of a PDK card is black), in a 768 x 1024 window buffer (LunaSysMgr's log). On
+Lunacy it drew its 320 x 480 viewport into a corner of the 1024 x 768 surface it was given.
+
+**What the TouchPad does.** webOS 3's "portability", in `libnapp.so` (its strings): with a
+`metadata.json` whose `devices` (PDL hardware ids, `PDL_types.h`) leave out the device it runs
+on, it picks a listed device to emulate and sets `final_spoofing`, `final_ogl`, `final_scale`
+and `final_rotation`; the TouchPad's `libSDL` forces the OpenGL surface to that size
+(`forceOGLResolutionX/Y`). No metadata, a hybrid app, or the device in the list: off.
+
+**What Lunacy does.** `Portability` in `card/PdkHost.kt`: the same test against the profile's
+hardware (601 TouchPad, 501 Pre3); the first listed phone with a known screen is emulated
+(320 x 480 Pre, Pre Plus, Pre 2; 320 x 400 Pixi, Veer; 480 x 800 Pre3).
+`PDL_GetHardwareID` answers it, the SDL driver's current mode and every OpenGL mode are its
+screen (`LUNACY_PDK_FORCE_OGL_W/H`), and the card turns and fits that buffer as any other.
+ExZeus fills the Fold3's inner screen, landscape with bars, as on the TouchPad.
+`PDL_GetHardwareID` was 101 (the Pre) for every app, with a comment saying TouchPad; it is
+now the profile's own.
+
+**Not measured:** which listed device libnapp picks when there are several; whether
+`final_scale` and `final_rotation` differ from the card's turn-and-fit; what
+`PDL_GetHardware`/`GetScreenMetrics` answer under it (the hardware string is left as it was);
+2D apps under it; the Pre3's own behaviour with a Pre-only app.
+
 ## 7. Still to do on the first path
 
 - A visible hybrid plugin's picture, drawn over its object in the page (no app needing it

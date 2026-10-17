@@ -214,6 +214,11 @@ int LUNACY_VideoInit(_THIS, SDL_PixelFormat *vformat)
 		this->info.current_w = w > h ? w : h;
 		this->info.current_h = w > h ? h : w;
 	}
+	/* Portability (PdkHost.kt): the emulated phone's own screen, held its own way up. */
+	if (getenv("LUNACY_PDK_FORCE_OGL_W") && getenv("LUNACY_PDK_FORCE_OGL_H")) {
+		this->info.current_w = atoi(getenv("LUNACY_PDK_FORCE_OGL_W"));
+		this->info.current_h = atoi(getenv("LUNACY_PDK_FORCE_OGL_H"));
+	}
 	/* LUNACY_PDK_NOSHELL: a desk test under qemu with no shell to reach; the mode is
 	   granted, frames and events go nowhere. */
 	if (getenv("LUNACY_PDK_NOSHELL")) { this->hidden->sock = -1; return 0; }
@@ -250,6 +255,12 @@ SDL_Surface *LUNACY_SetVideoMode(_THIS, SDL_Surface *current, int width, int hei
 	   here: SDL's own checks look for SDL_OPENGL, so both flags are kept on the surface. */
 	if (flags & (SDL_OPENGL | 0x40)) {
 		flags |= SDL_OPENGL;
+		/* Portability forces the surface to the emulated phone's size, whatever was asked
+		   (libnapp's final_ogl, read by the TouchPad's SDL as forceOGLResolutionX/Y). */
+		if (getenv("LUNACY_PDK_FORCE_OGL_W") && getenv("LUNACY_PDK_FORCE_OGL_H")) {
+			width = atoi(getenv("LUNACY_PDK_FORCE_OGL_W"));
+			height = atoi(getenv("LUNACY_PDK_FORCE_OGL_H"));
+		}
 		/* The GL library draws and the shell shows it; the screen surface still gets
 		   pixels of its own, because SDL clears and blits the screen surface as it sets
 		   the mode up whatever the flags, and a game may touch it too. */

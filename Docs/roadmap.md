@@ -3,10 +3,13 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-10-16)
+## Where things stand (2026-10-17)
 
-**0.7.4 release candidate, build 289** (pushed); codepoet tests it on 2026-10-17 and, if it
-holds, releases it to the community for testing and feedback. Since 0.7.2 (build 249):
+**0.8.0 release candidate, build 292** (not pushed): 0.7.4 RC build 289 renamed a minor
+release at codepoet's call, with one fix on top: the status bar's notification icons fade out
+under a banner, as LunaCE's do (the banner text had been drawn over them). codepoet tests it
+and, if it holds, releases it to the community for testing and feedback. Since 0.7.2 (build
+249):
 
 - **Foldables:** the shell rebuilds in the phone or tablet layout when a foldable folds or
   opens, keeping every card ([phone.md](phone.md) §1, "Foldables"); Email's message and IAmA
@@ -73,6 +76,8 @@ One line per milestone; the detail is in [fix-log.md](fix-log.md), the topic doc
   under qemu; chat threader 1.1.0.3; Db8 null and `incDel` fixes.
 - **2026-10-16, 0.7.4 RC:** foldables rebuild in place; Pre3 phone mode; Android's
   notifications as dashboards; PDK native on 64-bit with Temple Run 2 and Fruit Ninja.
+- **2026-10-17, 0.8.0 RC** (build 292): 0.7.4 as a minor release, with the banner over the
+  notification icons fixed.
 
 ## Open, carried forward
 

@@ -3,29 +3,37 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-10-14)
+## Where things stand (2026-10-16)
 
-**Released: 0.7.2 release candidate, build 249** (commit 10c5550, pushed); codepoet makes the
-release. **Since then, on `main` and not pushed** (five commits, b216b67..1633974):
+**0.7.4 release candidate, build 287** (pushed); codepoet tests it on 2026-10-17 and, if it
+holds, releases it to the community for testing and feedback. Since 0.7.2 (build 249):
 
-- **Foldables:** the shell decides phone or tablet again whenever the screen changes size, and
-  `ShellActivity.reshell` rebuilds its views in the other layout with every card kept, running,
-  in its group and state; the layout setting goes the same way instead of recreating the
-  activity ([phone.md](phone.md) §1, "Foldables"). Checked on a Galaxy Z Fold3 folded and
-  opened by hand.
-- **Memos** runs its wall and grid to the card's bottom on cards taller than a TouchPad's
-  (codepoet's exception to rule 5, [luna-deltas.md](luna-deltas.md) A22).
-- **compat:** the A12 margin fix no longer shakes scrolling rows (World Today's rows jumped
-  2 px every frame while flicked), and it leaves a box child's own items alone.
-- **Device Info:** a long service id breaks instead of widening the page, which had turned on
-  Enyo's sideways scrolling on phone-width screens (a user's Android 16 report).
+- **Foldables:** the shell rebuilds in the phone or tablet layout when a foldable folds or
+  opens, keeping every card ([phone.md](phone.md) §1, "Foldables"); Email's message and IAmA
+  reddit's right pane fit the opened screen.
+- **Phone mode is the Pre3's:** notifications along the bottom (rule 0 now covers the Pre3 in
+  phone mode), a centred launcher grid with the first row closer under the tabs.
+- **Android's notifications as webOS dashboards**, kept calm (no lock-screen work, no per-app
+  choice).
+- **Launcher and Software Manager:** hide any app, webOS or Android; pin a webOS app to
+  Android's home screen, and other apps can pin shortcuts to Lunacy's launcher.
+- **PDK:** native on 64-bit devices that run 32-bit code; Temple Run 2 and Fruit Ninja play;
+  ScummVM runs; every finger's motion; tilt in webOS's own frame (measured on the TouchPad
+  with `Workbench/probe/accelprobe`); the picture keeps its shape when the screen turns for
+  a game ([pdk.md](pdk.md)).
+- **Apps:** Photos & Videos 3.2.0 from webOS CE (rotate, crop; videos play in Android's
+  player); Memos to the card's bottom (A22); an `.apk` opens in Android's installer; Device
+  Info's long service ids.
+- **Enyo 0011 and 0012** (a native web view's holes, following a moving box), also in the SDK
+  (webos-sdk-redux 5d77edc).
 
-Builds: 252 (arm64 release) on the Pixel Tablet; the arm64 debug build on the Fold3.
+Tested on the HP 10 G2, the Nexus 5, the Galaxy Z Fold3 and the Pixel Tablet; Temple Run 2's
+tilt confirmed right on all four by codepoet, its turn on the Fold3 fixed last.
 
-Open from this round: measure on the TouchPad whether a `-webkit-box` child's own margin
-collapses through its box (the A12 note; it decided World Today's first row); check Device
-Info's fix on the Fold3's outer screen with the installed build (proved live there, installed
-build checked only open).
+Open from this round: the qemu path on the Pixel Tablet (to fix the emulator); Fruit Ninja is
+a little slow; `glGetAttachedShaders`; the A12 margin question for the TouchPad (does a
+`-webkit-box` child's own margin collapse through its box); Device Info on the Fold3's outer
+screen with an installed build.
 
 ## How it got here
 
@@ -63,6 +71,8 @@ One line per milestone; the detail is in [fix-log.md](fix-log.md), the topic doc
   Messaging 3.2.0 with webOS CE's IM stack ([messaging.md](messaging.md)).
 - **2026-10-12/13, 0.7.2 RC:** webOS Chat live over `oscar.webosarchive.org`; the IM transport
   under qemu; chat threader 1.1.0.3; Db8 null and `incDel` fixes.
+- **2026-10-16, 0.7.4 RC:** foldables rebuild in place; Pre3 phone mode; Android's
+  notifications as dashboards; PDK native on 64-bit with Temple Run 2 and Fruit Ninja.
 
 ## Open, carried forward
 

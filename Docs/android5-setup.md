@@ -304,6 +304,7 @@ WebView 149.0.7827.5 (153.0.8010.36 by 2026-10-02). The memory limiter reports i
 | Keyring's focus and field height (2026-10-05) | Three `adb install -r` of signed 64-bit release builds over Wi-Fi; Keyring SD driven over adb and DevTools (`Workbench/cdp.sh`: listeners, focus loggers and `blur`/`focus` wrappers in the live page, all gone with the page) with codepoet's master password; test items started and cancelled; `palm-install` of mojoprobe 0.0.3 tried and refused while the shell was looping; the lock screen swiped away, `svc power stayon true` while testing, `false` after | Keyring's data unchanged: no test item saved |
 | Launch-point builds installed (2026-10-05) | `adb install -r out/AndroidLuna-arm64-release.apk` twice over Wi-Fi (signed, over the 0.5.5 release); the Web app's Share → Add to Launcher used on example.com, its dialog opened twice more | An "Example Domain" shortcut is left on the launcher's first tab (codepoet's earlier one, made on the 0.5.5 build, never saved) |
 | Temple Run 2's turn and tilt (2026-10-16, evening) | The signed arm64 release build with the tilt frame and the GL view fitted to the picture installed with `adb install -r` (data kept), codepoet having opened the tablet for it | Data kept |
+| 0.7.4 build 287 (2026-10-16) | The signed arm64 release build 287 (commit 76f7546) installed with `adb install -r`, at codepoet's request | Data kept |
 
 ## Nexus 5 test phone (2026-09-23)
 
@@ -392,6 +393,7 @@ Added to reproduce a community report. Since 2026-10-02 the phone layout's test 
 | Viewport fit (2026-10-16) | The signed arm32 release build with the viewport fit measuring fractional widths installed with `adb install -r` (data kept); Screen & Lock opened with `--es launch` and its viewport read over DevTools (`adb forward tcp:9334`, removed after) | Data kept |
 | PDK games (2026-10-16) | Three signed arm32 release builds (280 and on) installed with `adb install -r` (data kept); Temple Run 2 1.4.0 and Fruit Ninja 1.0.0 (apkenv ports) installed with `palm-install` over the novacom relay (a first try over the USB link reset and reached nothing); Temple Run 2 launched with `--es launch`; at the end Lunacy force-stopped and the screen turned off | Data kept; both games installed |
 | Temple Run 2's turn and tilt (2026-10-16, evening) | The signed arm32 release build with the tilt frame and the GL view fitted to the picture installed with `adb install -r` (data kept) | Data kept |
+| 0.7.4 build 287 (2026-10-16) | The signed arm32 release build 287 (commit 76f7546) installed with `adb install -r`, at codepoet's request | Data kept |
 
 ## Galaxy Z Fold3, Android 15 (2026-10-14)
 
@@ -422,6 +424,7 @@ arrived. Lunacy 0.7.2 (build 249) was already installed.
 | Email and IAmA reddit (2026-10-16) | codepoet rebooted it (the screen had gone blank) and `adb connect` reached it again over Wi-Fi without the cable; four arm64 debug builds installed with `adb install -r` (data kept) for Enyo 0011 and 0012 and the viewport fit; DevTools reached over `adb forward tcp:9333 localabstract:webview_devtools_remote_<pid>` (removed after); IAmA reddit launched with `--es launch com.tehtorq.reddit`, and a probe viewport meta written and removed in its card | Data kept |
 | PDK games (2026-10-16) | About a dozen arm64 debug builds installed with `adb install -r` (data kept): native PDK on 64-bit, the GLES 2 hand-over, the preload's semaphores and paged stdio, the GL server's per-context blit; Fruit Ninja and Temple Run 2 launched with `--es launch` and their PDK processes ended with `kill` through `run-as` between tries; `files/pdk/env` written with `APKENV_TRACE_FILES`, `APKENV_TRACE_CALLS`, `LUNACY_PDK_TRACE_STDIO` and `LUNACY_GL_TRACE` in turn and removed each time; `files/pdk/gldump` touched for frame dumps and the `files/pdk/fb*.raw` they wrote removed; woken with `KEYCODE_WAKEUP`; `screen_off_timeout` raised from 120000 to 600000 while testing | Screen timeout put back to 120000 at the end of the session, the games' processes ended and the screen turned off |
 | Temple Run 2's turn and tilt (2026-10-16, evening) | Two arm64 debug builds installed with `adb install -r` (data kept): the tilt frame and the GL view fitted to the picture, then the GL server reading the window's size; Temple Run 2's PDK process ended with `kill` through `run-as` and relaunched from the home intent; screenshots of the inner screen with the game up | Data kept |
+| 0.7.4 build 287 (2026-10-16) | The arm64 debug build 287 (commit 76f7546) installed with `adb install -r` over Wi-Fi, at codepoet's request | Data kept |
 
 When the phone doesn't show in `adb devices` although it is on USB with debugging on, restart
 the adb server (`adb kill-server`).

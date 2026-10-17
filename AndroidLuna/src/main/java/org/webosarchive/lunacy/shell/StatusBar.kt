@@ -144,11 +144,14 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
         val i = notif[key] ?: return
         i.set(false) {
             notif.remove(key)
-            if (notif.isEmpty()) fadeNotificationGroup(false)
+            if (notif.isEmpty() && banner == null) fadeNotificationGroup(false)
             invalidate()
         }
     }
-    /** The notification group fades in with its first icon and out after its last (statusBarTabFade, 300 ms). */
+    /**
+     * The notification group fades in with its first icon or a banner, and out once neither is
+     * left (statusBarTabFade, 300 ms; StatusBar::slotNotificationArealVisibilityChanged).
+     */
     private var notifGroupOpacity = 0f
     private var notifGroupAnim: ValueAnimator? = null
     private fun fadeNotificationGroup(show: Boolean) {
@@ -163,7 +166,10 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
     /** The banner scrolling in the notification area, and its animation state. */
     override var banner: Banner? = null
         set(v) {
-            if ((field == null) != (v == null)) fadeNotificationIcons(v == null)
+            if ((field == null) != (v == null)) {
+                fadeNotificationIcons(v == null)
+                if (notif.isEmpty()) fadeNotificationGroup(v != null)
+            }
             field = v; invalidate()
         }
     /**
@@ -510,11 +516,23 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
         return left - luna.px(7f)
     }
 
-    /** Dashboard icons right to left (5 px apart, at most 26 px high), with the banner unrolling leftward from the group's right edge. */
+    /**
+     * Dashboard icons right to left (5 px apart, at most 26 px high), with the banner unrolling
+     * leftward from the group's right edge. The group is as wide as the wider of the two
+     * (StatusBarNotificationArea::updateBoundingRect), so its separator rides out at the
+     * banner's left edge and comes back with it.
+     */
     private fun drawNotifications(c: Canvas, right: Float) {
         notificationRight = right
         var x = right
-        if (notif.isNotEmpty() || notifGroupOpacity > 0f) {
+        val b = banner?.takeIf { bannerProgress > 0f }
+        // LunaCE unrolls the banner over the notification area's whole maximum width, not the
+        // text's: MAX_NOTIF_ICONS × (NOTIF_ICON_WIDTH + ICON_SPACING) + arrow + 2 × ARROW_SPACING
+        // (StatusBar.cpp, StatusBarNotificationArea::setMaxWidth), text left-aligned in it.
+        val arrowW = (luna.image("statusBar/menu-arrow.png")?.width ?: luna.px(15))
+        val bannerW = luna.px(10 * (24 + 5).toFloat()) + arrowW + luna.px(2 * 7f)
+        val bannerLeft = right - bannerProgress * bannerW
+        if (notif.isNotEmpty() || b != null || notifGroupOpacity > 0f) {
             val p = Paint().apply { alpha = (notifGroupOpacity * 255).toInt() }
             // The open menu's tab goes behind the group, in place of its separator.
             if (menuOpen) {
@@ -528,27 +546,22 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
             c.saveLayerAlpha(0f, 0f, x, height.toFloat(), icons.alpha, Canvas.ALL_SAVE_FLAG)
             for (icon in notif.values) x = drawSliding(c, icon, x, luna.px(5f))
             c.restore()
+            if (b != null) x = minOf(x, bannerLeft)
             x = clearOfCutout(x, luna.px(2f)) - luna.px(2f)
             if (!menuOpen) separator(c, x, p)
         }
         notificationLeft = x
-        val b = banner ?: return
-        if (bannerProgress <= 0f) return
+        if (b == null) return
         val margin = luna.px(5f)
         val iconS = luna.px(24f)
-        // LunaCE unrolls the banner over the notification area's whole maximum width, not the
-        // text's: MAX_NOTIF_ICONS × (NOTIF_ICON_WIDTH + ICON_SPACING) + arrow + 2 × ARROW_SPACING
-        // (StatusBar.cpp, StatusBarNotificationArea::setMaxWidth), text left-aligned in it.
-        val arrowW = (luna.image("statusBar/menu-arrow.png")?.width ?: luna.px(15))
-        val w = luna.px(10 * (24 + 5).toFloat()) + arrowW + luna.px(2 * 7f)
-        val textW = w - margin - (if (b.icon != null) iconS + margin else 0f) - margin
+        val textW = bannerW - margin - (if (b.icon != null) iconS + margin else 0f) - margin
         val text = android.text.TextUtils.ellipsize(b.text, android.text.TextPaint(bannerText), textW, android.text.TextUtils.TruncateAt.END).toString()
-        val left = right - bannerProgress * w
-        notificationLeft = minOf(notificationLeft, left)
+        val left = bannerLeft
         c.save()
-        // No backing: LunaCE's StatusBarScroll draws the icon and text straight onto the bar.
+        // No backing: LunaCE's StatusBarScroll draws the icon and text straight onto the bar,
+        // inside the group, so the group's fade covers it too.
         c.clipRect(left, 0f, right, height.toFloat())
-        val alpha = (bannerAlpha * 255).toInt()
+        val alpha = (bannerAlpha * notifGroupOpacity * 255).toInt()
         var cx = left + margin
         b.icon?.let { c.drawBitmap(it, null, RectF(cx, (height - iconS) / 2f, cx + iconS, (height + iconS) / 2f), android.graphics.Paint().apply { this.alpha = alpha }); cx += iconS + margin }
         bannerText.alpha = alpha

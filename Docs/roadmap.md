@@ -5,10 +5,11 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-10-17)
 
-**0.8.0 release candidate, build 293** (not pushed): 0.7.4 RC build 289 renamed a minor
-release at codepoet's call, with one fix on top: the status bar's notification icons fade out
-under a banner and the group's separator rides out at the banner's edge, as LunaCE's do (the banner text had been drawn over them). codepoet tests it
-and, if it holds, releases it to the community for testing and feedback. Since 0.7.2 (build
+**0.8.0 release, build 296:** 0.7.4 RC build 289 renamed a minor release at codepoet's
+call, with one fix on top: the status bar's notification icons fade out under a banner and
+the group's separator rides out at the banner's edge, as LunaCE's do (the banner text had
+been drawn over them). The keyboard now carries the same version and build number.
+codepoet approved it and releases it to the community for testing and feedback. Since 0.7.2 (build
 249):
 
 - **Foldables:** the shell rebuilds in the phone or tablet layout when a foldable folds or
@@ -76,7 +77,7 @@ One line per milestone; the detail is in [fix-log.md](fix-log.md), the topic doc
   under qemu; chat threader 1.1.0.3; Db8 null and `incDel` fixes.
 - **2026-10-16, 0.7.4 RC:** foldables rebuild in place; Pre3 phone mode; Android's
   notifications as dashboards; PDK native on 64-bit with Temple Run 2 and Fruit Ninja.
-- **2026-10-17, 0.8.0 RC** (build 293): 0.7.4 as a minor release, with the banner over the
+- **2026-10-17, 0.8.0** (build 296; the keyboard now carries the same version): 0.7.4 as a minor release, with the banner over the
   notification icons fixed.
 
 ## Open, carried forward

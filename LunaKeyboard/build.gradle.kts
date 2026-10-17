@@ -3,6 +3,17 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+/**
+ * The keyboard ships with Lunacy, so it carries the shell's version: the same build number
+ * (the repository's commit count, as AndroidLuna/build.gradle.kts counts it, kept here so the
+ * keyboard still depends on nothing in Lunacy) and the same version name, changed by hand
+ * alongside the shell's.
+ */
+val buildNumber: Int = runCatching {
+    val git = ProcessBuilder("git", "rev-list", "--count", "HEAD").directory(rootDir).start()
+    git.inputStream.bufferedReader().readText().trim().toInt()
+}.getOrDefault(1)
+
 android {
     namespace = "org.webosarchive.keyboard"
     compileSdk = 35
@@ -13,8 +24,8 @@ android {
         // Android 15 below 24. minSdk keeps Android 5, which ignores a target above its
         // own level. What 23 and 24 change on newer devices is in Docs/architecture.md.
         targetSdk = 24
-        versionCode = 4
-        versionName = "0.5.0"
+        versionCode = buildNumber
+        versionName = "0.8.0"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

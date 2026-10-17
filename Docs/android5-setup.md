@@ -395,6 +395,7 @@ Added to reproduce a community report. Since 2026-10-02 the phone layout's test 
 | PDK games (2026-10-16) | Three signed arm32 release builds (280 and on) installed with `adb install -r` (data kept); Temple Run 2 1.4.0 and Fruit Ninja 1.0.0 (apkenv ports) installed with `palm-install` over the novacom relay (a first try over the USB link reset and reached nothing); Temple Run 2 launched with `--es launch`; at the end Lunacy force-stopped and the screen turned off | Data kept; both games installed |
 | Temple Run 2's turn and tilt (2026-10-16, evening) | The signed arm32 release build with the tilt frame and the GL view fitted to the picture installed with `adb install -r` (data kept) | Data kept |
 | 0.7.4 builds 287 and 289 (2026-10-16) | The signed arm32 release builds 287 (commit 76f7546) and 289 (commit 019e0ae) installed with `adb install -r`, at codepoet's request | Data kept |
+| Banner over the notification icons (2026-10-17) | Switched to Wi-Fi adb (`adb connect 192.168.10.34:5555`, the cable still in); `org.webosarchive.lunacy.notifprobe` 0.0.3 installed with `palm-install -d <nduid>` over the relay (nduid checked with `getprop` first) and launched with `palm-launch -p` (banners and dashboards); a signed arm32 release test build of uncommitted code (the icons fading under a banner, on 289) installed with `adb install -r` (data kept), Lunacy relaunched with `am start`; screenshots with `screencap` | Data kept. The probe stays installed, with two dashboards open |
 
 ## Galaxy Z Fold3, Android 15 (2026-10-14)
 

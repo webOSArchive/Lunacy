@@ -162,7 +162,27 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
 
     /** The banner scrolling in the notification area, and its animation state. */
     override var banner: Banner? = null
-        set(v) { field = v; invalidate() }
+        set(v) {
+            if ((field == null) != (v == null)) fadeNotificationIcons(v == null)
+            field = v; invalidate()
+        }
+    /**
+     * The ▾ and dashboard icons fade out while banners are queued and back after the last
+     * (StatusBarNotificationArea::bmViewMessageCountUpdated, setIconsShown: 300 ms, linear, to
+     * 0), so the banner never draws over them. With no icons up the change is immediate.
+     */
+    private var notifIconsOpacity = 1f
+    private var notifIconsAnim: ValueAnimator? = null
+    private fun fadeNotificationIcons(show: Boolean) {
+        notifIconsAnim?.cancel()
+        val to = if (show) 1f else 0f
+        if (notif.isEmpty()) { notifIconsOpacity = to; return }
+        notifIconsAnim = ValueAnimator.ofFloat(notifIconsOpacity, to).apply {
+            duration = GROUP_FADE_MS; interpolator = Easing.Linear
+            addUpdateListener { notifIconsOpacity = it.animatedValue as Float; invalidate() }
+            start()
+        }
+    }
     override var bannerProgress = 0f
     override var bannerAlpha = 1f
     /** Tap on the notification area (banner or dashboard icons). */
@@ -503,8 +523,9 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
                 notif.values.forEach { i -> i.image?.let { b -> left -= (b.width * Math.min(1f, luna.px(26f) / b.height) + luna.px(5f)) * i.width } }
                 drawTab(c, left - luna.px(2f), notificationRight)
             }
-            x = drawArrowLeft(c, x, p)
-            c.saveLayerAlpha(0f, 0f, x, height.toFloat(), p.alpha, Canvas.ALL_SAVE_FLAG)
+            val icons = Paint().apply { alpha = (notifGroupOpacity * notifIconsOpacity * 255).toInt() }
+            x = drawArrowLeft(c, x, icons)
+            c.saveLayerAlpha(0f, 0f, x, height.toFloat(), icons.alpha, Canvas.ALL_SAVE_FLAG)
             for (icon in notif.values) x = drawSliding(c, icon, x, luna.px(5f))
             c.restore()
             x = clearOfCutout(x, luna.px(2f)) - luna.px(2f)

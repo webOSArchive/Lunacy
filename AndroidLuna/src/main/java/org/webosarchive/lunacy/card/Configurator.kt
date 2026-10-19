@@ -24,7 +24,10 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
         // The system's own kinds first, as the device's configurator read /etc/palm: those of
         // the services in the webOS root (accounts, palmprofile), in its ROM.
         if (system != null) {
-            configureFiles(File(system, "etc/palm/db"), db, "/etc/palm/db")
+            // Its permissions wait for db_kinds below: the device's configurator registered
+            // every kind of /etc/palm before any of its permissions (BusClient: kinds, then
+            // permissions), and one may name a kind from db_kinds (the carrier settings).
+            configureFiles(File(system, "etc/palm/db"), db, "/etc/palm/db", withPermissions = false)
             configureFiles(File(system, "etc/palm/tempdb"), tempdb, "/etc/palm/tempdb")
         }
         for (id in files.appIds()) {
@@ -37,7 +40,8 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
         // app's com.palm.mail.account).
         if (system != null) {
             val kinds = parseFiles(File(system, "etc/palm/db_kinds"), "/etc/palm/db_kinds") { text, _ -> JSONObject(jsonC(text)) }
-            if (kinds.isNotEmpty()) db.configure(kinds, emptyList())
+            val permissions = parseFiles(File(system, "etc/palm/db/permissions"), "/etc/palm/db") { text, _ -> JSONArray(jsonC(text)) }
+            if (kinds.isNotEmpty() || permissions.isNotEmpty()) db.configure(kinds, permissions)
         }
         // The file cache's types, as webOS's configurator defined them at boot ("filecache"):
         // /etc/palm/filecache_types and packages' configuration/filecache, each file a
@@ -175,11 +179,11 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
 
     // ---- the installed tree, for services ----
 
-    private fun configureFiles(dir: File, target: Db8, pkg: String) {
+    private fun configureFiles(dir: File, target: Db8, pkg: String, withPermissions: Boolean = true) {
         val kinds = parseFiles(File(dir, "kinds"), pkg) { text, owner ->
             JSONObject(jsonC(text)).apply { if (owner != null && !has("owner")) put("owner", owner) }
         }
-        val permissions = parseFiles(File(dir, "permissions"), pkg) { text, _ -> JSONArray(jsonC(text)) }
+        val permissions = if (!withPermissions) emptyList() else parseFiles(File(dir, "permissions"), pkg) { text, _ -> JSONArray(jsonC(text)) }
         if (kinds.isNotEmpty() || permissions.isNotEmpty()) target.configure(kinds, permissions)
     }
 

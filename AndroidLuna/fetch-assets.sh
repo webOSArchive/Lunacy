@@ -326,8 +326,8 @@ mkdir -p $R/usr/palm/ipkgs && echo '[]' > $R/usr/palm/ipkgs/manifest.json
 cp -r $V/touchpad/etc-db/tempdb/kinds $V/touchpad/etc-db/tempdb/permissions $R/etc/palm/tempdb/
 cat > $R/etc/palm/NOTICE <<'NOTICE'
 db8 kind and permission files for the accounts, palmprofile and calendar reminders services,
-contacts (people, contacts, the app's preferences and the linker's), the activity manager, App Catalog and the
-Web app, from /etc/palm on the reference TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. /
+contacts (people, contacts, the app's preferences and the linker's), the activity manager, App Catalog, the
+Web app and the carrier settings, from /etc/palm on the reference TouchPad (webOS CE 3.1.0). Copyright Palm, Inc. /
 LG Electronics.
 NOTICE
 
@@ -363,6 +363,12 @@ done
 # Their db8 kinds (db_kinds is the configurator's other kind folder on the device), the file
 # cache's configuration and types, and the IMAP account template.
 cp $E/etc/palm/db_kinds/com.palm.imap.* $R/etc/palm/db_kinds/
+# The carrier settings kind, owned on the device by the carrier database (which a wifi
+# TouchPad has, with nothing in it). Messaging watches it from the moment it starts, at boot;
+# a TouchPad answers an empty list, and without the kind the watch failed and Enyo retried it
+# every 10 seconds for ever.
+cp $V/touchpad/etc-db/db_kinds/com.palm.carrierdb.settings.current $R/etc/palm/db_kinds/
+cp $V/touchpad/etc-db/db/permissions/com.palm.carrierdb $R/etc/palm/db/permissions/
 cp $E/etc/palm/FileCache.conf $R/etc/palm/
 cp $E/etc/palm/filecache_types/* $R/etc/palm/filecache_types/
 cp -r $E/usr/palm/public/accounts/com.palm.imap $R/usr/palm/public/accounts/

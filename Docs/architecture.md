@@ -941,7 +941,12 @@ apps depend on it as much as Mojo apps do.
   new mail and puts up its dashboard, while the mail services only sync. Lunacy does the
   same once First Use is done and the webOS root is ready (`ShellActivity.launchBootTimeApps`,
   `LAUNCH_AT_BOOT`, `KEEP_ALIVE`), in phone mode too. Not done: LunaSysMgr also restarted a
-  boot-time app after it was updated.
+  boot-time app after it was updated. Their cost, measured 2026-10-19 by closing them in a
+  running Lunacy and starting them again (`dumpsys meminfo`, total PSS): 16.5 MB on the
+  HP 10 G2 (Android 5, the WebView in Lunacy's process; Messaging 8, Email 5, Calendar 3.5),
+  15 MB on the Galaxy Z Fold3 (Android 15, all of it in the WebView renderer), 28 MB there
+  after Email's card had been opened and closed. Calendar's own boot activity already
+  started it headless.
 - **One shell.** Android makes a second `ShellActivity` when the shell is started outside its
   task (another launcher's icon while Lunacy is the home app). A shell owns the bus, db8 and
   activity manager, so a second one was a second system; it hands its intent to the shell

@@ -70,7 +70,7 @@ more than one device is attached. The test devices:
 | Nexus 5 (Android 6, the phone layout) | `192.168.10.195:5555` | `adb tcpip` over the cable after a reboot |
 | Nexus 7 2012 (Android 5.1.1) | `192.168.10.198:5555` | the same |
 | Pixel Tablet (Android 17, arm64 only) | `192.168.10.153:5555` | `adb tcpip` as above (it answered on 5555 on 2026-10-03); wireless debugging's pairing port varies per reboot, so prefer tcpip |
-| HP 10 G2 (Android 5.0.1, the reference) | `192.168.10.34:5555` | `adb tcpip` over the cable after a reboot (it answered there on 2026-10-04) |
+| HP 10 G2 (Android 5.0.1, the reference) | `192.168.10.38:5555` | `adb tcpip` over the cable after a reboot (it answered there on 2026-10-04) |
 | Galaxy Z Fold3 (Android 15, foldable) | `192.168.10.175:44439` | wireless debugging, paired once on 2026-10-14; the connect port changes after a reboot, pairing holds |
 
 - `--es install <url or path>` installs a package through the same path the App Museum

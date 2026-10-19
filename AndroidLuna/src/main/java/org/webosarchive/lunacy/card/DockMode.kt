@@ -67,7 +67,7 @@ class DockMode(context: Context, private val registry: AppRegistry) {
 
     fun isEnabled(appId: String): Boolean = prefs.getBoolean(appId, false)
 
-    /** What the status bar calls this app while it is exhibiting. */
+    /** What the Exhibition menu calls this app (the status bar shows its own title: ShellActivity.barTitle). */
     fun title(appId: String): String {
         val app = registry.get(appId) ?: return "Time"
         return app.appinfo.optJSONObject("exhibitionModeOptions")?.optString("title").orEmpty()

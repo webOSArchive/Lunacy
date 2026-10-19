@@ -2164,8 +2164,15 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * dock window is already open is simply shown again; otherwise it is launched for the
      * dock, and its window takes the screen when it opens (addDockWindow).
      */
+    /**
+     * The status bar's title while [appId] is exhibiting: the app's own title. Measured on the
+     * reference TouchPad: Photos in Exhibition reads "Photos & Videos", its title, not the
+     * "Photos" of its exhibitionModeOptions (which the Exhibition app lists it by).
+     */
+    private fun barTitle(appId: String) = registry.get(appId)?.title ?: dockMode.title(appId)
+
     private fun exhibit(appId: String) {
-        statusBar.title = dockMode.title(appId)
+        statusBar.title = barTitle(appId)
         dockWindows[appId]?.let { showDockFace(it); return }
         launch(appId, dockModeParams(), startupCard = false, dock = true)
     }
@@ -2692,7 +2699,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (exhibitionMenu.visibility != View.VISIBLE) return
         exhibitionMenu.visibility = View.GONE
         if (!notifications.menu.isOpen) menuScrim.visibility = View.GONE
-        statusBar.title = exhibitionApp?.let { dockMode.title(it) } ?: "Time"
+        statusBar.title = exhibitionApp?.let { barTitle(it) } ?: "Time"
     }
 
     /** A face chosen from that menu: null is the shell's own Time. */

@@ -16,7 +16,8 @@ and a phase is finished when its criterion is met, not when its task list runs o
 - **Edge swipe for home** (Screen & Lock, on by default): a swipe in from a side edge cards
   the app; greyed out when Android's gesture navigation already does it.
 - **Exhibition:** the Time faces fit a phone or a cover screen; Photos' slideshow shows,
-  scaled to fit at the TouchPad's dock size, with its controls fading as on the TouchPad.
+  scaled to fit at the TouchPad's dock size, with its controls fading as on the TouchPad
+  (an app's named viewport scale now counts TouchPad px, as on webOS, so they stay hidden).
 - **Apps:** a link out of an app opens in the browser instead of replacing the app (SimpleChat's
   images); `timeout/set` ignores `$` keys as the TouchPad does; Messaging's carrier settings.
 - **PDK:** webOS 3's portability, read in libnapp's own device numbers (ExZeus fills the

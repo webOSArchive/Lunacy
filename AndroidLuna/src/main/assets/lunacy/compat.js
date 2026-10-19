@@ -1191,12 +1191,26 @@ window.__lunacyWatchProgress = (function () {
 		// where it is 1280 x 772. Written as the card's own numbers they say the same thing
 		// in the same unit. A size the app named in pixels is left exactly as it is, and the
 		// page is then left alone altogether: that app is being specific.
+		//
+		// A scale the app names is the same story: on webOS it counted TouchPad px per CSS px,
+		// and this engine counts its density-independent pixels. Where the window's scale is
+		// the display's density the two agree, and the number stands. Where they differ - an
+		// Exhibition window, held at the TouchPad's dock size and scaled to fit the screen -
+		// Photos' `maximum-scale=1.0` held its slideshow at the display's density, laid it out
+		// 1068 x 772 instead of 1024 x 740 on a Pixel Tablet, and its hidden controls showed
+		// along the bottom (2026-10-19). So the number is carried over in the engine's unit.
+		var ratio = (size.scale || 1) / (window.devicePixelRatio || 1);
 		for (i = 0; i < list.length; i++) {
 			var k = list[i][0], v = list[i][1].toLowerCase();
 			if (k === "width" && v === "device-width" && size.width) { list[i][1] = String(size.width); }
 			else if (k === "height" && v === "device-height" && size.height) { list[i][1] = String(size.height); }
 			else if (k === "initial-scale" || k === "minimum-scale" || k === "maximum-scale" ||
-				k === "user-scalable") { named = true; }
+				k === "user-scalable") {
+				named = true;
+				if (k !== "user-scalable" && parseFloat(v) > 0 && Math.abs(ratio - 1) > 0.001) {
+					list[i][1] = String(Math.round(parseFloat(v) * ratio * 100000) / 100000);
+				}
+			}
 		}
 		// Nothing the app said is overwritten; what it left unsaid is filled in. The size is
 		// the card's, and both halves of it matter: with only the width given, the engine

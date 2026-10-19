@@ -477,7 +477,7 @@ splash between about 3 and 8 seconds, then waits for taps on a black sky. Neithe
 Lunacy fault. On the phone profile, a TouchPad-only app sees a Pre3's screen, as it would have
 on a Pre3.
 
-Open (since done: hybrid apps, §6c; the accelerometer's frame, above): OpenSSL 0.9.8 and curl (about 50 apps); PDL_ServiceCall to the bus.
+Open (since done: hybrid apps, §6c; the accelerometer's frame, above; OpenSSL 0.9.8, §6g): curl (about 40 apps); PDL_ServiceCall to the bus.
 
 ## 6. Seen on the Nexus 5, 2026-10-02
 
@@ -852,6 +852,37 @@ now the profile's own.
 `final_scale` and `final_rotation` differ from the card's turn-and-fit; what
 `PDL_GetHardware`/`GetScreenMetrics` answer under it (the hardware string is left as it was);
 2D apps under it; the Pre3's own behaviour with a Pre-only app.
+
+## 6g. Worms and Atlantis Sky Patrol HD: OpenSSL, Palm's SDL calls, /proc/meminfo, 2026-10-19
+
+Both broken on the Galaxy Z Fold3 (64-bit, native), each for its own reason; both now play.
+
+- **OpenSSL 0.9.8.** Worms (EA, Marmalade) links `libcrypto.so.0.9.8`, which no current
+  system has (about 50 apps in the mirror do). The runtime now carries the device's own
+  build as Palm's PDK ships it (`device/lib`: OpenSSL 0.9.8k, soft-float glibc, needing only
+  libc, libdl and libgcc_s), `libssl.so.0.9.8` with it, the unversioned names as aliases,
+  and OpenSSL's licence (`LICENSE.openssl`, fetched from OpenSSL's repository at its 0.9.8k
+  tag), which a binary distribution must reproduce.
+- **`/proc/meminfo` at a TouchPad's size.** Marmalade then refused to start: "Insufficient
+  memory to start application. Not enough memory to begin loading s3e file." It reads
+  `/proc/meminfo` and turns MemFree's kB into bytes in a signed 32-bit int; the Fold3's
+  2,170,416 kB free comes out negative. The preload now answers `open`/`fopen` of
+  `/proc/meminfo` with a copy in which every figure is scaled by one factor so that MemTotal
+  is the reference TouchPad's 940,368 kB (measured): the device's proportions, and no sum an
+  app makes can pass a TouchPad's. A device with no more memory than that sees its own.
+- **Palm's own SDL calls.** Atlantis started, then quit at the first tap: `undefined symbol:
+  SDL_GetMultiMouseState`. Palm's SDL 1.2 added four public calls (its headers mark them
+  PALM): `SDL_GetMultiMouseState(which, x, y)` and `SDL_GetRelativeMultiMouseState`, a
+  finger's state, finger 0 being SDL's own mouse, and `SDL_GLES_LoadLibrary` and
+  `SDL_GLES_GetProcAddress`, SDL's GL loader under other names. Lunacy's SDL has all four now
+  (`sdl-lunacy`). Palm's library also exported a haptic API, but the PDK ships no header for
+  it, so no app could have been built against it.
+
+Worms is a Pre game: it draws portrait into a landscape screen, so on the Fold3 its picture
+is on its side, as the game's own frame is; how a TouchPad showed it is not yet compared.
+Its music (`Audio/Music/Title.mp3`) doesn't play: Lunacy's SDL_mixer has Ogg Vorbis but not
+MP3, which Palm's had. Atlantis posts a "start.game" ping to a Big Fish server that is gone;
+it doesn't wait for it.
 
 ## 7. Still to do on the first path
 

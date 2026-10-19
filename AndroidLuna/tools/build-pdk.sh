@@ -191,6 +191,15 @@ cp addon-out/lib/libSDL_ttf-2.0.so.0.10.1 "$OUT/lib/libSDL_ttf-2.0.so.0"
 cp addon-out/lib/libSDL_net-1.2.so.0.8.0 "$OUT/lib/libSDL_net-1.2.so.0"
 cp -L $DEPS/lib/libpng12.so.0 $DEPS/lib/libpng.so.3 $DEPS/lib/libfreetype.so.6 "$OUT/lib/"
 cp -L $SYSLIB/libjpeg.so.62 "$OUT/lib/"
+
+# ---- OpenSSL 0.9.8, as the device had it ----
+# About 50 PDK apps link libcrypto.so.0.9.8 (Worms among them), which no current system
+# carries. Palm's PDK ships the device's own build (OpenSSL 0.9.8k, soft-float glibc, needing
+# only libc, libdl and libgcc_s), so the runtime carries exactly what a TouchPad had, with
+# OpenSSL's licence, which a binary distribution must reproduce.
+PDK_LIB=${PDK_LIB:-/opt/PalmPDK/device/lib}
+cp "$PDK_LIB/libcrypto.so.0.9.8" "$PDK_LIB/libssl.so.0.9.8" "$OUT/lib/"
+curl -sfL https://raw.githubusercontent.com/openssl/openssl/OpenSSL_0_9_8k/LICENSE -o "$OUT/LICENSE.openssl"
 # ---- the TouchPad's other system fonts ----
 # Besides Prelude, /usr/share/fonts on the TouchPad holds Microsoft's core web fonts (arial,
 # cour, georgia, times, verdana, lucon), which apps open by name with SDL_ttf (Plasma Clock
@@ -266,6 +275,8 @@ libz.so libz.so.1
 libopenal.so libopenal.so.1
 libGLES_CM.so.1 libGLES_CM.so
 libGLESv2.so.2 libGLESv2.so
+libcrypto.so libcrypto.so.0.9.8
+libssl.so libssl.so.0.9.8
 EOA
 
 # ---- libGLES_CM: generated from the PDK's own GLES 1.1 headers (Docs/pdk.md, "Transformers G1") ----
@@ -462,6 +473,10 @@ The PDK runtime (Docs/pdk.md), built by tools/build-pdk.sh:
 - libpng12.so.0, libpng.so.3: libpng $PNG_VER (libpng licence), from libpng.org.
 - libfreetype.so.6: FreeType $FT_VER (FreeType Project License), from savannah.gnu.org.
 - libjpeg.so.62: libjpeg-turbo (IJG and BSD licences), Debian bookworm armel libjpeg62-turbo.
+- libcrypto.so.0.9.8, libssl.so.0.9.8: OpenSSL 0.9.8k (OpenSSL and SSLeay licences, in
+  LICENSE.openssl), the device's own build as Palm's PDK ships it (device/lib). This product
+  includes software developed by the OpenSSL Project for use in the OpenSSL Toolkit
+  (http://www.openssl.org/), and cryptographic software written by Eric Young.
 - libqemu-arm.so (64-bit builds only): QEMU $QEMU_VER user-mode emulator for 32-bit ARM
   (GPL 2), Termux's build for Android, with the libraries it loads in qemu-lib/ (glib
   LGPL 2.1, pixman MIT, gnutls LGPL 2.1, nettle LGPL, gmp LGPL, libffi MIT, pcre2 BSD,

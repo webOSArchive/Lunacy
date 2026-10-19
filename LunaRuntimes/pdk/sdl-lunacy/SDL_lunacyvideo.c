@@ -388,3 +388,10 @@ void LUNACY_VideoQuit(_THIS)
 	unmap(this);
 	if (this->hidden->sock >= 0) { close(this->hidden->sock); this->hidden->sock = -1; LUNACY_control_sock = -1; }
 }
+
+/* Palm's names for the GL ES loader (its SDL_video.h): SDL 1.2's own, under another name. */
+extern DECLSPEC int SDLCALL SDL_GLES_LoadLibrary(const char *path);
+extern DECLSPEC void * SDLCALL SDL_GLES_GetProcAddress(const char *proc);
+
+DECLSPEC int SDLCALL SDL_GLES_LoadLibrary(const char *path) { return SDL_GL_LoadLibrary(path); }
+DECLSPEC void * SDLCALL SDL_GLES_GetProcAddress(const char *proc) { return SDL_GL_GetProcAddress(proc); }

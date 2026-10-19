@@ -73,6 +73,44 @@ static void touch(_THIS, uint32_t finger, int32_t action, int32_t x, int32_t y)
 	SDL_PushEvent(&e);
 }
 
+/* Palm's multitouch state (its SDL_mouse.h, marked PALM): finger `which`'s buttons and where
+   it is, finger 0 being SDL's own mouse. Atlantis Sky Patrol asks on its first touch. */
+static int rel_x[16], rel_y[16];
+
+extern DECLSPEC Uint8 SDLCALL SDL_GetMultiMouseState(int which, int *x, int *y);
+extern DECLSPEC Uint8 SDLCALL SDL_GetRelativeMultiMouseState(int which, int *x, int *y);
+
+DECLSPEC Uint8 SDLCALL SDL_GetMultiMouseState(int which, int *x, int *y)
+{
+	SDL_VideoDevice *this = current_video;
+	if (which == 0) return SDL_GetMouseState(x, y);
+	if (which < 0 || which >= 16 || !this || !this->hidden) {
+		if (x) *x = 0;
+		if (y) *y = 0;
+		return 0;
+	}
+	if (x) *x = this->hidden->finger_x[which];
+	if (y) *y = this->hidden->finger_y[which];
+	return this->hidden->finger_down[which] ? SDL_BUTTON_LMASK : 0;
+}
+
+/* The same, with how far the finger has moved since the last time it was asked. */
+DECLSPEC Uint8 SDLCALL SDL_GetRelativeMultiMouseState(int which, int *x, int *y)
+{
+	SDL_VideoDevice *this = current_video;
+	if (which == 0) return SDL_GetRelativeMouseState(x, y);
+	if (which < 0 || which >= 16 || !this || !this->hidden) {
+		if (x) *x = 0;
+		if (y) *y = 0;
+		return 0;
+	}
+	if (x) *x = this->hidden->finger_x[which] - rel_x[which];
+	if (y) *y = this->hidden->finger_y[which] - rel_y[which];
+	rel_x[which] = this->hidden->finger_x[which];
+	rel_y[which] = this->hidden->finger_y[which];
+	return this->hidden->finger_down[which] ? SDL_BUTTON_LMASK : 0;
+}
+
 static void key(int down, int32_t sym, int32_t unicode)
 {
 	SDL_keysym ks;

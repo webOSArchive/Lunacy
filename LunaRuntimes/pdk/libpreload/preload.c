@@ -20,6 +20,12 @@
  *   linker (the Android ports, Docs/pdk.md "EGL and the Android ports") searches
  *   /vendor/lib and /system/lib before its own bionic: on webOS it found nothing there,
  *   on Android it loaded the device's libc.so and quit on its pthread_gettid_np.
+ *
+ * - /proc/meminfo, at a TouchPad's size. Apps written for 1 GB devices did sums in a signed
+ *   32-bit int: Marmalade (Worms) turns MemFree's kB into bytes, and an Android device's
+ *   2 GB free came out negative ("Insufficient memory to start application"). A device with
+ *   more memory than the TouchPad (940368 kB MemTotal, measured) shows every figure scaled by
+ *   the same factor, so the proportions are the device's and no sum passes a TouchPad's.
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>
@@ -142,16 +148,59 @@ ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t len)
 /* open and friends take a mode only with O_CREAT (or O_TMPFILE). */
 #define MODE_ARG(flags) mode_t mode = 0; if ((flags) & O_CREAT) { va_list ap; va_start(ap, flags); mode = va_arg(ap, mode_t); va_end(ap); }
 
+/* ---- /proc/meminfo ---- */
+
+#define TOUCHPAD_MEMTOTAL_KB 940368.0
+
+static int is_meminfo(const char *path) { return path && strcmp(path, "/proc/meminfo") == 0; }
+
+/* A read-only descriptor on a scaled copy of /proc/meminfo, or -1 to let the real one be opened. */
+static int meminfo_fd(void)
+{
+	char in[16384], out[16384];
+	char tmpl[PATH_MAX];
+	size_t root_len, n = 0, o = 0;
+	const char *root = webos_root(&root_len);
+	double total = 0, f;
+	int fd;
+	REAL(open);
+	if (!root || root_len + 32 > sizeof tmpl) return -1;
+	if ((fd = real_open("/proc/meminfo", O_RDONLY, 0)) < 0) return -1;
+	for (ssize_t r; n < sizeof in - 1 && (r = read(fd, in + n, sizeof in - 1 - n)) > 0; ) n += r;
+	close(fd);
+	in[n] = 0;
+	sscanf(in, "MemTotal: %lf", &total);
+	if (total <= TOUCHPAD_MEMTOTAL_KB) return -1;
+	f = TOUCHPAD_MEMTOTAL_KB / total;
+	for (char *line = in, *nl; *line && o < sizeof out - 128; line = nl ? nl + 1 : line + strlen(line)) {
+		char name[64]; unsigned long long kb;
+		nl = strchr(line, '\n');
+		if (nl) *nl = 0;
+		if (sscanf(line, "%63[^:]: %llu kB", name, &kb) == 2 && strstr(line, " kB"))
+			o += snprintf(out + o, sizeof out - o, "%s:%*llu kB\n", name, (int)(24 - strlen(name)), (unsigned long long)(kb * f + 0.5));
+		else
+			o += snprintf(out + o, sizeof out - o, "%s\n", line);
+		if (!nl) break;
+	}
+	memcpy(tmpl, root, root_len); strcpy(tmpl + root_len, "/tmp/.lunacy-meminfo-XXXXXX");
+	if ((fd = mkstemp(tmpl)) < 0) return -1;
+	unlink(tmpl);
+	if (write(fd, out, o) != (ssize_t)o || lseek(fd, 0, SEEK_SET) != 0) { close(fd); return -1; }
+	return fd;
+}
+
 int open(const char *path, int flags, ...)
 {
 	REAL(open);
 	MODE_ARG(flags); MAPPED(path);
+	if (is_meminfo(path)) { int fd = meminfo_fd(); if (fd >= 0) return fd; }
 	return real_open(mp_, flags, mode);
 }
 int open64(const char *path, int flags, ...)
 {
 	REAL(open64);
 	MODE_ARG(flags); MAPPED(path);
+	if (is_meminfo(path)) { int fd = meminfo_fd(); if (fd >= 0) return fd; }
 	return real_open64(mp_, flags, mode);
 }
 int openat(int dirfd, const char *path, int flags, ...)
@@ -222,12 +271,16 @@ static FILE *stdio_paged(FILE *f)
 FILE *fopen(const char *path, const char *how)
 {
 	REAL(fopen);
-	MAPPED(path); return stdio_paged(real_fopen(mp_, how));
+	MAPPED(path);
+	if (is_meminfo(path)) { int fd = meminfo_fd(); if (fd >= 0) return fdopen(fd, "r"); }
+	return stdio_paged(real_fopen(mp_, how));
 }
 FILE *fopen64(const char *path, const char *how)
 {
 	REAL(fopen64);
-	MAPPED(path); return stdio_paged(real_fopen64(mp_, how));
+	MAPPED(path);
+	if (is_meminfo(path)) { int fd = meminfo_fd(); if (fd >= 0) return fdopen(fd, "r"); }
+	return stdio_paged(real_fopen64(mp_, how));
 }
 FILE *freopen(const char *path, const char *how, FILE *f)
 {

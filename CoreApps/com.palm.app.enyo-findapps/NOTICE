@@ -8,5 +8,5 @@ open licence, distributed by Lunacy as abandonware, like Mojo and the Prelude fo
 Archive's changes (main/source/archive-*.js, direct-install.js, ipk-inspect.js,
 pivot-hydration.js and the rest its README lists) are webOS Archive's.
 
-Copied unchanged from the package palm-package builds of that repository on 2026-09-26; this
-file is Lunacy's.
+Copied unchanged from the package palm-package builds of that repository (6.2.2931, taken
+2026-10-19); this file is Lunacy's.

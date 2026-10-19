@@ -9,7 +9,7 @@
 (function () {
     "use strict";
 
-    var PIVOT_BASE_URL = "https://appcatalog.webosarchive.org/pivot";
+    var PIVOT_BASE_URL = "http://appcatalog.webosarchive.org/pivot";
     var PIVOT_CACHE_ROOT = "/media/internal/.pivot";
     var SUPPORTED_LANGS = ["de", "en", "es", "fr", "it"];
 
@@ -611,6 +611,12 @@
     // rendering, since native bridge calls and UI paint share one thread).
     // 20s gives the app room to fully launch and settle first.
     // -----------------------------------------------------------------------
+    // LuneOS can't read a hydrated edition back (file:// outside the app is
+    // blocked there; see archive-patch.js), so don't download one.
+    if (!/hpwOS\/|webOS\/[1-3]\./.test(navigator.userAgent)) {
+        console.log("PIVOT-HYDRATION LuneOS: not hydrating, the magazine is skipped here");
+        return;
+    }
     console.log("PIVOT-HYDRATION module loaded, scheduling checkAndHydrate in 20s");
     setTimeout(function () {
         try {

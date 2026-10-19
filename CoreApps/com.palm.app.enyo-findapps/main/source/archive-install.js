@@ -54,6 +54,42 @@
         return bridge;
     }
 
+    // ---- download counting ----
+
+    // The device's nduid, for download attribution (countAppDownload.php?device=); looked up
+    // once, best-effort. The server resolves the signed-in account from it.
+    var deviceId = "";
+    if (window.PalmServiceBridge) {
+        lunaCall("palm://com.palm.preferences/systemProperties/Get", {key: "com.palm.properties.nduid"}, function (r) {
+            deviceId = (r && r["com.palm.properties.nduid"]) || "";
+        });
+    }
+
+    // Count a download on the server (the "most downloaded" reports separate device installs
+    // from web by source). Counted once per install attempt, when the package's URL is handed
+    // to an installer: the direct install, Lunacy's install service, or the .ipk handler. Fire
+    // and forget: the endpoint returns no body and a miss must never affect the install.
+    function countDownload(app) {
+        var now = Date.now();
+        if (app._archiveCountedAt && now - app._archiveCountedAt < 30000) { return; }
+        app._archiveCountedAt = now;
+        var id = packageId(app) || String(app._archiveNumericId || app.publicApplicationId || app.id || "");
+        if (!id) { return; }
+        var url = (window.archiveApiBase || "http://appcatalog.webosarchive.org/WebService/") +
+                  "countAppDownload.php?appid=" + encodeURIComponent(id) +
+                  "&source=webos-appcatalog-enyo" +
+                  (deviceId ? "&device=" + encodeURIComponent(deviceId) : "");
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", url, true);
+            xhr.onerror = function () {};
+            xhr.send();
+        } catch (e) {
+            console.log("ARCHIVE-INSTALL countAppDownload failed: " + e);
+        }
+    }
+    window.archiveCountDownload = countDownload;
+
     // ---- where are we? ----
 
     // "lunacy", "webos" or "other"; decided at load, long before anyone taps Install.
@@ -182,7 +218,8 @@
     //     asked for up to DETAILS_TRIES times;
     //   - the install runs (DirectInstall), watched: no progress for STALL_MS ends it;
     //   - a throw anywhere, a download or install that fails, install scripts, no details, a
-    //     stall: the install stops and the package goes to Preware, once (handToPreware).
+    //     stall: the install stops and the package goes to Preware, once (handToPreware) -
+    //     as the file already downloaded, if it downloaded whole; as its URL only if not.
     // The only failure the catalog shows is Preware not being there at all.
 
     var DETAILS_TRIES = 3;
@@ -212,13 +249,17 @@
         return (id && !/^\d+$/.test(id)) ? id : null;
     }
 
-    // Preware, with the most it can be told: the package to install; else the package's page
-    // from its feeds ({type: "view", id}); else Preware itself (its own launch for that is
+    // Preware, with the most it can be told: the package to install - the file downloaded and
+    // inspected (localPath) if there is one, already counted, else its URL; else the package's
+    // page from its feeds ({type: "view", id}); else Preware itself (its own launch for that is
     // {source: "updateNotification"} - an empty launch opens nothing). Preware 1.9's
     // AppAssistant.handleLaunch, read on the reference TouchPad.
-    function handToPreware(app, why) {
-        console.log("ARCHIVE-INSTALL handing " + (app.publicApplicationId || "?") + " to Preware: " + why);
-        if (app.packageUrl) { installWithHandler(app, app.packageUrl); return; }
+    function handToPreware(app, why, localPath) {
+        console.log("ARCHIVE-INSTALL handing " + (app.publicApplicationId || "?") + " to Preware: " + why +
+                    (localPath ? " (" + localPath + ")" : ""));
+        // Preware's own Browse names a local package as file:// + its path.
+        if (localPath) { installWithHandler(app, "file://" + localPath); return; }
+        if (app.packageUrl) { countDownload(app); installWithHandler(app, app.packageUrl); return; }
         var id = packageId(app);
         var params = id ? {type: "view", id: id} : {source: "updateNotification"};
         ipkHandlerCandidates(function (ids) {
@@ -284,8 +325,12 @@
         function handOff(why) {
             if (over) { return; }
             end();
-            if (job) { try { job.abort(); } catch (e) {} }
-            try { handToPreware(app, why); } catch (e) { console.log("ARCHIVE-INSTALL handing to Preware threw: " + e); }
+            var localPath = null;
+            if (job) {
+                try { localPath = job.keep(); } catch (e) {}
+                try { job.abort(); } catch (e) {}
+            }
+            try { handToPreware(app, why, localPath); } catch (e) { console.log("ARCHIVE-INSTALL handing to Preware threw: " + e); }
         }
         function watch(ms) {
             clearTimeout(stall);
@@ -295,6 +340,7 @@
             var params = installParams(app);
             var report = reporter(adm, params);
             console.log("ARCHIVE-INSTALL installing " + params.id + " directly: " + params.ipkUrl);
+            countDownload(app);
             watch(STALL_MS);
             job = DirectInstall.run(params, function (state, progress, extra) {
                 if (over) { return; }
@@ -370,9 +416,11 @@
         } else if (!ipkUrl) {
             return;
         } else if (platform === "lunacy") {
+            countDownload(app);
             this.subscribe = false;
             this.call(installParams(app), {method: "install", onSuccess: successCb, onFailure: failureCb});
         } else {
+            countDownload(app);
             installWithHandler(app, ipkUrl);
         }
     };

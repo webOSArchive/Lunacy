@@ -17,11 +17,50 @@
             // Pivot's pages are laid out for the TouchPad's own screen: each edition page says
             // width:1024px;height:768px (768 x 1024 in portrait) in its layout. On a wider screen
             // they sat against the left edge; centered, the page-turn arrows move with them.
+            // (Vertical centering on taller screens is done in centerMagazinePage below: the
+            // page's parent is a plain absolutely-positioned block, where auto top margins are 0.)
             ".magazinepage>.enyo-view>.enyo-vflexbox{margin-left:auto;margin-right:auto;}";
         document.head.appendChild(s);
     }());
 
-    var API_BASE = "https://appcatalog.webosarchive.org/WebService/";
+    // Center each Pivot page vertically on screens taller than its layout. The page is a
+    // fixed-size box inside the magazine Pane's view, so give it half the spare height as a
+    // top margin, never less than 0 (on a shorter screen it stays top-aligned, like the
+    // horizontal auto margins do on a narrower one). Runs whenever the page (re)renders:
+    // on creation, on orientation change / window resize, and once the async layout
+    // has been built.
+    (function () {
+        var Page = enyo.FindApps && enyo.FindApps.Magazine && enyo.FindApps.Magazine.MagazinePage;
+        if (!Page) { return; }
+
+        function centerMagazinePage(page) {
+            var pane = page.$ && page.$.pageContainer && page.$.pageContainer.hasNode();
+            if (!pane) { return; }
+            var boxes = pane.querySelectorAll(".enyo-view>.enyo-vflexbox");
+            for (var i = 0; i < boxes.length; i++) {
+                var box = boxes[i];
+                var pageHeight = box.offsetHeight;
+                if (!pageHeight) { continue; }       // the view for the other orientation is hidden
+                var viewHeight = (box.offsetParent && box.offsetParent.clientHeight) || window.innerHeight;
+                var spare = viewHeight - pageHeight;
+                box.style.marginTop = (spare > 0 ? Math.floor(spare / 2) : 0) + "px";
+            }
+        }
+
+        var selectOrientView = Page.prototype._selectOrientView;
+        Page.prototype._selectOrientView = function () {
+            selectOrientView.apply(this, arguments);
+            centerMagazinePage(this);
+        };
+        var layoutRendered = Page.prototype.doDispatchLayoutRendered;   // enyo's generated event method
+        Page.prototype.doDispatchLayoutRendered = function () {
+            centerMagazinePage(this);
+            return layoutRendered ? layoutRendered.apply(this, arguments) : undefined;
+        };
+    }());
+
+    var API_BASE = "http://appcatalog.webosarchive.org/WebService/";
+    window.archiveApiBase = API_BASE;   // for archive-install.js (loads after this file)
     // An app's details: how long one request may take, and how many tries an install makes.
     var DETAILS_TIMEOUT_MS = 15000;
     var DETAILS_TRIES = 3;
@@ -260,6 +299,22 @@
             url = API_BASE + "getMuseumMaster.php?vendorId=" +
                   encodeURIComponent(params.developerId) +
                   "&hide_missing=true&key=" + makeKey();
+        } else if ((service === "SearchAppsService" || service === "SearchMoreAppsService") &&
+                   params.provides && !params.queryStr) {
+            // "Find More…" from Exhibition (dockMode), Just Type (universalSearch)
+            // or Accounts (connector/CONTACTS, …): a filtered search with no text.
+            // SearchApps joins connectorInfo.types into params.provides; the server
+            // matches any of them. Paged like a category list (startPosition/count).
+            var fPageSize = params.count || AppCatalog.Config.defaultPageSize;
+            var fPage     = Math.floor((params.startPosition || 0) / fPageSize);
+            url = API_BASE + "getMuseumMaster.php?" +
+                  "device=All" +
+                  "&provides=" + encodeURIComponent(params.provides) +
+                  "&page=" + fPage +
+                  "&count=" + fPageSize +
+                  "&key=" + makeKey() +
+                  "&hide_missing=true" +
+                  "&sort=" + (params.sort === "NAME_ASC" ? "alpha" : "recent");
         } else if (service === "SearchAppsService" || service === "SearchMoreAppsService") {
             url = API_BASE + "getSearchResults.php?app=" +
                   encodeURIComponent(params.queryStr || "");
@@ -712,6 +767,49 @@
         window.$L = function (s) {
             if (s === "FREE") { return "Install"; }
             return _origDollarL.apply(this, arguments);
+        };
+    }
+
+    // -----------------------------------------------------------------------
+    // LuneOS: no magazine
+    //
+    // Pivot can't be shown on LuneOS: the edition is hydrated to
+    // /media/internal/.pivot and read back through file:// requests, which
+    // LuneOS's web app manager refuses outside the app's own folder ("Access
+    // is blocked to resource"). The catalog then sat on a grey scrim at launch
+    // and again whenever Featured was tapped. Open on the browser view instead,
+    // and take Featured out of the navigation bar. pivot-hydration.js skips the
+    // download there for the same reason.
+    //
+    // Same user-agent test as archive-install.js: legacy webOS says
+    // "webOS/1.x-3.x" or "hpwOS/", LuneOS says neither. Unchanged on webOS.
+    // -----------------------------------------------------------------------
+    var IS_LEGACY_WEBOS_UA = /hpwOS\/|webOS\/[1-3]\./.test(navigator.userAgent);
+    if (!IS_LEGACY_WEBOS_UA) {
+        var _origShowView = findApps.AppCatalogWindow.prototype.showView;
+        findApps.AppCatalogWindow.prototype.showView = function (params) {
+            params = params || {};
+            var v = params.viewToLoad;
+            if (v === undefined || v === "" || v === "default" || v === "MAGAZINE") {
+                console.log("ARCHIVE-PATCH LuneOS: opening BROWSER instead of " + (v || "default"));
+                params.viewToLoad = "BROWSER";
+            }
+            return _origShowView.call(this, params);
+        };
+
+        // Featured (tab 0) opens the magazine too: hide it, and send anything
+        // that still selects it to Categories.
+        var _origNavCreate = findApps.NavigationBar.prototype.create;
+        findApps.NavigationBar.prototype.create = function () {
+            _origNavCreate.apply(this, arguments);
+            var tabs = this.$.navigationButtons && this.$.navigationButtons.getControls();
+            if (tabs && tabs[0]) {
+                tabs[0].setShowing(false);
+            }
+        };
+        var _origSwitchToView = findApps.NavigationBar.prototype.switchToView;
+        findApps.NavigationBar.prototype.switchToView = function (selected) {
+            return _origSwitchToView.call(this, selected === 0 ? 1 : selected);
         };
     }
 

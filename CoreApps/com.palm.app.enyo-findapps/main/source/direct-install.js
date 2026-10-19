@@ -16,8 +16,14 @@
  *     onScripts(list): the package has install scripts (list), or couldn't be read (null)
  *     onError(e): something threw in one of the install's callbacks (optional); the install
  *       stops there and reports nothing more
- *   returns {abort()}: stops the install where it is and reports nothing more - a download is
- *     cancelled and its file deleted. An install already handed to the installer runs on.
+ *   returns {abort(), keep()}:
+ *     abort() stops the install where it is and reports nothing more - a download is
+ *       cancelled. An install already handed to the installer runs on.
+ *     keep() returns the downloaded package's path, or null if it hasn't downloaded whole,
+ *       and keeps the file for whoever installs it instead (it stays in the downloads
+ *       folder). Called from report's failures, onScripts, onError or before abort().
+ *   The downloaded file is deleted once the package is installed, or after a failure, an
+ *   abort, onScripts or onError, unless keep() was called.
  *
  * No framework of its own, so a probe app can run it as it is (Workbench/probe in Lunacy).
  */
@@ -63,6 +69,8 @@ var DirectInstall = (function () {
 
     function run(params, report, onScripts, onError) {
         var ticket = null, lastPct = -1, broken = false, downloaded = false;
+        // The downloaded package, once it has downloaded whole; kept if a caller keep()s it.
+        var file = null, kept = false;
         var bridges = [];
         console.log("DIRECT-INSTALL installing " + params.id + " from " + params.ipkUrl);
 
@@ -77,16 +85,22 @@ var DirectInstall = (function () {
                     console.log("DIRECT-INSTALL " + params.id + " failed: " + e);
                     // A bus callback's second argument closes its subscription.
                     if (typeof arguments[1] === "function") { try { arguments[1](); } catch (e2) {} }
-                    try { forget(); } catch (e3) {}
-                    if (onError) { onError(e); }
+                    if (onError) { try { onError(e); } catch (e3) {} }
+                    try { release(); } catch (e4) {}
                 }
             };
         }
 
         function forget() {
+            file = null;
             if (ticket !== null) {
                 lunaCall("palm://com.palm.downloadmanager/deleteDownloadedFile", {ticket: ticket}, function () {});
             }
+        }
+
+        // After a failure has been reported: the file is deleted unless the caller kept it.
+        function release() {
+            if (!kept) { forget(); }
         }
 
         report("ipk download current", 0);
@@ -117,14 +131,15 @@ var DirectInstall = (function () {
                     return;
                 }
                 var path = r.target || ((r.destPath || "") + (r.destFile || ""));
+                file = path;
                 report("ipk download complete", 100);
                 readScripts(path, guard(function (scripts) {
                     if (scripts === null || scripts.length) {
-                        forget();
                         onScripts(scripts);
+                        release();
                         return;
                     }
-                    bridges.push(installFile(path, report, forget, params, guard));
+                    bridges.push(installFile(path, report, forget, release, params, guard));
                 }));
             }
         }), true));
@@ -138,7 +153,11 @@ var DirectInstall = (function () {
                 if (ticket !== null && !downloaded) {
                     lunaCall("palm://com.palm.downloadmanager/cancelDownload", {ticket: ticket}, function () {});
                 }
-                try { forget(); } catch (e) {}
+                try { release(); } catch (e) {}
+            },
+            keep: function () {
+                if (file) { kept = true; }
+                return file;
             }
         };
     }
@@ -146,20 +165,22 @@ var DirectInstall = (function () {
     // com.palm.appinstaller/installNoVerify, measured on the reference TouchPad as App Catalog:
     // {returnValue, ticket, subscribed}, then status STARTING, CREATE_TMP, VERIFYING,
     // IPKG_INSTALL and SUCCESS (or a FAILED_… status).
-    function installFile(path, report, forget, params, guard) {
+    function installFile(path, report, forget, release, params, guard) {
         report("installing", 0);
         return lunaCall("palm://com.palm.appinstaller/installNoVerify", {target: path, subscribe: true}, guard(function (r, stop) {
             if (r.returnValue === false) {
-                stop(); forget();
+                stop();
                 report("install failed", 0, {reason: r.errorText || "FAILED_IPKG_INSTALL"});
+                release();
                 return;
             }
             if (r.status === "SUCCESS") {
                 stop(); forget();
                 report("installed", 100, {version: params.version});
             } else if (r.status && /^FAILED/.test(r.status)) {
-                stop(); forget();
+                stop();
                 report("install failed", 0, {reason: r.status});
+                release();
             }
         }), true);
     }

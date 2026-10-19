@@ -834,24 +834,42 @@ screenshot of a PDK card is black), in a 768 x 1024 window buffer (LunaSysMgr's 
 Lunacy it drew its 320 x 480 viewport into a corner of the 1024 x 768 surface it was given.
 
 **What the TouchPad does.** webOS 3's "portability", in `libnapp.so` (its strings): with a
-`metadata.json` whose `devices` (PDL hardware ids, `PDL_types.h`) leave out the device it runs
-on, it picks a listed device to emulate and sets `final_spoofing`, `final_ogl`, `final_scale`
-and `final_rotation`; the TouchPad's `libSDL` forces the OpenGL surface to that size
-(`forceOGLResolutionX/Y`). No metadata, a hybrid app, or the device in the list: off.
+`metadata.json` whose `devices` leave out the device it runs on, it picks a listed device to
+emulate and sets `final_spoofing`, `final_ogl`, `final_scale` and `final_rotation`; the
+TouchPad's `libSDL` forces the OpenGL surface to that size (`forceOGLResolutionX/Y`). No
+metadata, a hybrid app, or the device in the list: off.
 
-**What Lunacy does.** `Portability` in `card/PdkHost.kt`: the same test against the profile's
-hardware (601 TouchPad, 501 Pre3); the first listed phone with a known screen is emulated
-(320 x 480 Pre, Pre Plus, Pre 2; 320 x 400 Pixi, Veer; 480 x 800 Pre3).
-`PDL_GetHardwareID` answers it, the SDL driver's current mode and every OpenGL mode are its
-screen (`LUNACY_PDK_FORCE_OGL_W/H`), and the card turns and fits that buffer as any other.
-ExZeus fills the Fold3's inner screen, landscape with bars, as on the TouchPad.
+The list's numbers are libnapp's own, not PDL's hardware ids (corrected 2026-10-19, after
+Worms). libnapp's data holds a table, read from the reference TouchPad's `libnapp.so`: each
+device's number, machine name, screen held its own way up, and the devices it can stand in
+for, most alike first.
+
+| libnapp | machine | device | screen | stands in for |
+|---|---|---|---|---|
+| 101 | castle | Pre | 320 x 480 | 401, 202, 201 |
+| 102 | castle+ | Pre Plus | 320 x 480 | 101, 401, 202, 201 |
+| 103 | roadrunner | Pre 2 | 320 x 480 | 102, 101, 401, 202, 201 |
+| 201 | pixie | Pixi | 320 x 400 | |
+| 202 | pixie+ | Pixi Plus | 320 x 400 | 201 |
+| 401 | broadway | Veer | 320 x 400 | 202, 201 |
+| 601 | mantaray | Pre3 | 480 x 800 | 103, 102, 101, 401, 202, 201 |
+| 701 | topaz | TouchPad | 1024 x 768 | 601, 103, 102, 101, 401, 202, 201 |
+| 702 | opal | TouchPad Go | 1024 x 768 | 701, 601, 103, 102, 101, 401, 202, 201 |
+
+So `[601]` is the Pre3, not the TouchPad, and `[101]` happens to be the Pre in both numberings.
+
+**What Lunacy does.** `Portability` in `card/PdkHost.kt`: the same test, in libnapp's numbers,
+against the profile's device (701 TouchPad, 601 Pre3 on the phone profile); the first device
+in its stand-in list that the app lists is emulated. `PDL_GetHardwareID` answers it in PDL's
+numbers, the SDL driver's current mode and every OpenGL mode are its screen
+(`LUNACY_PDK_FORCE_OGL_W/H`), and the card turns and fits that buffer as any other. ExZeus
+fills the Fold3's inner screen, landscape with bars, as on the TouchPad.
 `PDL_GetHardwareID` was 101 (the Pre) for every app, with a comment saying TouchPad; it is
 now the profile's own.
 
-**Not measured:** which listed device libnapp picks when there are several; whether
-`final_scale` and `final_rotation` differ from the card's turn-and-fit; what
-`PDL_GetHardware`/`GetScreenMetrics` answer under it (the hardware string is left as it was);
-2D apps under it; the Pre3's own behaviour with a Pre-only app.
+**Not measured:** whether `final_scale` and `final_rotation` differ from the card's
+turn-and-fit; what `PDL_GetHardware`/`GetScreenMetrics` answer under it (the hardware string
+is left as it was); 2D apps under it; the Pre3's own behaviour with a Pre-only app.
 
 ## 6g. Worms and Atlantis Sky Patrol HD: OpenSSL, Palm's SDL calls, /proc/meminfo, 2026-10-19
 
@@ -881,22 +899,19 @@ Both broken on the Galaxy Z Fold3 (64-bit, native), each for its own reason; bot
   A TouchPad has no vibration motor, so Lunacy's has no haptic devices: nothing opens, and
   every call on one fails with SDL's error. Lunacy's SDL now exports everything Palm's did.
 
-**Open: Worms is drawn a quarter turn off.** On the reference TouchPad, held landscape, Worms
-is upright (codepoet); on Lunacy its picture is turned, text reading bottom to top, and it
-doesn't follow the device's turning. The same files on both (checksums of `Worms`,
-`Worms.s3e`, `appinfo.json`, `metadata.json` match), a 1024 x 768 GLES 1 surface on both, and
-the card doesn't turn it ("turned 0"), so Worms (Marmalade) turns it itself. Ruled out, each
-measured on the TouchPad or tried on the Fold3: `SDL_ListModes` ("any" on both),
-`SDL_GetVideoInfo`, `PDL_GetScreenMetrics` (including its aspect 1.0), `PDL_GetHardwareID`,
-`PDL_GetHardware` ("unknown" on the TouchPad, now Lunacy's too), the device name, the GL
-vendor and renderer (Qualcomm, Adreno (TM) 220: tried, no change), an upright accelerometer
-before the first reading (tried, no change), `/proc/meminfo`. Worms makes no `glRotate*`,
-`glViewport` or `uname` calls through the dynamic linker and reads no files at start but
-`/proc/meminfo`; its environment on the TouchPad holds nothing about orientation
-(`LD_PRELOAD=libpvrtc.so` aside). Angry Birds, also said to be Marmalade, is upright on
-Lunacy (codepoet). Not yet compared: the OS version's string ("webOS CE 3.1.0" on the
-TouchPad, "3.1.0" here), the SDL event stream at start (an early resize or active event),
-and what Worms reads from the joystick as it runs.
+**Worms was drawn a quarter turn off: portability's numbers.** On the reference TouchPad Worms
+is upright; on Lunacy its picture was turned, text reading bottom to top, on the Fold3 and the
+HP 10 G2 alike. Its `metadata.json` is `{"version":1,"devices":[601]}`, which Lunacy read as
+PDL's 601, the TouchPad, and so gave it the 1024 x 768 surface. A logging preload
+(`Workbench/probe/wlog`: every SDL and PDL call Worms makes, with arguments and results) run
+under Worms on both machines showed the difference: on the TouchPad `SDL_GetVideoInfo` and
+`SDL_SetVideoMode` are 480 x 800, a Pre3's screen, and Marmalade draws a portrait game
+upright in it. 601 is libnapp's number for the Pre3 (§6f's table). With libnapp's numbering
+Lunacy emulates the Pre3 for Worms, the card turns its 480 x 800 buffer, and it is upright
+on both devices. On the way, ruled out (each measured on the TouchPad or tried on the
+Fold3): the SDL driver's name ("fbcon" on the TouchPad, "lunacy" here), SDL's version
+(1.2.13 there), `PDL_GetHardware`, the device name, the GL strings, the OS version's string,
+an early accelerometer reading, `/proc/meminfo`.
 Its music is MP3 (`Audio/Music/Title.mp3`), which Lunacy's SDL_mixer couldn't play; the
 TouchPad's (1.2.10) decoded MP3 through Palm's ffmpeg. SDL_mixer is now built with MP3 through
 SMPEG 0.4.5 (LGPL 2, Debian armel), its own MP3 path in 1.2, rather than libmad, which would

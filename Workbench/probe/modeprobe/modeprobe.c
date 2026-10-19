@@ -31,6 +31,9 @@ int main(int argc, char **argv) {
     PDL_GetDeviceName(buf, sizeof buf); printf("DeviceName '%s'\n", buf);
     PDL_OSVersion v; if (PDL_GetOSVersion(&v) == PDL_NOERROR) printf("OSVersion %d.%d.%d '%s'\n", v.majorVersion, v.minorVersion, v.revision, v.versionStr);
     printf("HardwareID %d\n", PDL_GetHardwareID());
+    char drv[64] = ""; SDL_VideoDriverName(drv, sizeof drv); printf("VideoDriverName '%s'\n", drv);
+    const SDL_version *lv = SDL_Linked_Version(); printf("Linked_Version %d.%d.%d\n", lv->major, lv->minor, lv->patch);
+    SDL_InitSubSystem(SDL_INIT_JOYSTICK); printf("NumJoysticks %d name0 '%s'\n", SDL_NumJoysticks(), SDL_NumJoysticks() > 0 ? SDL_JoystickName(0) : "");
     PDL_Quit(); SDL_Quit();
     return 0;
 }

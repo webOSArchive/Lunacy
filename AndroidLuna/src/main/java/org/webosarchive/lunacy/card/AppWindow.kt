@@ -130,9 +130,14 @@ open class AppWindow(
     private var page = 0
     var stageReady = false
         private set
-    /** webOS window attributes from window.open: "window" is card, dashboard or popupalert. */
+    /** webOS window attributes from window.open: "window" is card, dashboard, popupalert or dockMode. */
     var attributes = JSONObject()
-    val type: String get() = attributes.optString("window", "card")
+    /**
+     * The window's type, by its name whatever its case: Palm's Photos asks for its Exhibition
+     * window as "dockmode", and the same unchanged Photos opens it in the dock on the reference
+     * TouchPad, where Enyo passes the name through as written.
+     */
+    val type: String get() = attributes.optString("window", "card").let { t -> WINDOW_TYPES.firstOrNull { it.equals(t, ignoreCase = true) } ?: t }
     /**
      * The orientation the app has fixed its card at - "up", "down", "left", "right",
      * "landscape" or "portrait" - or null while it lets the card turn with the screen
@@ -438,6 +443,8 @@ open class AppWindow(
     }
 
     private companion object {
+        /** The window types the shell places, as it names them. */
+        val WINDOW_TYPES = listOf("card", "dashboard", "popupalert", "dockMode")
         /** How long an open holds the next one when no window comes of it. */
         const val POPUP_WAIT_MS = 1000L
         /** Plausible process ids, in the range webOS apps started at. */

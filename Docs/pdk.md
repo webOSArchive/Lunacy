@@ -881,8 +881,22 @@ Both broken on the Galaxy Z Fold3 (64-bit, native), each for its own reason; bot
   A TouchPad has no vibration motor, so Lunacy's has no haptic devices: nothing opens, and
   every call on one fails with SDL's error. Lunacy's SDL now exports everything Palm's did.
 
-Worms is a Pre game: it draws portrait into a landscape screen, so on the Fold3 its picture
-is on its side, as the game's own frame is; how a TouchPad showed it is not yet compared.
+**Open: Worms is drawn a quarter turn off.** On the reference TouchPad, held landscape, Worms
+is upright (codepoet); on Lunacy its picture is turned, text reading bottom to top, and it
+doesn't follow the device's turning. The same files on both (checksums of `Worms`,
+`Worms.s3e`, `appinfo.json`, `metadata.json` match), a 1024 x 768 GLES 1 surface on both, and
+the card doesn't turn it ("turned 0"), so Worms (Marmalade) turns it itself. Ruled out, each
+measured on the TouchPad or tried on the Fold3: `SDL_ListModes` ("any" on both),
+`SDL_GetVideoInfo`, `PDL_GetScreenMetrics` (including its aspect 1.0), `PDL_GetHardwareID`,
+`PDL_GetHardware` ("unknown" on the TouchPad, now Lunacy's too), the device name, the GL
+vendor and renderer (Qualcomm, Adreno (TM) 220: tried, no change), an upright accelerometer
+before the first reading (tried, no change), `/proc/meminfo`. Worms makes no `glRotate*`,
+`glViewport` or `uname` calls through the dynamic linker and reads no files at start but
+`/proc/meminfo`; its environment on the TouchPad holds nothing about orientation
+(`LD_PRELOAD=libpvrtc.so` aside). Angry Birds, also said to be Marmalade, is upright on
+Lunacy (codepoet). Not yet compared: the OS version's string ("webOS CE 3.1.0" on the
+TouchPad, "3.1.0" here), the SDL event stream at start (an early resize or active event),
+and what Worms reads from the joystick as it runs.
 Its music is MP3 (`Audio/Music/Title.mp3`), which Lunacy's SDL_mixer couldn't play; the
 TouchPad's (1.2.10) decoded MP3 through Palm's ffmpeg. SDL_mixer is now built with MP3 through
 SMPEG 0.4.5 (LGPL 2, Debian armel), its own MP3 path in 1.2, rather than libmad, which would

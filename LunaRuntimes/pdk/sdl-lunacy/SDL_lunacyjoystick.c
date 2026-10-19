@@ -42,3 +42,43 @@ void SDL_SYS_JoystickUpdate(SDL_Joystick *joystick)
 void SDL_SYS_JoystickClose(SDL_Joystick *joystick) { }
 
 void SDL_SYS_JoystickQuit(void) { }
+
+/*
+ * Palm's SDL exported SDL 1.3's haptic (force feedback) API, with no header in the PDK; FIFA
+ * and Raging Thunder 2 declare and call it themselves. A TouchPad has no vibration motor, so
+ * here, as on one, there are no haptic devices: nothing opens, and every call on a device
+ * fails with SDL's error. The effect is an opaque pointer, as the callers pass it.
+ */
+#include "SDL_error.h"
+typedef struct _SDL_Haptic SDL_Haptic;
+#define NO_HAPTIC(r) { SDL_SetError("Haptic: There are 0 haptic devices available"); return r; }
+
+DECLSPEC int SDLCALL SDL_NumHaptics(void) { return 0; }
+DECLSPEC const char * SDLCALL SDL_HapticName(int index) NO_HAPTIC(NULL)
+DECLSPEC SDL_Haptic * SDLCALL SDL_HapticOpen(int index) NO_HAPTIC(NULL)
+DECLSPEC int SDLCALL SDL_HapticOpened(int index) { return 0; }
+DECLSPEC int SDLCALL SDL_HapticIndex(SDL_Haptic *h) NO_HAPTIC(-1)
+DECLSPEC int SDLCALL SDL_MouseIsHaptic(void) { return 0; }
+DECLSPEC SDL_Haptic * SDLCALL SDL_HapticOpenFromMouse(void) NO_HAPTIC(NULL)
+DECLSPEC int SDLCALL SDL_JoystickIsHaptic(SDL_Joystick *j) { return 0; }
+DECLSPEC SDL_Haptic * SDLCALL SDL_HapticOpenFromJoystick(SDL_Joystick *j) NO_HAPTIC(NULL)
+DECLSPEC void SDLCALL SDL_HapticClose(SDL_Haptic *h) {}
+DECLSPEC int SDLCALL SDL_HapticNumEffects(SDL_Haptic *h) NO_HAPTIC(-1)
+DECLSPEC int SDLCALL SDL_HapticNumEffectsPlaying(SDL_Haptic *h) NO_HAPTIC(-1)
+DECLSPEC unsigned int SDLCALL SDL_HapticQuery(SDL_Haptic *h) NO_HAPTIC(0)
+DECLSPEC int SDLCALL SDL_HapticNumAxes(SDL_Haptic *h) NO_HAPTIC(-1)
+DECLSPEC int SDLCALL SDL_HapticEffectSupported(SDL_Haptic *h, void *effect) NO_HAPTIC(-1)
+DECLSPEC int SDLCALL SDL_HapticNewEffect(SDL_Haptic *h, void *effect) NO_HAPTIC(-1)
+DECLSPEC int SDLCALL SDL_HapticUpdateEffect(SDL_Haptic *h, int id, void *effect) NO_HAPTIC(-1)
+DECLSPEC int SDLCALL SDL_HapticRunEffect(SDL_Haptic *h, int id, Uint32 iterations) NO_HAPTIC(-1)
+DECLSPEC int SDLCALL SDL_HapticStopEffect(SDL_Haptic *h, int id) NO_HAPTIC(-1)
+DECLSPEC void SDLCALL SDL_HapticDestroyEffect(SDL_Haptic *h, int id) {}
+DECLSPEC int SDLCALL SDL_HapticGetEffectStatus(SDL_Haptic *h, int id) NO_HAPTIC(-1)
+DECLSPEC int SDLCALL SDL_HapticSetGain(SDL_Haptic *h, int gain) NO_HAPTIC(-1)
+DECLSPEC int SDLCALL SDL_HapticSetAutocenter(SDL_Haptic *h, int autocenter) NO_HAPTIC(-1)
+DECLSPEC int SDLCALL SDL_HapticPause(SDL_Haptic *h) NO_HAPTIC(-1)
+DECLSPEC int SDLCALL SDL_HapticUnpause(SDL_Haptic *h) NO_HAPTIC(-1)
+DECLSPEC int SDLCALL SDL_HapticStopAll(SDL_Haptic *h) NO_HAPTIC(-1)
+/* Palm's own two, beyond SDL 1.3's: their arguments are unknown, and with no device unused. */
+DECLSPEC int SDLCALL SDL_HapticMaxDuration(SDL_Haptic *h) NO_HAPTIC(-1)
+DECLSPEC int SDLCALL SDL_HapticMinDuration(SDL_Haptic *h) NO_HAPTIC(-1)

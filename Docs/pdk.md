@@ -875,8 +875,11 @@ Both broken on the Galaxy Z Fold3 (64-bit, native), each for its own reason; bot
   PALM): `SDL_GetMultiMouseState(which, x, y)` and `SDL_GetRelativeMultiMouseState`, a
   finger's state, finger 0 being SDL's own mouse, and `SDL_GLES_LoadLibrary` and
   `SDL_GLES_GetProcAddress`, SDL's GL loader under other names. Lunacy's SDL has all four now
-  (`sdl-lunacy`). Palm's library also exported a haptic API, but the PDK ships no header for
-  it, so no app could have been built against it.
+  (`sdl-lunacy`). Palm's library also exported SDL 1.3's haptic API with no header in the
+  PDK; FIFA and Raging Thunder 2 declare and call it themselves (a scan of every ARM binary
+  in the mirror for SDL calls the runtime lacked found these and nothing else of Palm's).
+  A TouchPad has no vibration motor, so Lunacy's has no haptic devices: nothing opens, and
+  every call on one fails with SDL's error. Lunacy's SDL now exports everything Palm's did.
 
 Worms is a Pre game: it draws portrait into a landscape screen, so on the Fold3 its picture
 is on its side, as the game's own frame is; how a TouchPad showed it is not yet compared.

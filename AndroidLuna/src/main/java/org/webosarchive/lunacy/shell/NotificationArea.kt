@@ -304,6 +304,56 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
         visibility = if (visible > 0f) View.VISIBLE else View.INVISIBLE
     }
 
+    // ---- the bottom edge ----
+
+    /**
+     * What the area pushed up from the bottom of the screen (the shell's root). On the Pre3 the
+     * swipe up came from the gesture area below the screen, so the area never stood in its way;
+     * here the screen's bottom edge is the gesture area too. A swipe up that starts on the bar,
+     * or in the bottom [CardLayer.Params.EDGE] px of the open list or an alert, is handed to this
+     * view as one that started at its own bottom edge, where the card layer takes it (a maximized
+     * card goes to the card view; the open list's scrim closes it first, as Home does). A tap on
+     * the bar stays the bar's, and the list still scrolls.
+     */
+    var edgeTarget: View? = null
+    private var edgeDownX = 0f
+    private var edgeDownY = 0f
+    /** 0: not an edge touch; 1: an edge touch, not yet a swipe; 2: a swipe, handed over. */
+    private var edgeState = 0
+
+    override fun dispatchTouchEvent(e: MotionEvent): Boolean {
+        if (e.actionMasked == MotionEvent.ACTION_DOWN) {
+            edgeDownX = e.rawX; edgeDownY = e.rawY
+            val screen = parent as? View
+            val at = IntArray(2).also { screen?.getLocationOnScreen(it) }
+            val band = if (bar.visibility == View.VISIBLE) barPx.toFloat() else luna.px(CardLayer.Params.EDGE)
+            edgeState = if (edgeTarget != null && screen != null && e.rawY >= at[1] + screen.height - band) 1 else 0
+        }
+        if (edgeState == 1 && e.actionMasked == MotionEvent.ACTION_MOVE) {
+            val up = edgeDownY - e.rawY
+            if (up >= luna.px(CardLayer.Params.TRIGGER) && up > abs(e.rawX - edgeDownX)) {
+                edgeState = 2
+                // The bar, a row or an alert had the touch so far: it ends for them.
+                MotionEvent.obtain(e).apply { action = MotionEvent.ACTION_CANCEL }.also { super.dispatchTouchEvent(it); it.recycle() }
+                handOver(e, MotionEvent.ACTION_DOWN, edgeDownX, edgeDownY)
+            }
+        }
+        if (edgeState == 2) {
+            handOver(e, e.actionMasked, e.rawX, e.rawY)
+            if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL) edgeState = 0
+            return true
+        }
+        return super.dispatchTouchEvent(e)
+    }
+
+    /** The swipe as [edgeTarget] would have had it: from its bottom edge, by as far as the finger has gone. */
+    private fun handOver(e: MotionEvent, action: Int, rawX: Float, rawY: Float) {
+        val t = edgeTarget ?: return
+        val at = IntArray(2).also { t.getLocationOnScreen(it) }
+        MotionEvent.obtain(e.downTime, e.eventTime, action, rawX - at[0], t.height - 1 + (rawY - edgeDownY), 0)
+            .also { t.dispatchTouchEvent(it); it.recycle() }
+    }
+
     // ---- the scroll masks ----
 
     override fun dispatchDraw(c: Canvas) {

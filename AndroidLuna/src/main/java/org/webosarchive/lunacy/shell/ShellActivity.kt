@@ -489,6 +489,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 (root.layoutParams as FrameLayout.LayoutParams).let { lp -> if (lp.bottomMargin != px) { lp.bottomMargin = px; root.layoutParams = lp } }
             }
             a.onNotificationTap = { if (!notifications.tapBanner()) toggleMenu() }
+            a.edgeTarget = root
             statusBar.onSlide = { hidden -> a.fullScreen = hidden }
         }
         barMenu = menu; barPopups = popups

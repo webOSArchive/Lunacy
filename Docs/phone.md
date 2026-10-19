@@ -237,6 +237,14 @@ card shrinks behind it. A page is laid out once per change, never every frame, a
 never shows the gap. The list keeps its open height while closed so its pages are drawn before
 it opens.
 
+**The swipe up.** On the Pre3 the swipe that cards an app started in the gesture area below
+the screen, so the area never stood in its way. Here the screen's bottom edge is the gesture
+area too, and the area sits on it. A swipe up that starts on the bar, or in the bottom 15 px
+(`kGestureBorderSize`) of the open list or an alert, is handed to the shell's root as one that
+started at its own bottom edge (`NotificationArea.edgeTarget`): a maximized card goes to the card
+view, and with the list open the scrim takes it and closes the list, as Home does. A tap on the
+bar is still the bar's, and the list still scrolls.
+
 **The keyboard.** webOS phones had a hardware keyboard; LunaSysMgr put a keyboard device's
 notifications at the top (`dashboardOwnsNegativeSpace` is false with a virtual keyboard). Here
 the area steps aside while Android's keyboard is up and comes back after it.

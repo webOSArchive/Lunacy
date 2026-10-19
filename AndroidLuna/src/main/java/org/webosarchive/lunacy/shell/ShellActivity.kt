@@ -940,7 +940,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         child.fixedOrientation = fixedOrientationOf(registry.get(child.appId))
         when (child.type) {
             "dashboard" -> notifications.addDashboard(child, icon(child.attributes.optString("icon"), child.appId))
-            "popupalert" -> notifications.popups.show(child, child.attributes.optInt("height", 200))
+            "popupalert" -> {
+                // A phone's list gives way to the alert in the same area: closed by the shell,
+                // so the scrim over the rest goes with it, or it would eat the next tap.
+                if (notificationsAtBottom) closeMenu()
+                notifications.popups.show(child, child.attributes.optInt("height", 200))
+            }
             // The headless app's first card: it fills the card its launch put up, and the root
             // goes on where a headless root lives.
             "card" -> placeholderOf(parent)?.let { card ->

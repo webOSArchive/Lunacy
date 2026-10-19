@@ -89,7 +89,11 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
     override fun addNotificationIcon(key: Any, icon: Bitmap?) { icons[key] = icon; relayout(); bar.invalidate() }
     override fun removeNotificationIcon(key: Any) { icons.remove(key); relayout(); bar.invalidate() }
 
-    private val bannerText = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = luna.px(BANNER_TEXT); typeface = luna.fontMedium }
+    private val bannerText = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = luna.px(BANNER_TEXT); typeface = luna.fontMedium }
+    private val iconPaint = Paint(Paint.FILTER_BITMAP_FLAG)
+    private val drawRect = RectF()
+    /** The banner's text as it fits the bar, worked out once per banner and width, not every frame. */
+    private var fitted: Triple<Banner, Float, String>? = null
 
     private val bar = object : View(context) {
         override fun onDraw(c: Canvas) {
@@ -105,10 +109,15 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
                 var x = luna.px(TEXT_MARGIN)
                 b.icon?.let {
                     val s = luna.px(BANNER_ICON)
-                    c.drawBitmap(it, null, RectF(x, (h - s) / 2f, x + s, (h + s) / 2f), Paint(Paint.FILTER_BITMAP_FLAG).apply { this.alpha = alpha })
+                    drawRect.set(x, (h - s) / 2f, x + s, (h + s) / 2f)
+                    iconPaint.alpha = alpha
+                    c.drawBitmap(it, null, drawRect, iconPaint)
                     x += s + luna.px(TEXT_MARGIN)
                 }
-                val text = android.text.TextUtils.ellipsize(b.text, android.text.TextPaint(bannerText), width - x - luna.px(TEXT_MARGIN), android.text.TextUtils.TruncateAt.END).toString()
+                val room = width - x - luna.px(TEXT_MARGIN)
+                bannerText.alpha = 255
+                val text = fitted?.takeIf { it.first === b && it.second == room }?.third
+                    ?: android.text.TextUtils.ellipsize(b.text, bannerText, room, android.text.TextUtils.TruncateAt.END).toString().also { fitted = Triple(b, room, it) }
                 bannerText.alpha = alpha
                 c.drawText(text, x, h / 2f - (bannerText.ascent() + bannerText.descent()) / 2, bannerText)
                 c.restore()
@@ -121,7 +130,9 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
             for (icon in icons.values.reversed()) {
                 val i = icon ?: continue
                 val ih = minOf(h, i.height.toFloat()); val iw = i.width * ih / i.height
-                c.drawBitmap(i, null, RectF(right - iw, (h - ih) / 2f, right, (h + ih) / 2f), Paint(Paint.FILTER_BITMAP_FLAG))
+                drawRect.set(right - iw, (h - ih) / 2f, right, (h + ih) / 2f)
+                iconPaint.alpha = 255
+                c.drawBitmap(i, null, drawRect, iconPaint)
                 right -= iw
             }
         }
@@ -145,17 +156,25 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
         override fun fling(velocityY: Int) {}
         override fun onScrollChanged(l: Int, t: Int, oldl: Int, oldt: Int) { super.onScrollChanged(l, t, oldl, oldt); this@NotificationArea.invalidate() }
         @SuppressLint("ClickableViewAccessibility")
+        override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
+            // A finger down stops a snap still running, or it would pull the list from under it.
+            if (e.actionMasked == MotionEvent.ACTION_DOWN) { snapping?.cancel(); snapping = null }
+            return super.onInterceptTouchEvent(e)
+        }
         override fun onTouchEvent(e: MotionEvent): Boolean {
+            if (e.actionMasked == MotionEvent.ACTION_DOWN) { snapping?.cancel(); snapping = null }
             val r = super.onTouchEvent(e)
             if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL) snap()
             return r
         }
+        private var snapping: ValueAnimator? = null
         fun snap() {
             val bottom = rows.height - height
             if (bottom <= 0) return
             val row = luna.px(ROW_H)
             val target = (bottom - Math.round((bottom - scrollY).toFloat() / row) * row).coerceIn(0, bottom)
-            ValueAnimator.ofInt(scrollY, target).apply {
+            snapping?.cancel()
+            snapping = ValueAnimator.ofInt(scrollY, target).apply {
                 duration = SNAP_MS; interpolator = Easing.OutCubic
                 addUpdateListener { scrollTo(0, it.animatedValue as Int) }
                 start()
@@ -382,12 +401,15 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
         private var downX = 0f
         private var downY = 0f
         private var mine = true
+        /** Swiped off and going: no more touches, and dismissed once. */
+        private var leaving = false
         private val slop = ViewConfiguration.get(context).scaledTouchSlop
         private val manual get() = window.attributes.optString("webosDragMode") == "manual"
 
         init { addView(window, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)) }
 
         override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
+            if (leaving) return true
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> { downX = e.rawX; downY = e.rawY; mine = !manual || e.x <= luna.px(BADGE_W) }
                 MotionEvent.ACTION_MOVE -> if (mine && abs(e.rawX - downX) > slop && abs(e.rawX - downX) > abs(e.rawY - downY)) {
@@ -400,10 +422,12 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
 
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(e: MotionEvent): Boolean {
+            if (leaving) return true
             when (e.actionMasked) {
                 MotionEvent.ACTION_MOVE -> translationX = e.rawX - downX
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (abs(translationX) > width / 4f) {
+                        leaving = true
                         animate().translationX(Math.signum(translationX) * width * 1.5f).setDuration(DISMISS_MS).setInterpolator(Easing.Linear)
                             .withEndAction { onDismiss(window) }.start()
                     } else animate().translationX(0f).setDuration(DISMISS_MS).start()

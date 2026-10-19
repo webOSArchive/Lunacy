@@ -423,6 +423,13 @@ open class AppWindow(
         }
     }
 
+    /**
+     * The page size this window is held at, in TouchPad px, or null for its own size. Set for
+     * Exhibition's windows, which the shell lays out at this shape and scales to fit
+     * (ShellActivity.layDockWindow).
+     */
+    var designSize: android.util.Size? = null
+
     /** Device px per CSS px in this window's page: the shell's scale, less the phone's app scale. */
     val pageScale: Float get() = host.pixelScale * fit(width, height)
 
@@ -436,6 +443,9 @@ open class AppWindow(
      * 640 x 332 card -> 0.519, a 1233 x 640 page.
      */
     private fun fit(widthPx: Int, heightPx: Int): Float {
+        // A window held at a size of its own (Exhibition's): its page is that size, whatever
+        // the shell's scale, shown at the size the window is laid out at.
+        designSize?.let { d -> if (widthPx > 0 && heightPx > 0) return minOf(widthPx / host.pixelScale / d.width, heightPx / host.pixelScale / d.height) }
         val layoutWidth = host.fixedViewportWidth(appId)
         val side = if (heightPx > 0) minOf(widthPx, heightPx) else widthPx
         if (layoutWidth <= 0 || side <= 0) return 1f

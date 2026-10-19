@@ -468,6 +468,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // the apps' dock windows in it, one on show at a time. It covers the cards, launcher
         // and dock; alerts, dashboards and the status bar stay over it, as on a device.
         dockLayer = DockLayer().apply { visibility = View.GONE; setBackgroundColor(android.graphics.Color.BLACK) }
+        // A turn or a fold changes the dock's shape: its windows are fitted to it again.
+        dockLayer.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or, ob ->
+            if (r - l != or - ol || b - t != ob - ot) dockLayer.post { dockWindows.values.forEach { layDockWindow(it) } }
+        }
         dockLayer.addView(exhibition, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         root.addView(dockLayer, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
 
@@ -1981,7 +1985,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
         headless.forEach { hidden.addView(it, FrameLayout.LayoutParams(1, 1)) }
         for (w in dockWindows.values) {
-            dockLayer.addView(w, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
+            dockLayer.addView(w, FrameLayout.LayoutParams(0, 0))
+            layDockWindow(w)
         }
         dashboards.forEach { notifications.addDashboard(it, icon(it.attributes.optString("icon"), it.appId)) }
         alerts.forEach { notifications.popups.show(it, it.attributes.optInt("height", 200)) }
@@ -2186,9 +2191,32 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         dockWindows.put(w.appId, w)?.takeIf { it != w }?.let { onWindowClosed(it) }
         w.alpha = 0f
         w.visibility = View.INVISIBLE
-        // In the positive space, under the status bar.
-        dockLayer.addView(w, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
+        dockLayer.addView(w, FrameLayout.LayoutParams(0, 0))
+        layDockWindow(w)
         if (exhibitionOn && w.appId == exhibitionApp) showDockFace(w)
+    }
+
+    /**
+     * An Exhibition window at the TouchPad's dock size: its screen, 1024 x 768, less the 28 px
+     * status bar above, upright or on its side as the dock is shaped. Exhibition was the
+     * Touchstone's, and its apps were written for exactly that window - Photos hard-codes its
+     * height in it, and on a dock any other height left its hidden controls on the screen. In
+     * the positive space under the status bar, as large as fits, centred, black around it
+     * (codepoet, 2026-10-19; Docs/luna-deltas.md B16).
+     */
+    private fun layDockWindow(w: AppWindow) {
+        val top = luna.px(StatusBar.HEIGHT)
+        val aw = dockLayer.width; val ah = dockLayer.height - top
+        val design = if (aw > ah) android.util.Size(1024, 768 - StatusBar.HEIGHT) else android.util.Size(768, 1024 - StatusBar.HEIGHT)
+        w.designSize = design
+        val lp = w.layoutParams as? FrameLayout.LayoutParams ?: return
+        if (aw <= 0 || ah <= 0) { lp.width = MATCH_PARENT; lp.height = MATCH_PARENT; lp.topMargin = top; w.layoutParams = lp; return }
+        val s = minOf(aw.toFloat() / design.width, ah.toFloat() / design.height)
+        lp.width = Math.round(design.width * s); lp.height = Math.round(design.height * s)
+        lp.gravity = android.view.Gravity.CENTER_HORIZONTAL or android.view.Gravity.TOP
+        lp.topMargin = top + (ah - lp.height) / 2
+        w.layoutParams = lp
+        w.post { w.rescale() }
     }
 
     /**

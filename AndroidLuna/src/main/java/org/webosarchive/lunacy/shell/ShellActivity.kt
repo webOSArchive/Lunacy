@@ -269,6 +269,19 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // One shell per process, as one LunaSysMgr per device. Android makes a second one
+        // beside the first when the shell is started outside its task: from another launcher's
+        // icon while Lunacy is the home app, or a home intent from adb (a home task and a
+        // standard one, which singleTask keeps apart). Two shells were two systems, each running
+        // every activity on its own bus and db8, so syncs ran twice. The newcomer hands its
+        // intent to the shell that is up, with its cards, and goes before building anything.
+        live?.get()?.takeIf { it !== this && !it.isDestroyed && !it.isFinishing }?.let { up ->
+            handedOff = true
+            up.takeOver(intent)
+            finish()
+            return
+        }
+        live = java.lang.ref.WeakReference(this)
         window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
         WebView.setWebContentsDebuggingEnabled(true)
         org.webosarchive.lunacy.card.FormFactor.shown = org.webosarchive.lunacy.card.FormFactor.decide(this)
@@ -513,6 +526,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     override fun onDestroy() {
+        if (handedOff) { super.onDestroy(); return }
+        if (live?.get() === this) live = null
         (getSystemService(DISPLAY_SERVICE) as android.hardware.display.DisplayManager)
             .unregisterDisplayListener(displayListener)
         if (watchingPower) { unregisterReceiver(powerReceiver); watchingPower = false }
@@ -564,6 +579,15 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     /** Lunacy is single-task: later launch requests (e.g. from adb or, later, Android intents) arrive here. */
+    /** Set when this shell found another already up and handed it its intent ([onCreate]). */
+    private var handedOff = false
+
+    /** A second shell's intent: this shell comes to the front and takes it as its own. */
+    private fun takeOver(intent: android.content.Intent) {
+        (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).moveTaskToFront(taskId, 0)
+        onNewIntent(intent)
+    }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         // As the home screen: Home while the shell is up is Lunacy's own Home button. From
@@ -1055,12 +1079,28 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      */
     private fun afterFirstUse() {
         if (!org.webosarchive.lunacy.card.LunacyService.firstUseDone(this) || !::webos.isInitialized) return
+        launchBootTimeApps()
         val prefs = java.io.File(webos.root, "var/luna/preferences")
         runCatching { prefs.mkdirs(); java.io.File(prefs, "ran-first-use").createNewFile() }
         if (java.io.File(prefs, "first-use-profile-created").exists()) return
         bus.call("", "palm://com.palm.accountservices/createNovaAccount", "{\"createDefaultAccount\":true}", privateBus = true) { r ->
             Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "firstuse-createDefaultAccount: $r")
         }
+    }
+
+    private var bootTimeAppsLaunched = false
+
+    /**
+     * ApplicationManager::launchBootTimeApps: once the launcher is up (here, once First Use
+     * is done and the webOS root is ready), the apps in [LAUNCH_AT_BOOT] start headless with
+     * {"launchedAtBoot": true}, which each of them answers by opening nothing. Email's headless
+     * page is what tells of new mail (its DashboardManager), Messaging's of new messages.
+     */
+    private fun launchBootTimeApps() {
+        if (bootTimeAppsLaunched) return
+        bootTimeAppsLaunched = true
+        for (id in LAUNCH_AT_BOOT) if (registry.get(id) != null && running[id] == null)
+            launch(id, JSONObject().put("launchedAtBoot", true), startupCard = false)
     }
 
     /** The installed apps changed (an install, a removal, a script's rescan): the launcher hears it. */
@@ -1461,10 +1501,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // An app ends when its last visible window closes; its headless root goes with it, a
         // moment later: a dashboard swiped away tells the root as it unloads (Enyo's
         // onUserClose), and the root acts on it, so it must still be there to hear it. A window
-        // it opens meanwhile keeps it.
+        // it opens meanwhile keeps it. An app in [KEEP_ALIVE] keeps its headless root.
         val app = registry.get(w.appId)
         if (list.isEmpty()) endApp(w.appId, list)
-        else if (app?.noWindow == true && list.none { it.parent != hidden }) {
+        else if (app?.noWindow == true && w.appId !in KEEP_ALIVE && list.none { it.parent != hidden }) {
             window.decorView.postDelayed({
                 if (running[w.appId] === list && list.none { it.parent != hidden }) endApp(w.appId, list)
             }, HEADLESS_LINGER_MS)
@@ -2847,6 +2887,18 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     companion object {
+        /**
+         * The reference TouchPad's /etc/palm/luna-platform.conf, [LaunchAtBoot] and [KeepAlive]
+         * (it overrides luna.conf's, which name only the phone app); used in phone mode too.
+         * Measured there: closing Email's last card leaves its headless page running and
+         * Clock's (not listed) ends; closing the headless page itself ends the app, and
+         * nothing starts it again. Phone and Music Player aren't in Lunacy.
+         */
+        val LAUNCH_AT_BOOT = listOf("com.palm.app.phone", "com.palm.app.email", "com.palm.app.calendar", "com.palm.app.messaging")
+        val KEEP_ALIVE = setOf("com.palm.app.email", "com.palm.app.calendar", "com.palm.app.messaging", "com.palm.app.photos", "com.palm.app.musicplayer")
+
+        /** The shell that is up, if any: a second one hands off to it ([onCreate]). */
+        private var live: java.lang.ref.WeakReference<ShellActivity>? = null
         /** onActivityResult code for Android's credential confirmation (matchDevicePasscode). */
         private const val CONFIRM_LOCK = 201
         /** The launcher's launch point title, com.palm.launcher's on the reference TouchPad. */

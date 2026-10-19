@@ -930,7 +930,22 @@ apps depend on it as much as Mojo apps do.
 
 - **Headless root window.** An app with `noWindow: true` in `appinfo.json` starts as an
   invisible window (its `index.html`), which then opens its cards. Lunacy runs it in a
-  WebView that is never shown.
+  WebView that is never shown. The app ends a moment after its last card closes, unless it
+  is a keep-alive app.
+- **Boot-time and keep-alive apps.** The reference TouchPad's `luna-platform.conf` starts
+  Phone, Email, Calendar and Messaging headless once the launcher is up, with
+  `{"launchedAtBoot": true}` (`[LaunchAtBoot]`), and keeps the headless pages of Email,
+  Calendar, Messaging, Photos and Music Player running when their last card closes
+  (`[KeepAlive]`); an explicit `applicationManager/close` of the headless page still ends the
+  app (measured). This is where notifications come from: Email's headless page watches db8 for
+  new mail and puts up its dashboard, while the mail services only sync. Lunacy does the
+  same once First Use is done and the webOS root is ready (`ShellActivity.launchBootTimeApps`,
+  `LAUNCH_AT_BOOT`, `KEEP_ALIVE`), in phone mode too. Not done: LunaSysMgr also restarted a
+  boot-time app after it was updated.
+- **One shell.** Android makes a second `ShellActivity` when the shell is started outside its
+  task (another launcher's icon while Lunacy is the home app). A shell owns the bus, db8 and
+  activity manager, so a second one was a second system; it hands its intent to the shell
+  that is up and finishes before building anything, and a destroyed shell stops all of it.
 - **`window.open` makes windows.** Cards, dashboards and popup alerts are all opened with
   `window.open`; the window type comes from its attributes. Lunacy handles this through
   `onCreateWindow`, which keeps the opener link. `enyo.windows` makes synchronous calls

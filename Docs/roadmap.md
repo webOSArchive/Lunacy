@@ -3,7 +3,26 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-10-17)
+## Where things stand (2026-10-19)
+
+**0.8.2, a mini release** of the fixes since 0.8.0, at codepoet's call, so people can try them:
+
+- **Duplicate calendar events and email:** a recreated shell left the old one's bus, db8 and
+  activity manager running, so syncs ran several times over; a destroyed shell now stops all
+  of it, and a process keeps one shell. Email, Calendar and Messaging run headless from boot,
+  as on the TouchPad, so new mail notifies.
+- **Phone notifications:** a swipe up from the bottom edge cards the app again; an alert
+  clears the scrim; rows dismiss once.
+- **Edge swipe for home** (Screen & Lock, on by default): a swipe in from a side edge cards
+  the app; greyed out when Android's gesture navigation already does it.
+- **Exhibition:** the Time faces fit a phone or a cover screen; Photos' slideshow shows,
+  scaled to fit at the TouchPad's dock size, with its controls fading as on the TouchPad.
+- **Apps:** a link out of an app opens in the browser instead of replacing the app (SimpleChat's
+  images); `timeout/set` ignores `$` keys as the TouchPad does; Messaging's carrier settings.
+- **PDK:** webOS 3's portability, read in libnapp's own device numbers (ExZeus fills the
+  screen; Worms upright); Worms and Atlantis Sky Patrol HD play (OpenSSL 0.9.8, Palm's SDL
+  calls, a TouchPad-sized `/proc/meminfo`); MP3 music; Cut the Rope's levels start.
+- The status bar's ▾ no longer shows while the group fades after a banner with no icons.
 
 **0.8.0 release, build 296:** 0.7.4 RC build 289 renamed a minor release at codepoet's
 call, with one fix on top: the status bar's notification icons fade out under a banner and
@@ -79,6 +98,8 @@ One line per milestone; the detail is in [fix-log.md](fix-log.md), the topic doc
   notifications as dashboards; PDK native on 64-bit with Temple Run 2 and Fruit Ninja.
 - **2026-10-17, 0.8.0** (build 296; the keyboard now carries the same version): 0.7.4 as a minor release, with the banner over the
   notification icons fixed.
+- **2026-10-19, 0.8.2:** a mini release of the fixes since: shell teardown (duplicate syncs),
+  headless mail from boot, edge swipe for home, Exhibition, links out, Worms and Atlantis.
 
 ## Open, carried forward
 

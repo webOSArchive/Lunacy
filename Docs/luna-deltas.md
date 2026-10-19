@@ -606,6 +606,12 @@ Every reply shape must be **measured on the reference device** before it is writ
 the C++ says which keys exist, not their exact form. Unknown methods already get the right
 error from `Bus`; these are the ones apps and frameworks call.
 
+### B15. Edge swipe for home
+
+**An addition, codepoet's decision, 2026-10-19.** With Android's three-button navigation nothing turned a swipe in from a side edge into anything: the TouchPad's side edges did nothing by default (`sysUiEnableAppSwitchGestures` off), and Lunacy's dead zone kept those touches from the app. With Android's gesture navigation, Android takes the side edges for its back gesture, and Lunacy's Back is the TouchPad's Home, so the same swipe cards an app there.
+
+- **The gesture.** Over a maximized card, a touch that starts in the dead zone's left or right band and moves inward 15 px, more across than up or down (LunaCE's BezelGestureRecognizer side edges), does what Back does (`ShellActivity.homePressed`): closes what Lunacy has open on top, else cards the app. At once, not following the finger. In the card view and the launcher the side edges keep their swipes. The bottom swipe is unchanged.
+- **The setting.** Palm's Advanced Gestures toggle in Screen & Lock, relabelled "Edge swipe for home" with a line saying what it does (marked `[Lunacy]`, recorded in its NOTICE). It keeps its key, `sysUiEnableNextPrevGestures`, on by default as on the reference TouchPad. With Android's gesture navigation on (`navigation_mode` 2, Android 10 and later) the toggle is greyed out and the line says Android's back gesture already does it (`system/getEnvironment` reports `navigationMode`).
 ### C1. `com.palm.applicationManager`
 
 | Method | What it does | Pointer | Who calls it | Lunacy step |

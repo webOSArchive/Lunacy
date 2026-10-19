@@ -354,6 +354,11 @@ class LunacyService(
         j.put("layout", FormFactor.describe(context).put("appLayoutWidth", FormFactor.appLayoutWidth(context)))
         j.put("hostWallpaper", HostWallpaper.isOn(context))
         j.put("colourNotificationIcons", NotificationIcons.colour(context))
+        // Android's navigation: "gesture" takes the side edges for its back gesture (Screen &
+        // Lock greys out Lunacy's edge swipe then), "buttons" leaves them to Lunacy. Android 10
+        // brought gesture navigation; before it there were only buttons.
+        j.put("navigationMode", if (Build.VERSION.SDK_INT >= 29 &&
+            android.provider.Settings.Secure.getInt(context.contentResolver, "navigation_mode", 0) == 2) "gesture" else "buttons")
         j.put("androidNotifications", AndroidNotifications.accessGranted(context))
         j.put("software", FixedViewport.describe(context, registry.apps.filter { it.androidComponent == null }.sortedBy { it.title.lowercase() }))
         return j.toString()

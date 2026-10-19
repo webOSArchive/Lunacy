@@ -322,6 +322,8 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         fun onThrownAway(card: Card)
         /** A card is picked up to be reordered, or put down: the dock fades out meanwhile. */
         fun onReorder(active: Boolean)
+        /** A swipe in from the left or right edge over a maximized card (Lunacy's "Edge swipe for home"). */
+        fun onSideSwipe()
     }
 
     /**
@@ -1101,6 +1103,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
                 drag = if (e.y > height - luna.px(Params.EDGE)) Drag.UNDECIDED else Drag.NONE
                 downX = e.x; downY = e.y; lastX = e.x; lastY = e.y
                 ignoring = false
+                side = 0
                 // The gesture dead zone (SystemUiController, sysUiEnableGestureDeadzone, on by
                 // default and with the edge gestures on, as the reference TouchPad has them): a
                 // touch that starts in the 15 px band at the bottom, or at the left or right
@@ -1109,6 +1112,8 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
                 val edge = luna.px(Params.EDGE)
                 if (e.y >= height - 1 - edge || (e.y > inset && (e.x <= edge || e.x >= width - 1 - edge))) {
                     dragCard = max
+                    // A side band's touch, not the bottom's: the way in from that edge.
+                    if (drag == Drag.NONE) side = if (e.x <= edge) 1 else -1
                     return true
                 }
             }
@@ -1237,6 +1242,12 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
      */
     private fun deadZoneTouch(e: MotionEvent): Boolean {
         val max = maximized ?: return true
+        // In from a side edge, past the trigger and more across than up or down
+        // (BezelGestureRecognizer's left and right edges): once per touch.
+        if (e.actionMasked == MotionEvent.ACTION_MOVE && side != 0) {
+            val dx = (e.x - downX) * side
+            if (dx >= luna.px(Params.TRIGGER) && dx > abs(e.y - downY)) { side = 0; listener.onSideSwipe() }
+        }
         if (e.actionMasked == MotionEvent.ACTION_MOVE && drag == Drag.UNDECIDED &&
             downY - e.y >= luna.px(Params.TRIGGER) && downY - e.y > abs(e.x - downX)) {
             drag = Drag.MINIMIZE; dragCard = max
@@ -1245,9 +1256,12 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
             if (velocity == null) velocity = VelocityTracker.obtain()
             velocity!!.addMovement(e)
         }
-        if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL) { drag = Drag.NONE; dragCard = null }
+        if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL) { drag = Drag.NONE; dragCard = null; side = 0 }
         return true
     }
+
+    /** A touch that began in a side band of the dead zone: +1 from the left edge, -1 from the right, 0 none. */
+    private var side = 0
 
     /** Fluid minimize: the maximized card shrinks toward its card-view slot as the finger rises. */
     private fun minimizeFollow(dy: Float) {

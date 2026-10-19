@@ -2737,6 +2737,17 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     /** SystemUiController::enterOrExitCardReorder: the dock fades while a card is being reordered. */
     override fun onReorder(active: Boolean) = showDock(!active)
 
+    /**
+     * Lunacy's "Edge swipe for home" (Screen & Lock): a swipe in from a side edge does what
+     * Android's Back does, the TouchPad's Home. For Android's three-button navigation, which
+     * has no edge gesture; with gesture navigation Android takes those edges itself. The
+     * setting is the toggle's own key, sysUiEnableNextPrevGestures, on by default as on the
+     * reference TouchPad. A delta: the TouchPad's side edges did nothing (luna-deltas.md B15).
+     */
+    override fun onSideSwipe() {
+        if (systemService.get("sysUiEnableNextPrevGestures") != false) homePressed()
+    }
+
     override fun onThrownAway(card: Card) {
         card.window.evaluateJavascript("try{window.close()}catch(e){}", null)
         closeWindow(card.window)

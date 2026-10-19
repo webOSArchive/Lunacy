@@ -78,10 +78,13 @@ enyo.kind({
 	        	{content: $L("Android's home and lock screens show this wallpaper too."), className:"accounts-gestures-text"},
 	        	{kind: "RowGroup", caption:$L("Advanced Gestures"), components: [
 	        	                                        					{kind: "Item", tapHighlight: false, layoutKind: "HFlexLayout", components: [
-	        	                                        						{flex:1, content: $L("Enable Gestures")},
+	        	                                        						// [Lunacy] Palm's "Enable Gestures", the same setting, now a swipe in from a side edge as Home (Docs/luna-deltas.md B15).
+	        	                                        						{flex:1, content: $L("Edge swipe for home")},
 	        	                                        						{kind: "ToggleButton", name:"enablegesture", state:true, onChange:"toggleEnableGesture"}
 	        	                                        					]}
 	        	]},
+				// [Lunacy] What the edge swipe does here, or that Android's back gesture already does it.
+				{name:"edgeSwipeText", content: $L("Swipe in from the left or right edge of the screen to card an app or close what's open."), className:"accounts-gestures-text"},
 				{content: $L("Swipe up from the bottom of the screen to card an app. Swipe up again to see the Launcher."), className:"accounts-gestures-text"},
 	        	{kind: "RowGroup", caption:$L("Secure Unlock"), className:"accounts-group", 
 	        		components: [
@@ -233,6 +236,14 @@ enyo.kind({
 		}
 		if (inResponse && inResponse.androidNotifications !== undefined) {
 			this.$.androidNotifications.setState(inResponse.androidNotifications);
+		}
+		// [Lunacy] Android's gesture navigation has the side edges for its back gesture, which goes home too.
+		if (inResponse && inResponse.navigationMode !== undefined) {
+			var gesture = inResponse.navigationMode == "gesture";
+			this.$.enablegesture.setDisabled(gesture);
+			this.$.edgeSwipeText.setContent(gesture ?
+				$L("Android's gesture navigation is on: its back gesture, a swipe in from the left or right edge, already cards an app or closes what's open.") :
+				$L("Swipe in from the left or right edge of the screen to card an app or close what's open."));
 		}
 		var y = inResponse && inResponse.layout;
 		if (!y) { return; }

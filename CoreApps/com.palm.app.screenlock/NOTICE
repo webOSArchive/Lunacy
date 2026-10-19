@@ -10,7 +10,9 @@ where the owner chooses Lunacy's phone or tablet layout (Docs/phone.md; 2026-10-
 "Use on Android" switch in the Wallpaper group, the opt-in to Android's own wallpaper
 following webOS's (2026-10-04), and a Notifications group after Layout, where the owner chooses
 apps' icons in the notifications in colour or grey, and turns on Android's notifications there by
-opening Android's own Notification access screen (2026-10-16). They are the only non-Palm things in the app, marked [Lunacy]
+opening Android's own Notification access screen (2026-10-16), and Palm's Advanced Gestures
+toggle relabelled "Edge swipe for home", with a line saying what it does, greyed out while
+Android's gesture navigation has the side edges (2026-10-19; Docs/luna-deltas.md B15). They are the only non-Palm things in the app, marked [Lunacy]
 in source/ScreenLockPrefApp.js, and talk to Lunacy's own service, not a webOS name. With it, two stylesheet rules (marked [Lunacy] in
 stylesheets/screenlock.css): the view fits a phone's card, which Palm's fixed 500 px column did
 not, and every footnote under a group has the same 6 px above and 9 px below. Everything else

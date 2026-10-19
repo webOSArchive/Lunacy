@@ -62,6 +62,9 @@ class ConnectionManager(private val context: Context, private val blocked: () ->
         subscribers.toList().forEach { it.reply(s) }
     }
 
+    /** The shell is gone: no more broadcasts for this one. */
+    fun stop() = stopWatching()
+
     private fun stopWatching() {
         receiver?.let { context.unregisterReceiver(it) }
         receiver = null

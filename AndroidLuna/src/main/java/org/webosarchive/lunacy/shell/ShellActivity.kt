@@ -58,11 +58,16 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     /** The app that launched each app, until that launch's card is shown (showAsCard). */
     private val launchers = HashMap<String, String>()
     /** powerd's part: timers that wake the device, and locks that keep it awake. */
-    private val power by lazy { org.webosarchive.lunacy.card.Power(applicationContext) }
+    private val powerLazy = lazy { org.webosarchive.lunacy.card.Power(applicationContext) }
+    private val power by powerLazy
     /** Every sign of having been asleep or frozen, answered as a webOS resume. */
-    private val sleepWake by lazy { org.webosarchive.lunacy.card.SleepWake(this, power) }
+    private val sleepWakeLazy = lazy { org.webosarchive.lunacy.card.SleepWake(this, power) }
+    private val sleepWake by sleepWakeLazy
     private val powerService by lazy { org.webosarchive.lunacy.card.PowerService(this, power) }
-    private val activityManager by lazy { org.webosarchive.lunacy.card.ActivityManager(this, power) }
+    private val activityManagerLazy = lazy { org.webosarchive.lunacy.card.ActivityManager(this, power) }
+    private val activityManager by activityManagerLazy
+    /** The shell's db8s and connection manager, closed with it ([onDestroy]). */
+    private val closeOnDestroy = ArrayList<() -> Unit>()
     private lateinit var webos: org.webosarchive.lunacy.card.WebosRoot
     private lateinit var mediaServer: org.webosarchive.lunacy.card.MediaServer
     private lateinit var configurator: org.webosarchive.lunacy.card.Configurator
@@ -527,6 +532,16 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (::jsServices.isInitialized) jsServices.stopAll()
         if (::nativeServices.isInitialized) nativeServices.stopAll()
         if (::webos.isInitialized) webos.lunaSend.stop()
+        // And the system under them: the bus, so nothing pending in this shell reaches a
+        // service again, then the activity manager's schedules, powerd's timers, the sleep
+        // watcher and db8. Left running, a re-created shell's predecessors each ran every
+        // activity again on their own bus (four shells' webCal syncs added each event four
+        // times, Galaxy Z Fold3).
+        bus.close()
+        if (activityManagerLazy.isInitialized()) activityManager.stop()
+        if (sleepWakeLazy.isInitialized()) sleepWake.stop()
+        if (powerLazy.isInitialized()) power.stop()
+        closeOnDestroy.forEach { it() }
         if (::audio.isInitialized) audio.close()
         sounds.release()
         super.onDestroy()
@@ -2377,6 +2392,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             hidden = hiddenApps, launcherApps = ::allLaunchPoints, appIcon = { luna.appIcon(it) },
             pinStatus = { homeScreenPins.status() }, pinToHome = homeScreenPins::pin).also { it.register(bus) }
         val connections = org.webosarchive.lunacy.card.ConnectionManager(this) { sleepWake.blocked }.also { it.register(bus) }
+        closeOnDestroy += connections::stop
         sleepWake.onBlockedChanged = connections::changed
         sleepWake.onBlocked = activityManager::networkBlocked
         // Secrets, where the accounts service keeps each account's credentials.
@@ -2390,6 +2406,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val db8 = org.webosarchive.lunacy.card.Db8("com.palm.db", java.io.File(filesDir, "db8.sqlite"),
             applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0).also { it.register(bus) }
         val tempdb = org.webosarchive.lunacy.card.Db8("com.palm.tempdb", null).also { it.register(bus) }
+        closeOnDestroy += db8::close; closeOnDestroy += tempdb::close
         // Documents', photos' and videos' indexes, answered from the folders themselves (FileIndex, MediaIndex).
         org.webosarchive.lunacy.card.FileIndex(jsServices.root).attach(db8)
         org.webosarchive.lunacy.card.MediaIndex(jsServices.root).attach(db8, bus)

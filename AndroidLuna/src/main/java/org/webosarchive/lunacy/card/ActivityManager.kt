@@ -819,8 +819,10 @@ class ActivityManager(private val context: Context, private val power: Power) {
     private fun requirementsMet(a: Activity) = a.requirements.keys().asSequence().all { met(it, a.requirements.get(it)) }
 
     /** The connection manager's status, as the device's activity manager subscribed to it. */
+    private var networkWatch: Bus.Call? = null
+
     private fun watchNetwork() {
-        bus.call(SERVICE, "palm://com.palm.connectionmanager/getstatus", "{\"subscribe\":true}", privateBus = true) { reply ->
+        networkWatch = bus.call(SERVICE, "palm://com.palm.connectionmanager/getstatus", "{\"subscribe\":true}", privateBus = true) { reply ->
             main.post {
                 val r = runCatching { JSONObject(reply) }.getOrNull() ?: return@post
                 val before = activities.values.associateWith { requirementsMet(it) }
@@ -829,6 +831,8 @@ class ActivityManager(private val context: Context, private val power: Power) {
             }
         }
     }
+
+    private var batteryReceiver: BroadcastReceiver? = null
 
     private fun watchBattery() {
         val r = object : BroadcastReceiver() {
@@ -843,6 +847,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
                 requirementsChanged(before)
             }
         }
+        batteryReceiver = r
         context.registerReceiver(r, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
     }
 
@@ -983,6 +988,20 @@ class ActivityManager(private val context: Context, private val power: Power) {
         enabled = true
         Log.i(AppServer.TAG, "activities: running")
         waitingForEnable.toList().also { waitingForEnable.clear() }.forEach { if (activities[it.id] === it) start(it) }
+    }
+
+    /**
+     * The shell is gone, and with it this activity manager: nothing here runs again. The next
+     * shell's reads the persisted activities back. Left running, each old one fired every
+     * schedule on its own bus beside the new one's.
+     */
+    fun stop() {
+        enabled = false
+        batteryReceiver?.let { context.unregisterReceiver(it) }; batteryReceiver = null
+        networkWatch?.cancel(); networkWatch = null
+        main.removeCallbacksAndMessages(null)
+        for (a in activities.values) { a.triggerCall?.cancel(); a.triggerCall = null }
+        activities.clear(); byName.clear(); queue.clear(); due.clear(); waitingForEnable.clear()
     }
 
     /** Reads the persisted activities back, with their ids, then answers the calls held meanwhile. */

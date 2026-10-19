@@ -47,6 +47,8 @@ class Power(private val app: Context) {
     private class Need(val at: Long, val wake: Boolean)
     private val needs = HashMap<String, Need>()
     private val clients = ArrayList<() -> Unit>()
+    private var receiver: BroadcastReceiver? = null
+    private var stopped = false
 
     private fun intent(action: String) = PendingIntent.getBroadcast(app, 0, Intent(action).setPackage(app.packageName),
         PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0)
@@ -56,10 +58,24 @@ class Power(private val app: Context) {
     fun register() {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(c: Context, i: Intent) { hold(GRACE_MS); due() }
-        }
+        }.also { receiver = it }
         val filter = IntentFilter(WAKEUP).apply { addAction(LATE) }
         if (Build.VERSION.SDK_INT >= 33) app.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
         else app.registerReceiver(receiver, filter)
+    }
+
+    /**
+     * The shell is gone: no more timers, sweeps or locks from this one. Its alarms are left
+     * set, as they are the same PendingIntents the next shell's Power arms; one that goes off
+     * early only makes the new shell sweep for nothing.
+     */
+    fun stop() {
+        stopped = true
+        receiver?.let { app.unregisterReceiver(it) }; receiver = null
+        clients.clear()
+        main.removeCallbacksAndMessages(null)
+        held.clear(); named.clear(); holding = 0
+        if (lock.isHeld) lock.release()
     }
 
     /** [f] runs whatever of its own has fallen due; it is called on every timer and resume. */
@@ -80,6 +96,7 @@ class Power(private val app: Context) {
 
     /** [client]'s next time (wall-clock ms), and whether it must wake the device; null for none. */
     fun at(client: String, time: Long?, wake: Boolean = true) {
+        if (stopped) return
         if (time == null) needs.remove(client) else needs[client] = Need(time, wake)
         arm(wakeIntent, AlarmManager.RTC_WAKEUP, needs.values.filter { it.wake }.minOfOrNull { it.at })
         arm(lateIntent, AlarmManager.RTC, needs.values.filter { !it.wake }.minOfOrNull { it.at })
@@ -120,6 +137,7 @@ class Power(private val app: Context) {
     }
 
     private fun apply() {
+        if (stopped) return
         if (held.isNotEmpty() || holding > 0 || named.isNotEmpty()) lock.acquire(LOCK_MS)
         else if (lock.isHeld) lock.release()
     }

@@ -97,8 +97,23 @@ class Db8(private val service: String, file: File?,
         if (repaired > 0) Log.i(AppServer.TAG, "$service: gave $repaired stored records their array objects' _ids")
     }
 
+    /**
+     * The shell is gone: this db8 finishes what it was asked and closes. Its cache would no
+     * longer see the next shell's writes to the same file.
+     */
+    fun close() {
+        mirrorTicker?.shutdownNow(); mirrorTicker = null
+        work { watches.clear(); db.close() }
+        worker.shutdown()
+    }
+
+    /** On db8's thread, unless it has closed. */
+    private fun work(f: () -> Unit) {
+        try { worker.execute(f) } catch (e: java.util.concurrent.RejectedExecutionException) { Log.w(AppServer.TAG, "$service: closed") }
+    }
+
     /** Registers a package's configuration/db files, as webOS's configurator did at install. */
-    fun configure(kindFiles: List<JSONObject>, permissionFiles: List<JSONArray>) = worker.execute {
+    fun configure(kindFiles: List<JSONObject>, permissionFiles: List<JSONArray>) = work {
         for (k in kindFiles) try { putKind(CONFIGURATOR, k) } catch (e: Exception) { Log.w(AppServer.TAG, "$service: kind ${k.optString("id")}: ${e.message}") }
         for (p in permissionFiles) try { putPermissions(CONFIGURATOR, JSONObject().put("permissions", p)) } catch (e: Exception) { Log.w(AppServer.TAG, "$service: permissions: ${e.message}") }
     }
@@ -120,15 +135,15 @@ class Db8(private val service: String, file: File?,
      * rewritten, and its record is replaced by a new one with a new `_id`.
      */
     fun mirror(spec: JSONObject, permissions: JSONArray, initial: Set<String> = emptySet(), owns: (JSONObject) -> Boolean = { true },
-               added: (() -> Unit)? = null, source: () -> List<JSONObject>) = worker.execute {
+               added: (() -> Unit)? = null, source: () -> List<JSONObject>) = work {
         try {
             putKind(CONFIGURATOR, spec)
             putPermissions(CONFIGURATOR, JSONObject().put("permissions", permissions))
-        } catch (e: Exception) { Log.w(AppServer.TAG, "$service: mirror ${spec.optString("id")}: ${e.message}"); return@execute }
+        } catch (e: Exception) { Log.w(AppServer.TAG, "$service: mirror ${spec.optString("id")}: ${e.message}"); return@work }
         mirrors[spec.getString("id")] = Mirror(source, initial, owns, added)
         if (mirrorTicker == null) mirrorTicker = Executors.newSingleThreadScheduledExecutor().also {
             it.scheduleWithFixedDelay({
-                worker.execute { for ((k, m) in mirrors) if (watches.any { w -> k in w.kinds }) syncMirror(k, m) }
+                work { for ((k, m) in mirrors) if (watches.any { w -> k in w.kinds }) syncMirror(k, m) }
             }, MIRROR_WATCH_MS, MIRROR_WATCH_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
         }
     }
@@ -202,7 +217,7 @@ class Db8(private val service: String, file: File?,
     fun register(bus: Bus) {
         this.bus = bus
         for (m in listOf("putKind", "delKind", "put", "get", "merge", "del", "find", "search", "watch", "reserveIds", "batch", "putPermissions", "purge", "purgeStatus")) {
-            bus.register(service, m, Bus.CallHandler { call -> worker.execute { handle(m, call) } })
+            bus.register(service, m, Bus.CallHandler { call -> work { handle(m, call) } })
         }
         bus.register(service, "internal/scheduledPurge", Bus.CallHandler { scheduledPurge(it) })
     }
@@ -814,7 +829,7 @@ class Db8(private val service: String, file: File?,
     private fun addWatch(call: Bus.Call, kinds: Set<String>, where: List<Clause>) {
         val w = Watch(call, kinds, where)
         watches += w
-        call.onCancel { worker.execute { watches.remove(w) } }
+        call.onCancel { work { watches.remove(w) } }
     }
 
     /** One-shot, as on webOS: a change to anything the query could return fires the watch and ends it. */
@@ -885,7 +900,7 @@ class Db8(private val service: String, file: File?,
             val r = runCatching { JSONObject(reply) }.getOrNull() ?: return@call
             if (done || !(r.optBoolean("adopted") || r.optString("event") == "orphan")) return@call
             done = true
-            worker.execute {
+            work {
                 runCatching { purgeDeleted(PURGE_WINDOW_DAYS) }.onFailure { Log.w(AppServer.TAG, "$service: purge failed", it) }
                 bus.call(service, "palm://com.palm.activitymanager/complete", JSONObject(ids.toString()).put("restart", true).toString(), privateBus = true) {
                     main.post { adopt?.cancel() }

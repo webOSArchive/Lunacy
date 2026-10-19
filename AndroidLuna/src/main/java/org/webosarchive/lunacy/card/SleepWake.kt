@@ -59,6 +59,8 @@ class SleepWake(context: Context, private val power: Power) {
     private var lastRealtime = SystemClock.elapsedRealtime()
     private var lastUptime = SystemClock.uptimeMillis()
     private var lastResume = 0L
+    private var dozeReceiver: BroadcastReceiver? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     fun start() {
         if (Build.VERSION.SDK_INT >= 23) {
@@ -69,14 +71,21 @@ class SleepWake(context: Context, private val power: Power) {
                     if (Build.VERSION.SDK_INT < 29) setBlocked(idle && !pm.isIgnoringBatteryOptimizations(app.packageName))
                     if (!idle) resume("doze ended")
                 }
-            }, IntentFilter(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED))
+            }.also { dozeReceiver = it }, IntentFilter(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED))
         }
         if (Build.VERSION.SDK_INT >= 29) {
             cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
                 override fun onBlockedStatusChanged(network: Network, blocked: Boolean) { main.post { setBlocked(blocked) } }
-            })
+            }.also { networkCallback = it })
         }
         main.postDelayed(::heartbeat, BEAT_MS)
+    }
+
+    /** The shell is gone: this one stops watching. */
+    fun stop() {
+        dozeReceiver?.let { app.unregisterReceiver(it) }; dozeReceiver = null
+        networkCallback?.let { cm.unregisterNetworkCallback(it) }; networkCallback = null
+        main.removeCallbacksAndMessages(null)
     }
 
     /** Looks for lost time now: the shell came to the front, say. */

@@ -48,6 +48,20 @@ class Bus {
     /** Open com.palm.bus/signal/addmatch calls: the call and the category/method it matches. */
     private val signalWatchers = ArrayList<Triple<Call, String, String>>()
 
+    /** The shell that owned this bus is gone: see [close]. */
+    @Volatile private var closed = false
+
+    /**
+     * Ends this bus: its shell was destroyed. Nothing on it is called again, so a timer or
+     * reply still pending in a part of the old shell can't start a service or reach db8 beside
+     * the new shell's (four shells' activity managers each ran webCal's sync at once, and each
+     * sync added the feed's events again).
+     */
+    fun close() {
+        closed = true
+        (statusWatchers.map { it.first } + signalWatchers.map { it.first }).forEach { it.cancel() }
+    }
+
     init {
         register("com.palm.bus", "signal/registerServerStatus", CallHandler { serverStatus(it) })
         register("com.palm.bus", "signal/addmatch", CallHandler { addMatch(it) })
@@ -126,7 +140,10 @@ class Bus {
         Log.i(AppServer.TAG, "bus [$appId] $service/$method ${if (h == null) "UNHANDLED" else ""} ${redact(params)}")
         val p = try { JSONObject(params.ifEmpty { "{}" }) } catch (e: Exception) { JSONObject() }
         val call = Call(appId, service, method, p, reply, privateBus || privileged(appId), params.ifEmpty { "{}" })
-        if (h == null) {
+        if (closed) {
+            Log.w(AppServer.TAG, "bus closed: [$appId] $service/$method not sent")
+            call.cancel()
+        } else if (h == null) {
             // webOS names the category the method sits in: a call to
             // com.palm.systemservice/wallpaper/listWallpapers is unknown "for category
             // \"/wallpaper\"" (measured on the reference TouchPad).

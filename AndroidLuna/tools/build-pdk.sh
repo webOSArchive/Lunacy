@@ -29,7 +29,7 @@ cd "$WORK"
 if [ ! -f deb/Packages ]; then
   curl -sL $DEBIAN/dists/bookworm/main/binary-armel/Packages.gz | zcat > deb/Packages
 fi
-for p in libc6 libc6-dev linux-libc-dev libgcc-s1 libgcc-12-dev libstdc++6 zlib1g zlib1g-dev libogg0 libogg-dev libvorbis0a libvorbisfile3 libvorbis-dev libjpeg62-turbo libjpeg62-turbo-dev; do
+for p in libc6 libc6-dev linux-libc-dev libgcc-s1 libgcc-12-dev libstdc++6 zlib1g zlib1g-dev libogg0 libogg-dev libvorbis0a libvorbisfile3 libvorbis-dev libjpeg62-turbo libjpeg62-turbo-dev libsmpeg0 libsmpeg-dev; do
   f=$(awk -v p="$p" '$1=="Package:"{cur=$2} $1=="Filename:" && cur==p {print $2; exit}' deb/Packages)
   b=$(basename "$f")
   if [ ! -f "deb/$b" ]; then echo "fetching $b"; curl -sL "$DEBIAN/$f" -o "deb/$b"; dpkg-deb -x "deb/$b" sysroot; fi
@@ -98,13 +98,27 @@ if [ ! -d SDL_mixer-$MIX_VER ]; then
   [ -f SDL_mixer-$MIX_VER.tar.gz ] || curl -sL https://www.libsdl.org/projects/SDL_mixer/release/SDL_mixer-$MIX_VER.tar.gz -o SDL_mixer-$MIX_VER.tar.gz
   tar xzf SDL_mixer-$MIX_VER.tar.gz
 fi
+# MP3 through SMPEG 0.4.5 (LGPL 2, Debian armel), SDL_mixer 1.2's own MP3 path: games play their
+# music as MP3 (Worms' Audio/Music/Title.mp3), which the device's mixer decoded through Palm's
+# ffmpeg. Debian's smpeg-config asks the host's sdl-config, so a small one answers for the sysroot.
+cat > smpeg-config <<EOSC
+#!/bin/sh
+for a in "\$@"; do case "\$a" in
+  --version) echo 0.4.5 ;;
+  --cflags) echo "-I$WORK/sysroot/usr/include/smpeg \$($WORK/sdl-out/bin/sdl-config --cflags)" ;;
+  --libs) echo "-L$WORK/sysroot/usr/lib/arm-linux-gnueabi -lsmpeg \$($WORK/sdl-out/bin/sdl-config --libs)" ;;
+esac; done
+EOSC
+chmod +x smpeg-config
+MIX_OPTS="--disable-static --enable-shared --disable-music-mod --disable-music-midi --disable-music-flac --enable-music-mp3 --disable-music-mp3-shared --disable-smpegtest --disable-music-mp3-mad-gpl --enable-music-ogg --disable-music-ogg-shared --disable-music-ogg-tremor"
 mkdir -p mixer-build && cd mixer-build
-if [ ! -f Makefile ]; then
+if [ ! -f Makefile ] || [ "$(cat configure.opts 2>/dev/null)" != "$MIX_OPTS" ]; then
+  [ -f Makefile ] && make distclean > /dev/null 2>&1 || true
   # 2012 code under a 2025 clang: the vorbis callback cast is an error by default now.
-  CFLAGS="-O2 -Wno-incompatible-function-pointer-types" SDL_CONFIG=$WORK/sdl-out/bin/sdl-config $WORK/SDL_mixer-$MIX_VER/configure --host=arm-linux-gnueabi --prefix=$WORK/mixer-out \
-    --disable-static --enable-shared --disable-music-mod --disable-music-midi --disable-music-flac --disable-music-mp3 \
-    --disable-music-mp3-mad-gpl --enable-music-ogg --disable-music-ogg-shared --disable-music-ogg-tremor \
+  CFLAGS="-O2 -Wno-incompatible-function-pointer-types" SDL_CONFIG=$WORK/sdl-out/bin/sdl-config SMPEG_CONFIG=$WORK/smpeg-config \
+    $WORK/SDL_mixer-$MIX_VER/configure --host=arm-linux-gnueabi --prefix=$WORK/mixer-out $MIX_OPTS \
     --with-sdl-prefix=$WORK/sdl-out > configure.log 2>&1
+  echo "$MIX_OPTS" > configure.opts
 fi
 # The library only: the example players don't link here and aren't shipped.
 make -j8 -k > make.log 2>&1 || true
@@ -112,7 +126,7 @@ make -j8 -k > make.log 2>&1 || true
 make install-lib install-hdrs > install.log 2>&1
 cd "$WORK"
 cp mixer-out/lib/libSDL_mixer-1.2.so.0.12.0 "$OUT/lib/libSDL_mixer-1.2.so.0"
-for f in libogg.so.0 libvorbis.so.0 libvorbisfile.so.3; do cp "$WORK/sysroot/usr/lib/arm-linux-gnueabi/$f" "$OUT/lib/"; done
+for f in libogg.so.0 libvorbis.so.0 libvorbisfile.so.3 libsmpeg-0.4.so.0; do cp -L "$WORK/sysroot/usr/lib/arm-linux-gnueabi/$f" "$OUT/lib/"; done
 
 # ---- the image and font libraries apps link by name (survey of the mirror: libpng12.so.0,
 # libpng.so.3, libjpeg.so.62, libfreetype.so.6), and SDL_image, SDL_ttf and SDL_net ----
@@ -455,7 +469,8 @@ The PDK runtime (Docs/pdk.md), built by tools/build-pdk.sh:
 - libSDL-1.2.so.0: SDL $SDL_VER (LGPL 2.1), with Lunacy's video, event and audio drivers
   (LunaRuntimes/pdk/sdl-lunacy, LGPL 2.1).
 - libpdl.so: Lunacy's own (LunaRuntimes/pdk/libpdl), built against Palm's PDK headers.
-- libSDL_mixer-1.2.so.0: SDL_mixer $MIX_VER (zlib licence), with Ogg Vorbis.
+- libSDL_mixer-1.2.so.0: SDL_mixer $MIX_VER (zlib licence), with Ogg Vorbis and MP3.
+- libsmpeg-0.4.so.0: SMPEG 0.4.5 (LGPL 2), Debian bookworm armel libsmpeg0, SDL_mixer's MP3 decoder.
 - libGLES_CM.so: Lunacy's own (LunaRuntimes/pdk/libgles), generated from the PDK's Khronos
   GLES 1.1 headers (SGI Free Software License B); its shell-side half is liblunacygl.so in
   the APK's own libraries. libGLESv2.so likewise from the GLES 2 headers (liblunacygl2.so).

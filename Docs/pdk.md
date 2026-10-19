@@ -883,8 +883,10 @@ Both broken on the Galaxy Z Fold3 (64-bit, native), each for its own reason; bot
 
 Worms is a Pre game: it draws portrait into a landscape screen, so on the Fold3 its picture
 is on its side, as the game's own frame is; how a TouchPad showed it is not yet compared.
-Its music (`Audio/Music/Title.mp3`) doesn't play: Lunacy's SDL_mixer has Ogg Vorbis but not
-MP3, which Palm's had. Atlantis posts a "start.game" ping to a Big Fish server that is gone;
+Its music is MP3 (`Audio/Music/Title.mp3`), which Lunacy's SDL_mixer couldn't play; the
+TouchPad's (1.2.10) decoded MP3 through Palm's ffmpeg. SDL_mixer is now built with MP3 through
+SMPEG 0.4.5 (LGPL 2, Debian armel), its own MP3 path in 1.2, rather than libmad, which would
+have made it GPL; Worms loads its title music. Atlantis posts a "start.game" ping to a Big Fish server that is gone;
 it doesn't wait for it.
 
 ## 7. Still to do on the first path

@@ -27,6 +27,8 @@ import java.util.TimeZone
  * - set needs key, uri, params and one of "in" ("HH:MM:SS", under 24 hours) or "at"
  *   ("MM/DD/YYYY HH:MM:SS", UTC); anything missing, another time format or an unknown
  *   parameter is {"returnValue":false,"errorText":"Invalid format for 'timeout/set'."}.
+ *   Keys starting with "$" are not parameters and are ignored (measured 2026-10-19 with
+ *   "$activity", which Mojo adds to every call, and "$other").
  *   "params" may be any JSON value. The reply is {"returnValue":true,"key":<key>}.
  * - keep_existing:true leaves a timeout already set under that key alone, and says so:
  *   {"returnValue":true,"key":<key>,"kept_existing":true}. Otherwise set replaces it.
@@ -104,7 +106,9 @@ class PowerService(context: Context, private val power: Power) {
         }
         // An activity's own lock length comes with the activity it belongs to.
         val duration = p.opt("activity_duration_ms") as? Number
-        val validKeys = p.keys().asSequence().all { it in PARAMS } && (duration == null || p.has("activity_id"))
+        // "$" keys are the bus's own, not parameters: Mojo adds "$activity" to an app's every
+        // call, and the reference TouchPad sets the timeout with it, or any other "$" key.
+        val validKeys = p.keys().asSequence().all { it in PARAMS || it.startsWith("$") } && (duration == null || p.has("activity_id"))
         if (key.isNullOrEmpty() || uri.isNullOrEmpty() || !p.has("params") || at == null || !validKeys ||
             (p.has("wakeup") && p.opt("wakeup") !is Boolean) || (p.has("keep_existing") && p.opt("keep_existing") !is Boolean))
             return call.reply(failure("Invalid format for 'timeout/set'."))

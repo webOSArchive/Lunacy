@@ -252,6 +252,16 @@ open class AppWindow(
         webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? =
                 LocalNet.serve(req, profile.userAgent) ?: host.server.serve(req.url, ExifOrientation.isImageLoad(req))
+            // A window's page goes nowhere but its own: Palm's WebKit handled only file: URLs in
+            // an app's page (WebPage::shouldHandleScheme) and handed every other navigation to
+            // applicationManager/open as the app (WebAppManager::mimeHandoffUrl), so a link to
+            // the web opened in the browser and the app stayed as it was. Lunacy's file: is the
+            // app origins. SimpleChat's image links took over its card, which then closed.
+            @Suppress("OverridingDeprecatedMember")
+            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = handOff(url)
+            @android.annotation.TargetApi(24)
+            override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean =
+                req.isForMainFrame && handOff(req.url.toString())
             override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                 page++; net.reset(); sql.reset(); endCalls()
                 // A new page: the old one's native web views go with it.
@@ -287,6 +297,20 @@ open class AppWindow(
             }
         }
         addJavascriptInterface(Native(), "LunacyNative")
+    }
+
+    /**
+     * Whether [url] is not this window's to load, and so goes to applicationManager/open:
+     * anything but the app origins and a page's own about:, data:, javascript: and blob: URLs.
+     */
+    private fun handOff(url: String): Boolean {
+        val u = android.net.Uri.parse(url)
+        val scheme = u.scheme?.lowercase() ?: return false
+        if (scheme in IN_PAGE_SCHEMES) return false
+        if ((scheme == "https" || scheme == "http") && u.host?.endsWith(AppServer.HOST_SUFFIX) == true) return false
+        Log.i(AppServer.TAG, "[$appId] navigation to $url handed to applicationManager/open")
+        host.bus.call(appId, "palm://com.palm.applicationManager/open", JSONObject().put("target", url).toString()) {}
+        return true
     }
 
     /** The browser views over the page see every touch, after it is dispatched (BrowserViews.touched). */
@@ -455,6 +479,8 @@ open class AppWindow(
     private companion object {
         /** The window types the shell places, as it names them. */
         val WINDOW_TYPES = listOf("card", "dashboard", "popupalert", "dockMode")
+        /** URLs a page loads in itself, which never leave it. */
+        val IN_PAGE_SCHEMES = setOf("about", "data", "javascript", "blob")
         /** How long an open holds the next one when no window comes of it. */
         const val POPUP_WAIT_MS = 1000L
         /** Plausible process ids, in the range webOS apps started at. */

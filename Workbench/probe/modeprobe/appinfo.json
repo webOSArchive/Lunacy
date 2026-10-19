@@ -1,0 +1,1 @@
+{"id": "org.webosarchive.lunacy.modeprobe", "version": "0.0.1", "vendor": "Lunacy", "type": "pdk", "main": "modeprobe", "title": "Mode Probe", "icon": "icon.png", "requiredMemory": 10}

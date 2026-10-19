@@ -91,7 +91,9 @@ PDL_Err PDL_GetOSVersion(PDL_OSVersion *v)
 }
 
 int PDL_GetHardwareID(void) { return atoi(env_or("LUNACY_PDK_HARDWARE_ID", "601")); }   /* HARDWARE_TOUCHPAD */
-const char *PDL_GetHardware(void) { return env_or("LUNACY_PDK_HARDWARE", "TouchPad"); }
+/* Measured on the reference TouchPad (Workbench/probe/modeprobe, 2026-10-19): "unknown", though
+   PDL_GetHardwareID says 601. The Pre3's answer is not measured. */
+const char *PDL_GetHardware(void) { return env_or("LUNACY_PDK_HARDWARE", "unknown"); }
 PDL_Err PDL_GetDeviceName(char *buffer, int bufferLen) { return copy_out(buffer, bufferLen, env_or("LUNACY_PDK_DEVICE_NAME", "TouchPad")); }
 PDL_Err PDL_GetUniqueID(char *buffer, int bufferLen) { return copy_out(buffer, bufferLen, env_or("LUNACY_PDK_NDUID", "")); }
 PDL_Err PDL_GetLanguage(char *buffer, int bufferLen) { return copy_out(buffer, bufferLen, env_or("LUNACY_PDK_LANGUAGE", "en_US")); }

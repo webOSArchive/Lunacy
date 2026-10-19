@@ -35,6 +35,8 @@ class ExhibitionLayer(context: Context, private val luna: Luna) : View(context) 
     /** The home button, or a tap on the status bar's Time menu, leaves exhibition mode. */
     var onExit: () -> Unit = {}
 
+    private companion object { const val FACE_H = 700f }
+
     private enum class Face { SIMPLE, ANALOG_GLASS, DIGITAL, ANALOG_MATTE }
     private val faces = Face.values()
     /** Which face is showing; fractional while a swipe is in flight. */
@@ -108,14 +110,28 @@ class ExhibitionLayer(context: Context, private val luna: Luna) : View(context) 
             c.drawBitmap(bg, null, RectF((width - w) / 2, (height - h) / 2, (width + w) / 2, (height + h) / 2), null)
         }
         // The faces sit side by side and slide with the swipe, as the QML's ListView does.
+        val fit = fit()
         for (i in faces.indices) {
             val dx = (i - position) * width
             if (abs(dx) >= width) continue
             c.save(); c.translate(dx, 0f)
+            c.scale(fit, fit, width / 2f, height / 2f)
             drawFace(c, faces[i])
             c.restore()
         }
         drawDots(c)
+    }
+
+    /**
+     * The QML laid the faces out for the TouchPad's own screen, 768 px wide (1024 on its side),
+     * and the tallest of them, the glass face with its date 300 px below the middle, needs
+     * about [FACE_H] of its height. A screen narrower or shorter than that at the shell's
+     * scale - a phone's, a foldable's cover screen - gets them shrunk to fit, whole, about the
+     * middle, rather than cut off; one that holds them gets them as they are.
+     */
+    private fun fit(): Float {
+        val designW = luna.px(if (landscape) 1024f else 768f)
+        return min(1f, min(width / designW, height / luna.px(FACE_H)))
     }
 
     private fun drawFace(c: Canvas, face: Face) = when (face) {

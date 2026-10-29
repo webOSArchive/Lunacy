@@ -128,6 +128,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // way back, so a page that reads its state on activation finds what changed there.
         // The screen going off leaves it as it was.
         val interactive = (getSystemService(POWER_SERVICE) as android.os.PowerManager).isInteractive
+        // An Android app opened over Exhibition (from a dashboard, say) is a card arriving, and
+        // a card arriving ended dock mode (SystemUiController::cardWindowAdded). The shell is
+        // already out of sight, so the screen saver's end doesn't send it there again.
+        if (interactive) cardArrivedInExhibition()
         if (interactive && ::cards.isInitialized) cards.maximized?.window?.let { it.setStageActive(false); coveredCard = it }
         started = false; super.onStop()
     }
@@ -878,6 +882,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     private fun showAsCard(w: AppWindow, parent: AppWindow? = null, placeholder: Boolean = false, splash: Boolean = true) {
+        // A card arriving ends Exhibition (SystemUiController::cardWindowAdded): an app opened
+        // from a dashboard, or one that opens a card of its own.
+        cardArrivedInExhibition()
         val card = newCard(w, splash)
         card.fullScreen = w.fullScreen && !w.emulated
         card.awaitingWindow = placeholder
@@ -2278,6 +2285,19 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             .start()
     }
 
+    /**
+     * Something to show has arrived while Exhibition is on, which ends it: a card added or
+     * maximized (SystemUiController::cardWindowAdded, setCardWindowMaximized), or an Android
+     * app opened over the shell. Whatever it is, it is what the user is looking at, so the
+     * screen saver's end doesn't send the shell out of sight. True if Exhibition was on.
+     */
+    private fun cardArrivedInExhibition(): Boolean {
+        if (!exhibitionOn) return false
+        dreamFromBackground = false
+        setExhibition(false)
+        return true
+    }
+
     private fun setExhibition(on: Boolean) {
         // Entering again while it is already on is not a no-op: Palm's Exhibition app sends
         // this every time its button is pressed, and if the exhibiting app's window has since
@@ -2675,6 +2695,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     override fun onMaximized(card: Card) {
+        // A running app brought forward ends Exhibition too (setCardWindowMaximized); leaving
+        // it comes back here with the card.
+        if (cardArrivedInExhibition()) return
         if (card.window.appId == directApp) directShown = true
         pendingLoads[card.window]?.run()
         quickLaunch.cancelLaunchFeedback()

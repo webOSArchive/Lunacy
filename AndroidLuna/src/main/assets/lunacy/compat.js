@@ -162,7 +162,17 @@
 		if (st.moved && ev.type === "touchend") { flick(t); }
 		// Read before the mouse events go out: that is when a framework may focus a field.
 		var before = document.activeElement;
-		fire("mouseup", t, target);
+		// A touch taken away from the page - the shell or a dashboard row claiming the gesture -
+		// is no release where the finger was: WindowedWebApp turned LunaSysMgr's PenCancel into
+		// a mouseup at (-10000, -10000), on nothing. Released where the finger was, it read as a
+		// tap (Mojo's tap needs no more than a mouseup) or crossed into another element (Enyo
+		// clicks their common ancestor). Off the page, Mojo sees y < 0 and sends no tap, and
+		// Enyo finds no control on the document to click.
+		if (ev.type === "touchcancel") {
+			fire("mouseup", { screenX: -10000, screenY: -10000, clientX: -10000, clientY: -10000 }, document);
+		} else {
+			fire("mouseup", t, target);
+		}
 		if (!st.moved && ev.type === "touchend") {
 			var f = focusable(st.target);
 			if (f) { f.focus(); if (window.__lunacyFieldTapped) { window.__lunacyFieldTapped(f); } }

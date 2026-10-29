@@ -1,7 +1,8 @@
 // Notification Probe: banners and dashboards on demand, for measuring where a webOS phone
 // puts them. A noWindow app; every launch acts on its params:
 //   {"banner": n}  n banners, one after another ("text" sets the words)
-//   {"dash": n}    n dashboards, each its own stage ("title", "text", "count")
+//   {"dash": n}    n dashboards, each its own stage ("title", "text", "count"); tapping one
+//                  opens a card and closes it, as a mail or message dashboard did
 //   {"clear": true} closes every dashboard this app has open
 //   {"full": true}  a card in full-screen mode (black, a line of text), to see notifications over it
 //   {"alert": h}    a popup alert h px high
@@ -50,5 +51,13 @@ AppAssistant.prototype.openDash = function (params, n) {
 					'<div class="palm-dashboard-text">' + text + '</div>' +
 				'</div>' +
 			'</div>';
+		Mojo.Event.listen(stage.document.body, Mojo.Event.tap, function () {
+			var app = Mojo.Controller.getAppController();
+			app.createStageWithCallback({name: "tapped" + n}, function (card) {
+				card.document.body.style.cssText = "background: #246; color: white; font-size: 24px; margin: 0; padding: 20px;";
+				card.document.body.innerHTML = "Opened from " + title;
+			}, "card");
+			app.closeStage(name);
+		});
 	}, "dashboard");
 };

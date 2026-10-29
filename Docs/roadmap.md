@@ -3,7 +3,19 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-10-19)
+## Where things stand (2026-10-29)
+
+**0.8.3, a mini release** of the fixes since 0.8.2, for the community to try:
+
+- **Notifications:** swiping a dashboard away no longer opens its app. The row takes the
+  whole touch, as LunaSysMgr's did, and the app hears only a real tap. On a phone's bottom
+  area and the tablet's drop-down.
+- **Exhibition:** an app opened from a dashboard, webOS or Android, ends Exhibition, as a
+  card arriving did on the TouchPad.
+- **Photos' slideshow** slides instead of slamming on fast devices: timer animations run at
+  the TouchPad's measured pace (luna-deltas B17).
+- **App Catalog 6.2.2931:** download counts, Find More by what an app provides.
+- Release builds no longer open their cards to `chrome://inspect`.
 
 **0.8.2, a mini release** of the fixes since 0.8.0, at codepoet's call, so people can try them:
 
@@ -101,6 +113,8 @@ One line per milestone; the detail is in [fix-log.md](fix-log.md), the topic doc
   notification icons fixed.
 - **2026-10-19, 0.8.2:** a mini release of the fixes since: shell teardown (duplicate syncs),
   headless mail from boot, edge swipe for home, Exhibition, links out, Worms and Atlantis.
+- **2026-10-29, 0.8.3:** a mini release: dashboard swipes no longer open apps, Exhibition
+  ends when an app opens, Photos' slideshow at the TouchPad's pace, App Catalog 6.2.2931.
 
 ## Open, carried forward
 

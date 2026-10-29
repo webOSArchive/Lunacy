@@ -10,6 +10,8 @@ and a phase is finished when its criterion is met, not when its task list runs o
 - **Notifications:** swiping a dashboard away no longer opens its app. The row takes the
   whole touch, as LunaSysMgr's did, and the app hears only a real tap. On a phone's bottom
   area and the tablet's drop-down.
+- **A touch the shell takes away no longer taps the app** under the finger: a cancelled
+  touch is released off the page, as webOS did.
 - **Exhibition:** an app opened from a dashboard, webOS or Android, ends Exhibition, as a
   card arriving did on the TouchPad.
 - **Photos' slideshow** slides instead of slamming on fast devices: timer animations run at

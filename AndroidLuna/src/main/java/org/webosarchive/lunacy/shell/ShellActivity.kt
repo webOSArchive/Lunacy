@@ -283,7 +283,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
         live = java.lang.ref.WeakReference(this)
         window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
-        WebView.setWebContentsDebuggingEnabled(true)
+        // chrome://inspect is a debug build's only: a release one leaves its cards closed to it.
+        WebView.setWebContentsDebuggingEnabled(devBuild)
         org.webosarchive.lunacy.card.FormFactor.shown = org.webosarchive.lunacy.card.FormFactor.decide(this)
         luna = Luna(this, org.webosarchive.lunacy.card.FormFactor.shown == org.webosarchive.lunacy.card.FormFactor.Kind.PHONE)
         val installed = java.io.File(filesDir, "cryptofs/apps")

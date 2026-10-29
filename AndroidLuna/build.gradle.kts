@@ -41,9 +41,10 @@ android {
     // server streams anyway. (aapt leaves jpg, png and the audio formats stored by itself.)
     androidResources { noCompress += listOf("wav", "mp3") }
     buildTypes {
-        // The debug APK is the one codepoet hands out, so it is the one R8 shrinks: without it
-        // the whole Kotlin stdlib ships (2.3 MB of dex for 0.9 MB of Lunacy). Obfuscation
-        // is off (proguard-rules.pro) so stack traces and chrome://inspect stay readable.
+        // The release APK, signed with the webOS Archive key, is the one codepoet hands out.
+        // R8 shrinks both: without it the whole Kotlin stdlib ships (2.3 MB of dex for 0.9 MB
+        // of Lunacy). Obfuscation is off (proguard-rules.pro) so stack traces stay readable,
+        // and chrome://inspect in a debug build.
         debug { isMinifyEnabled = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }
         release { isMinifyEnabled = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") }
     }

@@ -138,8 +138,8 @@ more than one device is attached. The test devices:
   `responseEnd` against `performance.timing`. That is how the framework art's arrival was
   timed, and it separates "the file is slow" from "the page asked late" - which turned out to
   be the whole story.
-- **Inspecting pages:** `chrome://inspect` works, because Lunacy turns on WebView
-  debugging.
+- **Inspecting pages:** `chrome://inspect` works, because a debug build of Lunacy turns on WebView
+  debugging (a release build leaves it off).
 - **Driving the tablet without hands:** `adb shell input tap <x> <y>`, `input swipe` (a long
   press is a swipe that ends where it started), and `input keyevent KEYCODE_BACK` for the home
   button. Coordinates are device pixels, which on the HP 10 G2 are TouchPad pixels. This is

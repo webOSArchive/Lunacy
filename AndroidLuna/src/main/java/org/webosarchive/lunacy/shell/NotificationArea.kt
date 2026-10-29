@@ -395,12 +395,23 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
      * (DashboardWindowContainer::triggerItemDelete). A dashboard opened with
      * `webosDragMode: "manual"` handles its own swipes past its 50 px badge
      * (DashboardWindowContainer::mousePressEvent).
+     *
+     * Otherwise the row owns the touch, and the page hears of it only once it has ended as a
+     * tap: a press and a release at the point it went down (DashboardWindowContainer::handleTap).
+     * Given the touch from the start, the page took a swipe's cancel as a lift that never left
+     * the tap radius, and Mojo opened the app mid-swipe.
      */
     @SuppressLint("ViewConstructor")
     inner class Row(val window: AppWindow) : FrameLayout(context) {
         private var downX = 0f
         private var downY = 0f
+        private var tapX = 0f
+        private var tapY = 0f
         private var mine = true
+        /** Past the slop sideways: the row follows the finger. */
+        private var dragging = false
+        /** Past the slop at all: whatever happens next, it isn't a tap. */
+        private var moved = false
         /** Swiped off and going: no more touches, and dismissed once. */
         private var leaving = false
         private val slop = ViewConfiguration.get(context).scaledTouchSlop
@@ -410,22 +421,29 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
 
         override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
             if (leaving) return true
-            when (e.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { downX = e.rawX; downY = e.rawY; mine = !manual || e.x <= luna.px(BADGE_W) }
-                MotionEvent.ACTION_MOVE -> if (mine && abs(e.rawX - downX) > slop && abs(e.rawX - downX) > abs(e.rawY - downY)) {
-                    parent.requestDisallowInterceptTouchEvent(true)
-                    return true
-                }
+            if (e.actionMasked == MotionEvent.ACTION_DOWN) {
+                downX = e.rawX; downY = e.rawY; tapX = e.x; tapY = e.y
+                dragging = false; moved = false
+                mine = !manual || e.x <= luna.px(BADGE_W)
             }
-            return false
+            return mine
         }
 
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(e: MotionEvent): Boolean {
             if (leaving) return true
             when (e.actionMasked) {
-                MotionEvent.ACTION_MOVE -> translationX = e.rawX - downX
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = e.rawX - downX; val dy = e.rawY - downY
+                    if (!moved && (abs(dx) > slop || abs(dy) > slop)) {
+                        moved = true
+                        // Sideways is the row's; up and down is the list's, which takes it.
+                        if (abs(dx) > abs(dy)) { dragging = true; parent.requestDisallowInterceptTouchEvent(true) }
+                    }
+                    if (dragging) translationX = dx
+                }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (e.actionMasked == MotionEvent.ACTION_UP && !moved) { tap(e); return true }
                     if (abs(translationX) > width / 4f) {
                         leaving = true
                         animate().translationX(Math.signum(translationX) * width * 1.5f).setDuration(DISMISS_MS).setInterpolator(Easing.Linear)
@@ -434,6 +452,14 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
                 }
             }
             return true
+        }
+
+        /** The tap, given to the page as a press and a release where the finger went down. */
+        private fun tap(up: MotionEvent) {
+            for (action in intArrayOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+                MotionEvent.obtain(up).apply { this.action = action; setLocation(tapX, tapY) }
+                    .also { window.dispatchTouchEvent(it); it.recycle() }
+            }
         }
     }
 }

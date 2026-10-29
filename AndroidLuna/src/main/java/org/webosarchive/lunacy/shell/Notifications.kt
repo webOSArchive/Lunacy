@@ -367,32 +367,51 @@ class DashboardMenu(context: Context, private val luna: Luna, private val onDism
      * dashboard opened with `webosDragMode: "manual"` - every Enyo dashboard - handles its own
      * swipes: only its 50 px badge at the left drags the row, and every other touch is the
      * app's (DashboardWindowContainer::mousePressEvent).
+     *
+     * Otherwise the row owns the touch, and the page hears of it only once it has ended as a
+     * tap: a press and a release at the point it went down (DashboardWindowContainer::handleTap).
+     * Given the touch from the start, the page took a swipe's cancel as a lift that never left
+     * the tap radius, and Mojo opened the app mid-swipe.
      */
     @SuppressLint("ViewConstructor")
     inner class Row(val window: AppWindow) : FrameLayout(context) {
         private var downX = 0f
+        private var downY = 0f
+        private var tapX = 0f
+        private var tapY = 0f
         private var mine = true
+        /** Past the slop sideways: the row follows the finger. */
+        private var dragging = false
+        /** Past the slop at all: whatever happens next, it isn't a tap. */
+        private var moved = false
         private val slop = ViewConfiguration.get(context).scaledTouchSlop
         private val manual get() = window.attributes.optString("webosDragMode") == "manual"
 
         init { addView(window, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)) }
 
         override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
-            when (e.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { downX = e.rawX; mine = !manual || e.x <= luna.px(BADGE_W) }
-                MotionEvent.ACTION_MOVE -> if (mine && e.rawX - downX > slop) {
-                    parent.requestDisallowInterceptTouchEvent(true)
-                    return true
-                }
+            if (e.actionMasked == MotionEvent.ACTION_DOWN) {
+                downX = e.rawX; downY = e.rawY; tapX = e.x; tapY = e.y
+                dragging = false; moved = false
+                mine = !manual || e.x <= luna.px(BADGE_W)
             }
-            return false
+            return mine
         }
 
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(e: MotionEvent): Boolean {
             when (e.actionMasked) {
-                MotionEvent.ACTION_MOVE -> { translationX = (e.rawX - downX).coerceAtLeast(0f); rows.invalidate() }  // right only
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = e.rawX - downX; val dy = e.rawY - downY
+                    if (!moved && (abs(dx) > slop || abs(dy) > slop)) {
+                        moved = true
+                        // Sideways is the row's; up and down is the list's, which takes it.
+                        if (abs(dx) > abs(dy)) { dragging = true; parent.requestDisallowInterceptTouchEvent(true) }
+                    }
+                    if (dragging) { translationX = dx.coerceAtLeast(0f); rows.invalidate() }  // right only
+                }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (e.actionMasked == MotionEvent.ACTION_UP && !moved) { tap(e); return true }
                     if (translationX > width / 4f) {
                         // Off to the right by one and a half widths (removeWindow's animation).
                         animate().translationX(width * 1.5f).setDuration(DISMISS_MS).setInterpolator(Easing.Linear)
@@ -402,6 +421,14 @@ class DashboardMenu(context: Context, private val luna: Luna, private val onDism
                 }
             }
             return true
+        }
+
+        /** The tap, given to the page as a press and a release where the finger went down. */
+        private fun tap(up: MotionEvent) {
+            for (action in intArrayOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+                MotionEvent.obtain(up).apply { this.action = action; setLocation(tapX, tapY) }
+                    .also { window.dispatchTouchEvent(it); it.recycle() }
+            }
         }
     }
 }

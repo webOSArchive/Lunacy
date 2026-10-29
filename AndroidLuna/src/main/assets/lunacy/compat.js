@@ -185,6 +185,52 @@
 	document.addEventListener("touchcancel", end, opts);
 })();
 
+// Timers at the TouchPad's pace. Apps animated with a chain of short timers and fixed steps,
+// never reading the clock: Photos' slideshow slides each photo in by 90 px per
+// setTimeout(..., 1) (SwipeTransition.doScene), so its speed was the device's. Two limits set
+// it there, both measured (Workbench/probe's slideprobe, and Photos filmed in Exhibition):
+// - No timer ran sooner than 10 ms after it was set; Chromium runs the first few at 1 ms and
+//   the rest at 4. So a delay under 10 ms waits 10.
+// - A step that changed the page had to be drawn before the next could run, and drawing a
+//   full-screen photo took the TouchPad about 70 ms: Photos' slide took about 770 ms on its
+//   screen for 11 steps, where Chromium drew it in a frame or two. So a short timer set by a
+//   short timer whose callback changed the page - the next step of an animation - waits
+//   70 ms. A chain that only computes (Mojo's and Enyo's "do this next") keeps 10 ms.
+// Longer delays are untouched.
+(function () {
+	var MIN_MS = 10, STEP_MS = 70, slice = Array.prototype.slice;
+	var nativeTimeout = window.setTimeout, nativeInterval = window.setInterval;
+	// While a short timer's callback runs: whether it has changed the page so far.
+	var watch = null, inShort = false, changed = false;
+	function changedPage() {
+		if (watch && !changed) { changed = watch.takeRecords().length > 0; }
+		return changed;
+	}
+	function run(fn, short) {
+		if (typeof fn !== "function") { return fn; }
+		return function () {
+			if (!short || !window.MutationObserver) { return fn.apply(this, arguments); }
+			var wasShort = inShort, wasWatch = watch, wasChanged = changed;
+			inShort = true; changed = false;
+			watch = new MutationObserver(function () {});
+			watch.observe(document, { attributes: true, childList: true, subtree: true });
+			try { return fn.apply(this, arguments); }
+			finally { watch.disconnect(); inShort = wasShort; watch = wasWatch; changed = wasChanged; }
+		};
+	}
+	window.setTimeout = function (fn, ms) {
+		var args = slice.call(arguments), short = !(ms >= MIN_MS);
+		if (short) { args[1] = inShort && changedPage() ? STEP_MS : MIN_MS; }
+		args[0] = run(fn, short);
+		return nativeTimeout.apply(window, args);
+	};
+	window.setInterval = function (fn, ms) {
+		var args = slice.call(arguments);
+		if (!(ms >= MIN_MS)) { args[1] = MIN_MS; }
+		return nativeInterval.apply(window, args);
+	};
+})();
+
 // The other half of the webOS input model: the keyboard. LunaSysMgr's virtual keyboard put
 // real key events into the page, so a keystroke arrived as keydown, keypress and keyup with
 // the character's own code. Android's keyboards are input methods, and a soft keyboard

@@ -1,0 +1,10 @@
+{
+	"id": "org.webosarchive.lunacy.slideprobe",
+	"version": "0.0.5",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Slide Probe",
+	"icon": "icon.png",
+	"uiRevision": 2
+}

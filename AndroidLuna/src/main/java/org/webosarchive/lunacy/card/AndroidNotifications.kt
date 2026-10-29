@@ -248,7 +248,8 @@ object AndroidNotifications {
     fun dismiss(keys: List<String>) {
         val l = listener
         val gone = synchronized(entries) { keys.mapNotNull { entries.remove(it) } }
-        for (e in gone) runCatching { l?.cancelNotification(e.key) }
+        if (l == null && gone.isNotEmpty()) Log.w(TAG, "dismissed with no listener connected: ${gone.size} left in Android")
+        for (e in gone) runCatching { l?.cancelNotification(e.key) }.onFailure { Log.w(TAG, "Android refused to clear ${e.key}: $it") }
         if (gone.isNotEmpty()) changed()
     }
 }

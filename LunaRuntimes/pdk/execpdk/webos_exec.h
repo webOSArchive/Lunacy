@@ -81,7 +81,8 @@ static int webos_exec(const char *prefix, int (*real)(const char *, char *const[
 	char exe[4200], preload[4200], libs[4200];
 	snprintf(exe, sizeof exe, "LUNACY_PDK_EXE=%s", target); nenvp[e++] = exe;
 	const char *v;
-	if ((v = getenv("LUNACY_PDK_GUEST_PRELOAD"))) { snprintf(preload, sizeof preload, "LD_PRELOAD=%s", v); nenvp[e++] = preload; }
+	/* Not with libenosys in the command: it is bionic, its linker refuses a glibc LD_PRELOAD, and it hands LUNACY_PDK_PRELOAD on itself. */
+	if ((v = getenv("LUNACY_PDK_GUEST_PRELOAD")) && !getenv("LUNACY_PDK_PRELOAD")) { snprintf(preload, sizeof preload, "LD_PRELOAD=%s", v); nenvp[e++] = preload; }
 	if ((v = getenv("LUNACY_PDK_HOST_LIBS"))) { snprintf(libs, sizeof libs, "LD_LIBRARY_PATH=%s", v); nenvp[e++] = libs; }
 
 	int r = real(nargv[0], nargv, nenvp);

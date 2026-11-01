@@ -975,6 +975,12 @@ with that shell's `WebosRoot` and luna-send tokens and the new one failing to bi
 in use"); there is now one listener a process, serving the newest shell. In the bad order after
 both changes, the socket stays and `palm-install -l` answers.
 
+**Found after: start scripts.** Setting `LUNACY_PDK_GUEST_PRELOAD` on every launch, for the
+preload's own exec, also reached libexecpdk, which made it the LD_PRELOAD of libenosys, a bionic
+program: `library "libc.so.6" not found`, and every app whose main is a script failed on
+Android 10 and later (ScummVM, Worms). libenosys hands the preload on itself, so the variable now
+waits for it. All the PDK apps were launched on the Fold3 after the fix.
+
 **Open.** NesEm's strings say the gamepad is "Portrait only", yet it draws and works in landscape;
 it reads the accelerometer's joystick events in its games list. Turning a device there isn't
 tested. SMB's Start didn't take on some early presses and did later on the same file, not

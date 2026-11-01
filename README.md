@@ -42,7 +42,10 @@ measured and written down ([Docs/luna-deltas.md](Docs/luna-deltas.md)).
 
 ## What it is not
 
-- **Not an emulator.** No Palm binaries, no system image, no QEMU.
+- **Not a TouchPad emulator.** There is no system image and no virtual device: web apps run in
+  Android's own WebView. Native code that needs webOS's libraries, PDK games and the TouchPad's
+  own system services, runs as shipped on a glibc runtime. Only a 64-bit-only device needs
+  QEMU, to run that 32-bit ARM code.
 - **Not a per-app porting kit.** No app is patched. Every fix goes into the frameworks or a
   global compatibility layer that treats all apps alike.
 - **Not LuneOS.** [LuneOS](https://github.com/webOS-ports) is a full OS. Lunacy is an app on

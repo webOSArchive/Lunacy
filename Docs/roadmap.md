@@ -18,6 +18,8 @@ and a phase is finished when its criterion is met, not when its task list runs o
 - **Trust Always** lasts across restarts, and holds for that certificate only.
 - **Hung cards:** the keyboard closing while a card came up left the card view deaf to touch.
   Send from Web's Share was the way in.
+- **JS services** that call the bus while they load start, as on webOS (Topaz Explorer), and a
+  margin inside a clipped box stays (its tree's arrows).
 - **The bus and the SDK:** a shell going no longer takes the luna-send socket and the novacom
   relay from the one replacing it (`palm-install`'s "no response").
 

@@ -654,7 +654,9 @@
 		// collapses out through it (World Today's first row kept its 2 px gap only by luck).
 		if (box(kid)) { return; }
 		var s = getComputedStyle(kid);
-		if (closedEdge(s, side)) { return; }
+		// Nor through one that clips: overflow holds a margin in on the TouchPad too (Topaz
+		// Explorer's tree arrows, centred in their rows by a top margin, 2026-11-01).
+		if (closedEdge(s, side) || s.overflow !== "visible") { return; }
 		for (var c = edgeChild(kid, side === "bottom"); c; c = edgeChild(c, side === "bottom")) {
 			var cs = getComputedStyle(c);
 			out.push([c, side, kid]);

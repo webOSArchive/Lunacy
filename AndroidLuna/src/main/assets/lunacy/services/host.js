@@ -262,6 +262,10 @@ class Request extends EventEmitter {
 
 class Handle extends EventEmitter {
 	constructor(name, isPublic) {
+		// ls-hubd refused a service an unnamed handle on the private bus (measured in a service
+		// on the TouchPad). PalmCall tries one for a call made before mojoservice has registered
+		// its own, and has to fail: left set, it makes mojoservice's registration throw.
+		if (!name && !isPublic) { throw new Error("Invalid permissions for (null)"); }
 		super();
 		this.name = name;
 		this.isPublic = !!isPublic;

@@ -5,11 +5,7 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-11-01)
 
-**After 0.8.4:** `/media/internal` lists its mapped folders (downloads, music and the rest)
-everywhere: Node's `fs.readdir`, and PDK apps by `scandir` and relative paths, so Topaz Explorer
-and NES.emu find what Web downloaded.
-
-**0.8.4, a mini release** of the fixes since 0.8.3 (2026-11-01):
+**0.8.4, a mini release** of the fixes since 0.8.3 (2026-11-01, build 358 replacing build 352):
 
 - **PDK games:** the six emulators play (2600.emu, EMU7800, MD.emu, NesEm HD, Snes9x EX,
   SuperNES): launchers that exec another binary, `uname`'s machine and the PDK version as the
@@ -24,6 +20,9 @@ and NES.emu find what Web downloaded.
   Send from Web's Share was the way in.
 - **JS services** that call the bus while they load start, as on webOS (Topaz Explorer), and a
   margin inside a clipped box stays (its tree's arrows).
+- **`/media/internal`** lists its mapped folders (downloads, music and the rest) everywhere:
+  Node's `fs.readdir`, and PDK apps by `scandir` and relative paths, so a file browser or a
+  game's picker finds what Web downloaded.
 - **The bus and the SDK:** a shell going no longer takes the luna-send socket and the novacom
   relay from the one replacing it (`palm-install`'s "no response").
 

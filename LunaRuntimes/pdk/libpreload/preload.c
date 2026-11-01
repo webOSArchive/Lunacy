@@ -26,6 +26,12 @@
  *   2 GB free came out negative ("Insufficient memory to start application"). A device with
  *   more memory than the TouchPad (940368 kB MemTotal, measured) shows every figure scaled by
  *   the same factor, so the proportions are the device's and no sum passes a TouchPad's.
+ *
+ * - uname's machine, armv7l as on the TouchPad (measured). A 64-bit kernel says aarch64 or
+ *   armv8l; the explusalpha emulators' launcher picks its binary by finding "v7" in it.
+ *
+ * - exec of another webOS binary, which that launcher does next. The kernel can't run one
+ *   here, so it goes through the loader or qemu (webos_exec.h, LUNACY_PDK_REEXEC).
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>
@@ -41,6 +47,8 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
+#include "../execpdk/webos_exec.h"
 
 /* ---- /proc/self/exe ---- */
 
@@ -189,36 +197,52 @@ static int meminfo_fd(void)
 	return fd;
 }
 
+/*
+ * File modes, which /media/internal and /media/cryptofs didn't have: every file there reads
+ * rwxrwxrwx on a TouchPad, whatever it was created with. NesEm HD makes its settings with
+ * open(O_CREAT, S_IWUSR), which Android's file systems honour, so it could never read them back.
+ * What an app creates, its owner can read and write; a file an earlier run left so is put right.
+ */
+#define OWNER_RW(flags) if ((flags) & O_CREAT) mode |= S_IRUSR | S_IWUSR
+static int own_again(const char *path)
+{
+	struct stat st;
+	if (errno != EACCES || fstatat(AT_FDCWD, path, &st, 0) != 0 || st.st_uid != geteuid()) { return 0; }
+	return fchmodat(AT_FDCWD, path, (st.st_mode & 07777) | S_IRUSR | S_IWUSR, 0) == 0;
+}
+
 int open(const char *path, int flags, ...)
 {
 	REAL(open);
-	MODE_ARG(flags); MAPPED(path);
+	MODE_ARG(flags); MAPPED(path); OWNER_RW(flags);
 	if (is_meminfo(path)) { int fd = meminfo_fd(); if (fd >= 0) return fd; }
-	return real_open(mp_, flags, mode);
+	int fd = real_open(mp_, flags, mode);
+	return fd < 0 && own_again(mp_) ? real_open(mp_, flags, mode) : fd;
 }
 int open64(const char *path, int flags, ...)
 {
 	REAL(open64);
-	MODE_ARG(flags); MAPPED(path);
+	MODE_ARG(flags); MAPPED(path); OWNER_RW(flags);
 	if (is_meminfo(path)) { int fd = meminfo_fd(); if (fd >= 0) return fd; }
-	return real_open64(mp_, flags, mode);
+	int fd = real_open64(mp_, flags, mode);
+	return fd < 0 && own_again(mp_) ? real_open64(mp_, flags, mode) : fd;
 }
 int openat(int dirfd, const char *path, int flags, ...)
 {
 	REAL(openat);
-	MODE_ARG(flags); MAPPED(path);
+	MODE_ARG(flags); MAPPED(path); OWNER_RW(flags);
 	return real_openat(dirfd, mp_, flags, mode);
 }
 int openat64(int dirfd, const char *path, int flags, ...)
 {
 	REAL(openat64);
-	MODE_ARG(flags); MAPPED(path);
+	MODE_ARG(flags); MAPPED(path); OWNER_RW(flags);
 	return real_openat64(dirfd, mp_, flags, mode);
 }
 int creat(const char *path, mode_t mode)
 {
 	REAL(creat);
-	MAPPED(path); return real_creat(mp_, mode);
+	MAPPED(path); return real_creat(mp_, mode | S_IRUSR | S_IWUSR);
 }
 /* ---- stdio buffers on a page, as the TouchPad's glibc had them ----
  *
@@ -451,6 +475,29 @@ int closedir(DIR *d)
  * loader's own search and is left alone.
  */
 void *dlopen(const char *path, int flags) { REAL(dlopen); MAPPED(path); return real_dlopen(mp_, flags); }
+/* The working directory as webOS names it: an app showing a file browser shows /media/internal. */
+char *getcwd(char *buf, size_t size)
+{
+	REAL(getcwd);
+	size_t root_len;
+	const char *root = webos_root(&root_len);
+	char *r = real_getcwd(buf, size);
+	if (r && root && strncmp(r, root, root_len) == 0 && r[root_len] == '/') memmove(r, r + root_len, strlen(r + root_len) + 1);
+	return r;
+}
+
+/* scandir opens its folder inside glibc, past opendir above. */
+int scandir(const char *dir, struct dirent ***list, int (*filter)(const struct dirent *), int (*compare)(const struct dirent **, const struct dirent **))
+{
+	REAL(scandir); MAPPED(dir);
+	return real_scandir(mp_, list, filter, compare);
+}
+int scandir64(const char *dir, struct dirent64 ***list, int (*filter)(const struct dirent64 *), int (*compare)(const struct dirent64 **, const struct dirent64 **))
+{
+	REAL(scandir64); MAPPED(dir);
+	return real_scandir64(mp_, list, filter, compare);
+}
+
 int mkdir(const char *path, mode_t mode) { MAPPED(path); return mkdirat(AT_FDCWD, mp_, mode); }
 int rmdir(const char *path) { MAPPED(path); return unlinkat(AT_FDCWD, mp_, AT_REMOVEDIR); }
 int unlink(const char *path) { MAPPED(path); return unlinkat(AT_FDCWD, mp_, 0); }
@@ -876,6 +923,35 @@ struct hostent *gethostbyname(const char *name)
 	}
 	webos_nameservers();
 	return real_gethostbyname(name);
+}
+
+/* ---- the machine, and running another webOS binary ---- */
+
+int uname(struct utsname *u)
+{
+	REAL(uname);
+	int r = real_uname(u);
+	if (r == 0) snprintf(u->machine, sizeof u->machine, "armv7l");
+	return r;
+}
+
+/* The real execve, on what the path means here, absolute (getcwd's answer is webOS's). glibc's
+   exec family calls its own, so each name is wrapped. */
+static int exec_mapped(const char *path, char *const argv[], char *const envp[])
+{
+	REAL(execve);
+	char whole[PATH_MAX], cwd[PATH_MAX];
+	if (path && path[0] != '/' && getcwd(cwd, sizeof cwd)) { snprintf(whole, sizeof whole, "%s/%s", cwd, path); path = whole; }
+	MAPPED(path);
+	return webos_exec(getenv("LUNACY_PDK_REEXEC"), real_execve, mp_, argv, envp);
+}
+
+int execve(const char *path, char *const argv[], char *const envp[]) { return exec_mapped(path, argv, envp); }
+int execv(const char *path, char *const argv[]) { return exec_mapped(path, argv, environ); }
+int execvp(const char *file, char *const argv[])
+{
+	REAL(execvp);
+	return strchr(file, '/') ? exec_mapped(file, argv, environ) : real_execvp(file, argv);
 }
 
 /* ---- System V semaphores ----

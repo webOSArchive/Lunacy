@@ -981,9 +981,11 @@ JNIEXPORT void JNICALL JNI(attach)(JNIEnv *env, jclass cls, jlong handle, jobjec
 	ANativeWindow_setBuffersGeometry(c->window, 0, 0, format);
 	c->window_surface = eglCreateWindowSurface(c->display, c->config, c->window, NULL);
 	if (c->window_surface == EGL_NO_SURFACE) { LOGW("pdk gl: no window surface (0x%x)", eglGetError()); return; }
-	/* The app's context moves to the window, and the card shows black until the app's first swap. */
+	/* The app's context moves to the window. The card shows black until the app's first swap, or
+	   that swap's picture if it came first: an app that draws once and waits for input (the
+	   explusalpha emulators' menu) has nothing more to send. */
 	c->on_window = eglMakeCurrent(c->display, c->window_surface, c->window_surface, c->context);
-	if (c->on_window) blit(c, 0);
+	if (c->on_window) blit(c, c->frames > 0);
 	else LOGW("pdk gl: the card's surface isn't current (0x%x)", eglGetError());
 }
 

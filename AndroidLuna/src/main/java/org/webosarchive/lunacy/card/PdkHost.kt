@@ -110,6 +110,9 @@ class PdkHost(
         val script = plugin == null && PdkRuntime.isScript(original)
         val binary = if (script) runtime.scriptCopy(original, File(runtime.appsRoot, app.dir)) ?: return false
             else PdkRuntime.runnable(original)
+        // A launcher (the explusalpha emulators') picks one of the binaries beside it and execs
+        // it, through the preload; that one wants the same as main.
+        if (!script && plugin == null) PdkRuntime.readySiblings(original)
         val dataDir = File(context.filesDir, "pdk/data/$appId").also { it.mkdirs() }
         val webosRoot = File(context.filesDir, "webos")
         // A 32-bit CPU runs the binary through the loader; a 64-bit-only one runs it under
@@ -134,13 +137,20 @@ class PdkHost(
         val appDir = File(runtime.appsRoot, app.dir)
         val pb = ProcessBuilder(command).directory(appDir).redirectErrorStream(true)
         // qemu's own libraries (Termux's build), beside the runtime.
-        if (loader == null) runtime.qemuLibDir?.let { pb.environment()[if (script) "LUNACY_PDK_HOST_LIBS" else "LD_LIBRARY_PATH"] = it.path }
+        if (loader == null) runtime.qemuLibDir?.let {
+            pb.environment()["LUNACY_PDK_HOST_LIBS"] = it.path
+            if (!script) pb.environment()["LD_LIBRARY_PATH"] = it.path
+        }
         // The preload (LunaRuntimes/pdk/libpreload): /proc/self/exe as the binary, not the
         // loader (Transformers G1 finds its data from it), and webOS's own paths (/usr/share/fonts,
         // /media/internal...) in the webOS root. Under qemu it goes to the guest by -E above.
         // libenosys is a bionic program, so it hands the preload on to the app itself.
-        if (loader != null) pb.environment()[if (enosys != null) "LUNACY_PDK_PRELOAD" else if (script) "LUNACY_PDK_GUEST_PRELOAD" else "LD_PRELOAD"] =
+        if (loader != null && !(script && enosys == null)) pb.environment()[if (enosys != null) "LUNACY_PDK_PRELOAD" else "LD_PRELOAD"] =
             File(lib, "liblunacy-preload.so").path
+        // What the glibc preload execs another webOS binary with. Not through libenosys: that one
+        // goes on watching the process across the exec.
+        pb.environment()["LUNACY_PDK_REEXEC"] = prefix.filter { it != enosys?.path }.joinToString("\n")
+        if (loader != null) pb.environment()["LUNACY_PDK_GUEST_PRELOAD"] = File(lib, "liblunacy-preload.so").path
         if (script) pb.environment().apply {
             put("LD_PRELOAD", runtime.execPdk!!.path); put("LUNACY_PDK_EXEC", prefix.joinToString("\n"))
             runtime.webos?.let { put("PATH", it.environment(appId).getValue("PATH")) }
@@ -545,6 +555,12 @@ class PdkRuntime(private val context: Context, val appsRoot: File, val screenWid
 
         private fun head(f: File, n: Int): ByteArray =
             runCatching { f.inputStream().use { s -> ByteArray(n).also { if (s.read(it) != n) return ByteArray(0) } } }.getOrDefault(ByteArray(0))
+
+        /** The other binaries in a main binary's folder, readied as main is. */
+        fun readySiblings(main: File) {
+            main.parentFile?.listFiles()?.filter { it.isFile && it != main && !it.name.startsWith(".lunacy.") && !it.name.contains(".so") && isElf(it) }
+                ?.forEach { it.setExecutable(true, false); runnable(it) }
+        }
 
         fun runnable(original: File): File {
             try {

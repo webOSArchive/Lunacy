@@ -918,6 +918,59 @@ SMPEG 0.4.5 (LGPL 2, Debian armel), its own MP3 path in 1.2, rather than libmad,
 have made it GPL; Worms loads its title music. Atlantis posts a "start.game" ping to a Big Fish server that is gone;
 it doesn't wait for it.
 
+## 6h. Emulators: launchers, what `uname` says, file modes, 2026-11-01
+
+Six emulators on the Galaxy Tab A7 Lite (arm32, native through libenosys): 2600.emu, MD.emu and
+Snes9x EX (explusalpha 1.5.2), NesEm HD 1.2.0, EMU7800 1.8.8 and SuperNES 1.0.4. Each played a
+game with touch and sound at 55 to 60 frames/s: Frogger, Sonic, Super Mario World (in both
+SNES emulators), Dr. Mario and Super Mario Bros, Asteroids. Nothing in Lunacy names any of them.
+
+**A launcher that execs.** The explusalpha `main` is a stub: it reads `uname`, and if the
+machine has `v7` in it, runs `3-armv7` when `PDL_GetPDKVersion()` is above 300, else `armv7`; with
+no `v7`, `armv6`. Three things stopped it. An `execv` of a glibc binary fails, the kernel having no
+`/lib/ld-linux.so.3`, so it exited 1; `aarch64` has no `v7`; and Lunacy answered 300. Measured on
+the reference TouchPad: `armv7l`, PDK version **303**. The preload now answers `armv7l`, libpdl 303,
+and the exec family (`execv`, `execve`, `execvp`) goes through `execpdk/webos_exec.h`, the same rule
+as a start script's (§6d), with the command in `LUNACY_PDK_REEXEC`: the loader or qemu, not
+libenosys, which goes on watching across the exec. The binaries beside `main` are readied as `main` is
+(`PdkRuntime.readySiblings`).
+
+**A first frame before the surface.** These menus draw once and wait for input. That swap came
+before the TextureView had a surface, and `attach` then cleared the card black until the first
+touch. `attach` now shows the frame it already has.
+
+**`scandir`** opens its folder inside glibc, past the preload's `opendir`, so NesEm and SuperNES
+saw no ROMs in `/media/internal`. **`getcwd`** named Android's path in explusalpha's file picker;
+it now answers `/media/internal/...`, and a relative exec is made absolute before it is mapped.
+
+**File modes.** NesEm saves `data/.prefs.dat` with `open(O_CREAT|O_TRUNC|O_WRONLY, S_IWUSR)`. On a
+TouchPad every file in `/media/cryptofs` and `/media/internal` reads `rwxrwxrwx` (measured), so this
+never showed; Android honoured it, the file was `--w-------`, and NesEm never read its settings
+back: its on-screen pad sat at 0,0 and wasn't drawn in a game. What an app creates, its owner can
+now read and write. `open` also repairs such a file on EACCES (tested with a small binary under the
+preload), but NesEm's existing `--w-------` file did not get repaired that way in use: the fix
+reached it when NesEm next saved and recreated the file.
+
+**Measured on the reference TouchPad, the same as Lunacy.** Same app, ROM and taps, driven by
+`Workbench/probe/tapshot.c` (scripted taps, frames saved from the swap): Super Mario Bros has no
+title logo there either, and NesEm draws no gamepad in a game until its positions are saved
+(Settings, Configure Controls, Default Positions, OK, Accept Changes); the picture has the same size
+and place. Neither is Lunacy's. What Lunacy had to fix is that saving them stuck.
+
+**Under qemu, the Pixel Tablet (2026-11-01).** An arm64 release of this work, with no 32-bit mode
+to fall back on: all six play at 59 to 60 frames/s on the Tensor G2, the emulating process at about
+60% of a core (SuperNES 100%). The launcher's exec, the first frame, `/media/internal` in the picker
+and NesEm's readable `.prefs.dat` all behave as on the A7 Lite.
+
+**Found on the way, not fixed.** After an update the shell opens `var/run/luna-send.sock`, then laying
+down the new ROM replaces `var/run` and the socket is gone: `palm-install` says "no response" and
+`luna-send` gets ENOENT until Lunacy restarts.
+
+**Open.** NesEm's strings say the gamepad is "Portrait only", yet it draws and works in landscape;
+it reads the accelerometer's joystick events in its games list. Turning a device there isn't
+tested. SMB's Start didn't take on some early presses and did later on the same file, not
+explained; on the TouchPad a press at 21 s with no gamepad saved did nothing, as expected.
+
 ## 7. Still to do on the first path
 
 - A visible hybrid plugin's picture, drawn over its object in the page (no app needing it

@@ -62,7 +62,7 @@ static int js_link(void);
 PDL_Err PDL_Init(unsigned int flags) { inited = 1; if (getenv("LUNACY_PDK_PLUGIN")) js_link(); return PDL_NOERROR; }
 void PDL_Quit(void) { inited = 0; }
 const char *PDL_GetError(void) { return last_error; }
-int PDL_GetPDKVersion(void) { return 300; }   /* the TouchPad's PDK, 3.0.x */
+int PDL_GetPDKVersion(void) { return 303; }   /* the TouchPad's, measured on CE 3.1.0 (the explusalpha emulators pick their webOS 3 build by it) */
 /* A hybrid app's plugin: the shell started it for a page (LUNACY_PDK_PLUGIN). */
 PDL_bool PDL_IsPlugin(void) { return getenv("LUNACY_PDK_PLUGIN") ? PDL_TRUE : PDL_FALSE; }
 PDL_bool PDL_IsFullscreenPlugin(void) { return PDL_FALSE; }

@@ -96,6 +96,7 @@ Building from source is [BUILDING.md](BUILDING.md).
 ## Documentation
 
 - [BUILDING.md](BUILDING.md): what you need and how to build both APKs
+- [Architecture diagrams](https://claude.ai/artifact/X3upLYuqeZBM4Dq3pPS2bx): the whole system on one page, for newcomers
 - [Docs/architecture.md](Docs/architecture.md): components and boundaries
 - [Docs/roadmap.md](Docs/roadmap.md): phases and exit criteria
 - [Docs/fix-log.md](Docs/fix-log.md): every compatibility fix, the layer it landed in, and how each app fares

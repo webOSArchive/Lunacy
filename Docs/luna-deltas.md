@@ -739,9 +739,10 @@ app's own included, so a page waiting for an answer stops the page that would dr
 nothing appeared and every card stood still, for good. `PageDialog` draws them natively, in the
 card, from the same Onyx art and sizes, checked against the TouchPad's prompt (2026-11-01).
 
-The difference, which the engine forces: until the dialog is answered, the pages of every other
-card and service stand still too, where the TouchPad's carried on. The shell itself stays live.
-A page in a card that isn't up holds everything the same way, its dialog waiting in that card
-until someone goes there; the shell doesn't bring the card forward. Two smaller ones: the keyboard offers suggestions on a prompt's field if it ignores the field's
+**codepoet's decision, 2026-11-01:** on hold is how webOS would have handled it, so it stays;
+revisit if it becomes a problem. Until the dialog is answered, or its card is closed, the pages of
+every other card wait and then carry on; the shell, services and PDK games have their own threads
+or processes. A page in a card that isn't up holds them the same way, its dialog waiting in that
+card until someone goes there; the shell doesn't bring the card forward. Two smaller differences: the keyboard offers suggestions on a prompt's field if it ignores the field's
 no-suggestions flag, and the dialog appears at once, without Enyo's popup animation.
 

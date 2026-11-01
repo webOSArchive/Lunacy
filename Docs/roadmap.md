@@ -3,16 +3,23 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-10-29)
+## Where things stand (2026-11-01)
 
-**After 0.8.3, in the working tree (2026-11-01):** the six emulators play on the Galaxy Tab A7
-Lite: launchers that exec another binary, `uname`'s machine and the PDK version as the TouchPad
-answers them (`armv7l`, 303), `scandir`, `getcwd`, file modes, a first frame before the surface.
-[pdk.md](pdk.md) §6h, with what is still open. Also there: a shell going no longer takes the bus
-socket and the SDK relay from the one replacing it, and the keyboard closing while a card comes
-up no longer leaves the card view deaf to touch. A web page's alert, confirm and prompt, which
-stopped every card, are drawn natively (`Docs/luna-deltas.md` B18). The Web app has a narrow
-layout of its own instead of Phone Zoom.
+**0.8.4, a mini release** of the fixes since 0.8.3 (2026-11-01):
+
+- **PDK games:** the six emulators play (2600.emu, EMU7800, MD.emu, NesEm HD, Snes9x EX,
+  SuperNES): launchers that exec another binary, `uname`'s machine and the PDK version as the
+  TouchPad answers them (`armv7l`, 303), `scandir`, `getcwd`, file modes, a first frame before
+  the surface ([pdk.md](pdk.md) §6h, with what is still open). Start scripts work with them.
+- **Web's dialogs:** a page's alert, confirm and prompt, which stopped every card, are drawn
+  natively (luna-deltas B18). A form that asked a question on Send looked like a dead button.
+- **Web on a narrow card:** a layout of its own instead of Phone Zoom: the address on top, the
+  tools along the bottom. A foldable's cover shows it at the Pre3's 320 x 532.
+- **Trust Always** lasts across restarts, and holds for that certificate only.
+- **Hung cards:** the keyboard closing while a card came up left the card view deaf to touch.
+  Send from Web's Share was the way in.
+- **The bus and the SDK:** a shell going no longer takes the luna-send socket and the novacom
+  relay from the one replacing it (`palm-install`'s "no response").
 
 **0.8.3, a mini release** of the fixes since 0.8.2, for the community to try:
 
@@ -126,6 +133,8 @@ One line per milestone; the detail is in [fix-log.md](fix-log.md), the topic doc
   headless mail from boot, edge swipe for home, Exhibition, links out, Worms and Atlantis.
 - **2026-10-29, 0.8.3:** a mini release: dashboard swipes no longer open apps, Exhibition
   ends when an app opens, Photos' slideshow at the TouchPad's pace, App Catalog 6.2.2931.
+- **2026-11-01, 0.8.4:** a mini release: the six PDK emulators, Web's dialogs and narrow
+  layout, Trust Always that lasts, hung cards, the bus socket.
 
 ## Open, carried forward
 

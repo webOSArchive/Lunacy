@@ -962,9 +962,18 @@ to fall back on: all six play at 59 to 60 frames/s on the Tensor G2, the emulati
 60% of a core (SuperNES 100%). The launcher's exec, the first frame, `/media/internal` in the picker
 and NesEm's readable `.prefs.dat` all behave as on the A7 Lite.
 
-**Found on the way, not fixed.** After an update the shell opens `var/run/luna-send.sock`, then laying
-down the new ROM replaces `var/run` and the socket is gone: `palm-install` says "no response" and
-`luna-send` gets ENOENT until Lunacy restarts.
+**Found on the way: the bus socket gone from a running Lunacy.** On the Pixel, right after the
+update, `var/run/luna-send.sock` wasn't there: `palm-install` said "no response" and `luna-send` got
+ENOENT until Lunacy restarted. The ROM has nothing to do with it (it never touches `var/run`, and an
+update on the A7 Lite and the Fold3 left the socket alone). Android can create a new shell before it
+destroys the one going, and the old shell's `LunaSendServer.stop()` then deleted the new shell's
+socket by its path. Forced on the Fold3 with Lunacy behind Home (`am start -f 0x10008000`, new
+shell's `onCreate` 0.45 s before the old one's `onDestroy`) it left the same picture: same process,
+no socket. The Pixel's own trigger wasn't caught, its log having wrapped. `stop()` now leaves the
+file, which `start()` clears anyway. The same overlap left the relay's `Novacom` on the old shell,
+with that shell's `WebosRoot` and luna-send tokens and the new one failing to bind ("Address already
+in use"); there is now one listener a process, serving the newest shell. In the bad order after
+both changes, the socket stays and `palm-install -l` answers.
 
 **Open.** NesEm's strings say the gamepad is "Portrait only", yet it draws and works in landscape;
 it reads the accelerometer's joystick events in its games list. Turning a device there isn't

@@ -43,12 +43,17 @@ import java.io.OutputStream
  * scripts do.
  */
 class Novacom(private val webos: WebosRoot, private val nduid: () -> String) {
-    private var server: LocalServerSocket? = null
-
-    @Synchronized fun start() {
-        if (server != null) return
-        val s = try { LocalServerSocket(SOCKET) } catch (e: IOException) { Log.w(AppServer.TAG, "novacom: no socket: $e"); return }
-        server = s
+    /**
+     * The newest shell's turn at the process's one listener: the socket's name can't be bound
+     * twice, and Android creates a new shell before it destroys the one going. A connection
+     * goes to the shell that is up, whose [WebosRoot] has a luna-send that knows its tokens.
+     */
+    fun start() {
+        current = this
+        val s = synchronized(Novacom) {
+            if (server != null) return
+            try { LocalServerSocket(SOCKET) } catch (e: IOException) { Log.w(AppServer.TAG, "novacom: no socket: $e"); return }.also { server = it }
+        }
         Thread({
             while (true) {
                 val c = try { s.accept() } catch (e: IOException) { break }
@@ -58,7 +63,8 @@ class Novacom(private val webos: WebosRoot, private val nduid: () -> String) {
                     runCatching { c.close() }
                     continue
                 }
-                Thread({ serve(c) }, "novacom").start()
+                val up = current
+                Thread({ up?.serve(c) }, "novacom").start()
             }
         }, "novacom-accept").apply { isDaemon = true }.start()
     }
@@ -264,6 +270,8 @@ class Novacom(private val webos: WebosRoot, private val nduid: () -> String) {
         const val SOCKET = "org.webosarchive.lunacy.novacomd"
         /** Who a novacom command's luna-send calls the bus as: root's shell, on the private bus. */
         const val CALLER = "novacomd"
+        private var server: LocalServerSocket? = null
+        @Volatile private var current: Novacom? = null
         private const val ROOT_UID = 0
         private const val SHELL_UID = 2000
         private val OK = "ok 0\n".toByteArray()

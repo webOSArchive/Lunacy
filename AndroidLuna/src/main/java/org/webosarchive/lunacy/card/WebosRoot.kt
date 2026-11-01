@@ -294,11 +294,14 @@ class LunaSendServer(private val bus: Bus, private val socket: File) {
         }, "luna-send-accept").apply { isDaemon = true }.start()
     }
 
-    /** Ends the socket: the accept loop stops, and a command that connects now gets nothing. */
+    /**
+     * Ends the socket: the accept loop stops, and a command that connects now gets nothing.
+     * The file stays. Android creates a new shell before it destroys the one going, so by now
+     * that path can be the new shell's socket; [start] clears one nothing is listening on.
+     */
     @Synchronized fun stop() {
         runCatching { server?.close() }; runCatching { listening?.close() }
         server = null; listening = null
-        socket.delete()
     }
 
     private fun serve(c: LocalSocket) {

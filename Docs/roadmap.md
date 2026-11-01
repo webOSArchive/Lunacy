@@ -8,7 +8,8 @@ and a phase is finished when its criterion is met, not when its task list runs o
 **After 0.8.3, in the working tree (2026-11-01):** the six emulators play on the Galaxy Tab A7
 Lite: launchers that exec another binary, `uname`'s machine and the PDK version as the TouchPad
 answers them (`armv7l`, 303), `scandir`, `getcwd`, file modes, a first frame before the surface.
-[pdk.md](pdk.md) §6h, with what is still open.
+[pdk.md](pdk.md) §6h, with what is still open. Also there: a shell going no longer takes the bus
+socket and the SDK relay from the one replacing it.
 
 **0.8.3, a mini release** of the fixes since 0.8.2, for the community to try:
 

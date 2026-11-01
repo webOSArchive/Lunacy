@@ -439,14 +439,22 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         setMeasuredDimension(ws, hs)
     }
 
-    /** Rotation or resize: put every card where the current state says it belongs. */
+    /**
+     * Rotation or resize: put every card where the current state says it belongs. The keyboard
+     * going does this too, and it can go while a card is on its way up: that card carries on
+     * to the new size, and whatever a move into the card view was to do next still happens.
+     */
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
+        val up = activating
+        val then = settled.takeIf { anim != null }
         anim?.cancel(); anim = null
         endReorder(animate = false)
         drag = Drag.NONE
+        if (up != null) { maximize(up); return }
         val max = maximized
         place(if (max != null) maximizedLayout(max) else layout(Arrange.STACK))
+        then?.invoke()
     }
 
     private fun reserve() = luna.px(Params.PILL_RESERVE)
@@ -663,6 +671,8 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
                        val cardMs: Long, val cardEase: TimeInterpolator)
 
     private var anim: ValueAnimator? = null
+    /** What [anim] does when it ends. */
+    private var settled: (() -> Unit)? = null
 
     private fun run(moves: List<Move>, done: () -> Unit = {}) {
         anim?.cancel(); anim = null
@@ -670,6 +680,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         if (total <= 0L) { moves.forEach { m -> place(mapOf(m.card to m.to)) }; done(); return }
         val from = moves.map { m -> m.card.let { floatArrayOf(it.gx, it.rx, it.cy, it.scale, it.rot, it.lift) } }
         var cancelled = false
+        settled = done
         anim = ValueAnimator.ofFloat(0f, total.toFloat()).apply {
             duration = total; interpolator = Easing.Linear
             addUpdateListener { a ->
@@ -900,6 +911,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     /** The launching card slides up into the card view, and the shell shows the card view around it. */
     private fun toCardView(card: Card) {
         maximized = null
+        activating = null
         card.group?.let { it.active = card; setActiveGroup(it) }
         cards.forEach { it.visibility = View.VISIBLE }
         topCard = null

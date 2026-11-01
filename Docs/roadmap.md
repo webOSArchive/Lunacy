@@ -9,7 +9,8 @@ and a phase is finished when its criterion is met, not when its task list runs o
 Lite: launchers that exec another binary, `uname`'s machine and the PDK version as the TouchPad
 answers them (`armv7l`, 303), `scandir`, `getcwd`, file modes, a first frame before the surface.
 [pdk.md](pdk.md) §6h, with what is still open. Also there: a shell going no longer takes the bus
-socket and the SDK relay from the one replacing it.
+socket and the SDK relay from the one replacing it, and the keyboard closing while a card comes
+up no longer leaves the card view deaf to touch.
 
 **0.8.3, a mini release** of the fixes since 0.8.2, for the community to try:
 

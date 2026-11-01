@@ -5,6 +5,10 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-11-01)
 
+**After 0.8.4:** `/media/internal` lists its mapped folders (downloads, music and the rest)
+everywhere: Node's `fs.readdir`, and PDK apps by `scandir` and relative paths, so Topaz Explorer
+and NES.emu find what Web downloaded.
+
 **0.8.4, a mini release** of the fixes since 0.8.3 (2026-11-01):
 
 - **PDK games:** the six emulators play (2600.emu, EMU7800, MD.emu, NesEm HD, Snes9x EX,

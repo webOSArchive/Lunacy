@@ -314,6 +314,10 @@ open class AppWindow(
     }
 
     /** The browser views over the page see every touch, after it is dispatched (BrowserViews.touched). */
+    /** A WebView keeps key events for its page, which would leave a page's dialog without Backspace. */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean =
+        (focusedChild as? PageDialog)?.dispatchKeyEvent(event) ?: super.dispatchKeyEvent(event)
+
     override fun dispatchTouchEvent(e: MotionEvent): Boolean {
         val handled = super.dispatchTouchEvent(e)
         if (hasBrowserViews) browserViews.touched(e)

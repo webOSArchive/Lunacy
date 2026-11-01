@@ -79,7 +79,7 @@ enyo.kind({
 		]},
 		{name: "sslDialog", kind: "Popup", onClose: "sslConfirmResponse", components: [
 			{name: "sslConfirmMessage", className: "browser-dialog-body enyo-text-body "},
-			{kind: enyo.HFlexBox, components: [
+			{kind: enyo.HFlexBox, className: "ssl-buttons" /* [Lunacy] stacked in a narrow card: browser.css */, components: [
 				{kind: "Button", name: "viewCertButton", flex: 1, caption: $L("View Certificate"), className: "enyo-button-dark", onclick: "viewSSLCertificate"},
 				{kind: "Button", flex: 1, caption: $L("Trust Always"), response: "1", className: "enyo-button-dark", onclick: "closeSSLConfirmBox"},
 				{kind: "Button", flex: 1, caption: $L("Trust Once"), response: "2", className: "enyo-button-dark", onclick: "closeSSLConfirmBox"},

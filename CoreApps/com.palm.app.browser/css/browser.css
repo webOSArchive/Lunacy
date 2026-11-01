@@ -381,6 +381,26 @@
 		-webkit-box-sizing: border-box;
 		padding-bottom: 54px;
 	}
+	/* The start page's 1024 px is a TouchPad's; taller than this card, it lets focus scroll the page. */
+	.startpage {
+		height: 100%;
+	}
+	.startpage .startpage-placeholder-tall {
+		height: auto;
+		-webkit-box-flex: 1;
+	}
+	.ssl-buttons {
+		-webkit-box-orient: vertical !important;
+		-webkit-flex-direction: column !important;
+		flex-direction: column !important;
+	}
+	.ssl-buttons .enyo-button {
+		-webkit-box-flex: 0 !important;
+		-webkit-flex: none !important;
+		flex: none !important;
+		margin-top: 3px;
+		margin-bottom: 3px;
+	}
 }
 
 @media (max-width: 480px) and (max-height: 419px) {

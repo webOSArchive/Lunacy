@@ -146,7 +146,8 @@ list until it got a narrow layout of its own (codepoet, 2026-11-01): below 481 p
 has the top row and the tools sit along the card's bottom, where a webOS phone had its command
 menu, leaving it when the keyboard takes the height (`browser.css`, marked `[Lunacy]`). The
 Fold3's cover shows it at the Pre3's 320 x 532. The tools' place comes from memory of the Pre3,
-not a measurement: no Pre3 was attached.
+not a measurement: no Pre3 was attached. The SSL dialog's four buttons stack there, and the start
+page gives up its TouchPad height of 1024 px, which otherwise let focus scroll the page.
 
 **Where.** Device Info's "Software — Use Phone Zoom" group (the switch is called Phone Zoom there) lists every app as the TouchPad's Device Info did
 (title on the left, "v" and the version on the right), with the switch at the right of each

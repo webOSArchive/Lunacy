@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Rect
 import android.net.Uri
+import android.content.Context
 import android.net.http.SslError
 import android.os.Handler
 import android.os.Looper
@@ -83,8 +84,13 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         private var nextPage = 1
         /** Windows a page has opened, waiting for the card that will show them; by identifier. */
         private val pending = HashMap<String, Browser>()
-        /** Hosts whose certificate the owner trusted always, for this run. */
-        private val trusted = HashSet<String>()
+        /**
+         * Trust Always: each host with the fingerprint of the certificate the owner trusted,
+         * kept across runs. Another certificate on that host is asked about again.
+         */
+        private const val TRUSTED_CERTIFICATES = "trustedcertificates"
+        private fun trustKey(host: String, certificate: ByteArray) = host + "/" +
+            java.security.MessageDigest.getInstance("SHA-256").digest(certificate).joinToString("") { "%02x".format(it) }
         /** Host and certificate pairs that held up under Lunacy's own trust store. */
         private val verified = HashSet<String>()
         private val worker = Executors.newSingleThreadExecutor()
@@ -191,6 +197,9 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         /** The plugin's one open dialog: a JsResult, an SSL or an HTTP auth handler. */
         private var dialog: Any? = null
         private var dialogHost = ""
+        /** What Trust Always would remember of the certificate being asked about. */
+        private var dialogTrust: String? = null
+        private val trustedCertificates get() = context.getSharedPreferences(TRUSTED_CERTIFICATES, Context.MODE_PRIVATE)
         /** The open window's transport, held until the card that shows it is ready. */
         private var transport: Message? = null
         private var lastTouch = floatArrayOf(0f, 0f)
@@ -366,7 +375,10 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
             when (val d = dialog) {
                 is JsPromptResult -> if (r == "1") d.confirm(a.optString(1)) else d.cancel()
                 is JsResult -> if (r == "1") d.confirm() else d.cancel()
-                is SslErrorHandler -> { if (r == "1") trusted.add(dialogHost); if (r == "1" || r == "2") d.proceed() else d.cancel() }
+                is SslErrorHandler -> {
+                    if (r == "1") dialogTrust?.let { trustedCertificates.edit().putBoolean(it, true).apply() }
+                    if (r == "1" || r == "2") d.proceed() else d.cancel()
+                }
                 is HttpAuthHandler -> if (r == "1") d.proceed(a.optString(1), a.optString(2)) else d.cancel()
             }
             dialog = null
@@ -753,27 +765,28 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
                 val uri = Uri.parse(error.url)
                 val host = uri.host.orEmpty()
-                if (host in trusted) { handler.proceed(); return }
+                val seen = android.net.http.SslCertificate.saveState(error.certificate)?.getByteArray("x509-certificate")
+                val always = seen?.let { trustKey(host, it) }
+                if (always != null && trustedCertificates.contains(always)) { handler.proceed(); return }
                 // An older Android's store lacks today's roots (Android 5 refuses Wikipedia's).
                 // Lunacy's own requests trust the bundled roots as well (Http); if the site's
                 // certificate holds up there and is the one this view was shown, it is good.
                 // (Expiry and the host name are checked there too.)
                 if (error.primaryError == SslError.SSL_UNTRUSTED) {
-                    val seen = android.net.http.SslCertificate.saveState(error.certificate)?.getByteArray("x509-certificate")
                     val key = host + "/" + seen?.contentHashCode()
                     if (key in verified) { handler.proceed(); return }
                     val port = if (uri.port > 0) uri.port else 443
                     worker.execute {
                         val good = seen != null && Http.verifiedLeaf(host, port)?.contentEquals(seen) == true
-                        main.post { if (good) { verified.add(key); handler.proceed() } else askSsl(handler, host, error) }
+                        main.post { if (good) { verified.add(key); handler.proceed() } else askSsl(handler, host, always, error) }
                     }
                     return
                 }
-                askSsl(handler, host, error)
+                askSsl(handler, host, always, error)
             }
-            private fun askSsl(handler: SslErrorHandler, host: String, error: SslError) {
+            private fun askSsl(handler: SslErrorHandler, host: String, always: String?, error: SslError) {
                 dialog?.let { (it as? SslErrorHandler)?.cancel() }
-                dialog = handler; dialogHost = host
+                dialog = handler; dialogHost = host; dialogTrust = always
                 owner.send(id, "dialogSSLConfirm", host, webosSslCode(error), "")
             }
             override fun onReceivedHttpAuthRequest(view: WebView, handler: HttpAuthHandler, host: String, realm: String) {

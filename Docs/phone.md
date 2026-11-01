@@ -137,12 +137,16 @@ every app written for the Pre3 wants: the SDK had it declare its viewport
 (`height=device-height`) and size itself with the framework.
 
 **Defaults.** Off, except the bundled Palm apps known to draw a fixed screen - Clock,
-Calculator and Memos - and the two whose chrome is a TouchPad's width, the Web app (its
-action bar left no room for the address) and App Catalog (codepoet, 2026-10-04), and
+Calculator and Memos - and App Catalog, whose chrome is a TouchPad's width (codepoet, 2026-10-04), and
 Calendar and Contacts, laid out for a tablet without sliding panels to stack, until they are
 given a phone layout of their own (codepoet, 2026-10-08)
 (`FixedViewport.DEFAULT_ON`, a shipped default for the user's switch; the apps themselves are
-untouched). An app's switch is forgotten when the app is removed.
+untouched). An app's switch is forgotten when the app is removed. The Web app was on this
+list until it got a narrow layout of its own (codepoet, 2026-11-01): below 481 px the address
+has the top row and the tools sit along the card's bottom, where a webOS phone had its command
+menu, leaving it when the keyboard takes the height (`browser.css`, marked `[Lunacy]`). The
+Fold3's cover shows it at the Pre3's 320 x 532. The tools' place comes from memory of the Pre3,
+not a measurement: no Pre3 was attached.
 
 **Where.** Device Info's "Software — Use Phone Zoom" group (the switch is called Phone Zoom there) lists every app as the TouchPad's Device Info did
 (title on the left, "v" and the version on the right), with the switch at the right of each

@@ -11,7 +11,8 @@ answers them (`armv7l`, 303), `scandir`, `getcwd`, file modes, a first frame bef
 [pdk.md](pdk.md) §6h, with what is still open. Also there: a shell going no longer takes the bus
 socket and the SDK relay from the one replacing it, and the keyboard closing while a card comes
 up no longer leaves the card view deaf to touch. A web page's alert, confirm and prompt, which
-stopped every card, are drawn natively (`Docs/luna-deltas.md` B18).
+stopped every card, are drawn natively (`Docs/luna-deltas.md` B18). The Web app has a narrow
+layout of its own instead of Phone Zoom.
 
 **0.8.3, a mini release** of the fixes since 0.8.2, for the community to try:
 

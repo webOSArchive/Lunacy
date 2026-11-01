@@ -7,8 +7,8 @@ with other webOS platforms, LuneOS among them. The build copies this folder into
 
 Every app carries a NOTICE: where it came from, its licence or abandonware status, and any
 change Lunacy made to it. Rule 5 in [CLAUDE.md](../CLAUDE.md) keeps installed apps as packaged.
-The only exceptions are Email and Screen & Lock, which codepoet approved, and each of those
-changes is marked `[Lunacy]` in its source.
+The only exceptions are Email, Screen & Lock and Web's narrow layout, which codepoet approved,
+and each of those changes is marked `[Lunacy]` in its source.
 
 | App | Id | Version | From |
 |---|---|---|---|

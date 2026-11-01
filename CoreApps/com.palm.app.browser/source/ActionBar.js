@@ -30,12 +30,12 @@ enyo.kind({
 	components: [
     	{kind: "Control", showing: false, name: "title", className: "page-title enyo-text-ellipsis", content: "Untitled"},
 		{kind: enyo.HFlexBox, className: "menu-container", align: "center", components: [
-			{kind: "ToolButton", name: "back", className: "actionbar-tool-button", icon: "images/chrome/menu-icon-back.png", onclick: "doBack"},
-			{kind: "ToolButton", name: "forward", className: "actionbar-tool-button", icon: "images/chrome/menu-icon-forward.png", onclick: "doForward"},
+			{kind: "ToolButton", name: "back", className: "actionbar-tool-button actionbar-bottom actionbar-bottom-1", icon: "images/chrome/menu-icon-back.png", onclick: "doBack"},
+			{kind: "ToolButton", name: "forward", className: "actionbar-tool-button actionbar-bottom actionbar-bottom-2", icon: "images/chrome/menu-icon-forward.png", onclick: "doForward"},
 			{kind: "ToolButton", name: "search", className: "actionbar-tool-button", flex: 1, kind: "URLSearch", onLoad: "doLoad", onStopLoad: "doStopLoad", onRefresh: "doRefresh"},
-			{kind: "ToolButton", name: "share", className: "actionbar-tool-button", icon: "images/chrome/menu-icon-share.png", onclick: "showSharePopup"},
-			{kind: "ToolButton", className: "actionbar-tool-button", icon: "images/chrome/menu-icon-newcard.png", onclick: "doNewCard"},
-			{kind: "ToolButton", className: "actionbar-tool-button", icon: "images/chrome/menu-icon-bookmark.png", onclick: "doOpenBookmarks"},
+			{kind: "ToolButton", name: "share", className: "actionbar-tool-button actionbar-bottom actionbar-bottom-3", icon: "images/chrome/menu-icon-share.png", onclick: "showSharePopup"},
+			{kind: "ToolButton", className: "actionbar-tool-button actionbar-bottom actionbar-bottom-4", icon: "images/chrome/menu-icon-newcard.png", onclick: "doNewCard"},
+			{kind: "ToolButton", className: "actionbar-tool-button actionbar-bottom actionbar-bottom-5", icon: "images/chrome/menu-icon-bookmark.png", onclick: "doOpenBookmarks"},
 		]},	
 		{name: "sharePopup", className: "launch-popup",  kind: "Menu", components: [
 			{caption: $L("Add Bookmark"), onclick: "doAddBookmark"},
@@ -86,6 +86,11 @@ enyo.kind({
 		this.$.search.setDefaultSearch(this.defaultSearch);
 	},
 	showSharePopup: function(inSender, inEvent) {
+		// [Lunacy] The tools are at the bottom of a narrow card (browser.css): the menu opens up from them.
+		if (window.matchMedia("(max-width: 480px)").matches) {
+			this.$.sharePopup.openAt({bottom: 56, right: 8});
+			return;
+		}
 		this.$.sharePopup.openAt({top: -1000});
 		var pop = this.$.sharePopup.getBounds(); 
 		this.$.sharePopup.close();

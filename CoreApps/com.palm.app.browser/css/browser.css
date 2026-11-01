@@ -346,3 +346,48 @@
 .enyo-gemstone.enyo-item.enyo-held {
     background-repeat: repeat-x;
 }
+
+/*
+ * [Lunacy] A card narrower than the action bar was drawn for (a phone, a foldable folded): the
+ * address has the top row to itself, and the tools sit along the bottom of the card, where a
+ * webOS phone kept its command menu. They step aside when the keyboard takes the height.
+ */
+@media (max-width: 480px) {
+	.actionbar-bottom {
+		position: fixed;
+		bottom: 5px;
+		z-index: 2;
+		margin-left: -22px;
+	}
+	.actionbar-bottom-1 { left: 10%; }
+	.actionbar-bottom-2 { left: 30%; }
+	.actionbar-bottom-3 { left: 50%; }
+	.actionbar-bottom-4 { left: 70%; }
+	.actionbar-bottom-5 { left: 90%; }
+	.actionbar:after {
+		content: "";
+		position: fixed;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		height: 54px;
+		z-index: 1;
+		-webkit-box-sizing: border-box;
+		-webkit-border-image: inherit;
+		border-width: 2px 4px;
+		background-color: #343434;
+	}
+	.browser-page, .startpage {
+		-webkit-box-sizing: border-box;
+		padding-bottom: 54px;
+	}
+}
+
+@media (max-width: 480px) and (max-height: 419px) {
+	.actionbar-bottom, .actionbar:after {
+		display: none;
+	}
+	.browser-page, .startpage {
+		padding-bottom: 0;
+	}
+}

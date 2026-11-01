@@ -65,10 +65,14 @@ factory WebView Chromium 37.
   ratchet item in the architecture doc, to be tightened on later targets. Don't add new ones
   without listing them.
 - Test on the device over `adb`, and inspect cards through `chrome://inspect`.
-- **Use Wi-Fi adb, not USB.** The development VM's USB passthrough is unreliable: it drops
-  during installs and leaves the device `offline`. Use the cable once for `adb tcpip 5555`
-  (after each reboot), then `adb connect <device ip>:5555` and work over Wi-Fi; the devices'
-  addresses are in [Docs/dev-workflow.md](Docs/dev-workflow.md).
+- **Use Wi-Fi adb, not USB, on every device, always.** Switch the moment a device shows up on
+  a cable, before doing anything else with it: a serial like `RFCRC196GZD` in `adb devices`
+  means stop and switch. USB can't be relied on anywhere: the development VM's passthrough
+  drops during installs and leaves a device `offline`, the VM's host can take the port back
+  from the Linux guest at any time, and the Fold3's own port is flaky (codepoet, 2026-11-01).
+  The TouchPad, which has only novacom, is the one device left on its cable. Use the cable once for `adb tcpip 5555` (after each reboot), then `adb connect <device
+  ip>:5555` and work over Wi-Fi; the devices' addresses are in
+  [Docs/dev-workflow.md](Docs/dev-workflow.md).
 - Record every change made to a test device (settings, installed packages, WebView
   versions) in [Docs/android5-setup.md](Docs/android5-setup.md).
 - A real TouchPad (webOS CE 3.1.0) is the reference for how webOS behaved. Reach it over

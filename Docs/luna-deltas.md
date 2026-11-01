@@ -741,6 +741,7 @@ card, from the same Onyx art and sizes, checked against the TouchPad's prompt (2
 
 The difference, which the engine forces: until the dialog is answered, the pages of every other
 card and service stand still too, where the TouchPad's carried on. The shell itself stays live.
-Two smaller ones: the keyboard offers suggestions on a prompt's field if it ignores the field's
+A page in a card that isn't up holds everything the same way, its dialog waiting in that card
+until someone goes there; the shell doesn't bring the card forward. Two smaller ones: the keyboard offers suggestions on a prompt's field if it ignores the field's
 no-suggestions flag, and the dialog appears at once, without Enyo's popup animation.
 

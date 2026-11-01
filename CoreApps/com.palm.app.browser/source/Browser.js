@@ -1,7 +1,7 @@
 enyo.kind({
 	name: "Browser",
 	kind: enyo.VFlexBox,
-	className: "basic-back",
+	className: "basic-back browser-page",
 	published: {
 		url: "",
 		searchPreferences: {},

@@ -730,3 +730,17 @@ the media indexer's db8 kinds. All in [fix-log.md](fix-log.md) "Known gaps".
 ### B17. Timer animations at the TouchPad's pace
 
 **2026-10-29, codepoet: "much better, not perfect, good enough".** An app that animated with a chain of short timers moved as fast as the TouchPad could run and draw it, not by the clock: Photos' slideshow slides each photo 90 px per `setTimeout(..., 1)`, and the TouchPad took about 770 ms for one slide (filmed; about 70 ms to draw each step), where Chromium drew it in a frame or two. compat.js now gives every page the TouchPad's two limits ([fix-log.md](fix-log.md), 2026-10-29): no timer under 10 ms, and 70 ms for the next step of a chain that changed the page. What stays different: the TouchPad's step time grew with how much of the screen a step redrew (about 60 ms early in a slide, 135 ms late, in `Workbench/probe`'s slideprobe), and Lunacy's is a flat 70 ms, the full-screen photo's. A small element animated the same way steps at 70 ms here where the TouchPad would have drawn it faster.
+
+### B18. A web page's alert, confirm and prompt
+
+On webOS the Web app's page drew these (AcceptCancelPopup) while the browser server, another
+process, waited for the answer. A WebView has one renderer for every page in the app, the Web
+app's own included, so a page waiting for an answer stops the page that would draw the question:
+nothing appeared and every card stood still, for good. `PageDialog` draws them natively, in the
+card, from the same Onyx art and sizes, checked against the TouchPad's prompt (2026-11-01).
+
+The difference, which the engine forces: until the dialog is answered, the pages of every other
+card and service stand still too, where the TouchPad's carried on. The shell itself stays live.
+Two smaller ones: the keyboard offers suggestions on a prompt's field if it ignores the field's
+no-suggestions flag, and the dialog appears at once, without Enyo's popup animation.
+

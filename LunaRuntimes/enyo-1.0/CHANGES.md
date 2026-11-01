@@ -171,9 +171,11 @@ offers `LunacyNative.webViewCreate`; elsewhere (a desktop browser) 0002's iframe
 - **The plugin's callbacks** come back by name onto the BasicWebView (`window.__lunacyWebView`):
   `loadStarted`, `loadProgressChanged`, `loadStopped`, `documentLoadFinished`,
   `urlTitleChanged` (with back and forward), `mainDocumentLoadFailed` (with webOS's error codes
-  where the app knows them), `dialogAlert`/`Confirm`/`Prompt`, `dialogSSLConfirm`,
+  where the app knows them), `dialogSSLConfirm`,
   `dialogUserPassword`, `mimeNotSupported`, `urlRedirected`, `createPage`, and `eventFired`
-  with a `mousehold` on a link or image, which is how the app's context menu opens.
+  with a `mousehold` on a link or image, which is how the app's context menu opens. A page's
+  alert, confirm and prompt don't come this way, though the callbacks remain: the page that
+  would draw them is stopped while the page that asked waits (`PageDialog.kt`).
 - **Popups.** The plugin drew into the page, so Enyo's popups came out over the web content.
   The native view is over the whole page. While an `enyo.BasicPopup` is open, or is still on
   screen over the box (a toaster sliding away), the view is *covered*: Android draws it into a

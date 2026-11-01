@@ -785,14 +785,18 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         inner class Chrome : WebChromeClient() {
             override fun onProgressChanged(view: WebView, progress: Int) = owner.send(id, "loadProgressChanged", progress)
             override fun onReceivedTitle(view: WebView, title: String?) = titleChanged()
+            // Drawn natively, not by the app's popups: see PageDialog.
             override fun onJsAlert(view: WebView, url: String, message: String, result: JsResult): Boolean {
-                dialog = result; owner.send(id, "dialogAlert", message); return true
+                PageDialog.show(owner.window, PageDialog.Kind.ALERT, message, "") { ok, _ -> if (ok) result.confirm() else result.cancel() }
+                return true
             }
             override fun onJsConfirm(view: WebView, url: String, message: String, result: JsResult): Boolean {
-                dialog = result; owner.send(id, "dialogConfirm", message); return true
+                PageDialog.show(owner.window, PageDialog.Kind.CONFIRM, message, "") { ok, _ -> if (ok) result.confirm() else result.cancel() }
+                return true
             }
             override fun onJsPrompt(view: WebView, url: String, message: String, defaultValue: String?, result: JsPromptResult): Boolean {
-                dialog = result; owner.send(id, "dialogPrompt", message, defaultValue.orEmpty()); return true
+                PageDialog.show(owner.window, PageDialog.Kind.PROMPT, message, defaultValue.orEmpty()) { ok, value -> if (ok) result.confirm(value) else result.cancel() }
+                return true
             }
             override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
                 if (blockPopups && !isUserGesture) return false

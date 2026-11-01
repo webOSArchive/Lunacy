@@ -46,6 +46,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/utsname.h>
 #include "../execpdk/webos_exec.h"
@@ -114,12 +115,70 @@ static const char *media(const char *path, char *buf)
 	return NULL;
 }
 
+/* A real path inside a mapped folder: its /media/internal path in out. */
+static int mapped_path(const char *cwd, char *out)
+{
+	const char *at = getenv("LUNACY_PDK_MEDIA");
+	if (!at) return 0;
+	while (*at) {
+		const char *end = at + strcspn(at, ":"), *eq = memchr(at, '=', end - at);
+		size_t n = eq ? (size_t)(end - eq - 1) : 0;
+		if (n && strncmp(cwd, eq + 1, n) == 0 && (cwd[n] == 0 || cwd[n] == '/')) {
+			snprintf(out, PATH_MAX, "/media/internal/%.*s%s", (int)(eq - at), at, cwd + n);
+			return 1;
+		}
+		at = *end ? end + 1 : end;
+	}
+	return 0;
+}
+
+/* The working directory, when it is inside a mapped folder. */
+static int in_mapped(char *out)
+{
+	char cwd[PATH_MAX];
+	return syscall(SYS_getcwd, cwd, sizeof cwd) > 0 && mapped_path(cwd, out);
+}
+
+/*
+ * A relative path that means a mapped folder, from where the app has chdir'd: "downloads" in
+ * /media/internal, "." or ".." in the folder itself. Its absolute webOS path in abs, or NULL for
+ * any other. NES.emu's picker works this way: chdir, scandir("."), then a stat of each name.
+ */
+static const char *media_relative(const char *path, char *abs)
+{
+	char cwd[PATH_MAX], probe[PATH_MAX];
+	size_t root_len;
+	const char *root = webos_root(&root_len);
+	if (!root || !getenv("LUNACY_PDK_MEDIA")) return NULL;
+	if (in_mapped(cwd)) {
+		char *end = cwd + strlen(cwd);
+		for (const char *seg = path; *seg; ) {
+			size_t n = strcspn(seg, "/");
+			if (n == 2 && seg[0] == '.' && seg[1] == '.') { while (end > cwd && *--end != '/') ; *end = 0; }
+			else if (n && !(n == 1 && seg[0] == '.')) {
+				if ((size_t)(end - cwd) + n + 2 > sizeof cwd) return NULL;
+				*end++ = '/'; memcpy(end, seg, n); end += n; *end = 0;
+			}
+			seg += n; if (*seg) seg++;
+		}
+		snprintf(abs, PATH_MAX, "%s", cwd);
+		return abs;
+	}
+	if (syscall(SYS_getcwd, cwd, sizeof cwd) <= 0) return NULL;
+	if (strncmp(cwd, root, root_len) != 0 || strcmp(cwd + root_len, "/media/internal") != 0) return NULL;
+	while (path[0] == '.' && path[1] == '/') path += 2;
+	snprintf(abs, PATH_MAX, "/media/internal/%s", path);
+	return media(abs, probe) ? abs : NULL;
+}
+
 /* The path to use for `path`: in the webOS root if it is a webOS path, else itself. */
 static const char *map(const char *path, char *buf)
 {
 	size_t root_len;
 	const char *root = webos_root(&root_len), *m;
-	if (!path || path[0] != '/' || !root) return path;
+	char abs[PATH_MAX];
+	if (!path || !root) return path;
+	if (path[0] != '/') { if (!path[0] || !media_relative(path, abs)) return path; path = abs; }
 	if ((m = media(path, buf))) return m;
 	for (int i = 0; webos_dirs[i]; i++) {
 		size_t n = strlen(webos_dirs[i]);
@@ -129,6 +188,7 @@ static const char *map(const char *path, char *buf)
 			return buf;
 		}
 	}
+	if (path == abs) { strcpy(buf, abs); return buf; }
 	return path;
 }
 
@@ -366,6 +426,9 @@ static pthread_mutex_t listings_lock = PTHREAD_MUTEX_INITIALIZER;
 static int is_media_internal(const char *path)
 {
 	static const char m[] = "/media/internal";
+	char cwd[PATH_MAX];
+	if (path && path[0] == '.' && (path[1] == 0 || (path[1] == '/' && path[2] == 0)))
+		return getcwd(cwd, sizeof cwd) && strcmp(cwd, m) == 0;
 	if (!path || strncmp(path, m, sizeof m - 1) != 0) return 0;
 	for (path += sizeof m - 1; *path == '/'; path++) ;
 	return *path == 0;
@@ -487,9 +550,28 @@ char *getcwd(char *buf, size_t size)
 	REAL(getcwd);
 	size_t root_len;
 	const char *root = webos_root(&root_len);
-	char *r = real_getcwd(buf, size);
+	char *r = real_getcwd(buf, size), mapped[PATH_MAX];
+	if (r && in_mapped(mapped)) {
+		if (strlen(mapped) + 1 > (size ? size : PATH_MAX)) { errno = ERANGE; return NULL; }
+		strcpy(r, mapped);
+		return r;
+	}
 	if (r && root && strncmp(r, root, root_len) == 0 && r[root_len] == '/') memmove(r, r + root_len, strlen(r + root_len) + 1);
 	return r;
+}
+
+/* realpath walks the path inside glibc, past the mapping: a webOS path goes in as the real one,
+   and the answer comes back in webOS's terms, as getcwd's does. */
+char *realpath(const char *path, char *resolved)
+{
+	REAL(realpath); MAPPED(path);
+	char out[PATH_MAX], webos[PATH_MAX];
+	size_t root_len;
+	const char *root = webos_root(&root_len);
+	if (!real_realpath(mp_, out)) return NULL;
+	if (mapped_path(out, webos)) strcpy(out, webos);
+	else if (root && strncmp(out, root, root_len) == 0 && out[root_len] == '/') memmove(out, out + root_len, strlen(out + root_len) + 1);
+	return resolved ? strcpy(resolved, out) : strdup(out);
 }
 
 /* scandir opens and reads its folder inside glibc, past opendir and readdir above, so
@@ -497,7 +579,8 @@ char *getcwd(char *buf, size_t size)
 #define SCAN_MAPPED(T) \
 	const char *at = getenv("LUNACY_PDK_MEDIA"); \
 	char name[NAME_MAX + 1]; \
-	while (n >= 0 && is_media_internal(dir) && mapped_after(&at, name)) { \
+	int root_ = n >= 0 && is_media_internal(dir); \
+	while (root_ && mapped_after(&at, name)) { \
 		T *e = calloc(1, sizeof *e), **more; \
 		if (!e) break; \
 		e->d_ino = 1; e->d_type = DT_DIR; e->d_reclen = sizeof *e; strcpy(e->d_name, name); \
@@ -506,7 +589,7 @@ char *getcwd(char *buf, size_t size)
 		if (!more) { free(e); break; } \
 		*list = more; more[n++] = e; \
 	} \
-	if (n > 0 && compare && is_media_internal(dir)) qsort(*list, n, sizeof **list, (int (*)(const void *, const void *))compare); \
+	if (n > 0 && compare && root_) qsort(*list, n, sizeof **list, (int (*)(const void *, const void *))compare); \
 	return n
 int scandir(const char *dir, struct dirent ***list, int (*filter)(const struct dirent *), int (*compare)(const struct dirent **, const struct dirent **))
 {

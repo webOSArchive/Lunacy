@@ -371,28 +371,34 @@ static int is_media_internal(const char *path)
 	return *path == 0;
 }
 
-/* The next mapped folder for this listing, or NULL: its name in name[NAME_MAX + 1]. */
-static int next_mapped(DIR *d, char *name)
+/* The next mapped folder from *at, a place in LUNACY_PDK_MEDIA: its name in name[NAME_MAX + 1]. */
+static int mapped_after(const char **at, char *name)
 {
 	size_t root_len;
 	const char *root = webos_root(&root_len);
 	int found = 0;
+	while (*at && **at && !found) {
+		const char *end = *at + strcspn(*at, ":"), *eq = memchr(*at, '=', end - *at);
+		size_t n = eq ? (size_t)(eq - *at) : 0;
+		char own[PATH_MAX];
+		struct stat st;
+		if (n && n <= NAME_MAX && root && root_len + n + 17 < sizeof own) {
+			snprintf(own, sizeof own, "%s/media/internal/%.*s", root, (int)n, *at);
+			if (fstatat(AT_FDCWD, own, &st, AT_SYMLINK_NOFOLLOW) != 0) { memcpy(name, *at, n); name[n] = 0; found = 1; }
+		}
+		*at = *end ? end + 1 : end;
+	}
+	return found;
+}
+
+/* The next mapped folder for this listing, or NULL: its name in name[NAME_MAX + 1]. */
+static int next_mapped(DIR *d, char *name)
+{
+	int found = 0;
 	pthread_mutex_lock(&listings_lock);
 	for (int i = 0; i < MEDIA_LISTINGS; i++) {
 		if (listings[i].dir != d) continue;
-		const char *at = listings[i].next;
-		while (at && *at && !found) {
-			const char *end = at + strcspn(at, ":"), *eq = memchr(at, '=', end - at);
-			size_t n = eq ? (size_t)(eq - at) : 0;
-			char own[PATH_MAX];
-			struct stat st;
-			if (n && n <= NAME_MAX && root && root_len + n + 17 < sizeof own) {
-				snprintf(own, sizeof own, "%s/media/internal/%.*s", root, (int)n, at);
-				if (fstatat(AT_FDCWD, own, &st, AT_SYMLINK_NOFOLLOW) != 0) { memcpy(name, at, n); name[n] = 0; found = 1; }
-			}
-			at = *end ? end + 1 : end;
-		}
-		listings[i].next = at;
+		found = mapped_after(&listings[i].next, name);
 		break;
 	}
 	pthread_mutex_unlock(&listings_lock);
@@ -486,16 +492,33 @@ char *getcwd(char *buf, size_t size)
 	return r;
 }
 
-/* scandir opens its folder inside glibc, past opendir above. */
+/* scandir opens and reads its folder inside glibc, past opendir and readdir above, so
+   /media/internal's mapped folders join its list here, through the caller's filter and sort. */
+#define SCAN_MAPPED(T) \
+	const char *at = getenv("LUNACY_PDK_MEDIA"); \
+	char name[NAME_MAX + 1]; \
+	while (n >= 0 && is_media_internal(dir) && mapped_after(&at, name)) { \
+		T *e = calloc(1, sizeof *e), **more; \
+		if (!e) break; \
+		e->d_ino = 1; e->d_type = DT_DIR; e->d_reclen = sizeof *e; strcpy(e->d_name, name); \
+		if (filter && !filter(e)) { free(e); continue; } \
+		more = realloc(*list, (n + 1) * sizeof *more); \
+		if (!more) { free(e); break; } \
+		*list = more; more[n++] = e; \
+	} \
+	if (n > 0 && compare && is_media_internal(dir)) qsort(*list, n, sizeof **list, (int (*)(const void *, const void *))compare); \
+	return n
 int scandir(const char *dir, struct dirent ***list, int (*filter)(const struct dirent *), int (*compare)(const struct dirent **, const struct dirent **))
 {
 	REAL(scandir); MAPPED(dir);
-	return real_scandir(mp_, list, filter, compare);
+	int n = real_scandir(mp_, list, filter, compare);
+	SCAN_MAPPED(struct dirent);
 }
 int scandir64(const char *dir, struct dirent64 ***list, int (*filter)(const struct dirent64 *), int (*compare)(const struct dirent64 **, const struct dirent64 **))
 {
 	REAL(scandir64); MAPPED(dir);
-	return real_scandir64(mp_, list, filter, compare);
+	int n = real_scandir64(mp_, list, filter, compare);
+	SCAN_MAPPED(struct dirent64);
 }
 
 int mkdir(const char *path, mode_t mode) { MAPPED(path); return mkdirat(AT_FDCWD, mp_, mode); }

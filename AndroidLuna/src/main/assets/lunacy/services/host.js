@@ -73,6 +73,23 @@ for (const n of ["access", "appendFile", "chmod", "chown", "createReadStream", "
 }
 for (const n of ["rename", "copyFile", "link", "symlink"]) { wrap(fs, n, [0, 1]); wrap(fs, n + "Sync", [0, 1]); }
 
+// /media/internal's listing names its mapped folders too, as a TouchPad's named its own: a file
+// browser (Topaz Explorer) finds downloads where the user looks. Each one the root hasn't got.
+function withMedia(p, options, names) {
+	const wantsNames = !options || typeof options === "string" || !options.withFileTypes;
+	if (!wantsNames || typeof p !== "string" || path.posix.normalize(p).replace(/\/$/, "") !== "/media/internal") { return names; }
+	const have = {};
+	names.forEach((n) => { have[String(n).toLowerCase()] = true; });
+	return names.concat(Object.keys(MEDIA).filter((n) => !have[n]));
+}
+const readdirSync0 = fs.readdirSync, readdir0 = fs.readdir;
+fs.readdirSync = function (p, options) { return withMedia(p, options, readdirSync0.apply(fs, arguments)); };
+fs.readdir = function (p, options, callback) {
+	const a = Array.prototype.slice.call(arguments), cb = a[a.length - 1];
+	a[a.length - 1] = function (e, names) { cb(e, e ? names : withMedia(p, typeof options === "function" ? undefined : options, names)); };
+	return readdir0.apply(fs, a);
+};
+
 // webOS ran services as root, which file modes don't bind: the photos service makes its cache
 // folder with mkdir(path, 666) - decimal, so d-w--w--wT - and goes on using it. Lunacy's
 // service isn't root, so what a service makes or chmods keeps its owner's access.

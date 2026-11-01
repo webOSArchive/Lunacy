@@ -981,7 +981,7 @@ program: `library "libc.so.6" not found`, and every app whose main is a script f
 Android 10 and later (ScummVM, Worms). libenosys hands the preload on itself, so the variable now
 waits for it. All the PDK apps were launched on the Fold3 after the fix.
 
-**Open.** NesEm's strings say the gamepad is "Portrait only", yet it draws and works in landscape;
+**Open.** Dead Space starts and plays with a horrible noise, the same on the build before this work (Fold3, codepoet); left for later. NesEm's strings say the gamepad is "Portrait only", yet it draws and works in landscape;
 it reads the accelerometer's joystick events in its games list. Turning a device there isn't
 tested. SMB's Start didn't take on some early presses and did later on the same file, not
 explained; on the TouchPad a press at 21 s with no gamepad saved did nothing, as expected.

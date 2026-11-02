@@ -147,8 +147,9 @@ class SystemService(private val webosRoot: File, private val store: File) {
      * missing dayOfWeek Australia/Brisbane; {} is "bias value missing", as is a bias that isn't
      * an integer ("300", 300.5); 720 (in the list's syszones only) is "Failed to find any
      * timezones with specified bias value", and whole dates that match no candidate "…with
-     * specified parametes" (sic). One difference: whole dates with Sydney's rules (bias -600)
-     * found no zone on the TouchPad, where this finds Australia/Melbourne, which they describe.
+     * specified parametes" (sic). Two differences: whole dates with Sydney's rules (bias -600)
+     * found no zone on the TouchPad, where this finds Australia/Melbourne, which they describe;
+     * and without whole dates the months they name choose the zone (byChangeMonths).
      */
     private fun timeZoneFromEasData(p: JSONObject): String {
         val fail = { text: String -> JSONObject().put("returnValue", false).put("errorText", text).toString() }
@@ -165,7 +166,7 @@ class SystemService(private val webosRoot: File, private val store: File) {
         val ok = { tz: String -> JSONObject().put("returnValue", true).put("timeZone", tz).toString() }
         val standard = easDate(p.optJSONObject("standardDate"))
         val daylight = easDate(p.optJSONObject("daylightDate"))
-        if (standard == null || daylight == null) return ok(candidates.first())
+        if (standard == null || daylight == null) return ok(byChangeMonths(candidates, offset, p) ?: candidates.first())
         val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
         val stdDay = easDayOfMonth(standard, year)
         val dstDay = easDayOfMonth(daylight, year)
@@ -181,6 +182,32 @@ class SystemService(private val webosRoot: File, private val store: File) {
         }
         return fail("Failed to find any timezones with specified parametes")
     }
+
+    /**
+     * The first candidate that changes its clocks in the months the server named, by Android's
+     * rules, with the offset it has now, or that doesn't change them if the server says so. mojomail-eas leaves dayOfWeek out,
+     * so a device took the first candidate whatever the rules: Sydney came back as Brisbane, with
+     * no daylight saving, and a repeat early on a Sydney morning fell on the day before there.
+     * Null when the request names no months, or nothing matches, and the first candidate stands.
+     */
+    private fun byChangeMonths(candidates: List<String>, offset: Int, p: JSONObject): String? {
+        val into = p.optJSONObject("daylightDate")?.optInt("month", -1) ?: return null
+        val out = p.optJSONObject("standardDate")?.optInt("month", -1) ?: return null
+        if (into !in 0..12 || out !in 0..12) return null
+        val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+        return candidates.firstOrNull { id ->
+            if (id !in zoneIds) return@firstOrNull false
+            val zone = java.util.TimeZone.getTimeZone(id)
+            val rules = yearRules(zone, id, year)
+            if (rules.getInt("utcOffset") != offset * 60) return@firstOrNull false   // the list's offset has gone stale
+            if (into == 0 || out == 0) return@firstOrNull !rules.optBoolean("hasDstChange")
+            rules.optBoolean("hasDstChange") &&
+                monthOf(rules.getLong("dstStart"), zone) == into && monthOf(rules.getLong("dstEnd"), zone) == out
+        }
+    }
+
+    private fun monthOf(seconds: Long, zone: java.util.TimeZone) =
+        java.util.Calendar.getInstance(zone).apply { timeInMillis = seconds * 1000 }.get(java.util.Calendar.MONTH) + 1
 
     /** ext-timezones.json's "timeZone" list, as (ZoneID, offsetFromUTC) in the file's order. */
     private val easZones: List<Pair<String, Int>> by lazy {

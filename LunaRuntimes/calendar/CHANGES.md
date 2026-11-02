@@ -1,7 +1,7 @@
 # Lunacy's changes to the calendar framework
 
 Upstream: webOS CE's calendar framework, submission 42, from `system/usr/palm/frameworks/calendar/`
-in [webos-doctor-ce](https://github.com/webOSArchive/webos-doctor-ce) at `5211473`. That is Palm's
+in [webos-doctor-ce](https://github.com/webOSArchive/webos-doctor-ce) at `8284a49`. That is Palm's
 framework from the TouchPad with CE's rewrite of repeat expansion and southern daylight time. The copy
 `fetch-assets.sh` starts from is `Workbench/vendor/webos-ce/`, whose `COMMIT` file says what it is;
 `Workbench/vendor/touchpad/` stays as the TouchPad shipped it.

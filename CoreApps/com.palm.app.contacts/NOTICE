@@ -4,7 +4,8 @@ It opens on contacts kept on the device ("On This Device") instead of asking peo
 started with an HP webOS account.
 
 The app was released by LG Electronics under the Apache License 2.0 (see LICENSE); the 3.2.0
-changes are webOS Archive's.
+changes are webOS Archive's, among them Import vCards in the App Menu (webos-doctor-ce commits
+7bd5641, c8b69b6; the tree stays at 3.2.0, so look for app/utils/VCardBatchImport.js).
 
 The app's files are here exactly as the package carries them, and Lunacy does not change them
 (rule 5 in CLAUDE.md). A change Lunacy needs in the app is made in the webOS CE project and

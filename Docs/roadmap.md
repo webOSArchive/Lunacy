@@ -159,7 +159,9 @@ starting; some may have been settled since without a note.
 - **Android packages (luna-deltas A24):** an install carried through past Android's "unknown
   sources" prompt, and on Android 5-6 (file URI); a Play build would have to drop or justify
   `REQUEST_INSTALL_PACKAGES`.
-- **Calendar:** repeats, snooze. **Contacts:** vCards, favorites. Both untried beyond the A7 Lite.
+- **Calendar:** repeats, snooze. **Contacts:** vCard export, a `.vcf` opened from outside the
+  app (the stock importer), favorites. Both untried beyond the A7 Lite, except Import vCards,
+  tested on the Fold3 (2026-11-02).
 - **Hybrid apps:** a visible plugin's picture; callable collections on Chromium 37.
 - **PDK:** OpenSSL 0.9.8 and curl for the apps that link them; the other ten apkenv ports; on
   the A7 Lite's 64-bit build Where's My Water levels take 20 to 65 s to load under qemu;

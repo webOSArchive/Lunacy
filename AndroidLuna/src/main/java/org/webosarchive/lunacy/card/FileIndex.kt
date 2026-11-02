@@ -76,9 +76,6 @@ class FileIndex(private val webosRoot: File) {
         return if (slash >= dot || dot == -1) "" else path.substring(dot + 1)
     }
 
-    /** Audio, images and video had kinds of their own; everything else is a document. */
-    private fun isDocument(name: String) = name.substringAfterLast('.', "").lowercase() !in MEDIA
-
     /** filenotifyd_module_unknown.js's registration: the kind and its indexes. */
     private fun kindSpec(): JSONObject {
         fun props(vararg p: JSONObject) = JSONArray(p.toList())
@@ -104,6 +101,10 @@ class FileIndex(private val webosRoot: File) {
 
     companion object {
         const val KIND = "com.palm.media.misc.file:1"
+
+        /** Audio, images and video had kinds of their own; everything else is a document. */
+        fun isDocument(name: String) = name.substringAfterLast('.', "").lowercase() !in MEDIA
+
         private const val OWNER = "com.palm.filenotifyd"
         private val CONSUMERS = listOf("com.palm.systemui", "com.quickoffice.webos", "com.quickoffice.ar", "com.palm.mojo-systemui")
         private val MEDIA = setOf(

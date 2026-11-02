@@ -842,8 +842,9 @@ answers the kind from the files themselves (codepoet's design, a deliberate delt
 webOS CE's Photos & Videos 3.2.0 is bundled, unchanged, from the webOS CE tree: Palm's app
 with CE's changes, among them a rotate and crop editor. Palm's photos service
 (`com.palm.service.photos`) runs as a system JS service from the webOS root, and so does
-CE's `org.webosarchive.photos.service`, which writes what the editor saves (it takes only
-Photos' calls, for `.jpg`, `.jpeg` and `.png` files under `/media/internal`). The app lists
+CE's `org.webosarchive.photos.service`, which writes what the editor saves (it takes Photos'
+calls, for `.jpg`, `.jpeg` and `.png` files under `/media/internal`, and Contacts', for
+`/media/internal/.contactphotos` alone, where Import vCards writes). The app lists
 what webOS's media index holds and shows the thumbnails the service makes.
 
 - **`MediaIndex.kt`** answers the media index from the files, as `FileIndex.kt` answers
@@ -1601,8 +1602,20 @@ asking for an HP webOS account. Contacts are local only; nothing syncs. What it 
   `ezResize` and `imageInfo`, to the TouchPad's measured behaviour. Its `convert` keeps the
   crop window inside the scaled image and cuts a window larger than it down to it, never
   padding; exactly scale 1 returns the image whole.
-- **Not yet:** syncing (Exchange, CardDAV), so "Or add a new account" lists nothing; vCard import
-  and export and favorites untried; messaging and calling from a contact (no apps).
+- **Import vCards** (App Menu, CE's feature, 2026-11-02). The picker asks for `document` with
+  `extensions: ["vcf", "VCF"]`; the app's own parser reads the file, and each contact goes
+  straight to db8 with `Contact.save()`, so people appear through the linker's `linkerWatch`.
+  It always imports into the on-device account (`com.palm.contact.palmprofile:1`), never the
+  default account, which can be Exchange: `mojomail-eas` uploads what is in its own kind, and
+  a file of cards must not reach a server unasked. It skips what that account already holds;
+  a card that matches an Exchange contact is linked to it as one person, and neither contact
+  changes (measured: the Exchange records took no new revision). A card's
+  photo goes through CE's photos service into `.contactphotos`, then `com.palm.image/convert`
+  cuts the two sizes as for a photo chosen in Edit. A photo whose short side is exactly 196 or
+  50 is scale 1, so it stays whole and non-square, measured the same on the TouchPad. A `.vcf`
+  opened from outside the app still goes to the stock `com.palm.service.contacts/importVCard`.
+- **Not yet:** syncing (Exchange, CardDAV), so "Or add a new account" lists nothing; vCard
+  export and favorites untried; messaging and calling from a contact (no apps).
 
 ## Mojo
 

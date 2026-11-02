@@ -603,14 +603,16 @@ class LunacyService(
     private fun webosPath(f: File): String =
         UserFiles.webosPath(webosRoot, f) ?: ("/" + f.canonicalPath.removePrefix(webosRoot.canonicalPath).trimStart('/'))
 
-    /** webOS's attachment types, by extension: what a FilePicker's fileType filters on. */
+    /**
+     * webOS's attachment types, by extension: what a FilePicker's fileType filters on. A
+     * document is whatever the file index calls one, as on a device: every file that isn't
+     * audio, an image or a video.
+     */
     private fun typeOf(name: String) = when (name.substringAfterLast('.', "").lowercase()) {
         "jpg", "jpeg", "png", "gif", "bmp", "webp" -> "image"
         "mp3", "m4a", "aac", "wav", "ogg", "oga", "flac" -> "audio"
         "mp4", "m4v", "mov", "avi", "mkv", "webm", "3gp" -> "video"
-        "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "rtf", "html", "htm",
-        "epub", "mobi", "prc", "azw", "fb2", "cbz", "cbr", "csv", "md" -> "document"
-        else -> "other"
+        else -> if (FileIndex.isDocument(name)) "document" else "other"
     }
 
     // ---- Android's own settings ----

@@ -155,7 +155,12 @@ class SystemService(private val webosRoot: File, private val store: File) {
         val bias = p.opt("bias")
         if (bias !is Int && bias !is Long) return fail("bias value missing")
         val offset = -(bias as Number).toInt()
-        val candidates = easZones.filter { it.second == offset }.map { it.first }
+        // The list is from 2011. Its order decides between zones, as on a device, and not Android's
+        // offsets: Cancun has since moved to -300, ahead of Toronto, and has no daylight saving, so
+        // every US Eastern event would lose it (measured against Zoho). Android only fills a gap.
+        val candidates = easZones.filter { it.second == offset }.map { it.first }.ifEmpty {
+            easZones.map { it.first }.filter { it in zoneIds && java.util.TimeZone.getTimeZone(it).rawOffset / 60_000 == offset }
+        }
         if (candidates.isEmpty()) return fail("Failed to find any timezones with specified bias value")
         val ok = { tz: String -> JSONObject().put("returnValue", true).put("timeZone", tz).toString() }
         val standard = easDate(p.optJSONObject("standardDate"))
@@ -186,8 +191,7 @@ class SystemService(private val webosRoot: File, private val store: File) {
                 val id = z.opt("ZoneID") as? String ?: return@mapNotNull null
                 val off = z.opt("offsetFromUTC") as? Number ?: return@mapNotNull null
                 if (!z.has("supportsDST")) return@mapNotNull null
-                // The list is from 2011: Android says what the zone's offset is now.
-                id to (if (id in zoneIds) java.util.TimeZone.getTimeZone(id).rawOffset / 60_000 else off.toInt())
+                id to off.toInt()
             }
         }.getOrElse { Log.w(AppServer.TAG, "systemservice: no ext-timezones.json: $it"); emptyList() }
     }

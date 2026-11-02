@@ -11,6 +11,8 @@ runs on a device except `fold-rules.mjs`.
 - **Needs:** Node 22 or later (its `Intl` supplies the expected answers and the zone rules), and a
   copy of Palm's underscore. The file under test is given on the command line, so stock, CE or
   Lunacy's copy all work. Nothing else is outside this folder.
+- **`next-sweep.js`:** `findNextOccurrence`, which reminders use, for every repeat type. It runs from CE's
+  `tools/calendar-sweep/` beside `gen-cases.py`'s cases and needs `lib.js` there.
 - **What it covers:** 8 event zones at 4 start times, COUNT repeats, weekly on one day and daily;
   UNTIL through the parser in 6 zones. It doesn't cover monthly, yearly, weekly on several days,
   intervals above 1 or multi-day events.

@@ -2720,7 +2720,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         applyOrientation(card.window)
         if (launcherOpen) closeLauncher()
         fade(justType, false); showDock(false)
-        card.window.setStageActive(true)
+        // Not a headless app's root behind its launching card: a TouchPad never activates that
+        // page, and Enyo's app menu goes to the first active window it finds, which would be it.
+        if (!card.awaitingWindow) card.window.setStageActive(true)
         cards.cards.filter { it != card }.forEach { it.window.setStageActive(false) }
         // The active card's page holds the focus, as webOS's did. Without it document.hasFocus()
         // is false, and Chromium then sets activeElement without dispatching focus or focusin -

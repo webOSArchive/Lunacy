@@ -1635,8 +1635,8 @@ asking for an HP webOS account. Contacts are local only; nothing syncs. What it 
   copy stays. The template sets `readOnlyData`, so an edit makes a linked contact in the default
   account.
 - **People's details stay out of the log.** The bus log, which runs on every build, shows only a
-  call's size for Contacts, the contacts services and anything naming a contact or person kind,
-  and those services' and Contacts' consoles show no text (`Bus.handlesContacts`).
+  call's size for Contacts, Calendar, their services and anything naming a contact, person or
+  event, and those services' and apps' consoles show no text (`Bus.handlesPeople`).
 - **Not yet:** CardDAV; vCard export and favorites untried; messaging and calling from a contact
   (no apps).
 

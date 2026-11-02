@@ -648,7 +648,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             val raw = intent.getStringExtra("params")
             val params = raw?.let {
                 runCatching { JSONObject(it) }
-                    .onFailure { e -> Log.w(AppServer.TAG, "launch $id: params is not JSON ($e): $raw") }
+                    .onFailure { e -> Log.w(AppServer.TAG, "launch $id: params is not JSON (${raw.length} characters)") }
                     .getOrNull()
             }
             launch(id, params)
@@ -794,7 +794,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             // Relaunch: webOS doesn't reload a running app. Unless the app handles the relaunch
             // itself, LunaSysMgr brings its first card forward.
             windows.first().relaunch(params?.toString() ?: "") { handled ->
-                Log.i(AppServer.TAG, "relaunch $appId $params handled=$handled")
+                Log.i(AppServer.TAG, "relaunch $appId ${if (org.webosarchive.lunacy.card.Bus.handlesPeople(appId)) "" else params} handled=$handled")
                 // A relaunch for the dock leaves the card view alone: the app answers it with
                 // a dockMode window, or the dock shows nothing of it, as on a device.
                 if (!handled && !dock) cards.cards.firstOrNull { it.window.appId == appId }?.let { cards.maximize(it, maximizeMs(appId)) }

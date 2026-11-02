@@ -174,16 +174,20 @@ class Bus {
         fun redact(params: String): String = SECRET.replace(params) { it.groupValues[1] + "\"…\"" }
 
         /**
-         * Whether a call may carry people's details, which the bus log leaves out: every call of
-         * Contacts, the linker and the contacts service, and any with a contact or person in it.
-         * Other apps look people up through the last two, by phone number or address.
+         * Whether a call may carry people's details or plans, which the bus log leaves out: every
+         * call of Contacts, Calendar and their services, and any with a contact, person or event
+         * in it. Other apps look people up through the contacts services, and a merge by `_id`
+         * names no kind, so an event is also told by its fields.
          */
         private fun personal(appId: String, service: String, params: String) =
-            handlesContacts(appId) || handlesContacts(service) || "com.palm.contact" in params || "com.palm.person" in params ||
-                "org.webosarchive.contact" in params
+            handlesPeople(appId) || handlesPeople(service) || PERSONAL.any { it in params }
+        private val PERSONAL = listOf("com.palm.contact", "com.palm.person", "org.webosarchive.contact", "com.palm.calendarevent",
+            "org.webosarchive.calendar", "com.palm.service.calendar.reminders", "\"dtstart\"", "\"alarm\"")
 
-        /** Contacts and its services, whose calls and console print people's names and numbers. */
-        fun handlesContacts(id: String) = id.startsWith("com.palm.app.contacts") || id.startsWith("com.palm.service.contacts")
+        /** Contacts, Calendar and their services, whose calls and consoles print names, numbers and events. */
+        fun handlesPeople(id: String) = PEOPLE_APPS.any { id.startsWith(it) }
+        private val PEOPLE_APPS = listOf("com.palm.app.contacts", "com.palm.service.contacts", "com.palm.app.calendar",
+            "com.palm.service.calendar", "org.webosarchive.webcal")
 
         fun error(text: String, code: Int = -1): String =
             JSONObject(mapOf("returnValue" to false, "errorCode" to code, "errorText" to text)).toString()

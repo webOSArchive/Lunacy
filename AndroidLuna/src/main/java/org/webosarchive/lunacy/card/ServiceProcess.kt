@@ -78,7 +78,7 @@ class ServiceProcess(
      * it, /var/log/messages, for palm-log; everything goes to Android's log too.
      */
     private fun log(line: String) {
-        if (Bus.handlesContacts(name)) { Log.i(AppServer.TAG, "svc [$name] (${line.length} characters)"); return }
+        if (Bus.handlesPeople(name)) { Log.i(AppServer.TAG, "svc [$name] (${line.length} characters)"); return }
         Log.i(AppServer.TAG, "svc [$name] ${Bus.redact(line)}")
         SYSLOG.find(line)?.let { m ->
             SysLog.log(PRIORITIES.getOrElse(m.groupValues[1].toInt()) { "info" }, m.groupValues[2], m.groupValues[3])

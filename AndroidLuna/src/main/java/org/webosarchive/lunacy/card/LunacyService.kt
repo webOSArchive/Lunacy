@@ -231,6 +231,7 @@ class LunacyService(
         return Bus.ok(mapOf(
             "storage" to JSONObject().put("asked", asked).put("granted", storageGranted()),
             "contacts" to JSONObject().put("asked", asked).put("granted", granted(CONTACTS)),
+            "calendar" to JSONObject().put("asked", asked).put("granted", granted(CALENDAR)),
             "systemSettings" to JSONObject().put("asked", asked).put("granted", systemSettingsGranted()),
             "homeLauncher" to JSONObject().put("asked", true).put("granted", isDefaultHome()),
             "firstUseDone" to firstUseDone(context),
@@ -246,10 +247,10 @@ class LunacyService(
 
     /**
      * An account's setup page runs inside the app that is adding the account, and calls the bus
-     * as that app: the Android Contacts page asks through bundled Contacts or Accounts.
+     * as that app: the Android account's page asks through bundled Contacts, Calendar or Accounts.
      */
     private fun hostsAccountPages(appId: String) =
-        (appId == "com.palm.app.contacts" || appId == "com.palm.app.accounts") && registry.get(appId)?.userInstalled == false
+        appId in setOf("com.palm.app.contacts", "com.palm.app.calendar", "com.palm.app.accounts") && registry.get(appId)?.userInstalled == false
 
     private fun storageGranted(): Boolean = granted(STORAGE)
 
@@ -260,7 +261,7 @@ class LunacyService(
     private fun systemSettingsGranted(): Boolean = Build.VERSION.SDK_INT < 23 || Settings.System.canWrite(context)
 
     /**
-     * Asks Android. Storage and contacts are a dialog, answered when the user has: the reply waits for it,
+     * Asks Android. Storage, contacts and calendars are a dialog, answered when the user has: the reply waits for it,
      * and says whether Android would ask again (`askAgain`); once it won't, the only way left
      * is Android's own settings screen for Lunacy, which `viaSettings` opens instead.
      * "Modify system settings" has no dialog; Android grants it only on its own screen, which
@@ -270,12 +271,12 @@ class LunacyService(
      */
     private fun requestPermission(caller: String, p: JSONObject, reply: (String) -> Unit) {
         val which = p.optString("permission")
-        if (!ownApp(caller) && !(which == "contacts" && hostsAccountPages(caller))) {
+        if (!ownApp(caller) && !((which == "contacts" || which == "calendar") && hostsAccountPages(caller))) {
             reply(Bus.error("Only Lunacy's own apps can ask for Android's permissions (asked by $caller)", -1)); return
         }
         when (which) {
-            "storage", "contacts" -> {
-                val permissions = if (which == "storage") STORAGE else CONTACTS
+            "storage", "contacts", "calendar" -> {
+                val permissions = when (which) { "storage" -> STORAGE; "contacts" -> CONTACTS; else -> CALENDAR }
                 if (granted(permissions)) { reply(Bus.ok(mapOf("permission" to which, "granted" to true))); return }
                 if (p.optBoolean("viaSettings")) {
                     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + context.packageName))
@@ -656,6 +657,7 @@ class LunacyService(
         const val SOFTWARE_MANAGER = "com.palm.app.swmanager"
         private val STORAGE = listOf(android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
         private val CONTACTS = listOf(android.Manifest.permission.READ_CONTACTS)
+        private val CALENDAR = listOf(android.Manifest.permission.READ_CALENDAR)
         /** Long enough for the setting app's reply to land and its selector to close before the shell goes. */
         const val RESTART_DELAY_MS = 400L
         fun firstUseDone(context: Context): Boolean =

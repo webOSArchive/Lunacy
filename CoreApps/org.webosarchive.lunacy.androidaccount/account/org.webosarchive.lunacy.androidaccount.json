@@ -1,0 +1,58 @@
+{
+	"templateId": "org.webosarchive.lunacy.androidaccount",
+	"loc_name": "Android",
+	"icon": {
+		"loc_32x32": "images/android-32x32.png",
+		"loc_48x48": "images/android-48x48.png"
+	},
+	"validator": {
+		"customUI": {
+			"appId": "org.webosarchive.lunacy.androidaccount",
+			"name": "index.html"
+		}
+	},
+	"readPermissions": [
+		"com.palm.*",
+		"org.webosarchive.lunacy.androidaccount"
+	],
+	"writePermissions": [
+		"com.palm.app.contacts",
+		"com.palm.app.calendar",
+		"org.webosarchive.lunacy.androidaccount"
+	],
+	"capabilityProviders": [
+		{
+			"capability": "CONTACTS",
+			"id": "org.webosarchive.lunacy.androidaccount.contacts",
+			"loc_name": "Contacts",
+			"icon": {
+				"loc_32x32": "images/android-32x32.png",
+				"loc_48x48": "images/android-48x48.png"
+			},
+			"implementation": "palm://org.webosarchive.lunacy.androidaccount/",
+			"onEnabled": "palm://org.webosarchive.lunacy.androidaccount/onEnabled",
+			"onDelete": "palm://org.webosarchive.lunacy.androidaccount/onDelete",
+			"readOnlyData": true,
+			"dbkinds": {
+				"contact": "org.webosarchive.contact.android:1"
+			}
+		},
+		{
+			"capability": "CALENDAR",
+			"id": "org.webosarchive.lunacy.androidaccount.calendar",
+			"loc_name": "Calendar",
+			"icon": {
+				"loc_32x32": "images/android-32x32.png",
+				"loc_48x48": "images/android-48x48.png"
+			},
+			"implementation": "palm://org.webosarchive.lunacy.androidaccount/",
+			"onEnabled": "palm://org.webosarchive.lunacy.androidaccount/onCalendarEnabled",
+			"onDelete": "palm://org.webosarchive.lunacy.androidaccount/onCalendarDelete",
+			"readOnlyData": true,
+			"dbkinds": {
+				"calendar": "org.webosarchive.calendar.android:1",
+				"calendarevent": "org.webosarchive.calendarevent.android:1"
+			}
+		}
+	]
+}

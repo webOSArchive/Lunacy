@@ -151,10 +151,13 @@ class Db8(private val service: String, file: File?,
     /**
      * Brings one account's records of [kind] into line with [records], matched by `remoteId`:
      * what a synced account's service does through merge and del, for a service inside Lunacy.
-     * A record that is the same is left alone, so nothing relinks; one whose source has gone
-     * takes a soft delete, whose tombstone is how the contacts linker hears of it. A record must
-     * carry every property it can have: an update merges, so a missing one keeps its old value.
-     * [done] gets the added, changed and removed counts, on db8's thread. Not through the bus,
+     * A record that is the same is left alone, so nothing relinks and no reminder is lost; one
+     * whose source has gone takes a soft delete, whose tombstone is how the contacts linker
+     * hears of it. Deletes go first: the reminder service reads 500 changes at a time and
+     * resumes from the highest revision it saw, deleted or not. A record names every property
+     * the source owns, each replaced whole, so an empty one must be there; a property it never
+     * names, as Calendar's colour, stays. A record may carry its own `_id`, which is how one
+     * refers to another. [done] gets the added, changed and removed counts, on db8's thread. Not through the bus,
      * whose log these records would land in.
      */
     fun syncAccount(kind: String, accountId: String, records: List<JSONObject>, done: (Int, Int, Int) -> Unit = { _, _, _ -> }) = work {
@@ -162,25 +165,34 @@ class Db8(private val service: String, file: File?,
             val have = HashMap<String, JSONObject>()
             for (o in objects(kind).values) if (!o.optBoolean("_del") && o.optString("accountId") == accountId) have[o.optString("remoteId")] = o
             var added = 0; var updated = 0
+            val wanted = records.map { it.getString("remoteId") }.toHashSet()
+            val gone = have.filterKeys { it !in wanted }
             transaction {
+                for (old in gone.values) delOne(old, false)
                 for (r in records) {
                     r.put("accountId", accountId)
-                    val old = have.remove(r.getString("remoteId"))
+                    val old = have[r.getString("remoteId")]
                     if (old == null) {
-                        val o = JSONObject(r.toString()).put("_id", newId()).put("_kind", kind).put("_rev", nextRev())
+                        val o = JSONObject(r.toString()).put("_kind", kind).put("_rev", nextRev())
+                        if (!o.has("_id")) o.put("_id", newId())
                         assignIds(o)
                         applyRevSets(null, o)
                         store(o)
                         changed(null, o)
                         added++
                     } else if (!r.keys().asSequence().all { same(old.opt(it), r.opt(it)) }) {
-                        mergeOne(old, r)
+                        val o = JSONObject(old.toString())
+                        for (k in r.keys()) o.put(k, r.get(k))
+                        o.put("_rev", nextRev())
+                        assignIds(o)
+                        applyRevSets(old, o)
+                        store(o)
+                        changed(old, o)
                         updated++
                     }
                 }
-                for (old in have.values) delOne(old, false)
             }
-            done(added, updated, have.size)
+            done(added, updated, gone.size)
         } catch (e: Exception) { Log.w(AppServer.TAG, "$service: syncAccount $kind: ${e.javaClass.simpleName}") }
     }
 

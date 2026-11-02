@@ -7,7 +7,7 @@ with other webOS platforms, LuneOS among them. The build copies this folder into
 
 Every app carries a NOTICE: where it came from, its licence or abandonware status, and any
 change Lunacy made to it. Rule 5 in [CLAUDE.md](../CLAUDE.md) keeps installed apps as packaged.
-The only exceptions are Email, Screen & Lock, Web's narrow layout and Contacts' narrow layout, which codepoet approved,
+The only exceptions are Email, Screen & Lock, Web's narrow layout, Contacts' narrow layout and Calendar's Android reminders switch, which codepoet approved,
 and each of those changes is marked `[Lunacy]` in its source.
 
 | App | Id | Version | From |
@@ -17,7 +17,7 @@ and each of those changes is marked `[Lunacy]` in its source.
 | Calculator | `com.palm.app.calculator` | 3.2.0 | webOS Archive's modernized Calculator (webOS CE) |
 | Calendar | `com.palm.app.calendar` | 3.2.0 | webOS Archive's modernized Calendar, from the webOS CE tree |
 | Clock | `com.palm.app.clock` | 3.1.1904 | Palm, HP webOS 3.x (abandonware) |
-| Android Contacts | `org.webosarchive.lunacy.androidcontacts` | 1.0.0 | Lunacy's own: the hidden page and account type that mirror Android's contacts into Contacts |
+| Android | `org.webosarchive.lunacy.androidaccount` | 1.0.0 | Lunacy's own: the hidden page and account type that mirror Android's contacts and calendars into Contacts and Calendar |
 | Contacts | `com.palm.app.contacts` | 3.2.0 | webOS Archive's modernized Contacts, from the webOS CE tree |
 | Device Info | `com.palm.app.deviceinfo` | 1.0.0 | Lunacy's own, in Palm's look |
 | Email | `com.palm.app.email` | 3.0.13600 | Palm, HP webOS 3.x (abandonware), with Lunacy's phone-layout changes |

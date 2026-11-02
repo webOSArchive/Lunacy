@@ -21,9 +21,9 @@ import java.io.File
 import java.security.MessageDigest
 
 /**
- * Android's contacts as a webOS account: the "Android Contacts" account (its template and setup
- * page are CoreApps/org.webosarchive.lunacy.androidcontacts) mirrors ContactsContract into
- * [KIND], one way. The linker joins those records to the same person in other accounts, as it
+ * Android's contacts as a webOS account: the Contacts side of the "Android" account (its template
+ * and setup page are CoreApps/org.webosarchive.lunacy.androidaccount; [AndroidCalendar] is the
+ * other side) mirrors ContactsContract into [KIND], one way. The linker joins those records to the same person in other accounts, as it
  * does for any account's.
  *
  * Nothing is ever written to Android, so no change here can reach an account Android syncs. The
@@ -300,7 +300,7 @@ class AndroidContacts(context: Context, webosRoot: File, private val db: Db8) {
         .put("indexes", JSONArray().put(JSONObject().put("name", "accountId").put("props", JSONArray().put(JSONObject().put("name", "accountId")))))
 
     companion object {
-        const val SERVICE = "org.webosarchive.lunacy.androidcontacts"
+        const val SERVICE = "org.webosarchive.lunacy.androidaccount"
         const val KIND = "org.webosarchive.contact.android:1"
         private const val ACCOUNTS_SERVICE = "com.palm.service.accounts"
         private const val PHOTO_PREFIX = "android-"

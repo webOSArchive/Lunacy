@@ -1,10 +1,10 @@
 {
-	"id": "org.webosarchive.lunacy.androidcontacts",
+	"id": "org.webosarchive.lunacy.androidaccount",
 	"version": "1.0.0",
 	"vendor": "webOS Archive",
 	"type": "web",
 	"main": "index.html",
-	"title": "Android Contacts",
+	"title": "Android",
 	"icon": "icon.png",
 	"uiRevision": 2,
 	"visible": false

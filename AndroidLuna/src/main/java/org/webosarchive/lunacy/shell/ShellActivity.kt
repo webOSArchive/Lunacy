@@ -2519,8 +2519,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         sleepWake.start()
         configurator = org.webosarchive.lunacy.card.Configurator(files, db8, tempdb, webos.root, bus)
         configurator.run()
-        // Android's contacts, once the owner adds that account (AndroidContacts).
+        // Android's contacts and calendars, once the owner adds that account (AndroidContacts, AndroidCalendar).
         org.webosarchive.lunacy.card.AndroidContacts(this, jsServices.root, db8).also { it.attach(bus); closeOnDestroy += it::close }
+        org.webosarchive.lunacy.card.AndroidCalendar(this, db8).also { it.attach(bus); closeOnDestroy += it::close }
         // Exchange's security policies and the device lock, once the kinds are there (SecurityPolicy).
         securityPolicy = org.webosarchive.lunacy.card.SecurityPolicy(bus, lockHost, java.io.File(filesDir, "securitypolicy.json"))
         securityPolicy.register()

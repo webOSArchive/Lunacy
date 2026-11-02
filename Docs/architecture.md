@@ -1571,6 +1571,24 @@ A change Lunacy needs in the app is made in the webOS CE project. What it uses:
   back on the next import. `timezone/getTimeZoneRules` answered as the TouchPad did for the same
   zones and years, except São Paulo, whose daylight saving ended in 2019: the TouchPad's zone
   data still has it, and Android's is right.
+- **The Android account, Calendar side** (2026-11-02; B19). `card/AndroidCalendar.kt` copies
+  Android's calendars, one way, into `org.webosarchive.calendar.android:1` and
+  `org.webosarchive.calendarevent.android:1`: a year back, two ahead, and repeats that reach the
+  window. Calendar reads `isReadOnly` on the calendar record, not the template's `readOnlyData`.
+  What was learned from Calendar's own repeat code, each measured on its screen:
+  - It walks a repeat's dates in the event's zone, so an exception is a `yyyyMMdd` in that zone;
+    a date a day off cancels nothing, and still uses up `count`.
+  - It compares `until` with midnights of the device's clock, so `until` is the end of the last
+    occurrence's date on that clock. Android's `LAST_DATE` gives it, and replaces `count` too.
+  - A repeat webOS can't hold (several BYSETPOS days, hourly, RDATE) comes from Android's
+    `Instances` as single events, so nothing is dropped.
+  - Alarms: its parser takes three digits a unit, so 1440 minutes must be `-P1D`, and only the
+    first alarm counts, so the shortest goes first. An all-day event sits at local noon and
+    Android counts from midnight, so 12 hours are added.
+  webOS has no per-calendar reminder switch, so Calendar's Preferences has one (`[Lunacy]`,
+  `setReminders`), and off means every event is written with the "none" alarm, which also closes
+  a reminder on the screen. Attendees aren't copied: a reminder would offer Email with an account
+  that has no mail.
 - **Not yet:** syncing CalDAV; Just Type's
   database search for events.
 
@@ -1624,11 +1642,11 @@ asking for an HP webOS account. Contacts are local only; nothing syncs. What it 
   cuts the two sizes as for a photo chosen in Edit. A photo whose short side is exactly 196 or
   50 is scale 1, so it stays whole and non-square, measured the same on the TouchPad. A `.vcf`
   opened from outside the app still goes to the stock `com.palm.service.contacts/importVCard`.
-- **Android Contacts** (2026-11-02; [luna-deltas.md](luna-deltas.md) B19). An account, off until
-  the owner adds it, that copies Android's contacts into `org.webosarchive.contact.android:1`,
-  one way (`card/AndroidContacts.kt`; its template and page are the hidden core app
-  `org.webosarchive.lunacy.androidcontacts`). Android is read, never written: Lunacy has
-  `READ_CONTACTS` and not `WRITE_CONTACTS`. A `ContentObserver` starts a diff keyed by Android's
+- **The Android account, Contacts side** (2026-11-02; [luna-deltas.md](luna-deltas.md) B19). An
+  account, off until the owner adds it, that copies Android's contacts into
+  `org.webosarchive.contact.android:1`, one way (`card/AndroidContacts.kt`; its template and page
+  are the hidden core app `org.webosarchive.lunacy.androidaccount`). Android is read, never
+  written: Lunacy has `READ_CONTACTS` and not `WRITE_CONTACTS`. A `ContentObserver` starts a diff keyed by Android's
   lookup key, through `Db8.syncAccount`: an unchanged contact is not written, so nothing relinks,
   and a deleted one leaves a tombstone so the linker lets its person go. `Db8.mirror` can't do
   that: it purges, and it would read Android every few seconds. If Android can't be read, the

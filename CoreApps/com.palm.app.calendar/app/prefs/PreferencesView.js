@@ -157,6 +157,9 @@ enyo.kind({
 	},
 
 	components: [
+		// [Lunacy] See "androidReminders" below.
+		{name: "getAndroidReminders", kind: enyo.PalmService, service: "palm://org.webosarchive.lunacy.androidaccount/", method: "getReminders", onResponse: "gotAndroidReminders"},
+		{name: "setAndroidReminders", kind: enyo.PalmService, service: "palm://org.webosarchive.lunacy.androidaccount/", method: "setReminders", onResponse: "gotAndroidReminders"},
 		{name: "pane", kind: enyo.Pane, flex: 1, components: [
 	    // This is the first view.  It contains all the app preferences and the accountsList
 
@@ -207,6 +210,15 @@ enyo.kind({
 						{kind: "calendar.prefs.AlertSelector", onChange: "chooseAlert"}
 					]},
 
+					// [Lunacy] Whether Android's calendars raise reminders here. Android's own
+					// notifications are its setting, so either, both or neither can sound.
+					{name: "androidReminders", kind: enyo.RowGroup, caption: $L("Android Calendars"), showing: false, components:[
+						{kind: enyo.HFlexBox, align: "center", components:[
+							{content: $L("Reminders"), flex: 1},
+							{name: "androidRemindersToggle", kind: enyo.ToggleButton, onChange: "androidRemindersChanged"}
+						]}
+					]},
+
 					{kind: enyo.Group, caption: $L("Calendar Colors"), components: [
 						{name: "calendarList", kind: enyo.VirtualRepeater, onSetupRow: "getCalendar", components: [
 							{kind: enyo.Item, name: "calendarItem", onclick: "calendarClick", layoutKind: enyo.HFlexLayout, className:"accounts-list-item", components: [
@@ -243,6 +255,7 @@ enyo.kind({
 
 	ready: function ready (){
 		this.$.accountsList.getAccountsList("CALENDAR", []);
+		this.$.getAndroidReminders.call({});	// [Lunacy]
 	},
 
 	destroy: function destroy(){
@@ -261,6 +274,18 @@ enyo.kind({
 	accountsAndCalendarsChanged: function accountsAndCalendarsChanged(){
 		this.$.calendarList.render();
 		this.setupDefaultCalendar();
+		this.$.getAndroidReminders.call({});	// [Lunacy]
+	},
+
+	// [Lunacy] The switch shows what the service says, so a refused call can't leave it wrong.
+	gotAndroidReminders: function gotAndroidReminders(inSender, inResponse){
+		var active = Boolean(inResponse && inResponse.returnValue && inResponse.active);
+		this.$.androidReminders.setShowing(active);
+		active && this.$.androidRemindersToggle.setState(inResponse.on);
+	},
+
+	androidRemindersChanged: function androidRemindersChanged(inSender, inState){
+		this.$.setAndroidReminders.call({on: inState});
 	},
 
 	is24HrChanged: function is24HrChanged () {

@@ -463,8 +463,8 @@ cp -r $M/etc/palm/activities/* $R/etc/palm/activities/
 cp $M/etc/palm/contact_linker_plugins/* $R/etc/palm/contact_linker_plugins/
 cp -r $M/usr/palm/services/com.palm.messaging.chatthreader $R/usr/palm/services/
 cp -r $M/usr/palm/frameworks/messaging.library $M/usr/palm/frameworks/contacts.plugin.messaging $R/usr/palm/frameworks/
-# The Android Contacts account type, Lunacy's own: its page is the core app beside it.
-cp -r ../CoreApps/org.webosarchive.lunacy.androidcontacts/account $R/usr/palm/public/accounts/org.webosarchive.lunacy.androidcontacts
+# The Android account type, Lunacy's own: its page is the core app beside it.
+cp -r ../CoreApps/org.webosarchive.lunacy.androidaccount/account $R/usr/palm/public/accounts/org.webosarchive.lunacy.androidaccount
 # webOS Chat's account type and service: with a webOS Account signed in, the service fetches
 # the chat credentials and makes the AIM account, so nobody types a pass phrase (messaging.md).
 # They come from the webOS Chat project's repository at the commit pinned here (its

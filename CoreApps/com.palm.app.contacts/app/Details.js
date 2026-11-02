@@ -26,6 +26,7 @@ enyo.kind({
     showDone             : false,
     className            : "enyo-bg",
     events               : {
+        onBackToList         : "", // [Lunacy] see SplitPane.fitToCard
         onEdit               : "",
         onLinkProfilesTap    : "",
         onLinkProfilesChanged: ""
@@ -70,6 +71,13 @@ enyo.kind({
     },
     editPerson           : function () {
         this.doEdit(this.person);
+    },
+    // [Lunacy] The grab handle a stacked panel's toolbar has on a phone, as in Email.
+    setBackShowing       : function (inShowing) {
+        if (!this.$.backToList) {
+            this.$.toolbar.createComponent({name: "backToList", kind: "GrabButton", onclick: "doBackToList", owner: this});
+        }
+        this.$.backToList.setShowing(inShowing);
     },
     setEditButtonDisabled: function (inDisable) {
         this.$.editButton.setDisabled(inDisable);

@@ -7,6 +7,9 @@ The app was released by LG Electronics under the Apache License 2.0 (see LICENSE
 changes are webOS Archive's, among them Import vCards in the App Menu (webos-doctor-ce commits
 7bd5641, c8b69b6; the tree stays at 3.2.0, so look for app/utils/VCardBatchImport.js).
 
-The app's files are here exactly as the package carries them, and Lunacy does not change them
-(rule 5 in CLAUDE.md). A change Lunacy needs in the app is made in the webOS CE project and
-comes here with its next release.
+The app's files are here as the package carries them, with one exception codepoet approved
+(rule 5 in CLAUDE.md, 2026-11-02): the layout for a card under 600 px wide, marked [Lunacy] in
+app/SplitPane.js, app/Details.js, app/ContactsApp.js and css/contacts.css. It doesn't change
+the TouchPad or a tablet, and it has to be carried over when CE's tree is taken again. Any
+other change Lunacy needs in the app is made in the webOS CE project and comes here with its
+next release.

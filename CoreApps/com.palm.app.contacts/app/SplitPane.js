@@ -39,11 +39,47 @@ enyo.kind({
                 mode      : "noFilter", enableGAL: false, resizeOnSearchFocus: false, onAddFavoriteClick: "doAddFavoriteClick"}
         ]},
         {name: "pane", kind: "Pane", flex: 1, transitionKind: "enyo.transitions.Simple", onCreateView: "paneAddView", components: [
-            {name: "details", kind: "Details", flex: 1, onEdit: "doDetailsEdit", onLinkProfilesTap: "doDetailsLinkProfilesTap", onLinkProfilesChanged: "onLinkProfilesChanged", onDoneCreatingPersonObject: "doDetailsContinueCrossLaunch"}
+            {name: "details", kind: "Details", flex: 1, onBackToList: "backToList", onEdit: "doDetailsEdit", onLinkProfilesTap: "doDetailsLinkProfilesTap", onLinkProfilesChanged: "onLinkProfilesChanged", onDoneCreatingPersonObject: "doDetailsContinueCrossLaunch"}
         ]}
     ],
     create                : function () {
         this.inherited(arguments);
+        this.fitToCard();
+    },
+    // [Lunacy] A card too narrow for the list and the details side by side shows one at a time,
+    // as Email does on a phone: a tapped contact comes over the list, and the grab handle in
+    // its toolbar or the back gesture goes back. The TouchPad and tablets never get here.
+    resizeHandler         : function () {
+        this.inherited(arguments);
+        this.fitToCard();
+    },
+    fitToCard             : function () {
+        var narrow = window.innerWidth < 600;
+        if (narrow !== this.narrow) {
+            this.narrow = narrow;
+            this.addRemoveClass("narrow-card", narrow);
+            this.$.left.applyStyle("width", narrow ? "100%" : "320px");
+            this.$.details.setBackShowing(narrow);
+            this.showStacked();
+        }
+    },
+    showStacked           : function () {
+        this.$.left.setShowing(!this.narrow || !this.detailsUp);
+        this.$.pane.setShowing(!this.narrow || !!this.detailsUp);
+    },
+    stackDetails          : function (inUp) {
+        this.detailsUp = inUp;
+        if (this.narrow) {
+            this.showStacked();
+        }
+    },
+    // [Lunacy] The back gesture: true if it went from a contact to the list.
+    backToList            : function () {
+        if (this.narrow && this.detailsUp) {
+            this.stackDetails(false);
+            return true;
+        }
+        return false;
     },
     enableListButtons     : function (state) {
         this.$.contacts.enableButtons(state);
@@ -92,8 +128,10 @@ enyo.kind({
         } else {
             this.setContact(inPerson);
         }
+        this.stackDetails(true); // [Lunacy]
     },
     showPerson            : function (inSender, inPersonId, inPerson) {
+        this.stackDetails(!!(inPersonId || inPerson)); // [Lunacy]
         if (inPersonId) {
             this.$.details.setPersonId(inPersonId);
         } else {

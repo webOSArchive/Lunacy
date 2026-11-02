@@ -533,6 +533,10 @@ enyo.kind({
     },
     backHandler          : function (inSender, inEvent) {
         var n = this.$.pane.getViewName();
+        if (n === "splitPane" && this.$.splitPane.backToList()) { // [Lunacy] see SplitPane.fitToCard
+            inEvent.preventDefault();
+            return;
+        }
         if (n !== "contacts" && (!this._wide || n !== "details")) {
             if (n === "details") {
                 this.$.pane.selectViewByName("splitPane");

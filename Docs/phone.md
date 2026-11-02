@@ -138,10 +138,14 @@ every app written for the Pre3 wants: the SDK had it declare its viewport
 
 **Defaults.** Off, except the bundled Palm apps known to draw a fixed screen - Clock,
 Calculator and Memos - and App Catalog, whose chrome is a TouchPad's width (codepoet, 2026-10-04), and
-Calendar and Contacts, laid out for a tablet without sliding panels to stack, until they are
-given a phone layout of their own (codepoet, 2026-10-08)
+Calendar, laid out for a tablet without sliding panels to stack, until it is given a phone
+layout of its own (codepoet, 2026-10-08)
 (`FixedViewport.DEFAULT_ON`, a shipped default for the user's switch; the apps themselves are
-untouched). An app's switch is forgotten when the app is removed. The Web app was on this
+untouched). An app's switch is forgotten when the app is removed. Contacts left the list when
+it got a layout of its own (codepoet, 2026-11-02): on a card under 600 px wide it shows the list
+or a contact, not both, a tapped contact comes over the list, and the grab handle in its toolbar
+or the back gesture goes back, as in Email; it changes as the Fold3 folds, without a restart
+(`SplitPane.fitToCard`, marked `[Lunacy]`). No Pre3 was attached to measure it against. The Web app was on this
 list until it got a narrow layout of its own (codepoet, 2026-11-01): below 481 px the address
 has the top row and the tools sit along the card's bottom, where a webOS phone had its command
 menu, leaving it when the keyboard takes the height (`browser.css`, marked `[Lunacy]`). The

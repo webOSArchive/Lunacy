@@ -439,3 +439,9 @@ img {
 .details-placeholder {
     background: #F9f9f9 url(../images/defaultview-panel-tile.png) bottom left repeat-x;
 }
+
+/* [Lunacy] A card that shows one panel at a time (SplitPane.fitToCard): the photo leaves room for
+   the name beside it, which the TouchPad's 196 px photo doesn't on a 320 px card. */
+.narrow-card .avatar {
+    zoom: 0.55;
+}

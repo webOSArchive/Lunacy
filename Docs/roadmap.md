@@ -159,7 +159,7 @@ starting; some may have been settled since without a note.
 - **Android packages (luna-deltas A24):** an install carried through past Android's "unknown
   sources" prompt, and on Android 5-6 (file URI); a Play build would have to drop or justify
   `REQUEST_INSTALL_PACKAGES`.
-- **Calendar:** repeats, snooze. **Contacts:** vCard export, a `.vcf` opened from outside the
+- **Calendar:** repeats on the screen, snooze. **Contacts:** vCard export, a `.vcf` opened from outside the
   app (the stock importer), favorites. Both untried beyond the A7 Lite, except Import vCards,
   tested on the Fold3 (2026-11-02).
 - **Android Contacts:** a real account's contacts (the Fold3's Android store was empty, so it

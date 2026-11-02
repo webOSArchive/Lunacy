@@ -11,6 +11,11 @@ distributed by Lunacy as abandonware, like Mojo, the Prelude fonts and the Touch
 no owner has asserted rights since webOS was discontinued. The 3.2.0 changes are webOS
 Archive's.
 
+Import Calendar in the App Menu is webOS CE's (webos-doctor-ce commits ed32d2b to 6eae747; the
+tree stays at 3.2.0, so look for app/import/). app/import/webcal/ is from webos-webcal-synergy,
+licensed under the GNU GPL version 3 (app/import/webcal/LICENSE.txt), approved by codepoet for
+Calendar. Its four .js files stay identical to that repository.
+
 The app's files are here exactly as the package carries them, and Lunacy does not change them
 (rule 5 in CLAUDE.md). A change Lunacy needs in the app is made in the webOS CE project and
 comes here with its next release.

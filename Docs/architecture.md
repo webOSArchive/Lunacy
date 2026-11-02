@@ -1561,7 +1561,17 @@ A change Lunacy needs in the app is made in the webOS CE project. What it uses:
 - **The icon.** Calendar's boot activity launches it headless with `dayChange`; it sets its
   default launch point's icon to the day of the month and schedules the next change for
   midnight.
-- **Not yet:** syncing (Exchange, CalDAV), so "Or add a new account" lists nothing; Just Type's
+- **Import Calendar** (App Menu, CE's feature, 2026-11-02). The picker asks for `document` with
+  `.ics` extensions, and the app's `app/import/` reads the file with webcal's parser (GPLv3,
+  `app/import/webcal/`, kept identical to `webos-webcal-synergy`), evaluated with `new Function`.
+  Events go to the calendar with `syncSource: "Local"` as `com.palm.calendarevent:1`, never the
+  default calendar, because a synced calendar uploads what goes in it, and attendees there send
+  no mail. It adds only: a `UID` already there (`remoteId`) is skipped even if the file is newer,
+  and an event with no `UID` matches on title, start and end. A deleted imported event comes
+  back on the next import. `timezone/getTimeZoneRules` answered as the TouchPad did for the same
+  zones and years, except São Paulo, whose daylight saving ended in 2019: the TouchPad's zone
+  data still has it, and Android's is right.
+- **Not yet:** syncing CalDAV; Just Type's
   database search for events.
 
 ## Contacts

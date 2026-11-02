@@ -10,6 +10,9 @@
          com.palm.display/control. Granted at install on Android 5; from Android 6 the user
          grants it on Android's own screen, which DisplayService opens (Docs/architecture.md). -->
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <!-- The Android Contacts account (card/AndroidContacts.kt): asked for only when the owner
+         adds it, and read only. Lunacy never writes to Android's contacts. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
     <!-- Screen & Lock's opt-in to Android's home and lock screen wallpaper following webOS's
          (HostWallpaper.kt). A normal permission, granted at install on every version. -->
     <uses-permission android:name="android.permission.SET_WALLPAPER" />

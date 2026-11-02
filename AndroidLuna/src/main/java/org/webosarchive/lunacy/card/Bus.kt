@@ -137,7 +137,7 @@ class Bus {
         val service = m?.groupValues?.get(1) ?: ""
         val method = m?.groupValues?.get(2) ?: ""
         val h = handlers["$service/$method"] ?: services[service]
-        Log.i(AppServer.TAG, "bus [$appId] $service/$method ${if (h == null) "UNHANDLED" else ""} ${redact(params)}")
+        Log.i(AppServer.TAG, "bus [$appId] $service/$method ${if (h == null) "UNHANDLED" else ""} ${if (personal(appId, service, params)) "(${params.length} characters)" else redact(params)}")
         val p = try { JSONObject(params.ifEmpty { "{}" }) } catch (e: Exception) { JSONObject() }
         val call = Call(appId, service, method, p, reply, privateBus || privileged(appId), params.ifEmpty { "{}" })
         if (closed) {
@@ -172,6 +172,18 @@ class Bus {
          */
         private val SECRET = Regex("""("(?:password|passwd|pin|secret|token|authToken|accessToken|refreshToken|client_secret)"\s*:\s*)"(?:[^"\\]|\\.)*"""", RegexOption.IGNORE_CASE)
         fun redact(params: String): String = SECRET.replace(params) { it.groupValues[1] + "\"…\"" }
+
+        /**
+         * Whether a call may carry people's details, which the bus log leaves out: every call of
+         * Contacts, the linker and the contacts service, and any with a contact or person in it.
+         * Other apps look people up through the last two, by phone number or address.
+         */
+        private fun personal(appId: String, service: String, params: String) =
+            handlesContacts(appId) || handlesContacts(service) || "com.palm.contact" in params || "com.palm.person" in params ||
+                "org.webosarchive.contact" in params
+
+        /** Contacts and its services, whose calls and console print people's names and numbers. */
+        fun handlesContacts(id: String) = id.startsWith("com.palm.app.contacts") || id.startsWith("com.palm.service.contacts")
 
         fun error(text: String, code: Int = -1): String =
             JSONObject(mapOf("returnValue" to false, "errorCode" to code, "errorText" to text)).toString()

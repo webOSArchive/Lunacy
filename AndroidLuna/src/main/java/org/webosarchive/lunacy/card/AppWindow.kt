@@ -231,6 +231,10 @@ open class AppWindow(
         isHorizontalScrollBarEnabled = false
         webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(m: ConsoleMessage): Boolean {
+                if (Bus.handlesContacts(appId)) {
+                    Log.i(AppServer.TAG, "[$appId] ${m.messageLevel()} ${m.sourceId()?.substringAfterLast('/')}:${m.lineNumber()}")
+                    return true
+                }
                 Log.i(AppServer.TAG, "[$appId] ${m.messageLevel()} ${m.sourceId()?.substringAfterLast('/')}:${m.lineNumber()} ${m.message()}")
                 SysLog.console(appId, m.messageLevel(), m.message(), m.sourceId(), m.lineNumber())
                 return true

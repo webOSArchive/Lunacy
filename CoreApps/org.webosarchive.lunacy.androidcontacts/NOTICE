@@ -1,0 +1,4 @@
+Lunacy's own: the account type and page that mirror Android's contacts into Contacts, one way
+(AndroidLuna/src/main/java/org/webosarchive/lunacy/card/AndroidContacts.kt). Its icons are
+HP's Contacts icon (com.palm.app.contacts, released by LG Electronics under the Apache License
+2.0, as webOS CE's 3.2.0 carries it), scaled.

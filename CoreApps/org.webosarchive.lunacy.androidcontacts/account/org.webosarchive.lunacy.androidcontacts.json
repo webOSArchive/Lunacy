@@ -1,0 +1,38 @@
+{
+	"templateId": "org.webosarchive.lunacy.androidcontacts",
+	"loc_name": "Android Contacts",
+	"icon": {
+		"loc_32x32": "images/android-contacts-32x32.png",
+		"loc_48x48": "images/android-contacts-48x48.png"
+	},
+	"validator": {
+		"customUI": { "appId": "org.webosarchive.lunacy.androidcontacts", "name": "index.html" }
+	},
+	"readPermissions": [
+		"com.palm.*",
+		"org.webosarchive.lunacy.androidcontacts"
+	],
+	"writePermissions": [
+		"com.palm.app.contacts",
+		"com.palm.app.calendar",
+		"org.webosarchive.lunacy.androidcontacts"
+	],
+	"capabilityProviders": [
+		{
+			"capability": "CONTACTS",
+			"id": "org.webosarchive.lunacy.androidcontacts.contacts",
+			"loc_name": "Contacts",
+			"icon": {
+				"loc_32x32": "images/android-contacts-32x32.png",
+				"loc_48x48": "images/android-contacts-48x48.png"
+			},
+			"implementation": "palm://org.webosarchive.lunacy.androidcontacts/",
+			"onEnabled": "palm://org.webosarchive.lunacy.androidcontacts/onEnabled",
+			"onDelete": "palm://org.webosarchive.lunacy.androidcontacts/onDelete",
+			"readOnlyData": true,
+			"dbkinds": {
+				"contact": "org.webosarchive.contact.android:1"
+			}
+		}
+	]
+}

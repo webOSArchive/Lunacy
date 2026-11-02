@@ -1614,8 +1614,21 @@ asking for an HP webOS account. Contacts are local only; nothing syncs. What it 
   cuts the two sizes as for a photo chosen in Edit. A photo whose short side is exactly 196 or
   50 is scale 1, so it stays whole and non-square, measured the same on the TouchPad. A `.vcf`
   opened from outside the app still goes to the stock `com.palm.service.contacts/importVCard`.
-- **Not yet:** syncing (Exchange, CardDAV), so "Or add a new account" lists nothing; vCard
-  export and favorites untried; messaging and calling from a contact (no apps).
+- **Android Contacts** (2026-11-02; [luna-deltas.md](luna-deltas.md) B19). An account, off until
+  the owner adds it, that copies Android's contacts into `org.webosarchive.contact.android:1`,
+  one way (`card/AndroidContacts.kt`; its template and page are the hidden core app
+  `org.webosarchive.lunacy.androidcontacts`). Android is read, never written: Lunacy has
+  `READ_CONTACTS` and not `WRITE_CONTACTS`. A `ContentObserver` starts a diff keyed by Android's
+  lookup key, through `Db8.syncAccount`: an unchanged contact is not written, so nothing relinks,
+  and a deleted one leaves a tombstone so the linker lets its person go. `Db8.mirror` can't do
+  that: it purges, and it would read Android every few seconds. If Android can't be read, the
+  copy stays. The template sets `readOnlyData`, so an edit makes a linked contact in the default
+  account.
+- **People's details stay out of the log.** The bus log, which runs on every build, shows only a
+  call's size for Contacts, the contacts services and anything naming a contact or person kind,
+  and those services' and Contacts' consoles show no text (`Bus.handlesContacts`).
+- **Not yet:** CardDAV; vCard export and favorites untried; messaging and calling from a contact
+  (no apps).
 
 ## Mojo
 

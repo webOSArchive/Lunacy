@@ -230,6 +230,7 @@ class LunacyService(
         val asked = Build.VERSION.SDK_INT >= 23
         return Bus.ok(mapOf(
             "storage" to JSONObject().put("asked", asked).put("granted", storageGranted()),
+            "contacts" to JSONObject().put("asked", asked).put("granted", granted(CONTACTS)),
             "systemSettings" to JSONObject().put("asked", asked).put("granted", systemSettingsGranted()),
             "homeLauncher" to JSONObject().put("asked", true).put("granted", isDefaultHome()),
             "firstUseDone" to firstUseDone(context),
@@ -243,14 +244,23 @@ class LunacyService(
         return resolved?.activityInfo?.packageName == context.packageName
     }
 
-    private fun storageGranted(): Boolean = STORAGE.all {
+    /**
+     * An account's setup page runs inside the app that is adding the account, and calls the bus
+     * as that app: the Android Contacts page asks through bundled Contacts or Accounts.
+     */
+    private fun hostsAccountPages(appId: String) =
+        (appId == "com.palm.app.contacts" || appId == "com.palm.app.accounts") && registry.get(appId)?.userInstalled == false
+
+    private fun storageGranted(): Boolean = granted(STORAGE)
+
+    private fun granted(permissions: List<String>): Boolean = permissions.all {
         context.checkPermission(it, android.os.Process.myPid(), android.os.Process.myUid()) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
     private fun systemSettingsGranted(): Boolean = Build.VERSION.SDK_INT < 23 || Settings.System.canWrite(context)
 
     /**
-     * Asks Android. Storage is a dialog, answered when the user has: the reply waits for it,
+     * Asks Android. Storage and contacts are a dialog, answered when the user has: the reply waits for it,
      * and says whether Android would ask again (`askAgain`); once it won't, the only way left
      * is Android's own settings screen for Lunacy, which `viaSettings` opens instead.
      * "Modify system settings" has no dialog; Android grants it only on its own screen, which
@@ -259,12 +269,14 @@ class LunacyService(
      * putting Android's dialogs in front of the user.
      */
     private fun requestPermission(caller: String, p: JSONObject, reply: (String) -> Unit) {
-        if (!ownApp(caller)) {
+        val which = p.optString("permission")
+        if (!ownApp(caller) && !(which == "contacts" && hostsAccountPages(caller))) {
             reply(Bus.error("Only Lunacy's own apps can ask for Android's permissions (asked by $caller)", -1)); return
         }
-        when (val which = p.optString("permission")) {
-            "storage" -> {
-                if (storageGranted()) { reply(Bus.ok(mapOf("permission" to which, "granted" to true))); return }
+        when (which) {
+            "storage", "contacts" -> {
+                val permissions = if (which == "storage") STORAGE else CONTACTS
+                if (granted(permissions)) { reply(Bus.ok(mapOf("permission" to which, "granted" to true))); return }
                 if (p.optBoolean("viaSettings")) {
                     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + context.packageName))
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -277,7 +289,7 @@ class LunacyService(
                     })
                     return
                 }
-                requestPermissions(STORAGE) { granted, askAgain ->
+                requestPermissions(permissions) { granted, askAgain ->
                     reply(Bus.ok(mapOf("permission" to which, "granted" to granted, "askAgain" to askAgain)))
                 }
             }
@@ -643,6 +655,7 @@ class LunacyService(
         /** Software Manager, which hides and shows the launcher's apps. */
         const val SOFTWARE_MANAGER = "com.palm.app.swmanager"
         private val STORAGE = listOf(android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        private val CONTACTS = listOf(android.Manifest.permission.READ_CONTACTS)
         /** Long enough for the setting app's reply to land and its selector to close before the shell goes. */
         const val RESTART_DELAY_MS = 400L
         fun firstUseDone(context: Context): Boolean =

@@ -17,6 +17,7 @@ and each of those changes is marked `[Lunacy]` in its source.
 | Calculator | `com.palm.app.calculator` | 3.2.0 | webOS Archive's modernized Calculator (webOS CE) |
 | Calendar | `com.palm.app.calendar` | 3.2.0 | webOS Archive's modernized Calendar, from the webOS CE tree |
 | Clock | `com.palm.app.clock` | 3.1.1904 | Palm, HP webOS 3.x (abandonware) |
+| Android Contacts | `org.webosarchive.lunacy.androidcontacts` | 1.0.0 | Lunacy's own: the hidden page and account type that mirror Android's contacts into Contacts |
 | Contacts | `com.palm.app.contacts` | 3.2.0 | webOS Archive's modernized Contacts, from the webOS CE tree |
 | Device Info | `com.palm.app.deviceinfo` | 1.0.0 | Lunacy's own, in Palm's look |
 | Email | `com.palm.app.email` | 3.0.13600 | Palm, HP webOS 3.x (abandonware), with Lunacy's phone-layout changes |

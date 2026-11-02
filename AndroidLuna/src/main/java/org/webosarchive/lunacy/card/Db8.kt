@@ -148,6 +148,42 @@ class Db8(private val service: String, file: File?,
         }
     }
 
+    /**
+     * Brings one account's records of [kind] into line with [records], matched by `remoteId`:
+     * what a synced account's service does through merge and del, for a service inside Lunacy.
+     * A record that is the same is left alone, so nothing relinks; one whose source has gone
+     * takes a soft delete, whose tombstone is how the contacts linker hears of it. A record must
+     * carry every property it can have: an update merges, so a missing one keeps its old value.
+     * [done] gets the added, changed and removed counts, on db8's thread. Not through the bus,
+     * whose log these records would land in.
+     */
+    fun syncAccount(kind: String, accountId: String, records: List<JSONObject>, done: (Int, Int, Int) -> Unit = { _, _, _ -> }) = work {
+        try {
+            val have = HashMap<String, JSONObject>()
+            for (o in objects(kind).values) if (!o.optBoolean("_del") && o.optString("accountId") == accountId) have[o.optString("remoteId")] = o
+            var added = 0; var updated = 0
+            transaction {
+                for (r in records) {
+                    r.put("accountId", accountId)
+                    val old = have.remove(r.getString("remoteId"))
+                    if (old == null) {
+                        val o = JSONObject(r.toString()).put("_id", newId()).put("_kind", kind).put("_rev", nextRev())
+                        assignIds(o)
+                        applyRevSets(null, o)
+                        store(o)
+                        changed(null, o)
+                        added++
+                    } else if (!r.keys().asSequence().all { same(old.opt(it), r.opt(it)) }) {
+                        mergeOne(old, r)
+                        updated++
+                    }
+                }
+                for (old in have.values) delOne(old, false)
+            }
+            done(added, updated, have.size)
+        } catch (e: Exception) { Log.w(AppServer.TAG, "$service: syncAccount $kind: ${e.javaClass.simpleName}") }
+    }
+
     private fun syncMirror(kind: String, m: Mirror) {
         val now = android.os.SystemClock.uptimeMillis()
         if (m.synced != 0L && now - m.synced < MIRROR_MS) return

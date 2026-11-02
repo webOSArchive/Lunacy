@@ -746,3 +746,11 @@ or processes. A page in a card that isn't up holds them the same way, its dialog
 card until someone goes there; the shell doesn't bring the card forward. Two smaller differences: the keyboard offers suggestions on a prompt's field if it ignores the field's
 no-suggestions flag, and the dialog appears at once, without Enyo's popup animation.
 
+### B19. Android's contacts as a webOS account
+
+**An addition, codepoet's decision, 2026-11-02.** A TouchPad has no Android, so nothing here can be measured against it; it is built from what webOS already does for a read-only account such as Facebook.
+
+- **Off until the owner asks.** The account is listed under Add an Account; adding it asks for Android's permission, and only then is anything read. Refused, nothing changes. Removing it removes the copy, unless Remove Account's "keep data" box is ticked.
+- **One way.** Lunacy holds `READ_CONTACTS` and never writes to Android, so nothing here can reach an account Android syncs. Editing such a contact in Lunacy makes a linked contact in the default account, as for any read-only account, which is where a person's edit lands if that default is Exchange.
+- **How it looks.** Accounts' own pages, plus a page in place of the sign-in form that says what the account does. Its icon is Contacts', scaled.
+- **Known limit.** A permission taken away keeps the last copy; one given back from Android's settings takes effect at the next start of Lunacy.

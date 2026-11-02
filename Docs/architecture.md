@@ -1553,7 +1553,14 @@ A change Lunacy needs in the app is made in the webOS CE project. What it uses:
   to the page and to services. It converts times with
   `systemservice/timezone/getTimeZoneRules`, answered from Android's zone data in the
   TouchPad's measured shape. The TouchPad's zone data stopped at 2037 and it reports no
-  daylight saving after; Lunacy reports the rules.
+  daylight saving after; Lunacy reports the rules. Android decides daylight saving (codepoet,
+  2026-11-02): each year's reply also carries Android's own list of changes, which `getOffset`
+  reads, because the TouchPad's fields hold one span a year. The library is webOS CE's with
+  Lunacy's patches ([LunaRuntimes/calendar/CHANGES.md](../LunaRuntimes/calendar/CHANGES.md)).
+  "Android" is two sources: Android's zone data answers this, and the WebView's own data is
+  behind JavaScript's `Date`. On the Fold3 the first is 2025a and the second is newer (Vancouver
+  in January 2027 is PST to one, PDT to the other), so a device in a zone that has just changed
+  can be an hour out until Android's data catches up.
 - **Reminders.** The TouchPad's `com.palm.service.calendar.reminders` (a JS service, in the
   ROM) starts from Calendar's boot activity, watches the event kind, and schedules a
   `calendar.reminders.wake` activity for the next reminder and an `autoclose` one; at the time

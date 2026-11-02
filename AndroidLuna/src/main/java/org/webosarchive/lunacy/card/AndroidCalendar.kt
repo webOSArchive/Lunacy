@@ -258,8 +258,9 @@ class AndroidCalendar(context: Context, private val db: Db8) {
         for (p in parents.values) {
             if (p.unsupported) { out += expand(p, from, to); continue }
             val own = androidExdates(p.json.optString("androidExdate"), p.allDay, p.json.getString("tzId"))
-            p.json.remove("androidExdate")
-            if (p.rule.isNotEmpty()) p.json.put("exdates", JSONArray((own + exdates[p.id].orEmpty()).distinct()))
+            val spilled = p.json.getJSONArray("spilledExdates").let { a -> List(a.length()) { a.getString(it) } }
+            p.json.remove("androidExdate"); p.json.remove("spilledExdates")
+            if (p.rule.isNotEmpty()) p.json.put("exdates", JSONArray((own + exdates[p.id].orEmpty() + spilled).distinct()))
             out += p.json
         }
         return out
@@ -283,9 +284,13 @@ class AndroidCalendar(context: Context, private val db: Db8) {
         // Android has worked out when a repeat ends, so Calendar gets that and not COUNT, which it
         // lets exceptions use up (measured: a repeat with two lost its last occurrence).
         val last = c.number(Events.LAST_DATE)
+        var spilled = emptyList<String>()
         if (parsed != null && last > 0 && (parsed.has("count") || parsed.has("until"))) {
             parsed.remove("count")
-            parsed.put("until", endOfLastDay(last - (end - start), zone))
+            val lastStart = lastOccurrence(last - (end - start), start, zone, allDay)
+            val until = endOfRepeat(lastStart, end - start, zone, allDay)
+            parsed.put("until", until)
+            spilled = daysPast(lastStart, until, zone, allDay)
         }
         val json = JSONObject().put("_id", "android-ev-$id").put("remoteId", "ev-$id").put("calendarId", "android-cal-${c.text(Events.CALENDAR_ID)}")
             .put("subject", c.text(Events.TITLE)).put("location", c.text(Events.EVENT_LOCATION)).put("note", c.text(Events.DESCRIPTION))
@@ -293,6 +298,7 @@ class AndroidCalendar(context: Context, private val db: Db8) {
             .put("transp", if (c.number(Events.AVAILABILITY).toInt() == Events.AVAILABILITY_FREE) "TRANSPARENT" else "OPAQUE")
             .put("rrule", parsed ?: JSONObject.NULL).put("exdates", JSONArray())
             .put("alarm", alarm(alarms[id], allDay)).put("androidExdate", c.text(Events.EXDATE))
+            .put("spilledExdates", JSONArray(spilled))
         return Row(id, c.text(Events.CALENDAR_ID), json, from, rule, unsupported, allDay)
     }
 
@@ -307,7 +313,7 @@ class AndroidCalendar(context: Context, private val db: Db8) {
                 val start = if (p.allDay) allDayStart(begin) else begin
                 out += JSONObject(p.json.toString()).put("_id", "android-ev-${p.id}-$begin").put("remoteId", "ev-${p.id}#$begin")
                     .put("dtstart", start).put("dtend", start + length).put("rrule", JSONObject.NULL).put("exdates", JSONArray())
-                    .apply { remove("androidExdate") }
+                    .apply { remove("androidExdate"); remove("spilledExdates") }
             }
         }
         return out
@@ -346,14 +352,52 @@ class AndroidCalendar(context: Context, private val db: Db8) {
     private fun allDayEnd(utcStart: Long, utcEnd: Long): Long = maxOf(allDayStart(utcStart), allDayStart(maxOf(utcEnd - DAY_MS, utcStart))) + 1000
 
     /**
-     * `until` as Calendar compares it: it walks the event's dates as midnights of the device's
-     * clock, so an instant in another zone can fall before the last occurrence's own date.
+     * The start of a repeat's last occurrence, from LAST_DATE less the length. That is the
+     * occurrence itself for COUNT, but only the rule's UNTIL otherwise (measured), which can fall
+     * before that day's start time, when the day before was the last. A later date than the true
+     * last is harmless, as no occurrence falls on it.
      */
-    private fun endOfLastDay(lastStart: Long, zone: String): Long {
-        val at = Calendar.getInstance(TimeZone.getTimeZone(zone)).apply { timeInMillis = lastStart }
+    private fun lastOccurrence(end: Long, start: Long, zone: String, allDay: Boolean): Long {
+        if (allDay) return end
+        val first = Calendar.getInstance(TimeZone.getTimeZone(zone)).apply { timeInMillis = start }
+        val at = Calendar.getInstance(TimeZone.getTimeZone(zone)).apply {
+            timeInMillis = end
+            set(Calendar.HOUR_OF_DAY, first.get(Calendar.HOUR_OF_DAY)); set(Calendar.MINUTE, first.get(Calendar.MINUTE))
+            set(Calendar.SECOND, first.get(Calendar.SECOND)); set(Calendar.MILLISECOND, 0)
+        }
+        if (at.timeInMillis > end) at.add(Calendar.DAY_OF_MONTH, -1)
+        return at.timeInMillis
+    }
+
+    /**
+     * `until` as Calendar compares it. It walks the event's dates as midnights of the device's
+     * clock, and tests each occurrence's real start too, so until has to reach both the end of the
+     * last day in the event's zone, on the device's clock, and the last occurrence's real end,
+     * which is later when the zone is behind the device. An all-day event's date is its UTC date.
+     */
+    private fun endOfRepeat(lastStart: Long, length: Long, zone: String, allDay: Boolean): Long {
+        if (allDay) return allDayStart(lastStart) + DAY_MS / 2 - 1000
+        return maxOf(endOfDay(lastStart, zone), lastStart + length)
+    }
+
+    private fun endOfDay(instant: Long, zone: String): Long {
+        val at = Calendar.getInstance(TimeZone.getTimeZone(zone)).apply { timeInMillis = instant }
         return Calendar.getInstance().apply {
             clear(); set(at.get(Calendar.YEAR), at.get(Calendar.MONTH), at.get(Calendar.DAY_OF_MONTH), 23, 59, 59)
         }.timeInMillis
+    }
+
+    /** The dates after the last that `until` reaches into, as exceptions: they would gain an occurrence. */
+    private fun daysPast(lastStart: Long, until: Long, zone: String, allDay: Boolean): List<String> {
+        if (allDay) return emptyList()
+        val at = Calendar.getInstance(TimeZone.getTimeZone(zone)).apply { timeInMillis = lastStart }
+        val next = Calendar.getInstance().apply { clear(); set(at.get(Calendar.YEAR), at.get(Calendar.MONTH), at.get(Calendar.DAY_OF_MONTH) + 1) }
+        val out = ArrayList<String>()
+        while (next.timeInMillis <= until) {
+            out += "%04d%02d%02d".format(next.get(Calendar.YEAR), next.get(Calendar.MONTH) + 1, next.get(Calendar.DAY_OF_MONTH))
+            next.add(Calendar.DAY_OF_MONTH, 1)
+        }
+        return out
     }
 
     private fun zoneDate(instant: Long, zone: String): String = Calendar.getInstance(TimeZone.getTimeZone(zone)).apply { timeInMillis = instant }.let {

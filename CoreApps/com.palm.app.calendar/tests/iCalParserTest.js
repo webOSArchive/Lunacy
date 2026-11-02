@@ -137,7 +137,7 @@ test("a moved occurrence stays a child, and its date joins the parent's exdates"
     var r = parse(vevent(["UID:e", "DTSTART:20270104T100000Z", "DTEND:20270104T110000Z", "SUMMARY:P", "RRULE:FREQ=WEEKLY;COUNT=5"]).concat(
         vevent(["UID:e", "RECURRENCE-ID:20270111T100000Z", "DTSTART:20270112T100000Z", "DTEND:20270112T110000Z", "SUMMARY:M"])));
     assert.equal(r.events.length, 1);
-    assert.deepEqual(r.events[0].result.exdates, ["20270111T100000Z"]);
+    assert.deepEqual(r.events[0].result.exdates, ["20270111"]);
     assert.equal(r.events[0].exceptions[0].subject, "M");
     assert.equal(r.events[0].exceptions[0].parentDtstart, r.events[0].result.dtstart);
 });
@@ -176,6 +176,26 @@ test("the stored zone is one the calendar can look up", function () {
 
 test("daylight time south of the equator, from the service's rules", function () {
     assert.equal(iso(parse(timed("1", "Australia/Sydney")).events[0].result.dtstart), "2027-01-04T23:00");
+});
+
+test("exceptions are plain dates, in the event's zone", function () {
+    var series = ["UID:s", "DTSTART;TZID=Australia/Sydney:20270111T090000", "RRULE:FREQ=WEEKLY;COUNT=6"];
+    assert.deepEqual(parse(vevent(series.concat(["EXDATE;TZID=Australia/Sydney:20270118T090000"]))).events[0].result.exdates, ["20270118"]);
+    assert.deepEqual(parse(vevent(series.concat(["EXDATE:20270117T220000Z"]))).events[0].result.exdates, ["20270118"]);
+    assert.deepEqual(parse(vevent(series.concat(["EXDATE;VALUE=DATE:20270118"]))).events[0].result.exdates, ["20270118"]);
+    assert.deepEqual(parse(vevent(series.concat(["EXDATE;TZID=Australia/Sydney:20270118T090000"])).concat(
+        vevent(["UID:s", "RECURRENCE-ID;TZID=Australia/Sydney:20270118T090000", "DTSTART;TZID=Australia/Sydney:20270119T090000"]))).events[0].result.exdates, ["20270118"]);
+});
+
+test("until reaches the end of the last day in the event's zone", function () {
+    var rrule = function (lines) { return parse(vevent(lines)).events[0].result.rrule; },
+        sydney = ["UID:s", "DTSTART;TZID=Australia/Sydney:20270111T090000", "DTEND;TZID=Australia/Sydney:20270111T100000"],
+        local = ["UID:l", "DTSTART:20270111T090000", "DTEND:20270111T100000"];
+    assert.equal(iso(rrule(sydney.concat(["RRULE:FREQ=WEEKLY;UNTIL=20270125T220000Z"])).until), "2027-01-26T23:59");
+    assert.equal(iso(rrule(sydney.concat(["RRULE:FREQ=WEEKLY;UNTIL=20270125T215900Z"])).until), "2027-01-25T23:59");
+    assert.equal(iso(rrule(local.concat(["RRULE:FREQ=WEEKLY;UNTIL=20270125T090000"])).until), "2027-01-25T23:59");
+    assert.equal(iso(rrule(["UID:a", "DTSTART;VALUE=DATE:20270111", "RRULE:FREQ=WEEKLY;UNTIL=20270125"]).until), "2027-01-25T23:59");
+    assert.equal(rrule(sydney.concat(["RRULE:FREQ=WEEKLY;UNTIL=20270125T220000Z"])).untilText, undefined);
 });
 
 var usVtimezone = ["BEGIN:VTIMEZONE", "TZID:(UTC-05:00) Eastern Time (US & Canada)",

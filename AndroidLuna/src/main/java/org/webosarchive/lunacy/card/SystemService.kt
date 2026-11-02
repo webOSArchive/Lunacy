@@ -101,6 +101,12 @@ class SystemService(private val webosRoot: File, private val store: File) {
      * TouchPad's, measured with luna-send; Lunacy fills them from Android's zone data. One
      * difference: the TouchPad's zone data stopped at 2037, and it answered no daylight saving
      * for any later year, where Lunacy answers the rules.
+     *
+     * Each year also carries Lunacy's own firstOffset and changes ([[instant, offset], …]): every
+     * change of offset Android knows for that year, which the fields above can't hold when a year
+     * has a permanent change or a third change. The calendar framework's getOffset reads these
+     * (LunaRuntimes/calendar/CHANGES.md), so Android's data decides the offset; the TouchPad's
+     * fields are unchanged for anything else that reads them.
      */
     private fun timeZoneRules(raw: String): String {
         val fail = { text: String -> JSONObject().put("returnValue", false).put("errorText", text).toString() }
@@ -180,7 +186,8 @@ class SystemService(private val webosRoot: File, private val store: File) {
                 val id = z.opt("ZoneID") as? String ?: return@mapNotNull null
                 val off = z.opt("offsetFromUTC") as? Number ?: return@mapNotNull null
                 if (!z.has("supportsDST")) return@mapNotNull null
-                id to off.toInt()
+                // The list is from 2011: Android says what the zone's offset is now.
+                id to (if (id in zoneIds) java.util.TimeZone.getTimeZone(id).rawOffset / 60_000 else off.toInt())
             }
         }.getOrElse { Log.w(AppServer.TAG, "systemservice: no ext-timezones.json: $it"); emptyList() }
     }
@@ -225,6 +232,8 @@ class SystemService(private val webosRoot: File, private val store: File) {
         val to = cal.timeInMillis - zone.getOffset(cal.timeInMillis)
         val out = JSONObject().put("tz", id).put("year", year)
         var dstStart = -1L; var dstEnd = -1L; var dstOffset = -1; var stdOffset = zone.getOffset(from) / 1000
+        out.put("firstOffset", zone.getOffset(from) / 1000)
+        val changes = org.json.JSONArray()
         val day = 86_400_000L
         var t = from
         while (t < to) {
@@ -236,12 +245,14 @@ class SystemService(private val webosRoot: File, private val store: File) {
                     val mid = (lo + hi) / 2
                     if (zone.getOffset(mid * 1000) == zone.getOffset(t) && zone.inDaylightTime(java.util.Date(mid * 1000)) == zone.inDaylightTime(java.util.Date(t))) lo = mid else hi = mid
                 }
+                if (zone.getOffset(hi * 1000) != zone.getOffset(lo * 1000)) changes.put(org.json.JSONArray().put(hi).put(zone.getOffset(hi * 1000) / 1000))
                 val into = zone.inDaylightTime(java.util.Date(hi * 1000))
                 if (into && dstStart < 0) { dstStart = hi; dstOffset = zone.getOffset(hi * 1000) / 1000 }
                 if (!into && dstEnd < 0) { dstEnd = hi; stdOffset = zone.getOffset(hi * 1000) / 1000 }
             }
             t = next
         }
+        out.put("changes", changes)
         if (dstStart < 0 || dstEnd < 0) {
             // No change into daylight saving and out again: the offset in force all year.
             return out.put("hasDstChange", false).put("utcOffset", zone.getOffset(from) / 1000)

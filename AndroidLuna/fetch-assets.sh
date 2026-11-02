@@ -110,6 +110,16 @@ chmod -R u+w $L/fw/frameworks
 # webOS CE's contacts framework: the TouchPad's, with CE's AppPrefs fix (one prefs record, and
 # duplicates healed), from the CE project's system/ (Workbench/vendor/webos-ce).
 cp -r $V/webos-ce/system/usr/palm/frameworks/contacts/. $L/fw/frameworks/contacts/
+# webOS CE's calendar framework (its repeat and southern daylight time fixes), then Lunacy's
+# changes to it as diffs against CE's: LunaRuntimes/calendar/CHANGES.md says what each one is.
+calendar_framework() {
+    cp -r $V/webos-ce/system/usr/palm/frameworks/calendar/. "$1/"
+    for patch in ../LunaRuntimes/calendar/patches/*.patch; do
+        (cd "$1" && patch -p1 --forward --silent --fuzz=0 < "$HERE/$patch") ||
+            { echo "fetch-assets: $patch does not apply to CE's calendar framework" >&2; exit 1; }
+    done
+}
+calendar_framework $L/fw/frameworks/calendar
 # mojo2's images and templates link to ../../../../mojocommon, which on the device is
 # /usr/palm/frameworks/mojocommon, beside it; here mojocommon is served from fw/mojocommon, so
 # a stand-in link lets those links resolve (and goes with the rest, below).
@@ -122,7 +132,7 @@ mojoloader.js, the metascene frameworks the Video Player's scenes come from, the
 frameworks they and other apps ask MojoLoader for, and contacts (submission 114), which Email
 imports for its address fields (webOS CE's copy, with its AppPrefs fix), with the foundations.crypto and foundations.io it loads,
 caja, Google Caja's HTML sanitizer (Apache 2.0), which Email's compose window loads, and
-calendar (submission 42), the events, repeats and time zones library Calendar loads. `media` is /usr/lib/luna/luna-media-shim,
+calendar (submission 42), the events, repeats and time zones library Calendar loads (webOS CE's copy, with Lunacy's patches in LunaRuntimes/calendar). `media` is /usr/lib/luna/luna-media-shim,
 which the frameworks folder symlinks to.
 Copyright Palm, Inc. / Hewlett-Packard, except underscore, which is MIT (Jeremy Ashkenas),
 and prototype, which is MIT (Sam Stephenson). Palm's own is never released under an open
@@ -191,9 +201,11 @@ for f in foundations foundations.crypto foundations.io foundations.json foundati
 done
 cp -r $V/touchpad/services-fw/jsservicelauncher $R/usr/palm/services/
 cp -r $V/webos-ce/system/usr/palm/frameworks/contacts/. $R/usr/palm/frameworks/contacts/
+chmod -R u+w $R/usr/palm/frameworks/calendar
+calendar_framework $R/usr/palm/frameworks/calendar
 cat > $R/usr/palm/frameworks/NOTICE <<'NOTICE'
 Palm's JS service frameworks (foundations*, mojoservice*, globalization, underscore,
-mojoloader.js, calendar, calendar.io, contacts - webOS CE's copy, with its AppPrefs fix) and jsservicelauncher, copied from /usr/palm on the reference TouchPad
+mojoloader.js, calendar - webOS CE's copy, with Lunacy's patches in LunaRuntimes/calendar, calendar.io, contacts - webOS CE's copy, with its AppPrefs fix) and jsservicelauncher, copied from /usr/palm on the reference TouchPad
 (webOS CE 3.1.0). Status: treated as abandonware, like Mojo: no owner has asserted rights
 since webOS was discontinued. underscore is MIT (Jeremy Ashkenas).
 NOTICE

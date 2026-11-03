@@ -86,6 +86,17 @@ From LuneOS's LunaNext, also a reimplementation: it shows the approach works, an
 function alone isn't enough - it doesn't look or feel like webOS. **For Lunacy the look and
 feel is a requirement, not polish.**
 
+- **A stand-in keeps the API's contract, even when it does nothing.** The movie-player stand-in
+  answered "failed" to everything, which looked safe; games that play an intro then hung or
+  crashed. Palm's real library, read off the TouchPad, answers success and ends a movie with an
+  event, and a stand-in that does the same with no player lets every game through. When a
+  device library can't be ported, read what it promises and promise the same.
+- **A webOS path works only where every reader goes through the preload.** Giving a game the
+  TouchPad's folder name in `argv[0]` fixed Oregon Trail. Doing the same for `/proc/self/exe`
+  and `getcwd` broke Fruit Ninja: apkenv makes raw `stat` system calls that skip the preload,
+  so a `/media/...` path doesn't exist for them. Present a webOS name where the TouchPad's
+  shorter path matters, and leave the real one where code may reach the filesystem around glibc.
+
 ## What the host has to provide
 
 - **The host talks to pages through `window.Mojo`** - lifecycle, gestures, flicks, rotation -
@@ -140,3 +151,12 @@ feel is a requirement, not polish.**
   tree, or applying them in order fails. `AndroidLuna/tools/make-enyo-patch.sh` builds that base.
 - **An app loads either the built framework or its source tree.** A change to a fork has to be
   in both, or it works in some apps and not others.
+- **"Every tap does the same thing" means the coordinates, not the game.** Guitar Hero's taps
+  all toggled one menu because SDL clamped them to the 2 x 2 screen the game asked for. A
+  ten-line preload that prints the events a game actually receives (`Workbench/pdk-evtrace.c`)
+  settles that kind of question in one launch, and its crash handler named the next two bugs.
+- **State in a static is shared by every app.** The GL server ran one thread per app but kept
+  its replay state in statics; it worked until two PDK apps were up at once, and then the
+  shell crashed. Anything the shell hosts per app has to be per app all the way down.
+- **Sweep every PDK app after any runtime change.** The four fixes for the Broken folder
+  passed on the games they were for; the full sweep caught Fruit Ninja breaking.

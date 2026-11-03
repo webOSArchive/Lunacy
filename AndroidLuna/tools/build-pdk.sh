@@ -12,7 +12,7 @@
 # its NOTICE and version.
 set -e
 HERE=$(cd "$(dirname "$0")/.." && pwd)
-NDK=${NDK:-$HOME/Android/Sdk/ndk/android-ndk-r28c}
+NDK=${NDK:-${ANDROID_NDK:-$HOME/Android/Sdk/ndk/android-ndk-r28c}}
 BIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin
 WORK=$HERE/local-build/pdk
 OUT=$HERE/local-assets/pdk
@@ -25,14 +25,28 @@ SDL_VER=1.2.15
 mkdir -p "$WORK/deb" "$WORK/sysroot" "$OUT/lib" "$JNI" "$JNI64"
 cd "$WORK"
 
+# A download that fails leaves nothing behind (not a 404 page cached as the file), and a
+# file that has a known hash is checked against it, cached or not.
+get() { curl -sfL "$1" -o "$2.part" && mv "$2.part" "$2" || { rm -f "$2.part"; echo "can't fetch $1" >&2; exit 1; }; }
+pinned() { echo "$2  $1" | sha256sum -c --quiet || { echo "$1 isn't the file it should be; delete it to fetch it again" >&2; exit 1; }; }
+# A Debian package checked against the SHA256 its index gives.
+deb() {
+  f=$(awk -v p="$1" '$1=="Package:"{cur=$2} $1=="Filename:" && cur==p {print $2; exit}' deb/Packages)
+  h=$(awk -v p="$1" '$1=="Package:"{cur=$2} $1=="SHA256:" && cur==p {print $2; exit}' deb/Packages)
+  b=$(basename "$f")
+  [ -n "$f" ] && [ -n "$h" ] || { echo "no $1 in Debian's index" >&2; exit 1; }
+  new=0; if [ ! -f "deb/$b" ]; then echo "fetching $b"; get "$DEBIAN/$f" "deb/$b"; new=1; fi
+  pinned "deb/$b" "$h"
+}
+
 # ---- the Debian armel sysroot: runtime libraries and the headers to build against ----
 if [ ! -f deb/Packages ]; then
-  curl -sL $DEBIAN/dists/bookworm/main/binary-armel/Packages.gz | zcat > deb/Packages
+  get $DEBIAN/dists/bookworm/main/binary-armel/Packages.gz deb/Packages.gz
+  zcat deb/Packages.gz > deb/Packages.part && mv deb/Packages.part deb/Packages && rm deb/Packages.gz
 fi
 for p in libc6 libc6-dev linux-libc-dev libgcc-s1 libgcc-12-dev libstdc++6 zlib1g zlib1g-dev libogg0 libogg-dev libvorbis0a libvorbisfile3 libvorbis-dev libjpeg62-turbo libjpeg62-turbo-dev libsmpeg0 libsmpeg-dev; do
-  f=$(awk -v p="$p" '$1=="Package:"{cur=$2} $1=="Filename:" && cur==p {print $2; exit}' deb/Packages)
-  b=$(basename "$f")
-  if [ ! -f "deb/$b" ]; then echo "fetching $b"; curl -sL "$DEBIAN/$f" -o "deb/$b"; dpkg-deb -x "deb/$b" sysroot; fi
+  deb "$p"
+  [ $new = 0 ] || dpkg-deb -x "deb/$b" sysroot
 done
 G=$WORK/sysroot/usr/lib/gcc/arm-linux-gnueabi/12
 # glibc's libm.so is a linker script naming /lib/arm-linux-gnueabi/libm.so.6 by its absolute
@@ -44,7 +58,8 @@ export CC AR=$BIN/llvm-ar RANLIB=$BIN/llvm-ranlib
 
 # ---- SDL 1.2 with Lunacy's drivers in place of the dummy ones ----
 if [ ! -d SDL-$SDL_VER ]; then
-  [ -f SDL-$SDL_VER.tar.gz ] || curl -sL https://www.libsdl.org/release/SDL-$SDL_VER.tar.gz -o SDL-$SDL_VER.tar.gz
+  [ -f SDL-$SDL_VER.tar.gz ] || get https://www.libsdl.org/release/SDL-$SDL_VER.tar.gz SDL-$SDL_VER.tar.gz
+  pinned SDL-$SDL_VER.tar.gz d6d316a793e5e348155f0dd93b979798933fb98aa1edebcc108829d6474aad00
   tar xzf SDL-$SDL_VER.tar.gz
 fi
 S=$WORK/SDL-$SDL_VER
@@ -95,7 +110,8 @@ $CC -O2 -shared -fPIC -Wl,-soname,libpdl.so -I"$PDK_INC" -I"$PDK_INC/SDL" -I$WOR
 # ---- SDL_mixer 1.2, with Ogg Vorbis (the format webOS games shipped their music in) ----
 MIX_VER=1.2.12
 if [ ! -d SDL_mixer-$MIX_VER ]; then
-  [ -f SDL_mixer-$MIX_VER.tar.gz ] || curl -sL https://www.libsdl.org/projects/SDL_mixer/release/SDL_mixer-$MIX_VER.tar.gz -o SDL_mixer-$MIX_VER.tar.gz
+  [ -f SDL_mixer-$MIX_VER.tar.gz ] || get https://www.libsdl.org/projects/SDL_mixer/release/SDL_mixer-$MIX_VER.tar.gz SDL_mixer-$MIX_VER.tar.gz
+  pinned SDL_mixer-$MIX_VER.tar.gz 1644308279a975799049e4826af2cfc787cad2abb11aa14562e402521f86992a
   tar xzf SDL_mixer-$MIX_VER.tar.gz
 fi
 # MP3 through SMPEG 0.4.5 (LGPL 2, Debian armel), SDL_mixer 1.2's own MP3 path: games play their
@@ -133,10 +149,10 @@ for f in libogg.so.0 libvorbis.so.0 libvorbisfile.so.3 libsmpeg-0.4.so.0; do cp 
 SYSLIB=$WORK/sysroot/usr/lib/arm-linux-gnueabi
 DEPS=$WORK/deps-out
 mkdir -p $DEPS
-fetch() { [ -f "$2" ] || curl -sL "$1" -o "$2"; [ -d "${2%.tar.*}" ] || tar xf "$2"; }
+fetch() { [ -f "$2" ] || get "$1" "$2"; pinned "$2" "$3"; [ -d "${2%.tar.*}" ] || tar xf "$2"; }
 # libpng 1.2, the series webOS shipped: libpng12.so.0, and libpng.so.3 for the older name.
 PNG_VER=1.2.59
-fetch https://download.sourceforge.net/libpng/libpng-$PNG_VER.tar.gz libpng-$PNG_VER.tar.gz
+fetch https://download.sourceforge.net/libpng/libpng-$PNG_VER.tar.gz libpng-$PNG_VER.tar.gz 4bd4b5ce04ce634c281ae76174714fa02b053b573ac2181c985db06aa57e1e9e
 if [ ! -f $DEPS/lib/libpng12.so.0 ]; then
   mkdir -p png-build && cd png-build
   CPPFLAGS="-I$WORK/sysroot/usr/include" LDFLAGS="-L$SYSLIB" $WORK/libpng-$PNG_VER/configure --host=arm-linux-gnueabi \
@@ -147,7 +163,7 @@ fi
 # FreeType 2, plain: its soname has been libfreetype.so.6 since 2.0. No PNG, bzip2, brotli
 # or HarfBuzz, so it needs nothing beyond zlib and libc.
 FT_VER=2.13.2
-fetch https://download.savannah.gnu.org/releases/freetype/freetype-$FT_VER.tar.gz freetype-$FT_VER.tar.gz
+fetch https://download.savannah.gnu.org/releases/freetype/freetype-$FT_VER.tar.gz freetype-$FT_VER.tar.gz 1ac27e16c134a7f2ccea177faba19801131116fd682efc1f5737037c5db224b5
 if [ ! -f $DEPS/lib/libfreetype.so.6 ]; then
   mkdir -p ft-build && cd ft-build
   CPPFLAGS="-I$WORK/sysroot/usr/include" LDFLAGS="-L$SYSLIB" $WORK/freetype-$FT_VER/configure --host=arm-linux-gnueabi \
@@ -159,7 +175,7 @@ fi
 ADDON_ENV="CPPFLAGS=-I$DEPS/include -I$DEPS/include/freetype2 -I$WORK/sysroot/usr/include LDFLAGS=-L$DEPS/lib -L$SYSLIB"
 # SDL_image 1.2: PNG and JPEG linked, not dlopen'd, so the loader finds them by soname.
 IMG_VER=1.2.12
-fetch https://www.libsdl.org/projects/SDL_image/release/SDL_image-$IMG_VER.tar.gz SDL_image-$IMG_VER.tar.gz
+fetch https://www.libsdl.org/projects/SDL_image/release/SDL_image-$IMG_VER.tar.gz SDL_image-$IMG_VER.tar.gz 0b90722984561004de84847744d566809dbb9daf732a9e503b91a1b5a84e5699
 mkdir -p image-build && cd image-build
 if [ ! -f Makefile ]; then
   env "CPPFLAGS=-I$DEPS/include -I$WORK/sysroot/usr/include" "LDFLAGS=-L$DEPS/lib -L$SYSLIB" LIBPNG_CFLAGS=-I$DEPS/include LIBPNG_LIBS="-L$DEPS/lib -lpng12" \
@@ -173,7 +189,7 @@ make install-libLTLIBRARIES install-libSDL_imageincludeHEADERS > install.log 2>&
 cd "$WORK"
 # SDL_ttf 2.0, against the FreeType above.
 TTF_VER=2.0.11
-fetch https://www.libsdl.org/projects/SDL_ttf/release/SDL_ttf-$TTF_VER.tar.gz SDL_ttf-$TTF_VER.tar.gz
+fetch https://www.libsdl.org/projects/SDL_ttf/release/SDL_ttf-$TTF_VER.tar.gz SDL_ttf-$TTF_VER.tar.gz 724cd895ecf4da319a3ef164892b72078bd92632a5d812111261cde248ebcdb7
 mkdir -p ttf-build && cd ttf-build
 if [ ! -f Makefile ]; then
   # LIBS: configure found FreeType's headers but left its link line empty: every FT_ symbol
@@ -190,7 +206,7 @@ make install-libLTLIBRARIES > install.log 2>&1
 cd "$WORK"
 # SDL_net 1.2.
 NET_VER=1.2.8
-fetch https://www.libsdl.org/projects/SDL_net/release/SDL_net-$NET_VER.tar.gz SDL_net-$NET_VER.tar.gz
+fetch https://www.libsdl.org/projects/SDL_net/release/SDL_net-$NET_VER.tar.gz SDL_net-$NET_VER.tar.gz 5f4a7a8bb884f793c278ac3f3713be41980c5eedccecff0260411347714facb4
 mkdir -p net-build && cd net-build
 if [ ! -f Makefile ]; then
   $WORK/SDL_net-$NET_VER/configure --host=arm-linux-gnueabi --prefix=$WORK/addon-out --disable-static --enable-shared \
@@ -222,9 +238,7 @@ curl -sfL https://raw.githubusercontent.com/openssl/openssl/OpenSSL_0_9_8k/LICEN
 # Sans for Verdana. The CJK fonts aren't stood in for.
 mkdir -p fonts-x "$OUT/fonts"
 for p in fonts-liberation2 fonts-dejavu-core fonts-dejavu-extra; do
-  f=$(awk -v p="$p" '$1=="Package:"{cur=$2} $1=="Filename:" && cur==p {print $2; exit}' deb/Packages)
-  b=$(basename "$f")
-  if [ ! -f "deb/$b" ]; then echo "fetching $b"; curl -sL "$DEBIAN/$f" -o "deb/$b"; fi
+  deb "$p"
   dpkg-deb -x "deb/$b" fonts-x
 done
 LIB=fonts-x/usr/share/fonts/truetype/liberation2; DJ=fonts-x/usr/share/fonts/truetype/dejavu
@@ -339,8 +353,8 @@ $CC -O2 -shared -fPIC -Wl,-soname,liblunaservice.so "$SRC/liblunaservice/lunaser
 # sources with the flags its CMake gives a release build, with config.h written here.
 AL_VER=1.11.753
 if [ ! -d openal-soft-openal-soft-$AL_VER ]; then
-  [ -f openal-soft-$AL_VER.tar.gz ] || curl -sL https://github.com/kcat/openal-soft/archive/refs/tags/openal-soft-$AL_VER.tar.gz -o openal-soft-$AL_VER.tar.gz
-  echo "1c16af245dc5721a899d49c883f76393c1f9732681d6881894dfcc77de1ddeeb  openal-soft-$AL_VER.tar.gz" | sha256sum -c --quiet || { echo "openal-soft-$AL_VER.tar.gz isn't the source it should be"; exit 1; }
+  [ -f openal-soft-$AL_VER.tar.gz ] || get https://github.com/kcat/openal-soft/archive/refs/tags/openal-soft-$AL_VER.tar.gz openal-soft-$AL_VER.tar.gz
+  pinned openal-soft-$AL_VER.tar.gz 1c16af245dc5721a899d49c883f76393c1f9732681d6881894dfcc77de1ddeeb
   tar xzf openal-soft-$AL_VER.tar.gz
 fi
 A=$WORK/openal-soft-openal-soft-$AL_VER
@@ -415,9 +429,9 @@ cp $WORK/sysroot/lib/ld-linux.so.3 "$OUT/lib/ld-linux.so.3"
 # LD_LIBRARY_PATH. qemu is GPL 2, glib and gnutls LGPL; sources are at packages.termux.dev.
 TERMUX=https://packages.termux.dev/apt/termux-main
 mkdir -p termux "$OUT/qemu-lib"
-if [ ! -f termux/Packages ]; then curl -sL $TERMUX/dists/stable/main/binary-aarch64/Packages -o termux/Packages; fi
+if [ ! -f termux/Packages ]; then get $TERMUX/dists/stable/main/binary-aarch64/Packages termux/Packages; fi
 python3 - "$WORK/termux" "$TERMUX" "$OUT/qemu-lib" "$JNI64/libqemu-arm.so" <<'PY'
-import sys, os, re, subprocess, shutil
+import sys, os, re, subprocess, shutil, hashlib
 work, base, outlib, outqemu = sys.argv[1:5]
 pk = {}; cur = None
 for line in open(os.path.join(work, 'Packages')):
@@ -439,7 +453,10 @@ x = os.path.join(work, 'x'); os.makedirs(os.path.join(work, 'deb'), exist_ok=Tru
 for p in sorted(seen):
     f = pk[p]['Filename']; b = os.path.join(work, 'deb', os.path.basename(f))
     if not os.path.exists(b):
-        print('fetching', os.path.basename(f)); subprocess.run(['curl', '-sL', base + '/' + f, '-o', b], check=True)
+        print('fetching', os.path.basename(f)); subprocess.run(['curl', '-sfL', base + '/' + f, '-o', b + '.part'], check=True)
+        if hashlib.sha256(open(b + '.part', 'rb').read()).hexdigest() != pk[p].get('SHA256'):
+            os.remove(b + '.part'); sys.exit(os.path.basename(f) + " doesn't match Termux's index")
+        os.rename(b + '.part', b)
         subprocess.run(['dpkg-deb', '-x', b, x], check=True)
 libdir = os.path.join(x, 'data/data/com.termux/files/usr/lib')
 qemu = os.path.join(x, 'data/data/com.termux/files/usr/bin/qemu-arm')

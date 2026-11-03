@@ -7,7 +7,9 @@
 #   ./cdp.sh list
 cd "$(dirname "$0")"
 PORT=${CDP_PORT:-9223}
-PID=$(adb shell ps | awk '$NF ~ /^org\.webosarchive\.lunacy\r?$/ {print $2}' | head -1)
+# Android 8 and later list only the shell's own processes without -A; Android 5's ps has no -A.
+PID=$(adb shell ps -A 2>/dev/null | awk '$NF ~ /^org\.webosarchive\.lunacy\r?$/ {print $2}' | head -1)
+[ -n "$PID" ] || PID=$(adb shell ps | awk '$NF ~ /^org\.webosarchive\.lunacy\r?$/ {print $2}' | head -1)
 [ -n "$PID" ] || { echo "Lunacy isn't running" >&2; exit 1; }
 adb forward tcp:$PORT localabstract:webview_devtools_remote_$PID >/dev/null
 CDP_PORT=$PORT exec node cdp.mjs "$@"

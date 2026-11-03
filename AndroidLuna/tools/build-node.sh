@@ -24,7 +24,8 @@ case $ARCH in
     arm64) ABI=arm64-v8a ;;
     *) echo "build-node: arch is arm or arm64" >&2; exit 1 ;;
 esac
-NDK=${ANDROID_NDK:-$HOME/Android/Sdk/ndk/21.4.7075529}
+# Its own variable: ANDROID_NDK is r28c, for everything else (BUILDING.md).
+NDK=${ANDROID_NDK_R21:-$HOME/Android/Sdk/ndk/21.4.7075529}
 SRC=Workbench/vendor/nodejs-mobile/src
 OUT=Workbench/vendor/nodejs-mobile/v0.3.3-16k/bin/$ABI
 [ -f $SRC/android-configure ] || { echo "build-node: no nodejs-mobile source at $SRC" >&2; exit 1; }

@@ -10,8 +10,8 @@ optional companion keyboard. Neither depends on the other.
 - **Android NDK r28c** (`android-ndk-r28c` under the SDK's `ndk/`, or `ANDROID_NDK`), only for
   `fetch-assets.sh`: it compiles the small launcher that lets Node run as a library for JS
   services and supplies a 16 KB-aligned libc++. Skip it and everything but JS services still
-  builds. **NDK r21e** as well, only to rebuild Node itself with 16 KB alignment
-  (`AndroidLuna/tools/build-node.sh`); without that, `fetch-assets.sh` falls back to
+  builds. **NDK r21e** as well (`21.4.7075529` under the SDK's `ndk/`, or `ANDROID_NDK_R21`),
+  only to rebuild Node itself with 16 KB alignment (`AndroidLuna/tools/build-node.sh`); without that, `fetch-assets.sh` falls back to
   nodejs-mobile's 4 KB prebuilt and says so.
 - **Python 3 with Pillow**, for the tools that generate assets and compare screenshots.
 - A device or emulator running **Android 5.0 (API 21)** or later.

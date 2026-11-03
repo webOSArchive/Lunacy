@@ -20,14 +20,19 @@
 # the 64-bit API 28 (the arm64 flavour's target).
 set -e
 HERE=$(cd "$(dirname "$0")/.." && pwd)
-NDK=${NDK:-$HOME/Android/Sdk/ndk/android-ndk-r28c}
+NDK=${NDK:-${ANDROID_NDK:-$HOME/Android/Sdk/ndk/android-ndk-r28c}}
 BIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin
 WORK=$HERE/local-build/busybox
 BB_VER=1.37.0
 mkdir -p "$WORK/stub"
 cd "$WORK"
 
-[ -f busybox-$BB_VER.tar.bz2 ] || curl -sL https://busybox.net/downloads/busybox-$BB_VER.tar.bz2 -o busybox-$BB_VER.tar.bz2
+if [ ! -f busybox-$BB_VER.tar.bz2 ]; then
+  curl -sfL https://busybox.net/downloads/busybox-$BB_VER.tar.bz2 -o busybox-$BB_VER.tar.bz2.part || { echo "can't fetch busybox $BB_VER" >&2; exit 1; }
+  mv busybox-$BB_VER.tar.bz2.part busybox-$BB_VER.tar.bz2
+fi
+echo "3311dff32e746499f4df0d5df04d7eb396382d7e108bb9250e7b519b837043a4  busybox-$BB_VER.tar.bz2" | sha256sum -c --quiet \
+  || { echo "busybox-$BB_VER.tar.bz2 isn't the source it should be; delete it to fetch it again" >&2; exit 1; }
 # busybox links -lresolv for res_init; bionic keeps that in libc, so an empty archive stands in.
 [ -f stub/libresolv.a ] || "$BIN/llvm-ar" rcs stub/libresolv.a
 

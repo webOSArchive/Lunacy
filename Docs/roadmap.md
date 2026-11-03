@@ -3,7 +3,26 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-11-01)
+## Where things stand (2026-11-03)
+
+**0.9.0, a preview release** (2026-11-03), the last before the OAuth work for Exchange and
+Google mail:
+
+- **System menu:** the TouchPad's whole menu, with a brightness slider that comes down and
+  dims at once.
+- **Settings:** Bluetooth, Date & Time, Location Services and Regional Settings open
+  Android's screens; the Settings page starts in alphabetical order, as on webOS; Help shows
+  its tablet layout on a tablet.
+- **Just Type:** what apps add to it (searches, Quick Actions, content), web search engines,
+  and Palm's Just Type settings app.
+- **PDK games:** Guitar Hero 5, Family Guy, The Oregon Trail and H.A.W.X. play ([pdk.md](pdk.md)
+  §6i); intro movies end at once, with no player.
+- **From the code review** ([code-review-2026-11-03.md](code-review-2026-11-03.md), its triage):
+  bus replies with a line separator no longer vanish, WebSQL refuses ATTACH, credentials stay
+  off another host after a redirect, caller names can't climb out of their folders, a fold no
+  longer loses delayed shell actions, Android's backup leaves out the key store, and the first
+  unit tests.
+- **Web on a narrow card:** the progress bar runs along the bottom of the chrome.
 
 **0.8.4, a mini release** of the fixes since 0.8.3 (2026-11-01, build 358 replacing build 352):
 
@@ -140,6 +159,8 @@ One line per milestone; the detail is in [fix-log.md](fix-log.md), the topic doc
   ends when an app opens, Photos' slideshow at the TouchPad's pace, App Catalog 6.2.2931.
 - **2026-11-01, 0.8.4:** a mini release: the six PDK emulators, Web's dialogs and narrow
   layout, Trust Always that lasts, hung cards, the bus socket.
+- **2026-11-03, 0.9.0:** a preview release: the system menu, settings shortcuts, Just Type's
+  app integration, four more PDK games, and the code review's fixes before release.
 
 ## Open, carried forward
 

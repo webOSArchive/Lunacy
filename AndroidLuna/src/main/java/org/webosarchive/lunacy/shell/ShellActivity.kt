@@ -15,6 +15,7 @@ import org.json.JSONObject
 import org.webosarchive.lunacy.card.AppFiles
 import org.webosarchive.lunacy.card.AppInfo
 import org.webosarchive.lunacy.card.AppRegistry
+import org.webosarchive.lunacy.card.jsString
 import org.webosarchive.lunacy.card.AppServer
 import org.webosarchive.lunacy.card.AppWindow
 import org.webosarchive.lunacy.card.Bus
@@ -605,6 +606,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (activityManagerLazy.isInitialized()) activityManager.stop()
         if (sleepWakeLazy.isInitialized()) sleepWake.stop()
         if (powerLazy.isInitialized()) power.stop()
+        // A shell that has gone runs nothing it had pending.
+        shellHandler.removeCallbacksAndMessages(null)
         closeOnDestroy.forEach { it() }
         if (::audio.isInitialized) audio.close()
         sounds.release()
@@ -653,7 +656,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * or run a command - install, sh, rawsh - are a debug build's only ([devBuild]).
      */
     private fun handleIntent(intent: android.content.Intent) {
-        if (devBuild) intent.getStringExtra("install")?.let { install(it) }
+        if (devBuild) intent.takeString("install")?.let { install(it) }
         intent.getStringExtra("layout")?.let { v ->
             if (org.webosarchive.lunacy.card.FormFactor.setSetting(this, v)) { intent.removeExtra("layout"); if (::cards.isInitialized) reshell() }
             else Log.w(AppServer.TAG, "layout: $v is not auto, phone or tablet")
@@ -683,8 +686,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             intent.getStringExtra(HomeScreenPins.EXTRA_APP)?.let { openDirect(it) }
             intent.action = null
         }
-        intent.getStringExtra("launch")?.let { id ->
-            val raw = intent.getStringExtra("params")
+        intent.takeString("launch")?.let { id ->
+            val raw = intent.takeString("params")
             val params = raw?.let {
                 runCatching { JSONObject(it) }
                     .onFailure { e -> Log.w(AppServer.TAG, "launch $id: params is not JSON (${raw.length} characters)") }
@@ -692,10 +695,16 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             }
             launch(id, params)
         }
-        if (intent.getBooleanExtra(EXTRA_EXHIBITION, false)) startDreamExhibition()
+        if (intent.getBooleanExtra(EXTRA_EXHIBITION, false)) { intent.removeExtra(EXTRA_EXHIBITION); startDreamExhibition() }
         // Android 5's am has no send-trim-memory; this stands in for it (Docs/dev-workflow.md).
-        if (intent.hasExtra("trimMemory")) onTrimMemory(intent.getIntExtra("trimMemory", 0))
+        if (intent.hasExtra("trimMemory")) { val level = intent.getIntExtra("trimMemory", 0); intent.removeExtra("trimMemory"); onTrimMemory(level) }
     }
+
+    /**
+     * An extra read once: the activity is singleTask, and a re-created one is handed the same
+     * intent, which would otherwise install, launch or open Exhibition again.
+     */
+    private fun android.content.Intent.takeString(key: String): String? = getStringExtra(key)?.also { removeExtra(key) }
 
     // ---- memory ----
 
@@ -724,13 +733,19 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * Android never says memory has eased, so the shell looks: "normal" once no warning has
      * come for half a minute and the system no longer calls itself low on memory.
      */
+    /**
+     * Delayed shell actions. Not a view's queue: reshell replaces the shell's views, and what
+     * was posted to one that has gone never runs (memory stayed "low", brightness held).
+     */
+    private val shellHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
     private val memoryCheck = object : Runnable {
         override fun run() {
             if (memoryState == "normal") return
             val mi = android.app.ActivityManager.MemoryInfo()
             (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
             if (android.os.SystemClock.uptimeMillis() - lastTrim >= MEMORY_CALM_MS && !mi.lowMemory) setMemoryState("normal")
-            else wallpaperView.postDelayed(this, MEMORY_CHECK_MS)
+            else shellHandler.postDelayed(this, MEMORY_CHECK_MS)
         }
     }
 
@@ -741,8 +756,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // Root pages only, as LunaSysMgr sent it: a child window is the same app.
         val arg = JSONObject().put("state", state).toString()
         running.values.mapNotNull { it.firstOrNull() }.forEach { it.callMojo("lowMemoryNotification", arg) }
-        wallpaperView.removeCallbacks(memoryCheck)
-        if (state != "normal") wallpaperView.postDelayed(memoryCheck, MEMORY_CHECK_MS)
+        shellHandler.removeCallbacks(memoryCheck)
+        if (state != "normal") shellHandler.postDelayed(memoryCheck, MEMORY_CHECK_MS)
     }
 
     override fun onResume() {
@@ -1074,7 +1089,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val target = cards.maximized?.window ?: return
         val clip = (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).primaryClip
         val text = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString() ?: return
-        target.evaluateJavascript("window.__lunacyPaste&&__lunacyPaste(${JSONObject.quote(text)})", null)
+        target.evaluateJavascript("window.__lunacyPaste&&__lunacyPaste(${jsString(text)})", null)
     }
 
     /** The last "Selection Copied" banner, which the next one replaces (WebAppManager::copiedToClipboard). */
@@ -1515,19 +1530,19 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
     private fun setMenuBrightness(percent: Int, done: Boolean) {
         displayService.setBrightnessPercent(percent)
-        shellRoot?.removeCallbacks(releaseBrightness)
+        shellHandler.removeCallbacks(releaseBrightness)
         window.attributes = window.attributes.apply { screenBrightness = displayService.overrideFromPercent(percent) }
-        if (done) shellRoot?.postDelayed(releaseBrightness, BRIGHTNESS_HOLD_MS)
+        if (done) shellHandler.postDelayed(releaseBrightness, BRIGHTNESS_HOLD_MS)
     }
 
     /** SystemMenu.qml's closeMenuTimer. A menu closed and opened again meanwhile stays. */
     private var systemMenuCloser: Runnable? = null
     private fun closeSystemMenuIn(delayMs: Long) {
-        systemMenuCloser?.let { shellRoot?.removeCallbacks(it) }
+        systemMenuCloser?.let { shellHandler.removeCallbacks(it) }
         if (!systemMenu.isOpen) return
         val r = Runnable { systemMenuCloser = null; if (systemMenu.isOpen) closeMenu() }
         systemMenuCloser = r
-        shellRoot?.postDelayed(r, delayMs)
+        shellHandler.postDelayed(r, delayMs)
     }
 
     /** One of Android's settings screens, by LunacyService's panel name: where the system menu hands over. */
@@ -1542,7 +1557,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     private fun closeMenu() {
-        systemMenuCloser?.let { shellRoot?.removeCallbacks(it) }; systemMenuCloser = null
+        systemMenuCloser?.let { shellHandler.removeCallbacks(it) }; systemMenuCloser = null
         menuScrim.visibility = View.GONE
         statusBar.menuOpen = false
         notifications.menu.close()
@@ -1666,7 +1681,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * maximizes it, and lets its placeholder go once the page has drawn as well (onPageDrawn).
      */
     override fun onPageLoaded(window: AppWindow) {
-        cards.postDelayed({
+        shellHandler.postDelayed({
             if (window.stageReady) return@postDelayed
             if (placeholderOf(window) != null) withdrawPlaceholder(window)
             else cardOf(window)?.let { cards.ready(it) }

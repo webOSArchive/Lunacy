@@ -183,7 +183,7 @@ open class AppWindow(
     val pid = nextPid.getAndIncrement()
     /** enyo.WebView's native views in this window, made when a page first asks for one. */
     private val browserViews by lazy { BrowserViews(this, host.server.webosRoot, host.server) }
-    private var hasBrowserViews = false
+    @Volatile private var hasBrowserViews = false
     /** The page's hybrid plugins, made when it first embeds one. */
     @Volatile private var plugins: HybridPlugins? = null
     private val pluginsLock = Any()
@@ -347,7 +347,7 @@ open class AppWindow(
 
     /** Calls a lifecycle hook the way LunaSysMgr did: a function on the page's Mojo object. */
     fun callMojo(fn: String, argsJson: String = "") =
-        evaluateJavascript("(function(){try{if(window.Mojo&&Mojo.$fn){Mojo.$fn($argsJson);}}catch(e){console.error('Mojo.$fn: '+e);}})()", null)
+        evaluateJavascript(jsSafe("(function(){try{if(window.Mojo&&Mojo.$fn){Mojo.$fn($argsJson);}}catch(e){console.error('Mojo.$fn: '+e);}})()"), null)
 
     /**
      * Drops the page's input focus, the way webOS put its keyboard away. Dismissing the
@@ -366,7 +366,7 @@ open class AppWindow(
      * brings the app's first card forward.
      */
     open fun relaunch(params: String, done: (Boolean) -> Unit) = evaluateJavascript(
-        "(function(){try{return window.__lunacyRelaunch?__lunacyRelaunch(${JSONObject.quote(params)}):false}catch(e){console.error('relaunch: '+e);return false}})()"
+        "(function(){try{return window.__lunacyRelaunch?__lunacyRelaunch(${jsString(params)}):false}catch(e){console.error('relaunch: '+e);return false}})()"
     ) { done(it == "true") }
 
     /**
@@ -507,7 +507,7 @@ open class AppWindow(
                 // arrives after the page changed is the old page's, and stays with it.
                 val from = page
                 val call = host.bus.call(appId, url, params) { reply ->
-                    main.post { if (!destroyed && from == page) evaluateJavascript("PalmServiceBridge.__reply($token, ${JSONObject.quote(reply)})", null) }
+                    main.post { if (!destroyed && from == page) evaluateJavascript("PalmServiceBridge.__reply($token, ${jsString(reply)})", null) }
                 }
                 if (call.subscribe && !call.cancelled) calls[token] = call
             }

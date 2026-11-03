@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android's backup (Auto Backup to the user's Google account, device-to-device transfer,
+     adb backup from Android 6) takes everything but webOS's key store: KeyManager keeps
+     accounts' passwords and tokens there unencrypted (a ratchet item, Docs/architecture.md),
+     and they should not leave the device in a backup. The accounts come back without them and
+     ask for their passwords again. Android 5's adb backup ignores these rules. -->
+<full-backup-content>
+    <exclude domain="file" path="keymanager.json" />
+    <exclude domain="file" path="keymanager.json.tmp" />
+</full-backup-content>

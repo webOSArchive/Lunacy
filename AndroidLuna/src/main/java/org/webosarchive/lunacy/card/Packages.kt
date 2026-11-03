@@ -82,6 +82,8 @@ class Packages(val root: File, private val cache: File, private val webos: Webos
             val fields = control["control"]?.toString(Charsets.UTF_8).orEmpty()
             val pkg = Regex("(?m)^Package:\\s*(\\S+)").find(fields)?.groupValues?.get(1)
                 ?: source.substringAfterLast('/').substringBefore('_')
+            // It names files in the package database and the scripts that are run from there.
+            if (!PACKAGE_NAME.matches(pkg) || ".." in pkg) throw IOException("its package name isn't one: $pkg")
             val old = File(info, "$pkg.control").takeIf { it.isFile }?.readText()
                 ?.let { Regex("(?m)^Version:\\s*(\\S+)").find(it)?.groupValues?.get(1) ?: "" }
             val files = Ipk.extract(ipk, staging)
@@ -240,6 +242,8 @@ class Packages(val root: File, private val cache: File, private val webos: Webos
         const val PACKAGES = "usr/palm/packages"
         const val SERVICES = "usr/palm/services"
         const val INFO = "usr/lib/ipkg/info"
+        /** opkg's package names, which webOS ids fit (com.palm.app.email, org.webosinternals.preware). */
+        private val PACKAGE_NAME = Regex("[A-Za-z0-9][A-Za-z0-9._+-]{0,127}")
         /** ipkgservice put no limit on a script; this one is only against a hang. */
         const val SCRIPT_TIMEOUT_MS = 5 * 60_000L
     }

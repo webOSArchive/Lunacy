@@ -96,3 +96,10 @@ val bundleCoreApps = tasks.register<BundleCoreApps>("bundleCoreApps") {
 androidComponents.onVariants { variant ->
     variant.sources.assets?.addGeneratedSourceDirectory(bundleCoreApps, BundleCoreApps::output)
 }
+
+// Plain-JVM tests of the pure functions (src/test): ./gradlew :AndroidLuna:testArm32DebugUnitTest.
+// android.jar's org.json is a stub off the device, so the tests get the real one.
+dependencies {
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20231013")
+}

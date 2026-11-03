@@ -78,7 +78,7 @@ class PdkHost(
     private val fbFile = File(context.filesDir, "pdk/fb/$appId" + if (plugin != null) "-plugin-${System.nanoTime()}" else "").also { it.parentFile?.mkdirs() }
     private var server: LocalServerSocket? = null
     private var process: Process? = null
-    private var control: OutputStream? = null
+    @Volatile private var control: OutputStream? = null
     private var track: AudioTrack? = null
     @Volatile private var stopped = false
     /** The screen the app asked for, in its px. */

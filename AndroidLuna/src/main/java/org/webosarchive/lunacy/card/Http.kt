@@ -41,6 +41,8 @@ object Http {
     }
 
     private const val MAX_REDIRECTS = 20
+    private val CREDENTIALS = setOf("authorization", "cookie")
+    private fun portOf(u: URL) = if (u.port == -1) u.defaultPort else u.port
     private lateinit var assets: AssetManager
     private val tls: SSLSocketFactory by lazy { tlsFactory() }
 
@@ -49,13 +51,17 @@ object Http {
     /**
      * Sends the request and follows redirects as the TouchPad's WebKit did: 301/302/303 turn a
      * POST into a GET without its body (headers stay), and each hop sends the previous URL as
-     * Referer. Returns the final connection, its response code already read.
+     * Referer. A hop to another protocol, host or port drops the request's own Authorization
+     * and Cookie headers, as WebKit's ResourceHandle did (clearHTTPAuthorization); the cookie
+     * jar's own cookies for each URL still go. Returns the final connection, its response code
+     * already read.
      */
     fun connect(req: Request, tracker: Tracker? = null): HttpURLConnection {
         var url = URL(req.url)
         var method = req.method.uppercase()
         var body = req.body
         var referer: String? = null
+        var sameOrigin = true
         repeat(MAX_REDIRECTS + 1) {
             if (url.protocol != "http" && url.protocol != "https") throw IOException("can't fetch ${url.protocol} URLs")
             val c = url.openConnection() as HttpURLConnection
@@ -67,7 +73,10 @@ object Http {
             c.readTimeout = req.readTimeoutMs
             c.requestMethod = method
             val names = HashSet<String>()
-            for ((k, v) in req.headers) { c.setRequestProperty(k, v); names += k.lowercase() }
+            for ((k, v) in req.headers) {
+                if (!sameOrigin && k.lowercase() in CREDENTIALS) continue
+                c.setRequestProperty(k, v); names += k.lowercase()
+            }
             if (referer != null && "referer" !in names) c.setRequestProperty("Referer", referer)
             if ("cookie" !in names) CookieManager.getInstance().getCookie(url.toString())?.let { c.setRequestProperty("Cookie", it) }
             if (body != null) {
@@ -82,7 +91,9 @@ object Http {
                 tracker?.redirected(headersOf(c))
                 c.disconnect()
                 referer = url.toString()
-                url = URL(url, location)
+                val next = URL(url, location)
+                if (next.protocol != url.protocol || !next.host.equals(url.host, ignoreCase = true) || portOf(next) != portOf(url)) sameOrigin = false
+                url = next
                 if (code in 301..303 && method != "GET" && method != "HEAD") { method = "GET"; body = null }
                 return@repeat
             }

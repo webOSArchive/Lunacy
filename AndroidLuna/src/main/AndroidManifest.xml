@@ -55,6 +55,7 @@
         android:largeHeap="true"
         android:resizeableActivity="false"
         android:networkSecurityConfig="@xml/network_security_config"
+        android:fullBackupContent="@xml/backup_rules"
         android:theme="@style/Theme.Lunacy">
         <!-- networkSecurityConfig: from a target of 28, Android blocks plain http unless the
              app says otherwise; webOS apps and the loopback media server use it freely

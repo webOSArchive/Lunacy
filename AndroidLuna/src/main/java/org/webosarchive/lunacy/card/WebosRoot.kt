@@ -229,7 +229,7 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
      * word, a quoted string or an assignment. A URL's path (`file:///usr/…`) is left alone, so
      * a luna-send payload still names webOS paths.
      */
-    fun mapPaths(s: String): String = PATHS.replace(s) { m -> m.groupValues[1] + root.path + m.groupValues[2] }
+    fun mapPaths(s: String): String = mapPaths(s, root.path)
 
     /** The environment a process in the webOS root gets, calling the bus as [caller]. */
     fun environment(caller: String): Map<String, String> = mapOf(
@@ -245,7 +245,10 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
         const val ROM = "rootfs"
         const val ROM_MANIFEST = ".lunacy-rom"
         const val TOOLS_LIST = ".lunacy-tools"
-        private val PATHS = Regex("(^|[\\s'\"=(;|&<>`])(/(?:usr|media|bin|sbin|var|etc|tmp|home|opt|lib)(?:/[^\\s'\";|&<>)`]*)?)", RegexOption.MULTILINE)
+        // The folder name ends the word or is followed by a slash: /library and /usrx are not webOS's.
+        private val PATHS = Regex("(^|[\\s'\"=(;|&<>`])(/(?:usr|media|bin|sbin|var|etc|tmp|home|opt|lib)(?=$|[/\\s'\";|&<>)`])(?:/[^\\s'\";|&<>)`]*)?)", RegexOption.MULTILINE)
+
+        internal fun mapPaths(s: String, rootPath: String): String = PATHS.replace(s) { m -> m.groupValues[1] + rootPath + m.groupValues[2] }
     }
 }
 

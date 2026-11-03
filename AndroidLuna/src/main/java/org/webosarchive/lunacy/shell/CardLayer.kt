@@ -701,7 +701,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
             addListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationCancel(a: Animator) { cancelled = true }
                 override fun onAnimationEnd(a: Animator) {
-                    if (anim === a) anim = null
+                    if (anim === a) { anim = null; settled = null }
                     if (!cancelled) { restack(); done() }
                 }
             })
@@ -886,6 +886,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
      */
     fun openLaunching(card: Card) {
         if (width == 0) { post { openLaunching(card) }; return }
+        if (card.group == null) return  // closed before the layer had a size
         // setActiveCardOffScreen: full size, its top at the bottom of the screen.
         card.gx = 0f; card.rx = 0f; card.cy = height + cardHeight(card) / 2f; card.scale = 1f; card.rot = 0f; card.lift = 0f
         topCard = card
@@ -942,7 +943,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         feedback(if (angry && upsideDown()) "birdappclose" else "appclose")
         val start = card.lift
         val end = inset - card.height * card.scale / 2f - card.cy
-        anim?.cancel(); anim = null
+        anim?.cancel(); anim = null; settled = null
         anim = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = Params.DELETE_MS; interpolator = Easing.OutCubic
             addUpdateListener { a -> val f = a.animatedValue as Float; card.lift = start + (end - start) * f; applyTransforms() }

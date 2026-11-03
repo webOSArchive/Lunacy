@@ -234,19 +234,6 @@ class SystemService(private val webosRoot: File, private val store: File) {
         return intArrayOf(month, dow, day, v[4], v[5], v[6])
     }
 
-    /** The day of the month an EAS date's "nth weekday" falls on this year (updateEasDateDayOfMonth). */
-    private fun easDayOfMonth(d: IntArray, year: Int): Int {
-        val utc = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { clear(); set(year, d[0] - 1, 1) }
-        val firstWday = utc.get(java.util.Calendar.DAY_OF_WEEK) - 1
-        val last = utc.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
-        val days = IntArray(35) { -1 }
-        for (i in 1..last) if (i + firstWday - 1 < days.size) days[i + firstWday - 1] = i
-        var weekStart = 0
-        while (weekStart < 5 && days[weekStart * 7 + d[1]] == -1) weekStart++
-        val week = (weekStart + d[2] - 1).coerceIn(0, 4)
-        return days[week * 7 + d[1]]
-    }
-
     /** Seconds since the epoch of the date's wall-clock time this year, read as UTC. */
     private fun wallClock(year: Int, d: IntArray, day: Int): Long {
         val utc = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { clear(); set(year, d[0] - 1, day, d[3], d[4], d[5]) }
@@ -347,7 +334,7 @@ class SystemService(private val webosRoot: File, private val store: File) {
 
     /** The wallpaper object for a name already in the store, or null if it isn't there. */
     fun wallpaper(name: String): JSONObject? {
-        val f = File(wallpaperDir, name)
+        val f = wallpaperFile(name) ?: return null
         if (!f.isFile) return null
         return JSONObject()
             .put("wallpaperName", name)
@@ -371,8 +358,8 @@ class SystemService(private val webosRoot: File, private val store: File) {
 
     private fun deleteWallpaper(call: Bus.Call) {
         val name = call.params.optString("wallpaperName")
-        val f = File(wallpaperDir, name)
-        if (!f.isFile) return call.reply(Bus.error("No such wallpaper: $name"))
+        val f = wallpaperFile(name)
+        if (f == null || !f.isFile) return call.reply(Bus.error("No such wallpaper: $name"))
         f.delete(); File(thumbDir, name).delete()
         call.reply(Bus.ok())
     }
@@ -429,6 +416,10 @@ class SystemService(private val webosRoot: File, private val store: File) {
 
     private fun inside(f: File) = f.canonicalPath.startsWith(webosRoot.canonicalPath + File.separator)
 
+    /** A wallpaper is named by its file name in the store; anything with a path in it names none. */
+    private fun wallpaperFile(name: String): File? =
+        if (name.isEmpty() || name == "." || name == ".." || '/' in name || '\\' in name) null else File(wallpaperDir, name)
+
     /** A small JPEG beside the wallpaper, as webOS's thumbs/ holds. */
     private fun thumbnail(source: File, dest: File) {
         try {
@@ -452,5 +443,18 @@ class SystemService(private val webosRoot: File, private val store: File) {
         const val SERVICE = "com.palm.systemservice"
         private const val THUMB = 160
         private const val NO_RULES = "Failed to retrieve results for specified timezones"
+
+        /**
+         * The day of the month an EAS date's "nth weekday" falls on in [year]
+         * (updateEasDateDayOfMonth): d is month, dayOfWeek (0 = Sunday), week (5 = the last).
+         */
+        internal fun easDayOfMonth(d: IntArray, year: Int): Int {
+            val utc = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { clear(); set(year, d[0] - 1, 1) }
+            val firstWday = utc.get(java.util.Calendar.DAY_OF_WEEK) - 1
+            val last = utc.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
+            val first = 1 + (d[1] - firstWday + 7) % 7
+            val day = first + 7 * (d[2] - 1)
+            return if (day > last) day - 7 else day
+        }
     }
 }

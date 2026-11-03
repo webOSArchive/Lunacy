@@ -53,6 +53,7 @@ import java.io.InputStream
  *   Formats 0 and 2 both came back as a BMP; this gives a PNG for both, as for the short form.
  */
 object Extractfs {
+    private const val MAX_EMBEDDED = 16 * 1024 * 1024
     class Result(val bytes: ByteArray, val mime: String)
 
     /** Opens a webOS path, or null if there is no such file; called more than once per read. */
@@ -82,6 +83,8 @@ object Extractfs {
         val n = parts.takeLast(11).map { it.toIntOrNull() ?: return null }
         val format = n[5]; val offset = n[6]; val length = n[7]; val w = n[8]; val h = n[9]; val crop = n[10]
         if (w !in 1..4096 || h !in 1..4096) return null
+        // An embedded image (album art) is read whole into memory; the page names its length.
+        if (length > MAX_EMBEDDED) return null
         val source = Source(opener.open(parts.dropLast(12).joinToString(":")) ?: return null, offset, length)
         if (format == 4) return Result(source.bytes() ?: return null, "application/octet-stream")
         val size = source.size() ?: return null

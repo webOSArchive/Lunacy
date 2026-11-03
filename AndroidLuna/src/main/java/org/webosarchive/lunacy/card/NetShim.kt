@@ -65,9 +65,10 @@ class NetShim(
     }
 
     private fun run(id: Int, request: String): String {
-        val j = JSONObject(request)
-        val method = j.getString("method").uppercase()
-        val url = j.getString("url")
+        // A request the page's own net.js didn't build is an error for that request, not for the pool thread.
+        val j = try { JSONObject(request) } catch (e: Exception) { return error("bad request: $e", "error") }
+        val method = j.optString("method").uppercase()
+        val url = j.optString("url")
         try {
             val headers = ArrayList<Pair<String, String>>()
             val set = HashSet<String>()

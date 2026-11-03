@@ -1170,6 +1170,9 @@ no `openDatabase` at all, and Lunacy provides it in JS instead:
 - **Secrets.** `com.palm.keymanager` keeps each caller's keys, as the accounts service keeps
   every account's credentials. **Ratchet item:** the device kept them encrypted; Lunacy keeps
   them in a file in its private storage, which a later target can wrap with Android's keystore.
+  Android's backup leaves that file out (`res/xml/backup_rules.xml`, codepoet, 2026-11-03), so
+  passwords never reach a Google account's backup; restored accounts ask for theirs again.
+  Android 5's `adb backup` ignores the rules.
 - **The webOS root.** `files/webos` is the filesystem JS services and package scripts see as
   `/` (`WebosRoot.kt`). Its ROM, `assets/rootfs/` from `fetch-assets.sh`, holds the service
   frameworks, the TouchPad's own palmprofile and accounts services (with the db8 kinds and

@@ -116,7 +116,7 @@ class HybridPlugins(private val window: AppWindow, private val app: AppInfo, pri
         /** Tells the page, in order: every event goes through the main thread's queue. */
         private fun event(kind: String, vararg values: Any) {
             val args = values.joinToString(",") { if (it is String) JSONObject.quote(it) else it.toString() }
-            main.post { if (!ended || kind == "status") window.evaluateJavascript("window.__lunacyPlugin&&__lunacyPlugin($id,${JSONObject.quote(kind)},$args)", null) }
+            main.post { if (!ended || kind == "status") window.evaluateJavascript(jsSafe("window.__lunacyPlugin&&__lunacyPlugin($id,${JSONObject.quote(kind)},$args)"), null) }
         }
     }
 

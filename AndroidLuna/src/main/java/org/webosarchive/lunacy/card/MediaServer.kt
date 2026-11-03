@@ -7,7 +7,7 @@ import java.io.OutputStream
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
-import java.net.URLDecoder
+import android.net.Uri
 import java.security.SecureRandom
 import kotlin.concurrent.thread
 
@@ -49,7 +49,8 @@ class MediaServer(private val webosRoot: File) {
             }
             val parts = request.split(' ')
             val method = parts.getOrNull(0) ?: ""
-            val path = URLDecoder.decode(parts.getOrNull(1)?.substringBefore('?') ?: "", "UTF-8")
+            // A URL's path: "+" is a plus sign there, not a space as in a form.
+            val path = Uri.decode(parts.getOrNull(1)?.substringBefore('?') ?: "")
             val prefix = "/$token/media/internal/"
             val file = if (path.startsWith(prefix)) UserFiles.resolve(webosRoot, path.removePrefix(prefix)) else null
             val out = c.getOutputStream()
@@ -61,7 +62,7 @@ class MediaServer(private val webosRoot: File) {
             var end = len - 1
             if (range != null) {
                 val (a, b) = range.destructured
-                if (a.isEmpty()) { start = maxOf(0, len - (b.toLongOrNull() ?: 0)) } else { start = a.toLong(); if (b.isNotEmpty()) end = minOf(b.toLong(), len - 1) }
+                if (a.isEmpty()) { start = maxOf(0, len - (b.toLongOrNull() ?: 0)) } else { start = a.toLongOrNull() ?: len; if (b.isNotEmpty()) end = minOf(b.toLongOrNull() ?: Long.MAX_VALUE, len - 1) }
                 if (start >= len || end < start) return status(out, 416, "Range Not Satisfiable")
             }
             val count = end - start + 1

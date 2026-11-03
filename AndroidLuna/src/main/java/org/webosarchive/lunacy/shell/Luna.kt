@@ -226,8 +226,12 @@ class Luna(private val context: Context,
         fun drawNineSlice(c: Canvas, b: Bitmap, dst: RectF, l: Int, t: Int, r: Int, bo: Int, p: Paint? = null, dl: Float = l.toFloat(), dt: Float = t.toFloat(), dr: Float = r.toFloat(), db: Float = bo.toFloat()) {
             val w = b.width; val h = b.height
             val xs = intArrayOf(0, l, w - r, w); val ys = intArrayOf(0, t, h - bo, h)
-            val dx = floatArrayOf(dst.left, dst.left + dl, dst.right - dr, dst.right)
-            val dy = floatArrayOf(dst.top, dst.top + dt, dst.bottom - db, dst.bottom)
+            // Drawn smaller than its two corners, the corners give way rather than overlap
+            // (the keyboard's Art.nine does the same).
+            val sx = if (dl + dr > dst.width() && dl + dr > 0) dst.width() / (dl + dr) else 1f
+            val sy = if (dt + db > dst.height() && dt + db > 0) dst.height() / (dt + db) else 1f
+            val dx = floatArrayOf(dst.left, dst.left + dl * sx, dst.right - dr * sx, dst.right)
+            val dy = floatArrayOf(dst.top, dst.top + dt * sy, dst.bottom - db * sy, dst.bottom)
             val src = Rect(); val d = RectF()
             for (i in 0..2) for (j in 0..2) {
                 src.set(xs[i], ys[j], xs[i + 1], ys[j + 1]); d.set(dx[i], dy[j], dx[i + 1], dy[j + 1])

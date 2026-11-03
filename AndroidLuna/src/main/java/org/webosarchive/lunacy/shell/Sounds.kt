@@ -163,7 +163,9 @@ class Sounds(private val context: Context, private val server: AppServer, privat
             listOf(AppServer.appUrl(appId, "resources/$locale/$entry", dirOf(appId)), AppServer.appUrl(appId, entry, dirOf(appId)))
         }
         for (url in candidates) {
-            val out = java.io.File(context.cacheDir, "sound-" + Integer.toHexString(url.hashCode()) + "." + entry.substringAfterLast('.', "snd"))
+            // The extension only if it is one: the rest of the name is the app's, and could climb out of the cache.
+            val ext = entry.substringAfterLast('.', "snd").takeIf { e -> e.isNotEmpty() && e.length <= 8 && e.all { it.isLetterOrDigit() } } ?: "snd"
+            val out = java.io.File(context.cacheDir, "sound-" + Integer.toHexString(url.hashCode()) + "." + ext)
             // Copied once per run: every banner of the app played this on the main thread before.
             if (url in copied && out.isFile) return out
             val r = server.serve(android.net.Uri.parse(url)) ?: continue

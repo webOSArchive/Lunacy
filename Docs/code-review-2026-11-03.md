@@ -45,6 +45,47 @@ Nothing here is a rule-0 matter: every change below leaves the screen as it is.
 
 ---
 
+## Triage (codepoet, 2026-11-03)
+
+Three stages: before the next preview, between the preview and the OAuth work for EAS and
+Google IMAP, and before 1.0.
+
+**Done before the preview:** B1, B2, B3, B7, B8, B9, B10, B11, B12, B13; S3, S4 (wallpaper
+names, ipk package names, the sound cache name, and the name "Copy to Photos" saves under),
+S10, S12 (the key store left out of Android's backup, codepoet's choice over turning backup
+off); §8's intent extras, delayed shell actions and `@Volatile`; §3.3 (the corner clamp
+ported to `Luna.drawNineSlice`, the keyboard kept independent, codepoet); §9's first tests
+(`./gradlew :AndroidLuna:testArm32DebugUnitTest`); §10's checked downloads, NDK variables,
+`cdp.sh`'s `ps`, and the probe `.ipk`s untracked.
+
+**Corrected on a second look:**
+- **S1** is already a recorded ratchet item (architecture.md, "Frames can reach the bus"), and
+  Accounts depends on it for Email's account wizard (`enyo.CrossAppUI`). It goes with the
+  move to `WebMessageListener`; no decision is needed now.
+- **S2** is rule 10, not security: JS services already run with Lunacy's permissions and see
+  its whole data directory (a ratchet item, architecture.md). Done with §4.1, after the preview.
+- **S4's image destinations and browser-view image commands** stay as they are: on the
+  TouchPad both ran as root and wrote anywhere; here they are held to the webOS root already,
+  and an installed app is inside the same boundary as its services.
+- **S9** was not exploitable as written: `file:` URLs fail the `HttpURLConnection` cast. The
+  file *name* it saved under could climb out of the folder; that is fixed.
+- **S11** stays: release builds are tested over adb with `--es launch`, `layout` and
+  `trimMemory`, and what they reach is opening a webOS app, as apps did for each other. The
+  replay on re-creation (§8) is fixed.
+- **S13** is robustness, not security: a PDK app is native code with Lunacy's own uid.
+- **S14's pins** stay silent (codepoet).
+- **B1** reaches nothing on a real account: mojomail-eas sends its dates without `dayOfWeek`,
+  so the function never runs for it.
+
+**Between the preview and the OAuth work:** §5, §4.2 (a debug-build log first, then the
+`check`), §4.1 with §3.2 and S2, §2.6 then §2.1, §4.3 and §4.4. The OAuth work touches
+the accounts and the services, so the service conventions come first.
+
+**Before 1.0:** §3.1, the other splits in §2, `compat.js` last; B14, B15, S13, the rest of §8
+and §10. Measurements on the TouchPad (§11) decide B4, B5, B6, S5, S7/S8, S14 and §4.3.
+
+---
+
 ## 1. The short list
 
 The ten changes that buy the most understanding per line touched, in order:

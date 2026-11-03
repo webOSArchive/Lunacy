@@ -174,7 +174,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
 
     internal fun send(id: Int, method: String, vararg args: Any?) {
         val a = JSONArray(); args.forEach { a.put(it ?: JSONObject.NULL) }
-        window.evaluateJavascript("window.__lunacyWebView&&__lunacyWebView($id,${JSONObject.quote(method)},$a)", null)
+        window.evaluateJavascript(jsSafe("window.__lunacyWebView&&__lunacyWebView($id,${JSONObject.quote(method)},$a)"), null)
     }
 
     /** A webOS path, in the webOS root; /media/internal through UserFiles, as apps see it. */
@@ -434,6 +434,8 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                         bytes = c.inputStream.use { it.readBytes() }
                         name = Uri.parse(src).lastPathSegment?.takeIf { it.contains('.') } ?: "image.jpg"
                     }
+                    // The name is the page's: a "/" in it (data:image/../..; or an encoded %2F) would climb out of the folder.
+                    name = name.substringAfterLast('/').replace(Regex("[^A-Za-z0-9._ -]"), "_").trimStart('.').ifEmpty { "image.jpg" }
                     var f = File(out, name)
                     var n = 1
                     while (f.exists()) f = File(out, name.substringBeforeLast('.') + "-" + n++ + "." + name.substringAfterLast('.'))
@@ -646,7 +648,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 val text = runCatching { file?.readText() }.getOrNull().orEmpty()
                 var doc = if (type == "text/plain") "<html><head></head><body><div style=\"white-space:pre-wrap;word-wrap:break-word\">" +
                     linkify(escape(text)) + "</div></body></html>" else text.ifEmpty { "<html><head></head><body></body></html>" }
-                for (k in cids.keys()) doc = doc.replace(k, "file://" + cids.optString(k))
+                for (k in cids.keys()) if (k.isNotEmpty()) doc = doc.replace(k, "file://" + cids.optString(k))
                 doc = touchpadFonts(doc)
                 doc = insertAfter(doc, "<head[^>]*>", FONTS_LINK + head) ?: "<head>$FONTS_LINK$head</head>$doc"
                 // The message is laid out at the view's own width, as webOS's message view did
@@ -691,7 +693,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
 
         private fun escape(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         private fun unescape(s: String) = s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
-            .replace(Regex("&#(\\d+);")) { it.groupValues[1].toInt().toChar().toString() }.replace("&amp;", "&")
+            .replace(Regex("&#(\\d+);")) { m -> m.groupValues[1].toIntOrNull()?.takeIf { Character.isValidCodePoint(it) }?.let { String(Character.toChars(it)) } ?: m.value }.replace("&amp;", "&")
         private fun linkify(s: String) = s.replace(Regex("\\b(https?://[^\\s<>\"]+)")) { "<a href=\"${it.value}\">${it.value}</a>" }
 
         // ---- callbacks ----

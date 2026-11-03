@@ -279,7 +279,8 @@ class Db8(private val service: String, file: File?,
             Log.w(AppServer.TAG, "$service/$method failed", e)
             error(-1, "db: internal error: ${e.message}")
         }
-        main.post { call.reply(reply) }
+        // A watch that fires at once is over, like one that fires later (changed).
+        main.post { call.reply(reply); if (method == "watch" && reply == FIRED) call.cancel() }
     }
 
     /** One operation. call is null inside a batch (no watches there). */
@@ -672,7 +673,7 @@ class Db8(private val service: String, file: File?,
     private fun watch(caller: String, p: JSONObject, call: Bus.Call?): String {
         val q = required(caller, p, "query") as JSONObject
         val (results, kindsQueried) = run(caller, q, search = false, validate = true)
-        if (results.isNotEmpty()) return JSONObject().put("returnValue", true).put("fired", true).toString()
+        if (results.isNotEmpty()) return FIRED
         if (call != null) addWatch(call, kindsQueried, clauses(q.optJSONArray("where")))
         return ok()
     }

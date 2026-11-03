@@ -50,6 +50,15 @@ Exchange and Google mail. Everything since 0.8.4:
   Video Player's volume keys don't switch to media volume; NesEm HD quits on the Fold3's
   cover screen.
 
+**Next (codepoet, 2026-11-03):** 0.9.x point releases until 0.9 is stable, then OAuth for
+Exchange and Google mail, then preparing an F-Droid launch. First up: the TouchPad
+measurements from the code review are done
+([code-review-2026-11-03.md](code-review-2026-11-03.md), "Measured on the TouchPad"), and
+three changes they decided (db8's typed-parameter errors, `pauseDownload` and
+`resumeDownload` as the device answers them, `com.palm.systemmanager` private-bus only) are
+written but untested. Then the review's cleanup before OAuth (its triage: §5, §4.2, §4.1 with
+§3.2 and S2), since OAuth works in the accounts and services.
+
 **0.8.4, a mini release** of the fixes since 0.8.3 (2026-11-01, build 358 replacing build 352):
 
 - **PDK games:** the six emulators play (2600.emu, EMU7800, MD.emu, NesEm HD, Snes9x EX,

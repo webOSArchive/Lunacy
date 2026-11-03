@@ -5,7 +5,7 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-11-03)
 
-**0.9.0, a preview release** (2026-11-03, build 392), the last before the OAuth work for
+**0.9.0, a preview release** (2026-11-03, build 394), the last before the OAuth work for
 Exchange and Google mail. Everything since 0.8.4:
 
 - **System menu and settings:** the TouchPad's whole system menu, its brightness slider
@@ -185,7 +185,7 @@ One line per milestone; the detail is in [fix-log.md](fix-log.md), the topic doc
   ends when an app opens, Photos' slideshow at the TouchPad's pace, App Catalog 6.2.2931.
 - **2026-11-01, 0.8.4:** a mini release: the six PDK emulators, Web's dialogs and narrow
   layout, Trust Always that lasts, hung cards, the bus socket.
-- **2026-11-03, 0.9.0** (build 392): a preview release: the system menu, settings shortcuts,
+- **2026-11-03, 0.9.0** (build 394): a preview release: the system menu, settings shortcuts,
   Just Type's app integration, the Android account, Contacts' and Calendar's imports and phone
   layouts, four more PDK games, and the code review's fixes before release.
 

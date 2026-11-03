@@ -73,7 +73,8 @@ enyo.kind({
 				{kind: "VFlexBox", className: "contentDefaults box", components: [
 					{content: $L("Lunacy is ready."), className: "text"},
 					{content: $L("The launcher has the apps that come with Lunacy; App Catalog, on its Downloads tab, has the rest."), className: "text"},
-					{content: $L("Anything not allowed here can be allowed later in Android's settings for Lunacy."), className: "text small"}
+					{content: $L("Anything not allowed here can be allowed later in Android's settings for Lunacy."), className: "text small"},
+					{content: $L("You can add your Android contacts and calendars later in Accounts."), className: "text small"}
 				]},
 				{kind: "HFlexBox", className: "buttons", pack: "center", components: [
 					{kind: "Button", caption: $L("Done"), className: "enyo-button-affirmative", onclick: "finish"}

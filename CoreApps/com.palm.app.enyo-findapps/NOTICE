@@ -1,7 +1,8 @@
 App Catalog 6.2 (com.palm.app.enyo-findapps): the TouchPad's own App Catalog client, as
 restored and maintained by webOS Archive (https://github.com/webOSArchive), and as packaged for
 webOS devices. It is the catalogue Lunacy gets its apps from, so it is bundled: a fresh install
-has somewhere to go. Installing a newer package of it replaces this copy.
+has somewhere to go. Installing a newer package of it replaces this copy; a package older
+than this copy is removed when Lunacy starts.
 
 HP's original Enyo source, copyright Palm, Inc. / Hewlett-Packard: never released under an
 open licence, distributed by Lunacy as abandonware, like Mojo and the Prelude fonts. webOS

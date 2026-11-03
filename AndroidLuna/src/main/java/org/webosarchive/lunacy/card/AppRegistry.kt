@@ -125,6 +125,18 @@ class AppInfo(
     }
 }
 
+/** Whether dotted version [a] is above [b], compared number by number. */
+internal fun isNewerVersion(a: String, b: String): Boolean {
+    val x = a.split('.').map { it.toIntOrNull() ?: 0 }
+    val y = b.split('.').map { it.toIntOrNull() ?: 0 }
+    for (i in 0 until maxOf(x.size, y.size)) {
+        val p = x.getOrElse(i) { 0 }
+        val q = y.getOrElse(i) { 0 }
+        if (p != q) return p > q
+    }
+    return false
+}
+
 /**
  * The files under /media/cryptofs/apps: packages installed on the device (Packages.root)
  * first, then apps in the webOS root's /usr/palm/applications - where a package's install
@@ -189,6 +201,24 @@ class AppFiles(private val assets: AssetManager, val root: File, private val sys
     }
 
     fun isInstalled(id: String) = File(root, "${Packages.APPS}/$id/appinfo.json").isFile
+
+    /**
+     * Ids of installed packages older than the copy bundled in this APK. An installed package
+     * is served ahead of the bundled app, which is right for a newer one and wrong here: an app
+     * installed from the catalog would hide every newer copy Lunacy later ships, and App Catalog
+     * 6.2.2929 went on asking to update itself under a Lunacy carrying 6.2.2931.
+     */
+    fun outdatedInstalled(): List<String> = assetList("apps").mapNotNull { dir ->
+        val bundled = try {
+            assets.open("apps/$dir/appinfo.json").bufferedReader().use { JSONObject(it.readText()) }
+        } catch (e: Exception) { return@mapNotNull null }
+        val id = bundled.optString("id", dir)
+        val installed = File(root, "${Packages.APPS}/$id/appinfo.json")
+        if (!installed.isFile) return@mapNotNull null
+        val version = try { JSONObject(installed.readText()).optString("version") }
+                      catch (e: Exception) { return@mapNotNull null }
+        id.takeIf { isNewerVersion(bundled.optString("version"), version) }
+    }
 
     /**
      * The names in a folder under /media/cryptofs/apps, installed packages, system apps and

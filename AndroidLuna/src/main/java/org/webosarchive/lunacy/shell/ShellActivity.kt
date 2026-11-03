@@ -322,6 +322,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             webos.prepare()
             files.warm()
             Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "webOS root ready in ${System.currentTimeMillis() - t} ms")
+            removeOutdatedPackages()
             // What the ROM brought: its services and their db8 kinds, and any system apps.
             // Activities run once the root's services are on the bus, as webOS's waited for boot.
             runOnUiThread { jsServices.reload(); nativeServices.reload(); appsChanged(); activityManager.enable(); powerService.enable(); afterFirstUse(); androidNotificationsChanged(); FontWarmer(this, server).warmWhenIdle() }
@@ -2625,6 +2626,22 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * Removes an installed app (the launcher's Remove): its windows close, then its package
      * goes, and the launcher, services and db8 kinds are reloaded.
      */
+    /**
+     * An upgrade of Lunacy can bring a newer copy of an app that was also installed as a
+     * package. The older package goes and the bundled copy takes over ([AppFiles.outdatedInstalled]);
+     * the app keeps its data. Waits for the removals, so the first app list is already right.
+     */
+    private fun removeOutdatedPackages() {
+        val outdated = files.outdatedInstalled()
+        if (outdated.isEmpty()) return
+        val done = java.util.concurrent.CountDownLatch(outdated.size)
+        for (id in outdated) {
+            Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "bundled $id is newer than the installed package: removing it")
+            packages.remove(id) { done.countDown() }
+        }
+        done.await(30, java.util.concurrent.TimeUnit.SECONDS)
+    }
+
     private fun remove(app: AppInfo) {
         // A pinned shortcut is unpinned; the app that pinned it stays.
         if (app.androidShortcut != null) { pinned.remove(app); return }

@@ -203,14 +203,36 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
     private var titleRight = 0f
     /** The dashboard drop-down is open: the notification group shows its highlighted tab. */
     var menuOpen = false
-        set(v) { field = v; invalidate() }
+        set(v) { if (field != v) { field = v; menuOverlay.to(if (v) 1f else 0f) } }
     /** The system menu is open: the system group shows its tab. */
     var systemMenuOpen = false
-        set(v) { field = v; invalidate() }
+        set(v) { if (field != v) { field = v; systemOverlay.to(if (v) 1f else 0f) } }
+
+    /**
+     * StatusBarItemGroup's overlayOpacity: one value that fades the group's menu, its tab (at
+     * the value) and its separator (at one less it) together, statusBarMenuFadeDuration
+     * (200 ms) linear, so the tab goes with the menu rather than before it.
+     */
+    private inner class Overlay {
+        var value = 0f
+            private set
+        private var anim: android.animation.ValueAnimator? = null
+        fun to(target: Float) {
+            anim?.cancel()
+            anim = android.animation.ValueAnimator.ofFloat(value, target).apply {
+                duration = SystemMenu.FADE_MS; interpolator = Easing.Linear
+                addUpdateListener { value = it.animatedValue as Float; invalidate() }
+                start()
+            }
+        }
+        val tabPaint get() = Paint().apply { alpha = (value * 255).toInt() }
+    }
+    private val menuOverlay = Overlay()
+    private val systemOverlay = Overlay()
 
     /** status-bar-menu-dropdown-tab.png, 3-slice with 11 px caps, 11 px beyond the group each side. */
-    private fun drawTab(c: Canvas, left: Float, right: Float) =
-        luna.nine(c, "statusBar/status-bar-menu-dropdown-tab.png", RectF(left - luna.px(11f), 0f, right + luna.px(11f), height.toFloat()), 11, 0, 11, 0)
+    private fun drawTab(c: Canvas, left: Float, right: Float, p: Paint? = null) =
+        luna.nine(c, "statusBar/status-bar-menu-dropdown-tab.png", RectF(left - luna.px(11f), 0f, right + luna.px(11f), height.toFloat()), 11, 0, 11, 0, p)
 
     /** Right edge of the notification group, where the dashboard drop-down aligns. */
     var notificationRight = 0f
@@ -438,7 +460,7 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
         c.drawRect(0f, 0f, width.toFloat(), h, fill)
         luna.tile(c, "statusBar/status-bar-background.png", RectF(0f, 0f, width.toFloat(), h))
         // The open system menu's tab, under the group (where the group began last frame).
-        if (systemMenuOpen) drawTab(c, systemLeft + luna.px(2f), width.toFloat())
+        if (systemOverlay.value > 0f) drawTab(c, systemLeft + luna.px(2f), width.toFloat(), systemOverlay.tabPaint)
 
         titleRight = drawTitle(c, h)
 
@@ -463,7 +485,7 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
         for (icon in info) x = drawSliding(c, icon, x - luna.px(5f) * icon.width, 0f)
         x -= luna.px(5f)
         systemLeft = clearOfCutout(x, luna.px(2f)) - luna.px(2f)
-        if (!systemMenuOpen) separator(c, systemLeft)
+        if (systemOverlay.value < 1f) separator(c, systemLeft, Paint().apply { alpha = ((1f - systemOverlay.value) * 255).toInt() })
         drawNotifications(c, systemLeft - luna.px(3f))
     }
 
@@ -538,11 +560,11 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
         if (notif.isNotEmpty() || b != null || notifGroupOpacity > 0f) {
             val p = Paint().apply { alpha = (notifGroupOpacity * 255).toInt() }
             // The open menu's tab goes behind the group, in place of its separator.
-            if (menuOpen) {
+            if (menuOverlay.value > 0f) {
                 val arrowW = (luna.image("statusBar/menu-arrow.png")?.width ?: 0) + luna.px(14f)
                 var left = x - arrowW
                 notif.values.forEach { i -> i.image?.let { b -> left -= (b.width * Math.min(1f, luna.px(26f) / b.height) + luna.px(5f)) * i.width } }
-                drawTab(c, left - luna.px(2f), notificationRight)
+                drawTab(c, left - luna.px(2f), notificationRight, Paint().apply { alpha = (menuOverlay.value * notifGroupOpacity * 255).toInt() })
             }
             val icons = Paint().apply { alpha = (notifGroupOpacity * notifIconsOpacity * 255).toInt() }
             x = drawArrowLeft(c, x, icons)
@@ -551,7 +573,7 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
             c.restore()
             if (b != null) x = minOf(x, bannerLeft)
             x = clearOfCutout(x, luna.px(2f)) - luna.px(2f)
-            if (!menuOpen) separator(c, x, p)
+            if (menuOverlay.value < 1f) separator(c, x, Paint().apply { alpha = ((1f - menuOverlay.value) * notifGroupOpacity * 255).toInt() })
         }
         notificationLeft = x
         if (b == null) return

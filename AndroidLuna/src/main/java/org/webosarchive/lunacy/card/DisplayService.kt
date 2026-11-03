@@ -120,6 +120,9 @@ class DisplayService(private val context: Context) {
     fun brightnessPercent(): Int = brightness()
     fun setBrightnessPercent(percent: Int) { write(Settings.System.SCREEN_BRIGHTNESS, rawFromPercent(percent)) }
 
+    /** [percent] as a window's brightness override, 0…1: the same backlight value the setting gets. */
+    fun overrideFromPercent(percent: Int): Float = rawFromPercent(percent) / 255f
+
     private fun brightness(): Int =
         percentFromRaw(Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS, 255))
 
@@ -127,9 +130,9 @@ class DisplayService(private val context: Context) {
      * A slider position as Android's own slider reads it. From Android 9 that slider is
      * perceptual: its position goes through a gamma curve (HLG, BrightnessUtils) to the linear
      * backlight value SCREEN_BRIGHTNESS holds, so half way along is a raw 22 of 255, not 128.
-     * Writing the percentage linearly put the menu's whole right half into the top eighth of
-     * what a person sees, and dragging down from full seemed to do nothing. Before Android 9
-     * the system's slider was linear, and so is this.
+     * Written linearly, the menu's whole right half was the top eighth of Android's slider.
+     * Before Android 9 the system's slider was linear, and so is this. (The screen following
+     * the slider at once is ShellActivity.setMenuBrightness's.)
      */
     private fun rawFromPercent(percent: Int): Int {
         val p = percent.coerceIn(1, 100) / 100.0

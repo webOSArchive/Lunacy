@@ -521,7 +521,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         })
         systemMenu.translationX = luna.px(SystemMenu.EDGE_OFFSET).toFloat()
         // SystemMenu::slotMenuBrightnessChanged: 0…1 along the slider is 1…100 %.
-        systemMenu.onBrightness = { v, _ -> displayService.setBrightnessPercent(Math.round(v * 99) + 1) }
+        systemMenu.onBrightness = { v, done -> setMenuBrightness(Math.round(v * 99) + 1, done) }
         statusBar.onSystemTap = { toggleSystemMenu() }
         statusBar.onSystemInfoChanged = { systemMenu.batteryPercent = statusBar.batteryPercent }
         root.addView(statusBar, FrameLayout.LayoutParams(MATCH_PARENT, luna.px(StatusBar.HEIGHT)))
@@ -1466,6 +1466,27 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         statusBar.post { (dashboards + alerts).forEach { it.rescale() } }
         // Their boxes are the other kind now (FormFactor.pre3Dashboards).
         dashboards.forEach { it.evaluateJavascript(AppServer.REFETCH_LAYOUT_IMAGES, null) }
+    }
+
+    /**
+     * The system menu's slider, which on the TouchPad set the backlight at once. Android's
+     * setting alone can't: with adaptive brightness on, Android ramps a lower value in at its
+     * slow rate, about 0.02 a second (measured on the Fold3, the Pixel Tablet too by codepoet),
+     * so the screen took most of a minute to follow a drag down. Android's own slider avoids
+     * that with a call only the system may make. A window's brightness override is ramped at
+     * the fast rate, so the shell's window holds the slider's value while it moves, the setting
+     * takes the same value (Android's slider agrees, and it lasts outside Lunacy), and the
+     * override goes a moment after the finger lifts, when adaptive brightness's target is that
+     * value already.
+     */
+    private val releaseBrightness = Runnable {
+        window.attributes = window.attributes.apply { screenBrightness = android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE }
+    }
+    private fun setMenuBrightness(percent: Int, done: Boolean) {
+        displayService.setBrightnessPercent(percent)
+        shellRoot?.removeCallbacks(releaseBrightness)
+        window.attributes = window.attributes.apply { screenBrightness = displayService.overrideFromPercent(percent) }
+        if (done) shellRoot?.postDelayed(releaseBrightness, BRIGHTNESS_HOLD_MS)
     }
 
     /** SystemMenu.qml's closeMenuTimer. A menu closed and opened again meanwhile stays. */
@@ -3017,6 +3038,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     companion object {
+        /** How long the slider's override outlasts the finger: the fast ramp (0.7 a second) crossing the whole range, and some. */
+        const val BRIGHTNESS_HOLD_MS = 3000L
         /**
          * The reference TouchPad's /etc/palm/luna-platform.conf, [LaunchAtBoot] and [KeepAlive]
          * (it overrides luna.conf's, which name only the phone app); used in phone mode too.

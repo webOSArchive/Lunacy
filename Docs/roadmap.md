@@ -5,7 +5,7 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-11-03)
 
-**0.9.0, a preview release** (2026-11-03, build 388), the last before the OAuth work for
+**0.9.0, a preview release** (2026-11-03, build 392), the last before the OAuth work for
 Exchange and Google mail. Everything since 0.8.4:
 
 - **System menu and settings:** the TouchPad's whole system menu, its brightness slider
@@ -23,7 +23,8 @@ Exchange and Google mail. Everything since 0.8.4:
     reminders is the owner's switch.
   - Import vCards and Import Calendar (.ics), from webOS CE, into the on-device account.
   - On a phone or a folded Fold, Calendar draws the Pre3's layout and Contacts a list or a
-    contact, both instead of Phone Zoom.
+    contact, both instead of Phone Zoom. Calendar's header keeps its round ends at any width,
+    and its view menu holds its size on older WebViews.
   - CE's rewrite of repeat expansion: repeats across daylight-saving changes are right, and
     Android's zone rules decide daylight saving.
   - Exchange time zones chosen as a TouchPad chose them (Sydney isn't Brisbane; US Eastern
@@ -33,7 +34,8 @@ Exchange and Google mail. Everything since 0.8.4:
     started cold (Calendar).
 - **PDK games:** Guitar Hero 5, Family Guy, The Oregon Trail and H.A.W.X. play ([pdk.md](pdk.md)
   §6i): taps land where touched in phone games, two games at once no longer crash the
-  shell, and intro movies end at once (there is no player) instead of hanging or crashing.
+  shell, and a game's intro movie ends at once instead of hanging or crashing (Lunacy's
+  stand-in for libSDL_cinema, the PDK's movie library, plays nothing yet).
 - **Web:** on a narrow card the progress bar runs along the bottom of the chrome.
 - **Installs:** an older installed copy of a bundled app no longer hides the newer bundled
   one (App Catalog stops asking to update itself).
@@ -44,8 +46,9 @@ Exchange and Google mail. Everything since 0.8.4:
   email no longer crashes Lunacy; music files with "+" in their names play; a fold no longer
   loses pending shell actions; Android's backup leaves out saved passwords; the first unit
   tests.
-- **Known issues:** intro movies are skipped; Video Player's volume keys don't switch to
-  media volume; NesEm HD quits on the Fold3's cover screen.
+- **Known issues:** PDK games' intro movies are skipped (libSDL_cinema plays nothing yet);
+  Video Player's volume keys don't switch to media volume; NesEm HD quits on the Fold3's
+  cover screen.
 
 **0.8.4, a mini release** of the fixes since 0.8.3 (2026-11-01, build 358 replacing build 352):
 
@@ -182,7 +185,7 @@ One line per milestone; the detail is in [fix-log.md](fix-log.md), the topic doc
   ends when an app opens, Photos' slideshow at the TouchPad's pace, App Catalog 6.2.2931.
 - **2026-11-01, 0.8.4:** a mini release: the six PDK emulators, Web's dialogs and narrow
   layout, Trust Always that lasts, hung cards, the bus socket.
-- **2026-11-03, 0.9.0** (build 388): a preview release: the system menu, settings shortcuts,
+- **2026-11-03, 0.9.0** (build 392): a preview release: the system menu, settings shortcuts,
   Just Type's app integration, the Android account, Contacts' and Calendar's imports and phone
   layouts, four more PDK games, and the code review's fixes before release.
 

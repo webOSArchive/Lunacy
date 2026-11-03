@@ -20,8 +20,8 @@
 	margin			: 0;
 	padding			: 0;
 	-webkit-box-sizing: border-box;
-	background		: url(images/palm-header.png) 0 0 no-repeat;
-	background-size	: 100% 50.67px;
+	background		: none;
+	z-index			: 0;
 	color			: #fff;
 	font-size		: 20px;
 	font-weight		: bold;
@@ -29,6 +29,26 @@
 	overflow		: hidden;
 	white-space		: nowrap;
 	text-overflow	: ellipsis;
+}
+/* [Lunacy] The header pill as a nine-slice, as Mojo drew its headers (palm-header's border
+   image): the round ends at their own size and only the middle stretched. Scaled whole to the
+   card's width, the ends came out as long points on a wide card (the Fold3's cover, landscape). */
+.calendar.pre3 .pre3-title:before,
+.calendar.pre3 .day > .header:before,
+.calendar.pre3 .month > .header > .date:before,
+.calendar.pre3 .week-view .week-header .date:before {
+	content			: "";
+	position		: absolute;
+	left			: 0;
+	right			: 0;
+	top				: 0;
+	height			: 50.67px;
+	-webkit-box-sizing: border-box;
+	border-style	: solid;
+	border-width	: 0 24px;
+	-webkit-border-image: url(images/palm-header.png) 0 36 0 36 stretch stretch;
+	z-index			: -1;
+	pointer-events	: none;
 }
 .calendar.pre3 .day > .header .date-normal,
 .calendar.pre3 .month > .header > .date .date-normal,
@@ -45,13 +65,12 @@
 .calendar.pre3 .month > .header			{ background: #e4e4e2; }
 .calendar.pre3 .day > .header {
 	height			: 59px;
-	background		: url(images/palm-header.png) 0 0 no-repeat, url(images/header-all-day-separator.png) left bottom repeat-x, #c8c7c7;
-	background-size	: 100% 50.67px, 1px 8px, auto;
+	background		: url(images/header-all-day-separator.png) left bottom repeat-x, #c8c7c7;
+	background-size	: 1px 8px, auto;
 }
 .calendar.pre3 .day.pre3-has-allday > .header {
 	height			: 52px;
-	background		: url(images/palm-header.png) 0 0 no-repeat #c8c7c7;
-	background-size	: 100% 50.67px;
+	background		: #c8c7c7;
 }
 .calendar.pre3 .week-view .day > .header	{ display: none; }
 
@@ -107,7 +126,10 @@
 .calendar.pre3 .Rbutton .enyo-radiobutton {
 	position		: relative;
 	display			: inline-block;
-	min-width		: 0;
+	/* [Lunacy] Enyo's radio buttons flex; an older engine (the Nexus 5's WebView 44) shrank
+	   them to their borders, 40 px, and the icons ran past the menu's end. Held at 59 px. */
+	-webkit-box-flex: 0;
+	min-width		: 59px;
 	width			: 59px;
 	height			: 50px;
 	margin			: 0;

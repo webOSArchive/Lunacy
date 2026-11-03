@@ -5,24 +5,47 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-11-03)
 
-**0.9.0, a preview release** (2026-11-03), the last before the OAuth work for Exchange and
-Google mail:
+**0.9.0, a preview release** (2026-11-03, build 388), the last before the OAuth work for
+Exchange and Google mail. Everything since 0.8.4:
 
-- **System menu:** the TouchPad's whole menu, with a brightness slider that comes down and
-  dims at once.
-- **Settings:** Bluetooth, Date & Time, Location Services and Regional Settings open
-  Android's screens; the Settings page starts in alphabetical order, as on webOS; Help shows
-  its tablet layout on a tablet.
-- **Just Type:** what apps add to it (searches, Quick Actions, content), web search engines,
-  and Palm's Just Type settings app.
+- **System menu and settings:** the TouchPad's whole system menu, its brightness slider
+  coming down as well as up and dimming at once, the tab fading with the menu. Bluetooth,
+  Date & Time, Location Services and Regional Settings open Android's screens under the
+  TouchPad's names and icons. The Settings page starts in alphabetical order, as on webOS;
+  Help shows its tablet layout on a tablet; First Use's last page says where the Android
+  account is.
+- **Just Type:** what apps add to it (searches, Quick Actions, content such as Memos,
+  Calendar events, bookmarks and history), web search engines to choose and switch, Palm's
+  Just Type settings app, and icons drawn smoothly.
+- **Contacts and Calendar:**
+  - An "Android" account copies Android's contacts and calendars into webOS, one way: Lunacy
+    never writes to Android. Off until added; each calendar can be chosen, and copying
+    reminders is the owner's switch.
+  - Import vCards and Import Calendar (.ics), from webOS CE, into the on-device account.
+  - On a phone or a folded Fold, Calendar draws the Pre3's layout and Contacts a list or a
+    contact, both instead of Phone Zoom.
+  - CE's rewrite of repeat expansion: repeats across daylight-saving changes are right, and
+    Android's zone rules decide daylight saving.
+  - Exchange time zones chosen as a TouchPad chose them (Sydney isn't Brisbane; US Eastern
+    keeps daylight saving), and Outlook's Windows zone names understood, so webcal events
+    no longer shift an hour after a clock change.
+  - People's details and events stay out of Android's log; the App Menu opens in an app
+    started cold (Calendar).
 - **PDK games:** Guitar Hero 5, Family Guy, The Oregon Trail and H.A.W.X. play ([pdk.md](pdk.md)
-  §6i); intro movies end at once, with no player.
+  §6i): taps land where touched in phone games, two games at once no longer crash the
+  shell, and intro movies end at once (there is no player) instead of hanging or crashing.
+- **Web:** on a narrow card the progress bar runs along the bottom of the chrome.
+- **Installs:** an older installed copy of a bundled app no longer hides the newer bundled
+  one (App Catalog stops asking to update itself).
 - **From the code review** ([code-review-2026-11-03.md](code-review-2026-11-03.md), its triage):
-  bus replies with a line separator no longer vanish, WebSQL refuses ATTACH, credentials stay
-  off another host after a redirect, caller names can't climb out of their folders, a fold no
-  longer loses delayed shell actions, Android's backup leaves out the key store, and the first
-  unit tests.
-- **Web on a narrow card:** the progress bar runs along the bottom of the chrome.
+  bus replies with a line separator no longer vanish; WebSQL refuses ATTACH; credentials
+  stay off another site after a redirect; names apps give can't climb out of their folders
+  (wallpapers, packages, sounds, images saved from Web); a malformed request or a crafted
+  email no longer crashes Lunacy; music files with "+" in their names play; a fold no longer
+  loses pending shell actions; Android's backup leaves out saved passwords; the first unit
+  tests.
+- **Known issues:** intro movies are skipped; Video Player's volume keys don't switch to
+  media volume; NesEm HD quits on the Fold3's cover screen.
 
 **0.8.4, a mini release** of the fixes since 0.8.3 (2026-11-01, build 358 replacing build 352):
 
@@ -159,8 +182,9 @@ One line per milestone; the detail is in [fix-log.md](fix-log.md), the topic doc
   ends when an app opens, Photos' slideshow at the TouchPad's pace, App Catalog 6.2.2931.
 - **2026-11-01, 0.8.4:** a mini release: the six PDK emulators, Web's dialogs and narrow
   layout, Trust Always that lasts, hung cards, the bus socket.
-- **2026-11-03, 0.9.0:** a preview release: the system menu, settings shortcuts, Just Type's
-  app integration, four more PDK games, and the code review's fixes before release.
+- **2026-11-03, 0.9.0** (build 388): a preview release: the system menu, settings shortcuts,
+  Just Type's app integration, the Android account, Contacts' and Calendar's imports and phone
+  layouts, four more PDK games, and the code review's fixes before release.
 
 ## Open, carried forward
 

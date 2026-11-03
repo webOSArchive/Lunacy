@@ -1,0 +1,10 @@
+Just Type (com.palm.app.searchpreferences 1.0.0), the Settings app that chooses what Just
+Type offers, as it is on the reference TouchPad (webOS CE 3.1.0), copied from its
+/usr/palm/applications on 2026-11-03.
+
+The app is here exactly as it was packaged, and Lunacy does not change it (rule 5 in
+CLAUDE.md). Everything it shows and sets is com.palm.universalsearch's, which Lunacy answers
+(card/UniversalSearch.kt); the shell's Just Type reads the same settings.
+
+Copyright Palm, Inc. / Hewlett-Packard; never released under an open licence; distributed by
+Lunacy as abandonware, like Mojo and the Prelude fonts.

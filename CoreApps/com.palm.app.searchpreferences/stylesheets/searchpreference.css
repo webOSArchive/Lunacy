@@ -1,0 +1,19 @@
+/* Search App */
+.search-row-title {
+	-webkit-border-top-right-radius: 9px;
+	-webkit-border-top-left-radius: 9px;
+	background-color: #cacaca;
+}
+.list-icon {
+	background-position: center center;
+	background-repeat: no-repeat;
+	-webkit-background-size: 48px;
+	width: 48px;
+	height: 48px;
+	margin: 5px 5px 0 0;
+	vertical-align: middle;
+}
+
+.item-checked {
+	background: url(../images/checkmark.png) center right no-repeat;
+}

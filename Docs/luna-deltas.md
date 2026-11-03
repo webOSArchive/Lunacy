@@ -476,17 +476,37 @@ Everything here is §3; Lunacy's is `Launcher.kt`.
 
 ### B6. Just Type
 
-**Done 2026-09-22 for the scope codepoet set: the launch results and "Search DuckDuckGo".** Drawn natively to the device app's measurements and with its art (`JustTypePanel`), compared with the reference TouchPad (`Workbench/results/b6-tp-justtype.png`, `b6-and-justtype2.png`). The filter tabs, "Search using…" and the rest are out of scope.
+**Done 2026-09-22 for the launch results and "Search DuckDuckGo"; on 2026-11-03 for what
+apps add to it, web search, and its settings app (codepoet: port app and web search, not
+the dead integrations; contacts later).** Drawn natively to the device app's measurements and
+with its art (`JustTypePanel`), compared with the reference TouchPad
+(`Workbench/results/b6-tp-justtype.png`, `jt-tp-ne*.png`, `jt-tp-com.png`,
+`jt-tp-content.png`) on the Galaxy Tab A7 Lite.
 
-- **LunaCE:** tapping the pill opens Just Type, a web app in a `Type_Launcher` window under
-  the status bar, cross-faded in over 150 ms; it searches apps and contacts and hands the
-  text to whichever app the user picks. §3.2, §3.3,
-  [OverlayWindowManager.cpp#L1837](https://github.com/webOSArchive/LunaCE/blob/master/Src/lunaui/launcher/OverlayWindowManager.cpp#L1837).
-- **Lunacy:** the pill is an `EditText`; Return is swallowed. On the roadmap.
-- **Do:** the useful subset without the web app: as text is typed, a list under the pill of
-  launch points whose title matches (`registry.launchPoints`), tap launches. Keep the
-  `universalSearchCrossFadeDuration` 150 ms. Anything more (Google search, contacts) is a
-  separate decision.
+- **LunaCE:** tapping the pill opens Just Type, a web app (com.palm.launcher,
+  luna-applauncher) in a `Type_Launcher` window under the status bar, cross-faded in over
+  150 ms. Apps add to it with `universalSearch` in appinfo.json: `search` (a row under Search
+  Using…), `action` (a Quick Action) and `dbsearch` (a db8 query run with the typed words, its
+  results counted under the app's name). `com.palm.universalsearch` keeps the lists and their
+  on/off state (`/var/luna/preferences/universalsearchprefs.db`), and Palm's Just Type app in
+  Settings (com.palm.app.searchpreferences) sets them. The device's search app has no app menu.
+- **Lunacy:** `UniversalSearch` builds the three lists from the installed apps' appinfo and
+  answers every call the settings app and the Web app make, with subscriptions that send the
+  whole list again with `"event"` `update`, `newapp` or `remove`, as measured. Palm's settings
+  app is bundled unchanged (CoreApps). `JustTypePanel` draws the tabs, Go to website, LAUNCH,
+  the content groups (Email's five or fewer open under it), Search <engine>, Search Using…
+  and Quick Actions (four, then More…), and a group's results under CONTENT; the default
+  engine has the focus ring when no app matches, and Return does what is focused. Its calls
+  go over the bus as com.palm.launcher, which the kinds' own permissions let read, and each
+  launch is built as Palm's code built it (a search's words URI-encoded, an action's as typed,
+  an email address to `mailto:`). Results follow the typing by 0.5 s and content by 0.5 s
+  more, the device's two debounces; before 2026-11-03 Lunacy's followed each keystroke.
+- **Left out:** Twitter (its search API is gone) and Maps (its app is gone), codepoet's call.
+- **Still to do:** contacts and Address Lookup (the CONTACTS tab shows "No Search Results
+  Found"); Recent Searches and "Start typing to search or create" before the first search
+  (Lunacy shows the plain background); the Suggest button (no engine has a suggest URL);
+  engines a page offers through OpenSearch (`getOptionalSearchList` is empty). "Go to
+  website" is drawn to the stylesheet (a 32-px line) but wasn't measured on the device.
 
 ### B7. The emulated card's chrome
 

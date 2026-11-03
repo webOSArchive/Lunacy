@@ -31,6 +31,7 @@ and each of those changes is marked `[Lunacy]` in its source.
 | Memos | `com.palm.app.notes` | 3.0.20 | Palm, HP webOS 3.x (abandonware) |
 | Photos & Videos | `com.palm.app.photos` | 3.2.0 | webOS Archive's modernized Photos & Videos (rotate and crop), from the webOS CE tree |
 | Regional Settings | `com.palm.app.languagepicker` | 1.0.0 | Lunacy's shortcut to Android's language settings |
+| Just Type | `com.palm.app.searchpreferences` | 1.0.0 | Palm, from the reference TouchPad (abandonware): what Just Type offers |
 | Screen & Lock | `com.palm.app.screenlock` | 1.0.0 | Palm, HP webOS 3.x (abandonware), with Lunacy's changes |
 | Sounds & Alerts | `com.palm.app.soundsandalerts` | 1.1.0 | Lunacy's own, in Palm's look |
 | Software Manager | `com.palm.app.swmanager` | 1.0.0 | Lunacy's own, in Palm's look: shows or hides each launcher app ([luna-deltas A25](../Docs/luna-deltas.md)) |

@@ -4,7 +4,11 @@ bg.png, search-header-bg.png, search-header-shadow.png, roundedbox.png,
 groupbox-app-focus.png, groupbox-app-focus-empty.png, underline.png and
 search-icon-duckduckgo.png: from Just Type itself (com.palm.launcher,
 /usr/lib/luna/system/luna-applauncher/images on the reference TouchPad, webOS CE 3.1.0),
-copied 2026-09-22. HP webOS system images, shipped as abandonware, like the Prelude fonts and
+copied 2026-09-22; and tab-button.png, filter-field-pill.png, groupbox-focus.png,
+search-icon-new.png, search-icon-{wikipedia,cnn,amazon,imdb}.png, bookmark-icon-48.png,
+history-icon-48.png, icon-email.png, go-url.png, calendar.png, goto-icon-32.png and
+empty-search.png from the same folder, copied 2026-11-03. search-icon-generic.png is from
+Just Type's settings app (com.palm.app.searchpreferences/images), copied 2026-11-03. HP webOS system images, shipped as abandonware, like the Prelude fonts and
 the TouchPad wallpapers.
 
 group-labeled.png, group-unlabeled.png and search-input-cancel.png: Enyo 1.0's Onyx theme

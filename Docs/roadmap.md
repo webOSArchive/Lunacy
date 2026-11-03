@@ -185,8 +185,7 @@ starting; some may have been settled since without a note.
 - **Shell (the 2026-09-22 candidates list):** the emulated card's chrome turning with the
   screen; the rest of the settings apps (Backup, Updates, and others codepoet keeps for Lunacy's own
   or hybrid apps; Bluetooth, Date & Time, Location Services and Regional Settings became
-  shortcuts to Android's screens on 2026-11-03); the system menu's VPN drawer (left out: Android keeps VPNs from apps); the rest of Just Type (filter tabs, "Search using…", contacts, content, actions, and
-  `searchApps`/`listLaunchPoints`/`universalsearch`); the border-image seams in Enyo dialogs
+  shortcuts to Android's screens on 2026-11-03); the system menu's VPN drawer (left out: Android keeps VPNs from apps); the rest of Just Type (contacts and Address Lookup, Recent Searches, the default engine's Suggest, OpenSearch engines from pages, and `searchApps`/`listLaunchPoints`; the filter tabs, Search Using…, Quick Actions, content and Palm's Just Type settings app came on 2026-11-03, luna-deltas B6); the border-image seams in Enyo dialogs
   and the Sampler's radio button; a test suite from the apps in fix-log.md, on WebView 37 and
   a current one; luna-deltas A9 and A10.
 

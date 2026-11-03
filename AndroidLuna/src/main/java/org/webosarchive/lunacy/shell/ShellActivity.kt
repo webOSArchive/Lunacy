@@ -229,6 +229,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var cards: CardLayer
     private lateinit var justType: JustType
     private lateinit var justTypePanel: JustTypePanel
+    /** com.palm.universalsearch: what Just Type offers besides apps, and its settings. */
+    private lateinit var universalSearch: org.webosarchive.lunacy.card.UniversalSearch
     private lateinit var quickLaunch: QuickLaunch
     private lateinit var launcher: Launcher
     private lateinit var tabDialog: TabDialog
@@ -456,6 +458,26 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         root.addView(justTypePanel, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
         justType.setOnClickListener { openJustType() }
         justTypePanel.onLaunch = { app -> closeJustType(); launch(app.id) }
+        // Just Type's other choices go over the bus as its own calls did, as com.palm.launcher.
+        justTypePanel.onLaunchApp = { id, params ->
+            closeJustType()
+            bus.call(JUST_TYPE, "palm://com.palm.applicationManager/launch", JSONObject().put("id", id).put("params", params).toString()) { r ->
+                Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "just type: launch $id: $r")
+            }
+        }
+        justTypePanel.onOpenTarget = { target ->
+            closeJustType()
+            bus.call(JUST_TYPE, "palm://com.palm.applicationManager/open", JSONObject().put("target", target).toString()) { r ->
+                Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "just type: open: $r")
+            }
+        }
+        justTypePanel.db = { method, params, reply ->
+            bus.call(JUST_TYPE, "palm://com.palm.db/$method", params.toString()) { r ->
+                reply(runCatching { JSONObject(r) }.getOrDefault(JSONObject().put("returnValue", false)))
+            }
+        }
+        justTypePanel.appFor = { id -> registry.get(id) }
+        if (::universalSearch.isInitialized) justTypePanel.search = universalSearch
         justTypePanel.onSearch = { url ->
             closeJustType()
             if (registry.get(BROWSER) != null) launch(BROWSER, JSONObject().put("target", url))
@@ -1152,6 +1174,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         for ((id, app) in after) if (id !in before) launchPointChanged(app, "added")
         for ((id, app) in before) if (id !in after) launchPointChanged(app, "removed")
         accountTemplatesChanged()
+        if (::universalSearch.isInitialized) universalSearch.appsChanged()
     }
 
     /** The account templates installed packages carry, as last seen: see [accountTemplatesChanged]. */
@@ -2619,7 +2642,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         bus.register("com.palm.applicationManager", "getResourceInfo") { _, p, reply -> reply(resourceInfo(p)) }
         bus.register("com.palm.applicationManager", "getHandlerForExtension") { _, p, reply -> reply(handlers.handlerForExtension(p)) }
         bus.register("com.palm.applicationManager", "getHandlerForUrl") { _, p, reply -> reply(handlers.handlerForUrl(p)) }
-        org.webosarchive.lunacy.card.UniversalSearch(this).register(bus)
+        universalSearch = org.webosarchive.lunacy.card.UniversalSearch(this) { registry.apps }.also {
+            it.register(bus)
+            it.onChange = { runOnUiThread { if (::justTypePanel.isInitialized) justTypePanel.reload() } }
+            if (::justTypePanel.isInitialized) justTypePanel.search = it
+        }
         // browserserver's own calls, which the Web app makes for its Preferences.
         bus.register("com.palm.browserServer", "clearCache") { _, _, reply ->
             android.webkit.WebView(this).apply { clearCache(true); destroy() }
@@ -3091,6 +3118,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val INSTALLERS = setOf("org.webosinternals.preware", "org.webosports.app.preware")
         /** webOS's Web app, which Lunacy ships; web links open in it. */
         const val BROWSER = "com.palm.app.browser"
+        /** Just Type's app id on a device (luna-applauncher): what its bus calls come from, and what db8 grants read to. */
+        const val JUST_TYPE = "com.palm.launcher"
         const val IPK_MIME = "application/vnd.webos.ipk"
     }
 

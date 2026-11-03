@@ -29,3 +29,16 @@ saving span a year can't hold a permanent change or a third change, as in Almaty
 
 The import parser keeps its own reading of the TouchPad's fields, because it has to stay identical
 to webos-webcal-synergy, so an import in such a year can be an hour out.
+
+## 0003: Windows zone names
+
+For CE to take; [its copy of the notes](https://github.com/webOSArchive/webos-doctor-ce/blob/main/Docs/LUNACY-WINDOWS-ZONE-NAMES.md).
+webcal 0.2.2 stored Outlook's `TZID` as it came ("Eastern Standard Time"). `getTimeZoneRules` leaves
+a zone it doesn't know out of its reply, on a TouchPad too, so `getOffset` answered 0 and a repeat
+kept its UTC time through a clock change: 09:45 Eastern became 08:45 after Nov 1. `windowsZones`
+(CLDR, territory 001) and `zoneName` map the name where the framework asks for rules and reads an
+offset. webcal 0.2.3 stores a real name, but events already stored keep the old one. Test:
+`Workbench/calendar-sweep/windows-zone-sweep.js`.
+
+CE took this as `b88ca03`, the same bytes. Drop this patch when CE's framework is next taken at that
+commit or later.

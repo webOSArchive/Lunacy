@@ -19,5 +19,7 @@ runs on a device except `fold-rules.mjs`.
 - **Weak spots:** the rule answers are `SystemService.yearRules` redone in JS, with "daylight" meaning
   the larger offset, so they're a stand-in for a device's. `Intl` is both the rule source and the
   expected answer here. The `Class` and `ObjectUtils.clone` stubs in `lib.js` are minimal.
+- **`windows-zone-sweep.js`:** a repeat stored with each Windows zone name against the same repeat with
+  its IANA name; a build without the names shows one hour out after a clock change.
 - **`fold-rules.mjs`, `score-rules.py`:** read `getTimeZoneRules` from a Lunacy card over DevTools for
   every zone in `zones.json`, then score the replies against Python's zone data.

@@ -130,8 +130,15 @@ class PdkHost(
             // couldn't find libpdl.so (2026-10-07).
             else listOf(emulator!!.path, "-L", lib.parentFile!!.path, "-E", "LD_LIBRARY_PATH=$libraryPath",
                 "-E", "LD_PRELOAD=/lib/liblunacy-preload.so")
+        // argv[0] as webOS gave it: Gameloft's games build paths from it in buffers sized for the
+        // TouchPad's, and Lunacy's folder is longer (Oregon Trail overran its movie's path and
+        // crashed). /proc/self/exe and getcwd stay Android's: apkenv finds itself through
+        // /proc/self/exe and stats its files with raw system calls the preload never sees, so a
+        // webOS path there broke Fruit Ninja.
+        val webosExe = PdkRuntime.webosPath(original, runtime.appsRoot)
+        val argv0 = if (webosExe == null || script) emptyList() else if (loader != null) listOf("--argv0", webosExe) else listOf("-0", webosExe)
         // The root's /bin/sh, busybox by the name it dispatches on, as a package script's.
-        val command = if (script) listOf(File(runtime.webos!!.root, "bin/sh").path, binary.path) else prefix + binary.path
+        val command = if (script) listOf(File(runtime.webos!!.root, "bin/sh").path, binary.path) else prefix + argv0 + binary.path
         // In the app's own folder, as LunaSysMgr started a native app; the binary may sit in a
         // subfolder (Transformers: transg1/transg1.exe) and still read its data from the top.
         val appDir = File(runtime.appsRoot, app.dir)
@@ -548,6 +555,12 @@ class PdkRuntime(private val context: Context, val appsRoot: File, val screenWid
          * ld-linux.so.3, which Lunacy doesn't have, so it exited at once on the Pixel Tablet
          * (2026-10-13). The native path runs the loader itself and never reads the name.
          */
+        /** [f], an installed app's file under [appsRoot], by its webOS path; null for any other. */
+        fun webosPath(f: File, appsRoot: File): String? {
+            val rel = f.path.removePrefix(appsRoot.path)
+            return if (rel != f.path && rel.startsWith("/")) "/" + AppServer.APPS.trimEnd('/') + rel else null
+        }
+
         /** Whether a package's file is a script (`#!`), run by its interpreter. */
         fun isScript(f: File): Boolean = head(f, 2).contentEquals(byteArrayOf('#'.code.toByte(), '!'.code.toByte()))
 

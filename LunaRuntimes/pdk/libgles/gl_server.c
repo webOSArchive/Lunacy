@@ -86,7 +86,10 @@ struct ctx {
 	int check_all;              /* files/pdk/glerrors: every command checked for an error */
 };
 
-static struct ctx *cur;   /* the context the replay is for (one app at a time per thread) */
+/* The replay's state is per thread, and each app has its own GL thread (PdkGl): two PDK apps
+   up at once (Guitar Hero 5 left in its card, Family Guy started) shared one reply buffer,
+   one set of client arrays and one framebuffer map, and the shell crashed. */
+static __thread struct ctx *cur;   /* the context the replay is for (one app at a time per thread) */
 
 static void missing(const char *name) { LOGW("pdk gl: the device's GLES %d has no %s; skipped", GLES_VERSION, name); }
 
@@ -95,7 +98,7 @@ struct reader { const uint8_t *p, *end; };
 static uint32_t get_u32(struct reader *r) { uint32_t v = 0; if (r->p + 4 <= r->end) { memcpy(&v, r->p, 4); r->p += 4; } return v; }
 static float get_f32(struct reader *r) { float v = 0; if (r->p + 4 <= r->end) { memcpy(&v, r->p, 4); r->p += 4; } return v; }
 /* A copied pointer argument: [u32 len][bytes]; NULL when the app passed NULL. */
-static uint32_t blob_len;   /* the last blob's length, for the checks before an upload */
+static __thread uint32_t blob_len;   /* the last blob's length, for the checks before an upload */
 static const void *get_blob(struct reader *r, uint32_t present)
 {
 	uint32_t len = get_u32(r), padded = (len + 3) & ~3u;   /* the client pads blobs to 4 */
@@ -107,9 +110,9 @@ static const void *get_blob(struct reader *r, uint32_t present)
 }
 
 /* ---- arrays: the app's client-side arrays arrive with each draw ---- */
-static uint8_t *index_scratch; static size_t index_cap;   /* a draw's indices, when in the app's memory */
-static GLuint element_bound, array_bound;
-static int client_unit;
+static __thread uint8_t *index_scratch; static __thread size_t index_cap;   /* a draw's indices, when in the app's memory */
+static __thread GLuint element_bound, array_bound;
+static __thread int client_unit;
 #define ARRAYS 10
 struct array { int enabled; GLint size; GLenum type; GLsizei stride; uint32_t offset; uint8_t *data; size_t cap; int fresh; GLboolean normalized;
 	GLuint buffer;   /* the buffer object the pointer was set with, 0 for an array in the app's memory */ };
@@ -117,7 +120,7 @@ struct array { int enabled; GLint size; GLenum type; GLsizei stride; uint32_t of
 #undef ARRAYS
 #define ARRAYS 16   /* vertex attributes */
 #endif
-static struct array arrays[ARRAYS];
+static __thread struct array arrays[ARRAYS];
 
 /* An ARRAY command (GLES 1.1: slot, size, stride, type, 0, 0) or ATTRIB command (GLES 2:
    index, size, type, normalized, stride), then the bytes; slot 255 is a draw's indices. */
@@ -205,7 +208,7 @@ static void apply_arrays(void)
 #endif
 
 /* ---- uploads ---- */
-static GLint unpack_alignment = 4;
+static __thread GLint unpack_alignment = 4;
 static int has_bgra = -1;
 static size_t upload_bytes(GLsizei w, GLsizei h, GLenum format, GLenum type)
 {
@@ -227,7 +230,7 @@ static size_t upload_bytes(GLsizei w, GLsizei h, GLenum format, GLenum type)
  * (GL_EXT_texture_format_BGRA8888, which the TouchPad's GPU had) is swizzled to RGBA on a
  * device whose GLES 1.1 hasn't it. Returns the pixels to use, or NULL to skip.
  */
-static uint8_t *swizzled; static size_t swizzled_cap;
+static __thread uint8_t *swizzled; static __thread size_t swizzled_cap;
 static const void *upload(const char *name, GLsizei w, GLsizei h, GLint *internalformat, GLenum *format, GLenum type, const void *pixels)
 {
 	if (!pixels) return NULL;
@@ -290,17 +293,17 @@ static void (*fb_renderbuffer)(GLenum, GLenum, GLenum, GLuint);
 static GLenum (*fb_status)(GLenum);
 static void (*gen_fb)(GLsizei, GLuint *);
 static void (*gen_rb)(GLsizei, GLuint *);
-static GLuint app_fb, app_depth;   /* the app's framebuffer 0, and its depth buffer */
+static __thread GLuint app_fb, app_depth;   /* the app's framebuffer 0, and its depth buffer */
 /* The framebuffer the app has bound, by its real name, as the replay binds it: the blit puts
    it back (a query can't say: Tegra 3's GLES 1 refuses GL_FRAMEBUFFER_BINDING_OES). Where's
    My Water renders into a framebuffer of its own and leaves it bound across the swap. */
-static GLuint fb_bound;
+static __thread GLuint fb_bound;
 
 /* The app's names to the driver's: framebuffers and renderbuffers (made when first bound),
    and GLES 2's shaders and programs (made when the app creates one, add_name). */
 enum { RB_NAMES, FB_NAMES, PROG_NAMES };
 struct names { GLuint *app, *real; int n, cap; int fb; };
-static struct names fb_names = { .fb = FB_NAMES }, rb_names = { .fb = RB_NAMES }, prog_names = { .fb = PROG_NAMES };
+static __thread struct names fb_names = { .fb = FB_NAMES }, rb_names = { .fb = RB_NAMES }, prog_names = { .fb = PROG_NAMES };
 static void add_name(struct names *t, GLuint name, GLuint real);
 static GLuint map_name(struct names *t, GLuint name, int make)
 {
@@ -596,7 +599,7 @@ static int blit(struct ctx *c, int shown)
 	return ok;
 }
 
-static uint8_t *replies; static size_t replies_len, replies_cap;
+static __thread uint8_t *replies; static __thread size_t replies_len, replies_cap;
 static void reply(uint32_t type, const void *payload, uint32_t len)
 {
 	if (replies_len + 12 + len > replies_cap) { replies_cap = (replies_len + 12 + len) * 2; replies = realloc(replies, replies_cap); }
@@ -608,7 +611,7 @@ static void reply(uint32_t type, const void *payload, uint32_t len)
 #if GLES_VERSION == 2
 /* ---- GLES 2's queries: the answer is [u32 return value], then [u32 length][bytes] per output ---- */
 #define LPDK_GL_RESULT 9
-static size_t answer_at;   /* where the answer's header is in the replies */
+static __thread size_t answer_at;   /* where the answer's header is in the replies */
 static void answer_begin(uint32_t ret)
 {
 	answer_at = replies_len;
@@ -624,7 +627,7 @@ static void answer_add(const void *p, uint32_t n)
 	memcpy(replies + answer_at + 8, &len, 4);
 }
 /* A string output's buffer, the size the app gave. */
-static char *out_str; static size_t out_cap;
+static __thread char *out_str; static __thread size_t out_cap;
 static char *out_buffer(GLsizei n)
 {
 	if (n <= 0) return NULL;
@@ -644,7 +647,7 @@ static void check_compile(GLuint shader)
 	for (char *p = src; *p; p++) if (*p == '\n') *p = ' ';
 	LOGW("pdk gl: a shader didn't compile: %s; source: %.400s", log, src);
 }
-static int trace_programs;   /* files/pdk/glerrors: programs' lives logged too */
+static __thread int trace_programs;   /* files/pdk/glerrors: programs' lives logged too */
 
 /* The app's name for a driver's object, for a query that answers with one. The app's names
    for programs, shaders, framebuffers and renderbuffers aren't the driver's (map_name), and a

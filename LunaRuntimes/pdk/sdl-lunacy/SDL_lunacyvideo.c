@@ -260,6 +260,10 @@ SDL_Surface *LUNACY_SetVideoMode(_THIS, SDL_Surface *current, int width, int hei
 		if (getenv("LUNACY_PDK_FORCE_OGL_W") && getenv("LUNACY_PDK_FORCE_OGL_H")) {
 			width = atoi(getenv("LUNACY_PDK_FORCE_OGL_W"));
 			height = atoi(getenv("LUNACY_PDK_FORCE_OGL_H"));
+			/* SDL set the mouse's range to the size asked for before calling here; touches
+			   come in the forced size. Guitar Hero 5 asks for 2 x 2, and every tap landed
+			   on (1, 1). */
+			SDL_SetMouseRange(width, height);
 		}
 		/* The GL library draws and the shell shows it; the screen surface still gets
 		   pixels of its own, because SDL clears and blits the screen surface as it sets

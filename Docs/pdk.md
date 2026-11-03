@@ -986,6 +986,57 @@ it reads the accelerometer's joystick events in its games list. Turning a device
 tested. SMB's Start didn't take on some early presses and did later on the same file, not
 explained; on the TouchPad a press at 21 s with no gamepad saved did nothing, as expected.
 
+## 6i. Glu's and Gameloft's phone games: touches, two GL apps, movies, the app's own path, 2026-11-03
+
+Four of codepoet's "Broken" folder on the Galaxy Z Fold3 (arm64, native through libenosys), all
+phone games run under Portability (§6f) at 320 x 480: Guitar Hero 5 Mobile and Family Guy (Glu),
+The Oregon Trail and H.A.W.X. (Gameloft). Each now reaches its menus and play. Four general fixes,
+none naming an app.
+
+**Every tap on (1, 1).** Glu's engine sets its mode with `SDL_SetVideoMode(2, 2, 16, SDL_OPENGL)`
+and draws through GLES. Portability forces the surface to the phone's 320 x 480, as libnapp's
+forced OGL resolution did, but SDL 1.2 sets the mouse's range to the size *asked for* before the
+driver runs (`SDL_SetMouseRange(width, height)` in `SDL_video.c`), so every touch was clamped to
+(1, 1). Guitar Hero read each tap as "next option" and its first menu never went away. The driver
+now sets the range to the forced size.
+
+**Two PDK apps at once crashed the shell.** With Guitar Hero left in its card, Family Guy's first
+tap ended Lunacy: `ArrayIndexOutOfBoundsException` in `PdkGl.replay`, a reply of 24 bytes into an
+array of 12. The GL server kept the replay's state in statics (the reply buffer, client arrays,
+bound buffers, the app's framebuffer and name maps), and each app replays on its own thread. That
+state is now per thread (`__thread`); the device-capability caches stay shared.
+
+**Movies.** Lunacy's `libSDL_cinema` answered failure everywhere. Palm's API (the PDK's
+`SDL_cinema.h`, and the TouchPad's `/usr/lib/libSDL_cinema.so`, pulled and read): `CIN_Init` and
+`CIN_LoadCIN(url)` answer 1 for success, `CIN_Play` is void, and the end of a movie is an event:
+`SDL_USEREVENT`, `user.code` `SDL_CINEMAEVENT` (0xE000), `user.data1` `SDL_CINEMA_EOS` (0), or
+`SDL_CINEMA_ERR` (1) on an error. H.A.W.X. said "can't int" (init) and waited for a movie that never
+ended; Oregon Trail went on with the movie it was refused. The stand-in now keeps the contract:
+init and load succeed, and play ends the movie at once with the EOS event. There is still no
+player; a game shows no intro.
+
+**The app's own path.** Oregon Trail then crashed jumping to `0x2e6f676e`, the text "ngo." of a
+path: it builds its movie's URL from its folder in a buffer sized for the TouchPad's
+`/media/cryptofs/apps/usr/palm/applications/...`, and Lunacy's folder,
+`/data/user/0/org.webosarchive.lunacy/files/cryptofs/apps/...`, is 36 characters longer. Oregon
+Trail takes it from `argv[0]`, which the loader now sets to the binary's webOS path (`--argv0`;
+qemu's `-0`); the preload maps that path back through the root's `/media/cryptofs/apps` link. A start
+script keeps its own. `/proc/self/exe` and `getcwd` still name Android's folder. Giving them the
+webOS path too broke Fruit Ninja: apkenv finds its APK through `/proc/self/exe`, and its libc
+wrappers `stat` with raw system calls (`__NR_stat64`, `__NR_fstatat64`) that never reach the
+preload, so a `/media/...` path doesn't exist for them and Mortar's file manager died
+(`std::bad_alloc`). On a TouchPad that path was real; here it can only be presented where every
+reader goes through glibc.
+
+**How it was found.** `Workbench/pdk-evtrace.c`, preloaded after Lunacy's own through
+`files/pdk/env`, logs the game's `SDL_SetVideoMode`, `PDL_SetOrientation`, mouse events as
+`SDL_WaitEvent` and `SDL_PollEvent` return them, and on SIGSEGV the faulting PC and LR with the
+library each is in. A hang showed as the main thread running (`/proc/<pid>/task/*/stat`) while
+another sat in `sock_wait_for_wmem`, which here was only audio being paced.
+
+**Open.** N.O.V.A. 2 and Asphalt 5, from the same folder, were not tried; Dead Space's noise
+(§6h) is as it was. No movie plays; a player is a later piece of work.
+
 ## 7. Still to do on the first path
 
 - A visible hybrid plugin's picture, drawn over its object in the page (no app needing it

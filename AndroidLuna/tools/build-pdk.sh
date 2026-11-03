@@ -386,8 +386,10 @@ $CC -O2 -funroll-loops -fomit-frame-pointer -DNDEBUG -D_GNU_SOURCE=1 -DAL_BUILD_
   $A/Alc/alcThread.c $A/Alc/bs2b.c $A/Alc/wave.c $A/Alc/sdl.c \
   -o "$OUT/lib/libopenal.so.1" -lrt -ldl -lm
 
-# libSDL_cinema: Palm's video player for a game's movies. A stub that has no movie to play.
-$CC -O2 -shared -fPIC -Wl,-soname,libSDL_cinema.so "$SRC/libcinema/cinema.c" -o "$OUT/lib/libSDL_cinema.so"
+# libSDL_cinema: Palm's video player for a game's movies. No player: every movie ends at once,
+# with the end-of-stream event the real one sends.
+$CC -O2 -shared -fPIC -Wl,-soname,libSDL_cinema.so -I$WORK/sdl-out/include/SDL "$SRC/libcinema/cinema.c" \
+  -o "$OUT/lib/libSDL_cinema.so" -L"$OUT/lib" -l:libSDL-1.2.so.0
 
 # ---- the glibc runtime ----
 L=$WORK/sysroot/lib/arm-linux-gnueabi

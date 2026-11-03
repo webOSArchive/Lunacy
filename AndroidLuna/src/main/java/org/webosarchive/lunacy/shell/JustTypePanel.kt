@@ -199,6 +199,8 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
     private val divDark = Paint().apply { color = Color.rgb(0x1d, 0x20, 0x23) }
     private val divLight = Paint().apply { color = Color.rgb(0x60, 0x64, 0x68) }
     private val held = Paint().apply { color = Color.rgb(0x21, 0x23, 0x25) }
+    /** Icons are scaled from their TouchPad size to the screen's; filtered, as WebKit scaled them, or they come out jagged. */
+    private val iconPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
 
     init {
         setWillNotDraw(false)
@@ -565,7 +567,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         if (searched) drawTabs(c)
         luna.tile(c, "justtype/search-header-shadow.png", RectF(0f, topOfList(), width.toFloat(), topOfList() + px(SHADOW_H)))
         luna.nine(c, "justtype/roundedbox.png", fieldRect(), 18, 18, 18, 17)
-        if (field.text.isNotEmpty()) luna.image("justtype/search-input-cancel.png")?.let { c.drawBitmap(it, null, clearRect(), null) }
+        if (field.text.isNotEmpty()) luna.image("justtype/search-input-cancel.png")?.let { c.drawBitmap(it, null, clearRect(), iconPaint) }
     }
 
     private fun drawGroup(c: Canvas, g: Group, term: String) {
@@ -596,7 +598,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
             val r = tileRect(g, i)
             luna.nine(c, if (i == 0) "justtype/groupbox-app-focus.png" else "justtype/groupbox-app-focus-empty.png", r, 6, 6, 6, 6)
             val half = px(32f); val cx = r.centerX(); val iy = r.top + px(37f)
-            (luna.appIcon(app) ?: luna.image("default-app-icon.png"))?.let { c.drawBitmap(it, null, RectF(cx - half, iy - half, cx + half, iy + half), null) }
+            (luna.appIcon(app) ?: luna.image("default-app-icon.png"))?.let { c.drawBitmap(it, null, RectF(cx - half, iy - half, cx + half, iy + half), iconPaint) }
             drawTitle(c, app.title, term, cx, r.top + px(88f), px(75f))
         }
     }
@@ -618,14 +620,14 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
     /** A 48-px list icon, 10 px in, and the label at 69 px, as LaunchAndSearchItem and ActionItem lay out. */
     private fun drawItemRow(c: Canvas, r: RectF, icon: Bitmap?, text: String) {
         val s = px(48f); val l = r.left + px(10f)
-        icon?.let { c.drawBitmap(it, null, RectF(l, r.centerY() - s / 2, l + s, r.centerY() + s / 2), null) }
+        icon?.let { c.drawBitmap(it, null, RectF(l, r.centerY() - s / 2, l + s, r.centerY() + s / 2), iconPaint) }
         val t = TextUtils.ellipsize(text, TextPaint(rowText), px(600f).coerceAtMost(r.right - r.left - px(81f)), TextUtils.TruncateAt.END).toString()
         c.drawText(t, r.left + px(69f), centreBaseline(r, rowText), rowText)
     }
 
     private fun drawWebRow(c: Canvas, r: RectF) {
         val s = px(32f); val l = r.left + px(12f)
-        luna.image("justtype/goto-icon-32.png")?.let { c.drawBitmap(it, null, RectF(l, r.centerY() - s / 2, l + s, r.centerY() + s / 2), null) }
+        luna.image("justtype/goto-icon-32.png")?.let { c.drawBitmap(it, null, RectF(l, r.centerY() - s / 2, l + s, r.centerY() + s / 2), iconPaint) }
         c.drawText("Go to website", l + s + px(10f), centreBaseline(r, rowText), rowText)
     }
 
@@ -634,13 +636,13 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         val s = px(48f); val l = r.left + px(10f)
         val box = RectF(l, r.centerY() - s / 2, l + s, r.centerY() + s / 2)
         val fixed = when (item.id) { EMAIL, "com.palm.app.enyo-email" -> "justtype/icon-email.png"; BROWSER -> "justtype/go-url.png"; else -> null }
-        if (fixed != null) luna.image(fixed)?.let { c.drawBitmap(it, null, box, null) }
+        if (fixed != null) luna.image(fixed)?.let { c.drawBitmap(it, null, box, iconPaint) }
         else {
             // A background image, not scaled: the app's 64-px icon, its middle 48 px showing.
             val icon = appFor(item.id)?.let { luna.appIcon(it) } ?: luna.image("justtype/calendar.png")
             icon?.let { b ->
                 val w = px(64f); c.save(); c.clipRect(box)
-                c.drawBitmap(b, null, RectF(box.centerX() - w / 2, box.centerY() - w / 2, box.centerX() + w / 2, box.centerY() + w / 2), null)
+                c.drawBitmap(b, null, RectF(box.centerX() - w / 2, box.centerY() - w / 2, box.centerX() + w / 2, box.centerY() + w / 2), iconPaint)
                 c.restore()
             }
         }
@@ -680,7 +682,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
             }
             icon?.let { luna.image(it) }?.let { b ->
                 val s = px(48f); val rr = r.right - px(12f)
-                c.drawBitmap(b, null, RectF(rr - s, r.centerY() - s / 2, rr, r.centerY() + s / 2), null)
+                c.drawBitmap(b, null, RectF(rr - s, r.centerY() - s / 2, rr, r.centerY() + s / 2), iconPaint)
             }
         }
     }
@@ -731,16 +733,16 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         val k = b.width / 80f
         val y0 = (top * k).toInt(); val y1 = ((top + TABS_H) * k).toInt().coerceAtMost(b.height)
         val cap = (34 * k).toInt(); val capW = px(34f)
-        c.drawBitmap(b, Rect(0, y0, cap, y1), RectF(r.left, r.top, r.left + capW, r.bottom), null)
-        c.drawBitmap(b, Rect(cap, y0, b.width - cap, y1), RectF(r.left + capW, r.top, r.right - capW, r.bottom), null)
-        c.drawBitmap(b, Rect(b.width - cap, y0, b.width, y1), RectF(r.right - capW, r.top, r.right, r.bottom), null)
+        c.drawBitmap(b, Rect(0, y0, cap, y1), RectF(r.left, r.top, r.left + capW, r.bottom), iconPaint)
+        c.drawBitmap(b, Rect(cap, y0, b.width - cap, y1), RectF(r.left + capW, r.top, r.right - capW, r.bottom), iconPaint)
+        c.drawBitmap(b, Rect(b.width - cap, y0, b.width, y1), RectF(r.right - capW, r.top, r.right, r.bottom), iconPaint)
     }
 
     /** "No Search Results Found" under empty-search.png, as DbSearch and ContactSearch show it. */
     private fun drawNoResults(c: Canvas) {
         val s = px(176f)
         val top = topOfList() + px(24f) + px(100f)
-        luna.image("justtype/empty-search.png")?.let { c.drawBitmap(it, null, RectF(width / 2f - s / 2, top, width / 2f + s / 2, top + s), null) }
+        luna.image("justtype/empty-search.png")?.let { c.drawBitmap(it, null, RectF(width / 2f - s / 2, top, width / 2f + s / 2, top + s), iconPaint) }
         c.drawText("No Search Results Found", width / 2f, top + s + px(100f) - px(80f) - emptyText.ascent(), emptyText)
     }
 

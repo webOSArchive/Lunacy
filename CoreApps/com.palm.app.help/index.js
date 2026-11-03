@@ -10,7 +10,9 @@
 	enyo.application = {
 		headless: window,			// Save the top window
 		deviceInfo: deviceInfo,		// Store deviceInfo		
-		isTablet: (deviceInfo && deviceInfo.screenWidth === 1024), // Check if we are on a Topaz device
+		// [Lunacy] A TouchPad's screen is 1024 wide; Lunacy reports a tablet's own width, and
+		// says TouchPad (phone mode says Pre3). The tablet UI wherever Lunacy is a TouchPad.
+		isTablet: (deviceInfo && (deviceInfo.screenWidth === 1024 || deviceInfo.modelNameAscii === "TouchPad")), // Check if we are on a Topaz device
 		locale: "en-us",			// Default to English/US
 		countryCode: "us",			// Default to US
 		languageCode: "en",			// Default to English

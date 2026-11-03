@@ -5,5 +5,8 @@ Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence; di
 Lunacy as abandonware, like Mojo, the Prelude fonts and the TouchPad wallpapers: no owner has
 asserted rights since webOS was discontinued.
 
-The app is here exactly as it was packaged, and Lunacy does not change it (rule 5 in
-CLAUDE.md). Its articles come from webOS Archive's help host.
+The app is as it was packaged but for one change, codepoet's exception to rule 5 in
+CLAUDE.md (2026-11-03), marked [Lunacy] in index.js: it chose its tablet UI only on a screen
+exactly 1024 wide, the TouchPad's, so on any other tablet it showed its phone UI. It now also
+takes the tablet UI wherever Lunacy says it is a TouchPad (a tablet; phone mode says Pre3).
+Its articles come from webOS Archive's help host.

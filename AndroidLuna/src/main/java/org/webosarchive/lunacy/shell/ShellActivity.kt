@@ -133,6 +133,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // already out of sight, so the screen saver's end doesn't send it there again.
         if (interactive) cardArrivedInExhibition()
         if (interactive && ::cards.isInitialized) cards.maximized?.window?.let { it.setStageActive(false); coveredCard = it }
+        // A launch that Android answers (a settings shortcut, an Android app) covers the shell
+        // while the launcher is still sliding away, and a stopped window's animation doesn't
+        // finish: the launcher came back on screen but closed, deaf to taps. Finish it now.
+        if (::launcher.isInitialized && !launcherOpen && launcher.visibility == View.VISIBLE) {
+            launcher.animate().cancel()
+            launcher.translationY = launcher.height.toFloat()
+            launcher.visibility = View.INVISIBLE; launcher.cancelLaunchFeedback(); exitEditMode()
+        }
         started = false; super.onStop()
     }
     /** The maximized card that another Android app covered, to be activated again ([onStop]). */

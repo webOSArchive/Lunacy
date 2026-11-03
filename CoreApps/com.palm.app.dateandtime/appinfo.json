@@ -1,0 +1,20 @@
+{
+	"id": "com.palm.app.dateandtime",
+	"version": "1.0.0",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Date & Time",
+	"icon": "icon.png",
+	"splashicon": "icon-256x256.png",
+	"uiRevision": 2,
+	"keywords": [
+		"Clock",
+		"Settings",
+		"Preferences",
+		"Time zone",
+		"Date",
+		"Time"
+	],
+	"lunacyAndroidSettings": "date"
+}

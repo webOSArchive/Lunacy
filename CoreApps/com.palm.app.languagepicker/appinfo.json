@@ -1,0 +1,22 @@
+{
+	"id": "com.palm.app.languagepicker",
+	"version": "1.0.0",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Regional Settings",
+	"icon": "icon.png",
+	"splashicon": "icon-256x256.png",
+	"uiRevision": 2,
+	"keywords": [
+		"Settings",
+		"Preferences",
+		"Languages",
+		"Format",
+		"Country",
+		"Countries",
+		"Region",
+		"Language"
+	],
+	"lunacyAndroidSettings": "locale"
+}

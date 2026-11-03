@@ -13,20 +13,24 @@ and each of those changes is marked `[Lunacy]` in its source.
 | App | Id | Version | From |
 |---|---|---|---|
 | Accounts | `com.palm.app.accounts` | 3.1.1 | Open webOS (Apache 2.0), as on the reference TouchPad (webOS CE 3.1.0) |
+| Bluetooth | `com.palm.app.bluetooth` | 1.0.0 | Lunacy's shortcut to Android's Bluetooth settings |
 | Web | `com.palm.app.browser` | 1.0.0 | Palm, from the reference TouchPad (abandonware) |
 | Calculator | `com.palm.app.calculator` | 3.2.0 | webOS Archive's modernized Calculator (webOS CE) |
 | Calendar | `com.palm.app.calendar` | 3.2.0 | webOS Archive's modernized Calendar, from the webOS CE tree |
 | Clock | `com.palm.app.clock` | 3.1.1904 | Palm, HP webOS 3.x (abandonware) |
 | Android | `org.webosarchive.lunacy.androidaccount` | 1.0.0 | Lunacy's own: the hidden page and account type that mirror Android's contacts and calendars into Contacts and Calendar |
 | Contacts | `com.palm.app.contacts` | 3.2.0 | webOS Archive's modernized Contacts, from the webOS CE tree |
+| Date & Time | `com.palm.app.dateandtime` | 1.0.0 | Lunacy's shortcut to Android's date and time settings |
 | Device Info | `com.palm.app.deviceinfo` | 1.0.0 | Lunacy's own, in Palm's look |
 | Email | `com.palm.app.email` | 3.0.13600 | Palm, HP webOS 3.x (abandonware), with Lunacy's phone-layout changes |
 | App Catalog | `com.palm.app.enyo-findapps` | 6.2.2931 | webOS Archive's restoration of the TouchPad's own |
 | Exhibition | `com.palm.app.exhibitionpreferences` | 1.0.0 | Palm, HP webOS 3.x (abandonware) |
 | Help | `com.palm.app.help` | 2.0.0 | Palm, HP webOS 3.x, content host moved to help.webosarchive.org |
 | Messaging | `com.palm.app.messaging` | 3.2.0 | Palm, HP webOS 3.0.5 (abandonware), with the webOS CE project's changes |
+| Location Services | `com.palm.app.location` | 1.0.0 | Lunacy's shortcut to Android's location settings |
 | Memos | `com.palm.app.notes` | 3.0.20 | Palm, HP webOS 3.x (abandonware) |
 | Photos & Videos | `com.palm.app.photos` | 3.2.0 | webOS Archive's modernized Photos & Videos (rotate and crop), from the webOS CE tree |
+| Regional Settings | `com.palm.app.languagepicker` | 1.0.0 | Lunacy's shortcut to Android's language settings |
 | Screen & Lock | `com.palm.app.screenlock` | 1.0.0 | Palm, HP webOS 3.x (abandonware), with Lunacy's changes |
 | Sounds & Alerts | `com.palm.app.soundsandalerts` | 1.1.0 | Lunacy's own, in Palm's look |
 | Software Manager | `com.palm.app.swmanager` | 1.0.0 | Lunacy's own, in Palm's look: shows or hides each launcher app ([luna-deltas A25](../Docs/luna-deltas.md)) |

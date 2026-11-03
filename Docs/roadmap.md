@@ -183,8 +183,9 @@ starting; some may have been settled since without a note.
   in the rootfs can't be removed from the launcher; Enyo's libraries other than `networkproxy`
   are upstream's, not the TouchPad's newer ones.
 - **Shell (the 2026-09-22 candidates list):** the emulated card's chrome turning with the
-  screen; the rest of the settings apps (Date & Time, Language, Backup, Accounts, Updates,
-  Location); the system menu's VPN drawer (left out: Android keeps VPNs from apps); the rest of Just Type (filter tabs, "Search using…", contacts, content, actions, and
+  screen; the rest of the settings apps (Backup, Updates, and others codepoet keeps for Lunacy's own
+  or hybrid apps; Bluetooth, Date & Time, Location Services and Regional Settings became
+  shortcuts to Android's screens on 2026-11-03); the system menu's VPN drawer (left out: Android keeps VPNs from apps); the rest of Just Type (filter tabs, "Search using…", contacts, content, actions, and
   `searchApps`/`listLaunchPoints`/`universalsearch`); the border-image seams in Enyo dialogs
   and the Sampler's radio button; a test suite from the apps in fix-log.md, on WebView 37 and
   a current one; luna-deltas A9 and A10.

@@ -35,8 +35,12 @@
 		]},
 		{"title": "prefs", "items": [
 			"com.palm.app.accounts_default",
+			"com.palm.app.bluetooth_default",
+			"com.palm.app.dateandtime_default",
 			"com.palm.app.deviceinfo_default",
 			"com.palm.app.exhibitionpreferences_default",
+			"com.palm.app.location_default",
+			"com.palm.app.languagepicker_default",
 			"com.palm.app.screenlock_default",
 			"com.palm.app.swmanager_default",
 			"com.palm.app.soundsandalerts_default",

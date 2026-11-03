@@ -1,0 +1,12 @@
+A shortcut, not Palm's app.
+
+Palm's Regional Settings app sets webOS's language and formats. Lunacy follows the language
+Android is set to, so a copy of that UI here could only pretend. This app is an icon that
+opens Android's language settings instead (appinfo.json's lunacyAndroidSettings, a Lunacy
+extension), and it holds no code of its own. Its id and title are the reference TouchPad's
+(webOS CE 3.1.0).
+
+icon.png and icon-256x256.png are Palm's, from com.palm.app.languagepicker on the reference
+TouchPad, so the icon looks like the one webOS users know. Copyright Palm, Inc. / Hewlett-
+Packard; never released under an open licence; distributed by Lunacy as abandonware, like
+Mojo and the Prelude fonts.

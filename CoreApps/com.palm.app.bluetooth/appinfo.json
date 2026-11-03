@@ -1,0 +1,20 @@
+{
+	"id": "com.palm.app.bluetooth",
+	"version": "1.0.0",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Bluetooth",
+	"icon": "icon.png",
+	"splashicon": "icon-256x256.png",
+	"uiRevision": 2,
+	"keywords": [
+		"Settings",
+		"Preferences",
+		"Wireless",
+		"Bluetooth",
+		"Pairing",
+		"Headset"
+	],
+	"lunacyAndroidSettings": "bluetooth"
+}

@@ -680,6 +680,7 @@ class LunacyService(
             "sound" to Settings.ACTION_SOUND_SETTINGS,
             "security" to Settings.ACTION_SECURITY_SETTINGS,
             "date" to Settings.ACTION_DATE_SETTINGS,
+            "location" to Settings.ACTION_LOCATION_SOURCE_SETTINGS,
             "locale" to Settings.ACTION_LOCALE_SETTINGS,
             "storage" to Settings.ACTION_INTERNAL_STORAGE_SETTINGS,
             "apps" to Settings.ACTION_APPLICATION_SETTINGS,

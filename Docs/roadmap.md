@@ -170,6 +170,13 @@ starting; some may have been settled since without a note.
 - **Chat:** longevity on the devices; webOS CE's startup hang (PmLogLib's semaphore; take CE's
   fix if it lands in the transport); the Add Buddy invitation message, which the transport drops.
 - **Exchange:** a real server's policy, tasks, attachments.
+- **Launching an app as the shell starts (0.9.0 sweep):** an `--es launch` of Calendar, Clock
+  or Email in the intent that starts Lunacy can come up with no card (Calendar: "no card
+  opened"; the Nexus 5 showed the launcher), seemingly racing the same app's own start at
+  boot. A tap once the shell is up opens them (codepoet, HP 10 G2). Not compared with 0.8.4.
+- **Video Player:** `com.palm.filenotifyd`'s `state` (whether `/media/internal` is mounted and
+  scanned) and `com.palm.audio`'s `media/lockVolumeKeys` (the volume keys drive the media
+  stream while a video plays) aren't there; Photos asks for the second too.
 - **Email:** attachments; the Android 5 devices untried; PmLogLib's levels need PmLogDaemon's
   shared memory (only errors are logged unless a service is started with `files/pdk/args`).
 - **Photos & Videos 3.2.0:** the editor dragged with a finger, and on the 32-bit build's

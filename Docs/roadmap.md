@@ -197,6 +197,11 @@ starting; some may have been settled since without a note.
 - **Chat:** longevity on the devices; webOS CE's startup hang (PmLogLib's semaphore; take CE's
   fix if it lands in the transport); the Add Buddy invitation message, which the transport drops.
 - **Exchange:** a real server's policy, tasks, attachments.
+- **PDK intro movies, before 1.0 (codepoet, 2026-11-03):** Lunacy's libSDL_cinema is a
+  stand-in that answers every call with success and ends each movie at once, so games skip
+  their intros. That is not acceptable for 1.0: decode the game's movie with Android's media
+  player and draw it as Palm's library did, keeping its contract (CIN_Init, CIN_LoadCIN,
+  CIN_Play/Pause/Stop, the SDL_CINEMAEVENT end event; [pdk.md](pdk.md) §6i).
 - **Launching an app as the shell starts (0.9.0 sweep):** an `--es launch` of Calendar, Clock
   or Email in the intent that starts Lunacy can come up with no card (Calendar: "no card
   opened"; the Nexus 5 showed the launcher), seemingly racing the same app's own start at

@@ -1469,7 +1469,8 @@ otherwise, these win:
 15. **Q15 — System menu internals:** the date, battery and brightness rows were read from the
     device's `uiComponents/SystemMenu/*.qml` on 2026-09-22 and built (300 wide, clipped 7 px in
     and 14 up, rows 42 px, headers 14 px in, Prelude 18 px #AAA; the slider per `Slider.qml`).
-    The Wi-Fi, VPN, Bluetooth, airplane, rotation-lock and mute rows are still to read.
+    The Wi-Fi, VPN, Bluetooth, airplane, rotation-lock and mute rows were read and built on
+    2026-11-03 (luna-deltas B3); VPN's is left out.
 16. **Q16 — Banner timing constants in stock.** Banner show times (2 s / 5 s) and 1 s
     animations are read from LunaCE; assumed stock but not checked against the binary.
 17. **Q17 — Dock `backgroundOpacity`.** The fade animation exists but nothing paints with it

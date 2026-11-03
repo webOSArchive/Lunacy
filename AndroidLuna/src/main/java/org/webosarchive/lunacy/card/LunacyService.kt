@@ -675,6 +675,7 @@ class LunacyService(
         val PANELS: Map<String, String> = mapOf(
             "wifi" to Settings.ACTION_WIFI_SETTINGS,
             "bluetooth" to Settings.ACTION_BLUETOOTH_SETTINGS,
+            "airplane" to Settings.ACTION_AIRPLANE_MODE_SETTINGS,
             "display" to Settings.ACTION_DISPLAY_SETTINGS,
             "sound" to Settings.ACTION_SOUND_SETTINGS,
             "security" to Settings.ACTION_SECURITY_SETTINGS,

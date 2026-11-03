@@ -107,7 +107,7 @@ class DisplayService(private val context: Context) {
         if (p.has("maximumBrightness")) {
             val percent = p.optInt("maximumBrightness", -1)
             if (percent !in 1..100) problems += "maximumBrightness must be 1 to 100"
-            else if (!write(Settings.System.SCREEN_BRIGHTNESS, percent * 255 / 100)) problems += "maximumBrightness"
+            else if (!write(Settings.System.SCREEN_BRIGHTNESS, rawFromPercent(percent))) problems += "maximumBrightness"
         }
         return if (problems.isEmpty()) Bus.ok()
         else Bus.error("Android wouldn't let Lunacy set: ${problems.joinToString(", ")}")
@@ -118,11 +118,31 @@ class DisplayService(private val context: Context) {
 
     /** The screen's brightness as webOS's maximumBrightness, 1 to 100: the system menu's slider. */
     fun brightnessPercent(): Int = brightness()
-    fun setBrightnessPercent(percent: Int) { write(Settings.System.SCREEN_BRIGHTNESS, percent.coerceIn(1, 100) * 255 / 100) }
+    fun setBrightnessPercent(percent: Int) { write(Settings.System.SCREEN_BRIGHTNESS, rawFromPercent(percent)) }
 
-    private fun brightness(): Int {
-        val raw = Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS, 255)
-        return (raw * 100 / 255).coerceIn(1, 100)
+    private fun brightness(): Int =
+        percentFromRaw(Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS, 255))
+
+    /**
+     * A slider position as Android's own slider reads it. From Android 9 that slider is
+     * perceptual: its position goes through a gamma curve (HLG, BrightnessUtils) to the linear
+     * backlight value SCREEN_BRIGHTNESS holds, so half way along is a raw 22 of 255, not 128.
+     * Writing the percentage linearly put the menu's whole right half into the top eighth of
+     * what a person sees, and dragging down from full seemed to do nothing. Before Android 9
+     * the system's slider was linear, and so is this.
+     */
+    private fun rawFromPercent(percent: Int): Int {
+        val p = percent.coerceIn(1, 100) / 100.0
+        if (android.os.Build.VERSION.SDK_INT < 28) return Math.round(p * 255).toInt().coerceIn(1, 255)
+        val linear = (if (p <= HLG_R) (p / HLG_R) * (p / HLG_R) else Math.exp((p - HLG_C) / HLG_A) + HLG_B) / 12.0
+        return (1 + Math.round(linear * 254)).toInt().coerceIn(1, 255)
+    }
+
+    private fun percentFromRaw(raw: Int): Int {
+        if (android.os.Build.VERSION.SDK_INT < 28) return Math.round(raw * 100 / 255.0).toInt().coerceIn(1, 100)
+        val linear = 12.0 * (raw.coerceIn(1, 255) - 1) / 254.0
+        val gamma = if (linear <= 1.0) HLG_R * Math.sqrt(linear) else HLG_A * Math.log(linear - HLG_B) + HLG_C
+        return Math.round(gamma * 100).toInt().coerceIn(1, 100)
     }
 
     /**
@@ -131,7 +151,7 @@ class DisplayService(private val context: Context) {
      * time a write is refused in a run; the write itself still fails, and the next one after
      * the user has said yes will take.
      */
-    private fun write(key: String, value: Int): Boolean {
+    fun write(key: String, value: Int): Boolean {
         if (android.os.Build.VERSION.SDK_INT >= 23 && !Settings.System.canWrite(context)) {
             if (!askedToWrite) {
                 askedToWrite = true
@@ -163,5 +183,12 @@ class DisplayService(private val context: Context) {
             if (on) Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC else Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
     }
 
-    companion object { const val SERVICE = "com.palm.display" }
+    companion object {
+        const val SERVICE = "com.palm.display"
+        // Android's BrightnessUtils: the Hybrid Log-Gamma curve its brightness slider uses.
+        private const val HLG_R = 0.5
+        private const val HLG_A = 0.17883277
+        private const val HLG_B = 0.28466892
+        private const val HLG_C = 0.55991073
+    }
 }

@@ -26,6 +26,16 @@
     <uses-permission android:name="android.permission.REORDER_TASKS" />
     <!-- The status bar's Bluetooth icon: whether the adapter is on and connected. -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
+    <!-- The system menu's drawers turn Wi-Fi and Bluetooth on and off and join a known
+         network (SystemControls). Normal permissions, granted at install. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <!-- Android names the Wi-Fi networks around only to an app with location access. Asked
+         for the first time the system menu's Wi-Fi drawer opens, from Android 6. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Mute Sound sets the ringer to silent on a device without a vibrator, which is Do Not
+         Disturb's from Android 7; the user allows it on Android's own screen. -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <!-- webOS's /media/internal is the user's own storage, and apps read and wrote it freely.
          Android's shared folders are mapped into it (UserFiles.kt). Granted at install on
          Android 5; from Android 6 the shell asks for it at startup. -->

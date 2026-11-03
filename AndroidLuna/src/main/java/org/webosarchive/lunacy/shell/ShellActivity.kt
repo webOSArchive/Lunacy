@@ -235,6 +235,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     /** Whether the notifications are in [area] now: a phone held upright. */
     private var notificationsAtBottom = false
     private lateinit var systemMenu: SystemMenu
+    private lateinit var systemControls: SystemControls
     /** Exhibition mode: webOS's dock-mode clock, over everything, while it is on. */
     private lateinit var exhibition: ExhibitionLayer
     private lateinit var dockMode: org.webosarchive.lunacy.card.DockMode
@@ -508,7 +509,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         notifications = newNotifications()
         statusBar.onNotificationTap = { if (!notifications.tapBanner()) toggleMenu() }
         // The system menu, right-aligned under the bar, its edge 11 px past the screen's.
-        systemMenu = SystemMenu(this, luna)
+        systemControls = SystemControls(this, ::askPermissions, ::openAndroidPanel) { key, value -> displayService.write(key, value) }
+        systemMenu = SystemMenu(this, luna, systemControls)
+        systemControls.onChange = { systemMenu.refresh() }
+        // WiFiElement: a network the menu turned on or joined came up; the menu goes a second later.
+        systemControls.onConnected = { closeSystemMenuIn(1000) }
+        systemMenu.onCloseRequest = { closeSystemMenuIn(it) }
+        systemControls.start()
         root.addView(systemMenu, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
             topMargin = luna.px(StatusBar.HEIGHT); gravity = android.view.Gravity.TOP or android.view.Gravity.END
         })
@@ -538,6 +545,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     override fun onDestroy() {
         if (handedOff) { super.onDestroy(); return }
+        if (::systemControls.isInitialized) systemControls.stop()
         if (live?.get() === this) live = null
         (getSystemService(DISPLAY_SERVICE) as android.hardware.display.DisplayManager)
             .unregisterDisplayListener(displayListener)
@@ -1372,6 +1380,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun toggleSystemMenu() {
         if (systemMenu.isOpen) { closeMenu(); return }
         closeMenu()
+        // SystemMenu::slotPositiveSpaceChangeFinished: as tall as the room under the bar, plus 10.
+        shellRoot?.let { if (it.height > 0) systemMenu.maxHeightPx = it.height - luna.px(StatusBar.HEIGHT) + luna.px(10) }
         systemMenu.batteryPercent = statusBar.batteryPercent
         systemMenu.brightness = (displayService.brightnessPercent() - 1) / 99f
         menuScrim.visibility = View.VISIBLE
@@ -1458,7 +1468,29 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         dashboards.forEach { it.evaluateJavascript(AppServer.REFETCH_LAYOUT_IMAGES, null) }
     }
 
+    /** SystemMenu.qml's closeMenuTimer. A menu closed and opened again meanwhile stays. */
+    private var systemMenuCloser: Runnable? = null
+    private fun closeSystemMenuIn(delayMs: Long) {
+        systemMenuCloser?.let { shellRoot?.removeCallbacks(it) }
+        if (!systemMenu.isOpen) return
+        val r = Runnable { systemMenuCloser = null; if (systemMenu.isOpen) closeMenu() }
+        systemMenuCloser = r
+        shellRoot?.postDelayed(r, delayMs)
+    }
+
+    /** One of Android's settings screens, by LunacyService's panel name: where the system menu hands over. */
+    private fun openAndroidPanel(panel: String) {
+        val action = org.webosarchive.lunacy.card.LunacyService.PANELS[panel] ?: return
+        try {
+            startActivity(android.content.Intent(action).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) {
+            Log.w(AppServer.TAG, "systemMenu: can't open Android's $panel settings", e)
+            systemBanner("", "Couldn't open Android's settings")
+        }
+    }
+
     private fun closeMenu() {
+        systemMenuCloser?.let { shellRoot?.removeCallbacks(it) }; systemMenuCloser = null
         menuScrim.visibility = View.GONE
         statusBar.menuOpen = false
         notifications.menu.close()

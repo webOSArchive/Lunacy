@@ -25,6 +25,7 @@ enyo.kind({
 
 	components: [
 		{kind:enyo.ApplicationEvents, onWindowRotated:"windowRotatedHandler"},
+		{name:"busy"		, className:"pre3-strips", allowHtml:true, content:"<i></i><i></i><i></i>"},	// [Lunacy] see fillPhoneDay
 		{name:"date"		, className:"date"},
 		{name:"eventList"	, className:"events", kind:enyo.Control, defaultKind:"calendar.EventView"}
 	],
@@ -132,6 +133,10 @@ enyo.kind({
 
 		var currDate = (new Date()).clearTime();
 		(+currDate == +this.date) ? this.addClass ("today") : this.removeClass ("today");
+		this.$.busy.setClassName ("pre3-strips");					// [Lunacy]
+		this.addRemoveClass ("first-week", this.date.getDate() <= 7);
+		this.addRemoveClass ("first-day", this.date.getDate() == 1);
+		this.addRemoveClass ("weekend", this.date.getDay() === 0 || this.date.getDay() == 6);
 	},
 
 	daysChanged: function daysChanged (oldDays) {
@@ -146,6 +151,11 @@ enyo.kind({
 		var dateString = String(+this.date)
 		,	day		= this.days && this.days[dateString] && (this.day = this.days[dateString])
 		;
+
+		if (window.calendar.phone.on) {		// [Lunacy] (this function has a local "calendar")
+			this.fillPhoneDay (day);
+			return;
+		}
 
 		if (!day || !this.inCurrentMonth) {
 			!this.inCurrentMonth && this.clearEventDisplay();	// Remove all of this day's existing events. TODO: Reuse them instead.
@@ -217,6 +227,43 @@ enyo.kind({
 	},
 
 // BEGIN :-------: Custom Methods :---------------------------------------------------------------------------------------------------------------------------//
+
+	// [Lunacy] The Pre3's month has no event names: a day hatches its morning, afternoon or evening
+	// where something is on (month-day.html), in any month the grid shows.
+	fillPhoneDay: function fillPhoneDay (day) {
+		var	events		= []
+		,	calendars	= this.calendars
+		,	beg			= false
+		,	mid			= false
+		,	end			= false
+		;
+		day && (events = events.concat (day.allDayEvents || [], day.events || []));
+		for (var event, calendarOf, i=0; i < events.length; i++) {
+			event		= events[i];
+			calendarOf	= calendars && calendars [event.calendarId];
+			if (!calendarOf || !calendarOf.on) { continue; }
+			var	first	= new Date (event.renderStartTime || event.dtstart)
+			,	last	= new Date (event.renderEndTime || event.dtend)
+			,	start	= event.allDay ? 0 : first.getHours() + first.getMinutes() / 60
+			,	stop	= event.allDay ? 24 : last.getHours() + last.getMinutes() / 60
+			;
+			stop <= start && (stop = 24);	// Runs past midnight.
+			beg = beg || start < 12;
+			mid = mid || (start < 17 && stop > 12);
+			end = end || stop > 17;
+		}
+		var strips = this.$.busy;
+		strips.addRemoveClass ("beg", beg);
+		strips.addRemoveClass ("mid", mid);
+		strips.addRemoveClass ("end", end);
+	},
+
+	phoneChangedHandler: function phoneChangedHandler () {
+		this.clearEventDisplay();
+		this.$.busy.setClassName ("pre3-strips");
+		this.daysChanged();
+	},
+
     changeEventColor: function changeEventColor() {
     	if(!this.hasClass("held")) {
     		this.timerOn = false; 

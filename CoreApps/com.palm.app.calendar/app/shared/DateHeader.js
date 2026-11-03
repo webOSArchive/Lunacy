@@ -51,7 +51,9 @@ enyo.kind({
 		if (format) {				// We only need to do this if the format was found.
 			var headerString;
 
-			if (duration) {
+			if (calendar.phone.on && this.phoneTitle) {			// [Lunacy] The Pre3's title.
+				headerString = this.phoneTitle (date);
+			} else if (duration) {
 				var	startDate	= (this.timeMachine.setTime (+date), this.timeMachine)
 				,	endDate		= new Date(+startDate);
 
@@ -68,12 +70,16 @@ enyo.kind({
 
 	rendered: function rendered () {
 		this.inherited (arguments);
-		if (this.fit) {
+		if (this.fit && !(calendar.phone.on && this.phoneTitle)) {	// [Lunacy] The Pre3's title always fits.
 			this.checkFormatFit();
 		}
 	},
 
 // BEGIN :-------: Framework Handlers :-----------------------------------------------------------------------------------------------------------------------//
+
+	phoneChangedHandler: function phoneChangedHandler () {		// [Lunacy]
+		this.render();
+	},
 
 	resizeHandler: function resizeHandler (from, domEvent) {
 		DEBUG && this.log ("======= RESIZED\t");

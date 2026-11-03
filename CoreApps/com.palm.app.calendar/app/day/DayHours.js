@@ -46,6 +46,10 @@ enyo.kind({
 		this.setIs24Hr (is24Hr);
 	},
 
+	phoneChangedHandler: function phoneChangedHandler () {		// [Lunacy]
+		this.labelHours();
+	},
+
 // BEGIN :-------: Property Change Handlers :-----------------------------------------------------------------------------------------------------------------//
 
 	is24HrChanged: function is24HrChanged (was24Hr) {
@@ -53,7 +57,12 @@ enyo.kind({
 		if (was24Hr !== undefined && is24Hr == was24Hr) {		// 24Hr mode was previously defined and still has the same value:
 			return;														//	So do nothing.
 		}
-		var	hourLabel
+		this.labelHours();
+	},
+
+	labelHours: function labelHours () {
+		var	is24Hr		= this.is24Hr
+		,	hourLabel
 		,	hours		= this.hours
 		,	numHours	= hours && hours.length
 		,	g11n		= this.G11N
@@ -64,8 +73,9 @@ enyo.kind({
 		for (var hour=0, last=numHours; hour < last; ++hour) {
 			hourLabel = hours [hour];
 			if (hourLabel) {
-				hourLabel.setHourLabel	(hour == 12 ? noon : Utilities.formatHour (hour, is24Hr));
-				hourLabel.setAMPM		(is24Hr || hour == 12 ? "" : hour < 12 ? am : pm);
+				var pre3 = calendar.phone.on;	// [Lunacy] The Pre3 says 12 and pm like any other hour.
+				hourLabel.setHourLabel	(hour == 12 && !pre3 ? noon : Utilities.formatHour (hour, is24Hr));
+				hourLabel.setAMPM		(is24Hr || (hour == 12 && !pre3) ? "" : hour < 12 ? am : pm);
 			}
 		}
 	}

@@ -16,8 +16,12 @@ tree stays at 3.2.0, so look for app/import/). app/import/webcal/ is from webos-
 licensed under the GNU GPL version 3 (app/import/webcal/LICENSE.txt), approved by codepoet for
 Calendar. Its four .js files stay identical to that repository.
 
-The app's files are here as the package carries them, with one exception codepoet approved
-(rule 5 in CLAUDE.md, 2026-11-02): the Android Calendars reminders switch in Preferences, marked
-[Lunacy] in app/prefs/PreferencesView.js. It shows only with Lunacy's Android account, and it
-has to be carried over when CE's tree is taken again. Any other change Lunacy needs in the app
-is made in the webOS CE project and comes here with its next release.
+The app's files are here as the package carries them, with two exceptions codepoet approved
+(rule 5 in CLAUDE.md, 2026-11-02). The Android Calendars reminders switch in Preferences, marked
+[Lunacy] in app/prefs/PreferencesView.js, shows only with Lunacy's Android account. The Pre3's
+layout on a phone's card is app/phone/ (with its own NOTICE for the art) and the hooks marked
+[Lunacy] in app/AppView.js, app/AppMenu.js, app/depends.js, app/day/, app/week/, app/month/,
+app/edit/EditView.js, app/header/CalendarList.js and app/shared/DateHeader.js. It doesn't change
+the TouchPad or a tablet. Both have to be carried over when CE's tree is taken again. Any other
+change Lunacy needs in the app is made in the webOS CE project and comes here with its next
+release.

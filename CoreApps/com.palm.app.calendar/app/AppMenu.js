@@ -93,6 +93,10 @@ enyo.kind({
 	},
 
 	viewsChanged: function viewsChanged (lastViewChange) {
+		// [Lunacy] A phone has no New event and Jump to buttons: as on the Pre3, they are in the menu.
+		var phone = calendar.phone.on, states = this.MENU_STATES.calendar;
+		states.menuNew = states.menuAllDay = states.menuEvent = states.menuToday = states.menuJump = phone;
+
 		var	views			= this.views
 		,	lastViewName	= views.last	&& views.last.name
 		,	viewName		= views.current	&& views.current.name

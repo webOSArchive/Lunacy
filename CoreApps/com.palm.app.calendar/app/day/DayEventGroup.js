@@ -191,7 +191,7 @@ enyo.kind({
 			for(var i = 0; i < innerElements.length; i++) {
 				if (i == this.clickedElement) {
 					var	edge	= this.edge || "none";
-					edge		= edge && this.edges[edge] || this.edges.none;
+					edge		= edge && !calendar.phone.on && this.edges[edge] || this.edges.none;	// [Lunacy]
 					innerElements[i].className = 'event theme-' + this.events[i].color + edge.className;
 					break;
 				}
@@ -241,8 +241,43 @@ enyo.kind({
 		}
 	},
 
+	setDayMap: function setDayMap (map) {		// [Lunacy] see phone/DayFold.js
+		this.dayMap = map;
+		this.eventsChanged();
+	},
+
+	// [Lunacy] Moves the events without drawing them again, for the accordion's animation.
+	placeEvents: function placeEvents (v) {
+		var map = this.dayMap, events = this.events, idPrefix = this.id;
+		for (var event, node, i = 0; map && events && i < events.length; i++) {
+			event	= events[i];
+			node	= document.getElementById (idPrefix + '_' + event._id);
+			node && (node.style.top = calendar.phone.day.y (map, event.start_decimal, v) + "px");
+		}
+	},
+
+	// [Lunacy] Where the Pre3 puts events: by their decimal times, the full column, nothing shorter than it is.
+	calcPhonePositions: function calcPhonePositions () {
+		var	week	= this.edge != "default"
+		,	h		= calendar.phone.hourHeight (week)
+		,	width	= this.getDimensions().width
+		,	map		= this.dayMap
+		;
+		for (var event, i = 0; this.events && i < this.events.length; i++) {
+			event		= this.events[i];
+			event.top	= map ? calendar.phone.day.y (map, event.start_decimal, this.dayV) : event.start_decimal * h / 100;
+			event.height= (event.end_decimal - event.start_decimal) * h / 100 - (week ? 1 : 0);
+			event.width	= width / event.overlap_count;
+			event.left	= event.overlap_index * width / event.overlap_count;
+		}
+	},
+
 	calcEventPositions: function () {
 		/* Go through all events and figure out their top, left, height, and width with respect to the current container */
+		if (calendar.phone.on) {					// [Lunacy]
+			this.calcPhonePositions();
+			return;
+		}
 		var width		= this.getDimensions().width;
 		var hourHeight	= this.hourHeight;
 		for(var i = 0; this.events && i < this.events.length; i++){
@@ -271,6 +306,10 @@ enyo.kind({
 		var	hour		= Math.floor(domEvent.offsetY / 59)				// Store the current hour.
 		,	minute		= 0 //Math.ceil (date.getMinutes() / 15) * 15	// Calculate the closest 15 minute interval after the current time.
 		;
+		if (calendar.phone.on) {										// [Lunacy]
+			hour = this.dayMap	? calendar.phone.day.hourAt (this.dayMap, domEvent.offsetY, this.dayV)
+								: Math.floor (domEvent.offsetY / calendar.phone.WEEK_HOUR);
+		}
 		date.clearTime();												// Set the event's time to midnight.
 		date.set({hour:hour, minute:minute});							// Set the event's hour and minute.
 
@@ -302,12 +341,14 @@ enyo.kind({
 		,	htmlString				= ''
 		,	idPrefix				= this.id
 		,	numEvents				= events && events.length
-		,	edge					= this.edges[this.edge] || this.edges.none
+		,	phone					= calendar.phone.on						// [Lunacy] The Pre3's event boxes have no side edge.
+		,	week					= phone && this.edge != "default"		// and in its week view no text.
+		,	edge					= phone ? this.edges.none : (this.edges[this.edge] || this.edges.none)
 		,	edgeWidth				= edge.width + edge.borderWidth + edge.spacing
-		,	widthDiff				= edgeWidth + 2							// 2 accounts for the event's border
-		,	minWidthToShowText		= this.minWidthToShowText + widthDiff
-		,	minHeightToShowLocation	= this.minHeightToShowLocation
-		,	minHeightToShowNote		= this.minHeightToShowNote
+		,	widthDiff				= phone ? 0 : edgeWidth + 2				// 2 accounts for the event's border
+		,	minWidthToShowText		= week ? Infinity : this.minWidthToShowText + widthDiff
+		,	minHeightToShowLocation	= phone ? 32 : this.minHeightToShowLocation
+		,	minHeightToShowNote		= phone ? 46 : this.minHeightToShowNote
 		;
 
 		for (var i = 0; i < numEvents; i++) {
@@ -332,6 +373,15 @@ enyo.kind({
 				}
 			}
 			htmlString += '</div> ';
+		}
+		if (week) {									// [Lunacy] The grey behind a day's events in the Pre3's week.
+			var	busy	= enyo.application.busyFreeManager.getBusyTimes (events)
+			,	h		= calendar.phone.WEEK_HOUR
+			;
+			for (var b = 0; b < busy.length; b++) {
+				htmlString += '<div class="pre3-week-busy" style="top:' + (busy[b].start_decimal * h / 100) + 'px;'
+					+	'height:' + ((busy[b].end_decimal - busy[b].start_decimal) * h / 100) + 'px;"></div>';
+			}
 		}
 		return htmlString;
 	}

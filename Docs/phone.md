@@ -137,11 +137,9 @@ every app written for the Pre3 wants: the SDK had it declare its viewport
 (`height=device-height`) and size itself with the framework.
 
 **Defaults.** Off, except the bundled Palm apps known to draw a fixed screen - Clock,
-Calculator and Memos - and App Catalog, whose chrome is a TouchPad's width (codepoet, 2026-10-04), and
-Calendar, laid out for a tablet without sliding panels to stack, until it is given a phone
-layout of its own (codepoet, 2026-10-08)
+Calculator and Memos - and App Catalog, whose chrome is a TouchPad's width (codepoet, 2026-10-04)
 (`FixedViewport.DEFAULT_ON`, a shipped default for the user's switch; the apps themselves are
-untouched). An app's switch is forgotten when the app is removed. Contacts left the list when
+untouched). Calendar left the list when it took the Pre3's layout (codepoet, 2026-11-02; §8). An app's switch is forgotten when the app is removed. Contacts left the list when
 it got a layout of its own (codepoet, 2026-11-02): on a card under 600 px wide it shows the list
 or a contact, not both, a tapped contact comes over the list, and the grab handle in its toolbar
 or the back gesture goes back, as in Email; it changes as the Fold3 folds, without a restart
@@ -284,3 +282,38 @@ Screen & Lock, on every layout ([luna-deltas.md](luna-deltas.md) B13).
   re-lays out at seven columns, not yet watched.
 - The keyboard on a phone with the app scale on: `positiveSpaceChanged` is scaled, Enyo's
   own resize path is the window's and needs no scaling, not yet watched with a field.
+
+## 8. Calendar: the Pre3's layout
+
+Codepoet, 2026-11-02: instead of zooming the tablet layout, implement the Pre3's. The app stays
+CE's Calendar on Enyo, with CE's data and repeat code. Only how it is drawn changes, in
+`app/phone/` of the app and hooks marked `[Lunacy]`, so a TouchPad and a tablet are unchanged
+(its NOTICE; [luna-deltas.md](luna-deltas.md) B20 lists what still differs from a Pre3). Numbers
+and art are the Pre3's own, read from its Calendar (HP webOS 2.2.4) and checked side by side
+against it with the same events. Novacom can't tap a Pre3, so codepoet walked its screens for
+the reference frames.
+
+**Which layout.** `calendar.phone.fit` (`Phone.js`), again on every resize, so a Fold changes
+while the card stays open: a card under 600 px wide, or a card under 500 px tall on a device told
+it is a phone (a phone in landscape).
+
+| | The Pre3, and so here |
+|---|---|
+| Header | Mojo's header pill with the title ("Today, Mon, Nov 2", "Tue, Nov 3, 2026", "Week of Nov 1, 2026", "Nov 2026") and the ALL pill, whose popup replaces a tablet's calendar toggles: All calendars, one calendar, Calendar View Options... |
+| View selector | Mojo's three-segment command menu, floating over the view. New, Show today and Jump to are in the App Menu |
+| Day | 48 px an hour; shaded outside working hours, heavier lines at their edges; labels in the first 28 px, events beside them; hatching across busy times; am/pm under the top hour; opens on the first event, or the hour before work |
+| All-day | Stacked bars, 24 px on a 34 px pitch, in a grey band of up to 135 px that scrolls |
+| Accordion | Between the first and last events a gap over 1.5 hours folds to one hour, pleated, with a pill ("4 HRS FREE"). A tap on a fold opens all of them, the pill stays mid-gap and closes them: 0.4 s, or 0.3 when no gap reaches 3 hours, ease-in-out. `DayFold.js`, using CE's `BusyFreeManager`, which is the Pre3's code |
+| Week | 30 px an hour; seven columns, the hour marks over the first; marks at the day's start, noon and end; boxes without text on a grey busy block; "T3" labels with a circle on today; all-day bars in a strip, 9 px a row, five rows |
+| Month | Six weeks; bold dates, grey weekends and other months, a black step at each month's edge, the blue circle on today; a cell hatches morning, afternoon or evening where something is on |
+| An event | A page with a colour header and icon rows. The edit form is one column |
+
+**Tall enough.** The accordion is for short cards. A card at least 720 px tall holds a working
+day unfolded, so nothing folds there (the Fold3's cover): `TALL_ENOUGH` in `Phone.js`. A card
+taller than the Pre3's gets extra room below the day, so a folded day can still bring its first
+event to the top.
+
+Checked on the Kyocera A101BM (card 384 x 655, 2026-11-02), portrait and landscape, against the
+Pre3: every row above, opening and closing folds, swiping days, Preferences, custom repeat and
+Jump To. The unfolded path was forced in the page there, not seen on a Fold3's cover. The A7 Lite
+stays in the tablet layout.

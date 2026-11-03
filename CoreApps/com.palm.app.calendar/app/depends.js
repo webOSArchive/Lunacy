@@ -6,6 +6,9 @@ enyo.depends
 ,	"$enyo-lib/addressing/"
 ,	"$enyo-lib/contactsui/"
 ,	"../libs/date.js"							// Okay because DateJS now avoids multiple instantiation thereby avoiding the Date.toString() stack overflow issue.
+,	"phone/Phone.js"								// [Lunacy] before the views; see phone/Phone.js
+,	"phone/DayFold.js"
+,	"phone/Source.js"
 ,	"shared/SimpleTransition.js"					// We need to include the custom transition before AppView.js
 ,	"shared/HoursScroller.js"						// webOS CE: before day/ and week/, which use it
 ,	"AppMenu.js"
@@ -40,4 +43,5 @@ enyo.depends
 ,	"shared/Utilities.js"
 ,	"import/ICalEvents.js"							// webOS CE: App Menu > Import Calendar
 ,	"import/ICalImport.js"
+,	"phone/Phone.css"
 );

@@ -39,6 +39,7 @@ enyo.kind({
 
 	components:	[
 		{name:"header", kind:"calendar.week.WeekHeader"},
+		{name:"phoneAllDay", className:"pre3-week-allday", kind:enyo.HFlexBox, showing:false},		// [Lunacy] see fillPhoneAllDay
 		{name:"weekHours", className:"week-hours", kind: "calendar.HoursScroller", flex:1, autoHorizontal:false, horizontal:false, vertical:true, components: [	// webOS CE: was enyo.Scroller (see shared/HoursScroller.js)
 			{name: "weekContainer", className: "week-container", kind: enyo.Control, components: [
 				{name:"allDayContainer", className:"allday-header", kind: enyo.HFlexBox, components: [
@@ -81,6 +82,7 @@ enyo.kind({
 			,	owner			: this
 			});
 		}
+		this.markHours();			// [Lunacy]
 		this.broadcastMessage ("isActive", [true]);
 	},
 
@@ -93,6 +95,22 @@ enyo.kind({
 	
 	becameCurrentPaneHandler: function becameCurrentPaneHandler(isCurrentPane){
 		this.$.week && this.$.week.broadcastMessage("becameCurrentPane", [isCurrentPane]);
+	},
+
+	phoneChangedHandler: function phoneChangedHandler () {		// [Lunacy]
+		this.markHours();
+		this.fillPhoneAllDay();
+	},
+
+	// [Lunacy] The Pre3's week marks the day's start, noon and end, and nothing between.
+	markHours: function markHours () {
+		var	hours	= this.$.hourLabels.hours
+		,	phone	= calendar.phone.on
+		,	work	= calendar.phone.workHours()
+		;
+		for (var i=0; i < 24; i++) {
+			hours[i].addRemoveClass ("weekmark", phone && (i == work.start || i == 12 || i == work.end));
+		}
 	},
 	
 	isActiveHandler: function isActiveHandler (isActive) {
@@ -134,6 +152,38 @@ enyo.kind({
 		for (var i=0; i < 7; i++) {
 			weekdays[i].setDays(days);
 		}
+		this.fillPhoneAllDay();
+	},
+
+	// [Lunacy] The Pre3's week keeps each day's all-day events in a strip under the day labels, a
+	// short bar each, five rows at most (week-assistant.js renderAllDayEvents: 9 px a row, plus 3).
+	fillPhoneAllDay: function fillPhoneAllDay () {
+		var	strip	= this.$.phoneAllDay
+		,	days	= this.days
+		,	rows	= 0
+		,	html	= []
+		;
+		if (!calendar.phone.on || !days) {
+			strip.setShowing (false);
+			return;
+		}
+		for (var i=0; i < 7; i++) {
+			var	day		= days [String (+this.weekdays[i].date)]
+			,	events	= (day && day.allDayEvents) || []
+			,	cell	= ""
+			;
+			for (var e=0; e < events.length && e < 5; e++) {
+				var cal = this.weekdays[i].calendars && this.weekdays[i].calendars [events[e].calendarId];
+				cell += '<div class="pre3-week-bar theme-bar-' + ((cal && cal.color) || events[e].color || "gray") + '"></div>';
+			}
+			rows = Math.max (rows, Math.min (5, events.length));
+			html.push ('<div style="-webkit-box-flex:1;width:0">' + cell + '</div>');
+		}
+		strip.setShowing (rows > 0);
+		strip.setAllowHtml (true);
+		strip.setContent (html.join (""));
+		strip.applyStyle ("height", rows ? rows * 9 + 3 + "px" : null);
+		this.$.weekHours.resized && this.resized();
 	},
 
 	is24HrChanged: function is24HrChanged(was24Hr){
@@ -190,6 +240,10 @@ enyo.kind({
 			isFinite(top) && ui.hours.setScrollTop(top);*/
 			(currentHour > 0) && (--currentHour);
 			currentHour = Math.min(currentHour, 17); 							// Can't scroll past 4pm anyway
+			if (calendar.phone.on) {											// [Lunacy] Opens on the day's start, as the Pre3 does.
+				ui.weekHours.setScrollTop (calendar.phone.workHours().start * calendar.phone.WEEK_HOUR - 20);
+				return;
+			}
 			var	top = hourLabels [currentHour].hasNode();
 			isFinite (top && (top = top.offsetTop)) && ui.weekHours.setScrollTop (top);			// Scroll to the hour before the current hour.
 		}

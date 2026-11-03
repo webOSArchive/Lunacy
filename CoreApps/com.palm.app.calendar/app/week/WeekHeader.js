@@ -30,7 +30,7 @@ enyo.kind({
 	},
 
 	components: [
-		{name:"dateHeader", kind:"calendar.DateHeader", className:"date", duration:6, fit: false, formats:{
+		{name:"dateHeader", kind:"calendar.DateHeader", className:"date", duration:6, fit: false, phoneTitle:calendar.phone.titles.week, formats:{
 				"short"	: new enyo.g11n.DateFmt ({date:"medium"})
 			,	full	: new enyo.g11n.DateFmt ({date:"long"})
 		}},
@@ -76,6 +76,14 @@ enyo.kind({
 		if (this.startOfWeek === oldStartOfWeek) {
 			return;
 		}
+		this.labelDays();
+	},
+
+	phoneChangedHandler: function phoneChangedHandler () {		// [Lunacy]
+		this.labelDays();
+	},
+
+	labelDays: function labelDays () {
 		var	days		= this.$.dayHeader.getComponents()
 		,	date		= this.timeMachine
 		,	weekLength = this.G11N.Fmts.dateTimeHash.long.day.length
@@ -86,7 +94,12 @@ enyo.kind({
 
 		for (var day, i = 0; i < weekLength; i++) {
 			day = days[i];
-			day.setContent (this.G11N.HeaderFmt.format (date));
+			if (calendar.phone.on) {							// [Lunacy] The Pre3's "T3".
+				day.setAllowHtml (true);
+				day.setContent ("<b>" + calendar.phone.shortDay (date) + "</b>" + date.getDate());
+			} else {
+				day.setContent (this.G11N.HeaderFmt.format (date));
+			}
 			day.date = +date; // For the clickHandler
 			(day.date == today) ? day.addClass ("todayDate") : day.removeClass ("todayDate");
 			date.addDays (1);

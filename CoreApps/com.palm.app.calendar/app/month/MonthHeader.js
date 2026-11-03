@@ -20,7 +20,7 @@ enyo.kind({
 	},
 
 	components: [
-		{name:"dateHeader", kind:"calendar.DateHeader", className:"date", fit: false, formats:{
+		{name:"dateHeader", kind:"calendar.DateHeader", className:"date", fit: false, phoneTitle:calendar.phone.titles.month, formats:{
 			short	: new enyo.g11n.DateFmt({date: "medium", dateComponents: "my"})
 		,	full	: new enyo.g11n.DateFmt({date: "long", dateComponents: "my"})
 		}},
@@ -48,6 +48,14 @@ enyo.kind({
 		if (this.startOfWeek === oldStartOfWeek) {
 			return;
 		}
+		this.labelDays();
+	},
+
+	phoneChangedHandler: function phoneChangedHandler () {		// [Lunacy]
+		this.labelDays();
+	},
+
+	labelDays: function labelDays () {
 		var dayFormats	= this.G11N.fmts.dateTimeHash.long.day
 		,	headers		= this.$.weekHeader.getComponents()
 		,	startOfWeek	= this.startOfWeek
@@ -55,7 +63,8 @@ enyo.kind({
 		;
 		for (var dayIndex, i=0; i < weekLength; ++i) {
 			dayIndex = (i + startOfWeek) % weekLength;
-			headers[i].setContent (dayFormats [dayIndex]);
+			headers[i].setContent (calendar.phone.on ? dayFormats [dayIndex].charAt (0) : dayFormats [dayIndex]);	// [Lunacy]
+			headers[i].addRemoveClass ("weekend", dayIndex === 0 || dayIndex == 6);
 		}
 	},
 

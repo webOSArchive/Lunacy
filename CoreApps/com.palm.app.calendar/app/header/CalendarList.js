@@ -19,6 +19,7 @@ enyo.kind({
 
 	published:
 	{	accountsAndCalendars	: null	// Array	: For watching Accounts and Calendars changes.
+	,	phoneSource				: null	// String	: [Lunacy] A calendar's id or "all", from the phone's popup.
 	,	toggleAllLimit			: 4		// Number	: Minimum number of calendars required to show toggle.
 	},
 
@@ -45,11 +46,11 @@ enyo.kind({
 	create: function create () {
 		this.inherited (arguments);
 		this.$.toggleAllButton.caption = this.G11N.hideAll;
-		enyo.application.watch ({accountsAndCalendars: this});
+		enyo.application.watch ({accountsAndCalendars: this, phoneSource: this});	// [Lunacy]
 	},
 
 	destroy: function destroy () {
-		enyo.application.ignore({accountsAndCalendars: this});
+		enyo.application.ignore({accountsAndCalendars: this, phoneSource: this});	// [Lunacy]
 		this.inherited (arguments);
 	},
 
@@ -67,6 +68,23 @@ enyo.kind({
 
 	accountsAndCalendarsChanged: function accountsAndCalendarsChanged (oldAccountsAndCalendars) {
 		this.updateList();
+	},
+
+	// [Lunacy] The Pre3's popup picks one calendar, or all (phone/Source.js).
+	phoneSourceChanged: function phoneSourceChanged () {
+		var	id	= this.phoneSource
+		,	map	= this.calendarMap
+		;
+		enyo.application.free ({phoneSource:true});
+		if (!id || !map) { return; }
+		for (var c in map) {
+			if (map.hasOwnProperty (c)) {
+				map[c].on = this.toggleMap[c].on = (id == "all" || c == id);
+				this.updateLegend (this.toggleMap[c]);
+			}
+		}
+		this.phoneSource = null;
+		this.shareCalendars();
 	},
 
 	shareCalendars: function shareCalendars (calendarMap) {

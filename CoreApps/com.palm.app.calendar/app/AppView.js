@@ -55,6 +55,7 @@ enyo.kind({
 			{name: "calendar", kind: enyo.VFlexBox,
 				components: [
 					{kind:"calendar.CalendarList"},
+					{name:"source", kind:"calendar.phone.Source", showing:false},		// [Lunacy] the Pre3's ALL pill
 					{name:"main", className:"view", kind:enyo.Pane, flex: 1, onSelectView: "viewSelected", transitionKind: "calendar.SimpleTransition", components: [  // Using a custom transition until the discovered enyo issue in enyo.transitions.Simple is resolved (DFISH-28771)
 						{name:"dayCarousel"		, kind:"calendar.day.DayCarousel"		, flex:1, lazy: true},
 						{name:"weekCarousel"	, kind:"calendar.week.WeekCarousel"		, flex:1, lazy: true},
@@ -85,7 +86,7 @@ enyo.kind({
 		{name: "jumpToDialog", kind: enyo.ModalDialog, caption: $L("Jump To..."), scrim:true, showing:false, onClose:"resetMenu", components: [
 			{name: "jumpTo", kind: "calendar.JumpToView", onDateChanged:"jumpToDate" }
 		]},
-		{name: "detailPopup", kind: enyo.ModalDialog, scrim:true, caption: $L("Event Details"), className: "enyo-modaldialog-customWidth", showing:false, onClose:"resetMenu", components: [
+		{name: "detailPopup", kind: enyo.ModalDialog, scrim:true, caption: $L("Event Details"), className: "enyo-modaldialog-customWidth detail-popup", showing:false, onClose:"resetMenu", components: [
 			{name: "detailView", kind: "calendar.edit.DetailView", showing:false, onEdit:"displayEvent", onDelete:"showDeleteConfirm"}
 		]},
 		{name: "deleteDialog", kind: enyo.ModalDialog, scrim:true, showing:false, components: [
@@ -109,7 +110,11 @@ enyo.kind({
 	},
 
 	create: function create () {		// PERF: new AppView() takes ~350 ms.
+		calendar.phone.fit();				// [Lunacy] before the views are made
 		this.inherited (arguments);
+		this.fitToCard();					// [Lunacy]
+		this.refit = enyo.bind (this, this.refit);		// A page loaded with the screen off starts wide, and Enyo may not hear it narrow.
+		window.addEventListener ("resize", this.refit, false);
 		window.PalmSystem && window.PalmSystem.keepAlive (true);
 
 		var enyoApp	= enyo.application
@@ -127,6 +132,7 @@ enyo.kind({
 	},
 
 	destroy: function destroy () {
+		window.removeEventListener ("resize", this.refit, false);	// [Lunacy]
 		enyo.application.ignore ({ is24Hr:this, showEvent:this, showView:this });
 		this.inherited (arguments);
 	},
@@ -141,7 +147,23 @@ enyo.kind({
 		(this.$.pane.getViewName() != "calendar") && event.preventDefault();
 	},
 
+	// [Lunacy] A phone's card gets the Pre3's layout (phone/Phone.js), and follows a Fold as it folds.
+	fitToCard: function fitToCard () {
+		var phone = calendar.phone.on;
+		this.addRemoveClass ("pre3", phone);
+		enyo.dom && document.body.classList[phone ? "add" : "remove"] ("pre3-card");		// Popups live on the body.
+		this.$.source.setShowing (phone);
+	},
+
+	refit: function refit () {
+		if (calendar.phone.fit()) {
+			this.fitToCard();
+			this.$.pane.broadcastMessage ("phoneChanged");
+		}
+	},
+
 	resizeHandler: function resizeHandler (from, domEvent) {
+		this.refit();						// [Lunacy]
 		this.inherited (arguments);
 		var view = this.$.main.getView();
 		view && view.showing && view.resized();
@@ -156,6 +178,7 @@ enyo.kind({
 	},
 
 	windowActivatedHandler: function windowActivatedHandler(){
+		this.refit();						// [Lunacy]
 		DEBUG && this.log ("======= ACTIVATED\t");
 	},
 
@@ -185,6 +208,7 @@ enyo.kind({
 	},
 
 	windowShownHandler: function windowShownHandler () {
+		this.refit();						// [Lunacy]
 		DEBUG && this.log ("======= SHOWN\t");
 	},
 

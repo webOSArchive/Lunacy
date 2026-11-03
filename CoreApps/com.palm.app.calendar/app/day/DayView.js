@@ -70,7 +70,7 @@ enyo.kind({
 		if(!this.inWeekView) {
 			this.createComponent
 			({name:"header", className:"header", kind:enyo.HFlexBox, components:[
-				{name:"dateHeader"		, kind:"calendar.DateHeader", formats:this.G11N.DateFormat, flex:1}
+				{name:"dateHeader"		, kind:"calendar.DateHeader", formats:this.G11N.DateFormat, phoneTitle:calendar.phone.titles.day, flex:1}
 			,	{name:"today"			, className:"today", showing:false}
 			]});
 		}
@@ -94,9 +94,12 @@ enyo.kind({
 		}
 
 		!this.inWeekView && this.broadcastMessage ("isActive", [true]);	// Already would've been activated by WeekView.
+		!this.inWeekView && calendar.phone.dayViews.push (this);		// [Lunacy]
 	},
 
 	destroy: function destroy () {
+		var views = calendar.phone.dayViews;							// [Lunacy]
+		views.indexOf (this) >= 0 && views.splice (views.indexOf (this), 1);
 		this.broadcastMessage ("isActive", [false]);
 		this.inherited (arguments);
 	},
@@ -116,6 +119,15 @@ enyo.kind({
 
 	becameCurrentPaneHandler: function becameCurrentPaneHandler(isCurrentPane){
 		this.eventGroup && this.eventGroup.broadcastMessage("becameCurrentPane", [isCurrentPane]);
+	},
+
+	phoneChangedHandler: function phoneChangedHandler () {						// [Lunacy]
+		calendar.phone.day.fit (this);
+		this.eventGroup.performResize();
+	},
+
+	hoursScrolled: function hoursScrolled () {									// [Lunacy]
+		calendar.phone.on && calendar.phone.day.ampm (this);
 	},
 
 	isActiveHandler: function isActiveHandler (isActive) {						// BUG: !!! This is being double-called on DayCarousel.destroy()
@@ -210,6 +222,15 @@ enyo.kind({
 				
 		this.layoutManager.positionEvents (day.events, {overlap: true});
 		this.updateHours({allDayEvents: day.allDayEvents, events: day.events});
+
+		if (calendar.phone.on && !this.inWeekView) {			// [Lunacy] The Pre3's hours, folded if the card is short.
+			calendar.phone.day.fit (this);
+			var firstKey = +this.date + ":" + calendar.phone.day.firstHour (this);
+			if (this.scrollToDefaultFor !== firstKey) {			// Once per date and first event, as the Pre3's renderDay does.
+				this.scrollToDefaultFor = firstKey;
+				calendar.phone.day.scrollDefault (this);
+			}
+		}
 	},
 	
 	inWeekViewChanged: function inWeekViewChanged (wasInWeekView) {
@@ -233,7 +254,7 @@ enyo.kind({
 
 	createDay: function createDay () {
 		var inWeekView		= this.inWeekView
-		,	hourContainer	= inWeekView ? {kind: enyo.Control} : {kind: "calendar.HoursScroller", horizontal:false, vertical:true}	// webOS CE: was enyo.Scroller
+		,	hourContainer	= inWeekView ? {kind: enyo.Control} : {kind: "calendar.HoursScroller", horizontal:false, vertical:true, onScroll:"hoursScrolled"}	// webOS CE: was enyo.Scroller
 		,	hoursContainer
 		,	is24Hr			= this.is24Hr
 		;
@@ -249,6 +270,8 @@ enyo.kind({
 			,	hourLabels		= dayContainer.createComponent	({name: "hourLabels"	, kind:"calendar.day.DayHours", owner: this, is24Hr:is24Hr})	// Build hour labels with the retained 24hr setting.
 			;
 			hoursContainer		= dayContainer.createComponent	({name: "hoursContainer", kind: enyo.Control, style: "height: 1440px; position: relative;", flex: 1});
+			this.dayContainer	= dayContainer;		// [Lunacy] for phone/DayFold.js
+			this.hoursContainer	= hoursContainer;
 		}
 
 		this.eventGroup = hoursContainer.createComponent(
@@ -318,7 +341,7 @@ enyo.kind({
 		isToday	&& hourLabels[currentHour].setIsCurrentHour (true);				// If this day is today, update the now (current hour) indicator.
 		this.currentHour = currentHour;
 		
-		if (options && options.scroll) {
+		if (options && options.scroll && !calendar.phone.on) {					// [Lunacy] A phone scrolls in daysChanged.
 			(currentHour > 0) && (--currentHour); 								// Scroll to the hour before the current hour.
 			currentHour = Math.min(currentHour, 17); 							// Can't scroll past 4pm anyway
 			var top = 59 * currentHour;
@@ -447,6 +470,7 @@ enyo.kind({
 
 		(numAllDay > 0) && (hasRenderContent ? allDayHeader.renderContent() : allDayHeader.render());	// renderContent does less work but the enyo team is deprecating it...
 		this.$.allDayContainer.setShowing ((numAllDay > 0) || !!this.inWeekView);
+		!this.inWeekView && window.calendar.phone.day.fitAllDay (this, numAllDay);	// [Lunacy] (this function has a local "calendar")
 
 		var timedEvents = events.events;
 		var numTimed = timedEvents.length;		

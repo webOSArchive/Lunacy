@@ -133,7 +133,7 @@ enyo.kind({
 							]}
 						]},
 					]},
-					{kind: enyo.HFlexBox, components: [
+					{kind: enyo.HFlexBox, className: "repeat-alerts", components: [		// [Lunacy] class, for phone/Phone.css
 						{kind: enyo.VFlexBox,  className: "horizontal-space repeat-alert-space", components: [
 							{content: $L("Repeat"), className: "edit-view-label"},
 							{ kind: enyo.HFlexBox, style: "margin-left: 6px;", components: [

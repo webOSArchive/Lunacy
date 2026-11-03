@@ -7,7 +7,7 @@ with other webOS platforms, LuneOS among them. The build copies this folder into
 
 Every app carries a NOTICE: where it came from, its licence or abandonware status, and any
 change Lunacy made to it. Rule 5 in [CLAUDE.md](../CLAUDE.md) keeps installed apps as packaged.
-The only exceptions are Email, Screen & Lock, Web's narrow layout, Contacts' narrow layout and Calendar's Android reminders switch, which codepoet approved,
+The only exceptions are Email, Screen & Lock, Web's narrow layout, Contacts' narrow layout, Calendar's Android reminders switch and Calendar's Pre3 layout, which codepoet approved,
 and each of those changes is marked `[Lunacy]` in its source.
 
 | App | Id | Version | From |

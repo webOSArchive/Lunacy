@@ -1,0 +1,584 @@
+/* [Lunacy] The Pre3's Calendar, measured on one running HP webOS 2.2.4. Everything here sits
+   under .calendar.pre3, which only a phone's card has (Phone.js). */
+
+.calendar.pre3					{ background: #e4e4e2; font-family: Prelude, sans-serif; }
+.calendar.pre3 .calendarList	{ display: none; }
+.calendar.pre3 .view			{ margin: 0; background: #e4e4e2; }
+.calendar.pre3 .footerPageEffect{ display: none; }
+
+/* The view header: the page's rounded top and the Mojo header pill */
+.calendar.pre3 .header,
+.calendar.pre3 .day .header,
+.calendar.pre3 .week-view .week-header .date	{ background: none; border: none; }
+
+.calendar.pre3 .pre3-title,
+.calendar.pre3 .day > .header,
+.calendar.pre3 .month > .header > .date,
+.calendar.pre3 .week-view .week-header .date {
+	position		: relative;
+	height			: 52px;
+	margin			: 0;
+	padding			: 0;
+	-webkit-box-sizing: border-box;
+	background		: url(images/palm-header.png) 0 0 no-repeat;
+	background-size	: 100% 50.67px;
+	color			: #fff;
+	font-size		: 20px;
+	font-weight		: bold;
+	line-height		: 50px;
+	overflow		: hidden;
+	white-space		: nowrap;
+	text-overflow	: ellipsis;
+}
+.calendar.pre3 .day > .header .date-normal,
+.calendar.pre3 .month > .header > .date .date-normal,
+.calendar.pre3 .week-view .week-header .date .date-normal {
+	font-family		: Prelude, sans-serif;
+	font-weight		: bold;
+	font-size		: 20px;
+	padding-left	: 24px;
+	max-width		: 215px;
+	overflow		: hidden;
+	text-overflow	: ellipsis;
+}
+.calendar.pre3 .day > .header .today	{ display: none !important; }
+.calendar.pre3 .month > .header			{ background: #e4e4e2; }
+.calendar.pre3 .day > .header {
+	height			: 59px;
+	background		: url(images/palm-header.png) 0 0 no-repeat, url(images/header-all-day-separator.png) left bottom repeat-x, #c8c7c7;
+	background-size	: 100% 50.67px, 1px 8px, auto;
+}
+.calendar.pre3 .day.pre3-has-allday > .header {
+	height			: 52px;
+	background		: url(images/palm-header.png) 0 0 no-repeat #c8c7c7;
+	background-size	: 100% 50.67px;
+}
+.calendar.pre3 .week-view .day > .header	{ display: none; }
+
+/* ALL */
+.calendar.pre3 .pre3-source {
+	position		: absolute;
+	top				: 8px;
+	right			: 8px;
+	height			: 35px;
+	max-width		: 110px;
+	line-height		: 33px;
+	border-width	: 0 22px 0 16px;
+	-webkit-border-image: url(images/cal-selector-header-gray.png) 0 33 0 24 stretch stretch;
+	-webkit-box-sizing: border-box;
+	color			: #fff;
+	font-size		: 14px;
+	font-weight		: bold;
+	text-transform	: uppercase;
+	z-index			: 10;
+}
+.calendar.pre3 .pre3-source .pre3-source-name {
+	display			: inline-block;
+	max-width		: 80px;
+	margin-left		: -5px;
+	overflow		: hidden;
+	text-overflow	: ellipsis;
+	white-space		: nowrap;
+}
+.calendar.pre3 .pre3-source .pre3-source-arrow {
+	position		: absolute;
+	top				: 0;
+	right			: -14px;
+	width			: 10px;
+	height			: 34px;
+	background		: url(images/header-arrow-down.png) right center no-repeat;
+	background-size	: 10px auto;
+}
+
+/* The view selector: Mojo's command menu, floating over the view */
+.calendar.pre3 .view-controls {
+	position		: absolute;
+	left			: 0;
+	right			: 0;
+	bottom			: 6px;
+	height			: 50px;
+	padding			: 0;
+	z-index			: 20;
+	pointer-events	: none;
+}
+.calendar.pre3 .view-controls .enyo-button,
+.calendar.pre3 .view-controls .enyo-spacer		{ display: none; }
+.calendar.pre3 .view-controls .Rbutton			{ pointer-events: auto; }
+.calendar.pre3 .Rbutton .enyo-radiobutton {
+	position		: relative;
+	display			: inline-block;
+	min-width		: 0;
+	width			: 59px;
+	height			: 50px;
+	margin			: 0;
+	padding			: 0;
+	background		: none;
+	-webkit-box-sizing: border-box;
+	border-style	: solid;
+	border-width	: 0 20px;
+	-webkit-border-image: url(images/palm-menu-segment-middle.png) 0 30 301 30 repeat stretch;
+	-webkit-box-shadow: none;
+}
+.calendar.pre3 .Rbutton .enyo-radiobutton.enyo-first	{ -webkit-border-image: url(images/palm-menu-segment-first.png) 0 30 301 30 repeat stretch; }
+.calendar.pre3 .Rbutton .enyo-radiobutton.enyo-last		{ -webkit-border-image: url(images/palm-menu-segment-last.png) 0 30 301 30 repeat stretch; }
+.calendar.pre3 .Rbutton .enyo-radiobutton.enyo-button-depressed				{ -webkit-border-image: url(images/palm-menu-segment-middle.png) 150 30 151 30 repeat stretch; }
+.calendar.pre3 .Rbutton .enyo-radiobutton.enyo-first.enyo-button-depressed	{ -webkit-border-image: url(images/palm-menu-segment-first.png) 150 30 151 30 repeat stretch; }
+.calendar.pre3 .Rbutton .enyo-radiobutton.enyo-last.enyo-button-depressed	{ -webkit-border-image: url(images/palm-menu-segment-last.png) 150 30 151 30 repeat stretch; }
+.calendar.pre3 .Rbutton .enyo-radiobutton .enyo-button-icon {
+	position		: absolute;
+	top				: 9px;
+	left			: -7px;
+	width			: 32px;
+	height			: 32px;
+	margin			: 0;
+	background-size	: 32px 64px;
+	background-position: 0 0 !important;
+}
+.calendar.pre3 .Rbutton .enyo-radiobutton.enyo-button-depressed .enyo-button-icon { background-position: 0 -32px !important; }
+
+/* Day: the hours */
+.calendar.pre3 .day					{ border: none; background: #e4e4e2; }
+.calendar.pre3 .day .hours			{ background: #cececc; }
+.calendar.pre3 .day-container		{ padding-top: 0; position: relative; overflow: hidden; }
+.calendar.pre3 .hourLabels			{ width: 28px; height: auto !important; position: relative; overflow: visible; }
+.calendar.pre3 .hourLabelBlock {
+	position		: absolute;
+	left			: 0;
+	width			: 2000px;
+	height			: 48px;
+	background		: #e4e4e2;
+	-webkit-box-sizing: border-box;
+	border-top		: 1px solid #b3b3b2;
+}
+.calendar.pre3 .hourLabelBlock.offhours	{ background: #cececc; }
+.calendar.pre3 .hourLabelBlock.workstart{ border-top: 2px solid #9f9f9e; }
+.calendar.pre3 .hourLabelBlock .halfMarker	{ display: none; }
+.calendar.pre3 .hourLabelBlock .label {
+	display			: block !important;
+	top				: 2px;
+	left			: 0;
+	width			: 28px;
+	padding			: 0;
+	text-align		: center;
+	z-index			: 3;
+	color			: #555;
+	font-size		: 14px;
+	line-height		: 16px;
+}
+.calendar.pre3 .hourLabelBlock.offhours .label	{ color: #777; }
+.calendar.pre3 .hourLabelBlock .label .number	{ display: block; font-weight: bold; margin: 0; }
+.calendar.pre3 .hourLabels .ampm	{ display: none; font-family: Prelude, sans-serif; font-size: 12px; margin-top: -2px; }
+.calendar.pre3 .hourLabelBlock.pre3-ampm .ampm	{ display: block; }
+.calendar.pre3 .hourLabelBlock .current {
+	position		: absolute;
+	top				: 0;
+	left			: 2px;
+	width			: 5px;
+	height			: 48px;
+	background		: url(images/current-time-indicator.png) 0 0 no-repeat;
+	background-size	: 5px 48px;
+}
+
+/* Day: the busy hatching and the folds */
+.calendar.pre3 .pre3-layer	{ position: absolute; left: 0; top: 0; width: 100%; height: 0; }
+.calendar.pre3 .pre3-busy	{ position: absolute; left: 0; right: 0; background: url(images/busy-time.png) repeat; background-size: 12px 12px; pointer-events: none; z-index: 2; }
+.calendar.pre3 .pre3-fold	{ position: absolute; left: 0; right: 0; overflow: visible; pointer-events: none; z-index: 4; }
+.calendar.pre3 .pre3-fold.folded {
+	background		: url(images/dayview-freetime-black-full.png) 0 0;
+	background-size	: 100% 100%;
+	pointer-events	: auto;
+}
+.calendar.pre3 .pre3-pill {
+	position		: absolute;
+	top				: 50%;
+	right			: 33px;
+	height			: 27px;
+	margin-top		: -13px;
+	padding			: 0 2px;
+	background		: url(images/dayview-freetime-button-center.png) repeat-x;
+	background-size	: 1px 27px;
+	color			: #666;
+	font-size		: 12px;
+	font-weight		: bold;
+	line-height		: 27px;
+	white-space		: nowrap;
+	pointer-events	: auto;
+}
+.calendar.pre3 .pre3-pill:before,
+.calendar.pre3 .pre3-pill:after {
+	content			: "";
+	position		: absolute;
+	top				: 0;
+	width			: 13px;
+	height			: 27px;
+	background-size	: 13px 27px;
+}
+.calendar.pre3 .pre3-pill:before	{ left: -13px; background-image: url(images/dayview-freetime-button-left.png); }
+.calendar.pre3 .pre3-pill:after		{ right: -13px; background-image: url(images/dayview-freetime-button-right.png); }
+
+/* Day: the events */
+.calendar.pre3 .day .eventGroup		{ background: none; z-index: 3; }
+.calendar.pre3 .day .event {
+	border-style	: solid;
+	border-width	: 12px 5px 5px 5px;
+	-webkit-box-sizing: border-box;
+	border-radius	: 0;
+	background		: none;
+	color			: #1c3f4d;
+	font-size		: 14px;
+}
+.calendar.pre3 .day .event.edge:after	{ display: none; }
+.calendar.pre3 .day .event .subject,
+.calendar.pre3 .day .event .location,
+.calendar.pre3 .day .event .note {
+	position		: relative;
+	top				: -8px;
+	margin			: 0;
+	padding			: 0;
+	min-height		: 0;
+	line-height		: 14px;
+	color			: inherit;
+}
+.calendar.pre3 .day .event .subject	{ font-size: 14px; font-weight: bold; margin-top: 0; }
+.calendar.pre3 .day .event .location{ font-size: 14px; font-weight: bold; font-style: italic; }
+.calendar.pre3 .day .event .note	{ font-size: 12px; padding: 0; }
+
+/* Day: event art per calendar colour */
+.calendar.pre3 .day .event.theme-blue { -webkit-border-image: url(images/day-event-blue.png) 18 8 8 8 stretch stretch; }
+.calendar.pre3 .day .event.theme-blue.held { -webkit-border-image: url(images/day-event-down-blue.png) 18 8 8 8 stretch stretch; }
+.calendar.pre3 .day .event.theme-gray { -webkit-border-image: url(images/day-event-gray.png) 18 8 8 8 stretch stretch; }
+.calendar.pre3 .day .event.theme-gray.held { -webkit-border-image: url(images/day-event-down-gray.png) 18 8 8 8 stretch stretch; }
+.calendar.pre3 .day .event.theme-green { -webkit-border-image: url(images/day-event-green.png) 18 8 8 8 stretch stretch; }
+.calendar.pre3 .day .event.theme-green.held { -webkit-border-image: url(images/day-event-down-green.png) 18 8 8 8 stretch stretch; }
+.calendar.pre3 .day .event.theme-orange { -webkit-border-image: url(images/day-event-orange.png) 18 8 8 8 stretch stretch; }
+.calendar.pre3 .day .event.theme-orange.held { -webkit-border-image: url(images/day-event-down-orange.png) 18 8 8 8 stretch stretch; }
+.calendar.pre3 .day .event.theme-pink { -webkit-border-image: url(images/day-event-pink.png) 18 8 8 8 stretch stretch; }
+.calendar.pre3 .day .event.theme-pink.held { -webkit-border-image: url(images/day-event-down-pink.png) 18 8 8 8 stretch stretch; }
+.calendar.pre3 .day .event.theme-purple { -webkit-border-image: url(images/day-event-purple.png) 18 8 8 8 stretch stretch; }
+.calendar.pre3 .day .event.theme-purple.held { -webkit-border-image: url(images/day-event-down-purple.png) 18 8 8 8 stretch stretch; }
+.calendar.pre3 .day .event.theme-red { -webkit-border-image: url(images/day-event-red.png) 18 8 8 8 stretch stretch; }
+.calendar.pre3 .day .event.theme-red.held { -webkit-border-image: url(images/day-event-down-red.png) 18 8 8 8 stretch stretch; }
+.calendar.pre3 .day .event.theme-teal { -webkit-border-image: url(images/day-event-teal.png) 18 8 8 8 stretch stretch; }
+.calendar.pre3 .day .event.theme-teal.held { -webkit-border-image: url(images/day-event-down-teal.png) 18 8 8 8 stretch stretch; }
+.calendar.pre3 .day .event.theme-yellow { -webkit-border-image: url(images/day-event-yellow.png) 18 8 8 8 stretch stretch; }
+.calendar.pre3 .day .event.theme-yellow.held { -webkit-border-image: url(images/day-event-down-yellow.png) 18 8 8 8 stretch stretch; }
+
+/* Week */
+.calendar.pre3 .week-view			{ background: #e4e4e2; }
+.calendar.pre3 .week-view .week-header .days-header {
+	padding			: 0;
+	height			: 26px;
+	color			: #333;
+	font-size		: 14px;
+	line-height		: 24px;
+	text-transform	: none;
+	background		: #e4e4e2;
+}
+.calendar.pre3 .week-view .week-header .days-header .day {
+	padding			: 0;
+	margin			: 0;
+	text-align		: center;
+	background		: none;
+}
+.calendar.pre3 .week-view .week-header .days-header .day b	{ margin-right: 2px; }
+.calendar.pre3 .week-view .todayDate {
+	background		: url(images/week-current-day.png) center center no-repeat !important;
+	background-size	: 32px 32px !important;
+}
+.calendar.pre3 .week-view .week-hours	{ border: none; background: #e4e4e2; }
+.calendar.pre3 .week-view .week-container{ position: relative; height: 890px; }
+.calendar.pre3 .week-view .week-hours .allday-header { display: none; }
+.calendar.pre3 .week-view .week-container > .hours { margin-top: 0 !important; position: absolute; top: 0; left: 0; z-index: 4; pointer-events: none; }
+.calendar.pre3 .week-view .day .hours { background: none; }
+.calendar.pre3 .week-view .week-hours .days {
+	left			: 0 !important;
+	height			: 890px;
+	background		: none;
+}
+.calendar.pre3 .week-view .hourLabels	{ width: 40px; height: 720px !important; }
+.calendar.pre3 .week-view .hourLabelBlock {
+	position		: relative;
+	height			: 30px;
+	width			: 40px;
+	border			: none;
+	background		: none !important;
+}
+.calendar.pre3 .week-view .hourLabelBlock .label	{ display: none !important; }
+.calendar.pre3 .week-view .hourLabelBlock .current	{ display: none; }
+.calendar.pre3 .week-view .hourLabelBlock.weekmark .label { display: block !important; top: 6px; width: 40px; }
+.calendar.pre3 .week-view .hourLabelBlock.weekmark .ampm	{ display: none; }
+.calendar.pre3 .week-view .hourLabelBlock.weekmark:before {
+	content			: "";
+	position		: absolute;
+	top				: -1px;
+	left			: 0;
+	width			: 2000px;
+	height			: 2px;
+	background		: #9f9f9e;
+}
+.calendar.pre3 .week-view .week-container	{ overflow: hidden; }
+.calendar.pre3 .week-view .day {
+	border-color	: #b3b3b2;
+	border-style	: solid;
+	border-width	: 0 1px 0 0;
+	background		: none;
+}
+.calendar.pre3 .week-view .pre3-week-busy	{ position: absolute; left: 0; right: 0; background: #cececc; }
+.calendar.pre3 .week-view .day .event		{ z-index: 2; }
+.calendar.pre3 .week-view .day:first-child	{ border-left: none; }
+.calendar.pre3 .week-view .day .eventGroup	{ height: 720px !important; }
+.calendar.pre3 .week-view .day .event {
+	border-width	: 5px 3px 3px 3px;
+	margin			: 0 2px;
+}
+.calendar.pre3 .week-view .day .allday-header	{ display: none; }
+
+/* Month */
+.calendar.pre3 .month				{ background: #e4e4e2; }
+.calendar.pre3 .month .header .weeks {
+	height			: 25px;
+	margin			: 0;
+	border			: none;
+	border-bottom	: 1px solid #727271;
+	background		: #e4e4e2;
+	color			: #333;
+	font-size		: 14px;
+	font-weight		: bold;
+	line-height		: 24px;
+	text-align		: center;
+	text-transform	: none;
+}
+.calendar.pre3 .month .header .weeks .weekend	{ color: #5b5b5a; }
+.calendar.pre3 .month .weeks		{ background: #e4e4e2; border: none; }
+.calendar.pre3 .month .day {
+	position		: relative;
+	min-height		: 0;
+	padding			: 0;
+	border-color	: #adadad;
+	border-style	: solid;
+	border-width	: 1px 0 0 1px;
+	overflow		: hidden;
+	background		: none;
+}
+.calendar.pre3 .month .day:first-child			{ border-left: none; }
+.calendar.pre3 .month .day.current-month		{ background: #fafaf9; color: #000; }
+.calendar.pre3 .month .day.other-month			{ background: none; color: #b3b3b2; }
+.calendar.pre3 .month .day.current-month.weekend{ color: #b3b3b2; }
+.calendar.pre3 .month .day.today				{ background: #fafaf9; color: #000; }
+.calendar.pre3 .month .day.held					{ background: #444; color: #fff; }
+.calendar.pre3 .month .day.first-week			{ border-top-color: #000; }
+.calendar.pre3 .month .day.first-day			{ border-left-color: #000; }
+.calendar.pre3 .month .day .events				{ display: none; }
+.calendar.pre3 .month .day .date {
+	position		: absolute;
+	left			: 0;
+	right			: 0;
+	top				: 50%;
+	margin-top		: -13px;
+	line-height		: 26px;
+	text-align		: center;
+	font-size		: 18px;
+	font-weight		: bold;
+}
+.calendar.pre3 .month .day.today .date:before {
+	content			: "";
+	position		: absolute;
+	top				: 50%;
+	left			: 50%;
+	width			: 57px;
+	height			: 55px;
+	margin			: -28px 0 0 -29px;
+	background		: url(images/month-current-day.png) center center no-repeat;
+	background-size	: 57px 55px;
+}
+.calendar.pre3 .month .day .pre3-strips {
+	position		: absolute;
+	top				: 0;
+	bottom			: 0;
+	left			: 0;
+	right			: 0;
+	display			: -webkit-box;
+	-webkit-box-orient: vertical;
+}
+.calendar.pre3 .month .day .pre3-strips i	{ display: block; -webkit-box-flex: 1; }
+.calendar.pre3 .month .day .pre3-strips.beg i:nth-child(1),
+.calendar.pre3 .month .day .pre3-strips.mid i:nth-child(2),
+.calendar.pre3 .month .day .pre3-strips.end i:nth-child(3) {
+	background		: url(images/busy-time.png) repeat;
+	background-size	: 12px 12px;
+}
+.calendar .pre3-strips	{ display: none; }
+
+/* ALL's popup: Mojo's popup panel */
+.pre3-source-popup {
+	width			: 260px;
+	padding			: 0;
+	border-width	: 16px;
+	border-style	: solid;
+	-webkit-box-sizing: border-box;
+	-webkit-border-image: url(images/palm-popup-background.png) 36 36 36 36 stretch stretch;
+	background		: none;
+	color			: #333;
+	font-size		: 18px;
+}
+.pre3-source-row {
+	display			: -webkit-box;
+	-webkit-box-align: center;
+	height			: 46px;
+	line-height		: 46px;
+	border-top		: 1px solid #c8c8c8;
+}
+.pre3-source-row:first-child	{ border-top: none; }
+.pre3-source-row .legend,
+.pre3-source-row .pre3-source-all { width: 18px; height: 18px; margin: 0 10px 0 2px; }
+.pre3-source-row .pre3-source-all { background: url(images/menu-icon-all.png) center center no-repeat; background-size: 24px 24px; }
+.pre3-source-row .name			{ -webkit-box-flex: 1; width: 0; }
+.pre3-source-check				{ width: 32px; height: 30px; background: url(images/checkmark.png) center center no-repeat; background-size: 32px 30px; }
+.pre3-source-row.options		{ color: #535353; }
+.pre3-source-account {
+	color			: #4b7fc3;
+	font-size		: 12px;
+	font-weight		: bold;
+	line-height		: 18px;
+	border-bottom	: 2px solid #8fb3e0;
+	margin-top		: 6px;
+}
+
+/* The view selector's icons are the Pre3's: normal above, selected below */
+.calendar.pre3 .Rbutton .enyo-radiobutton:nth-child(1) .enyo-button-icon	{ background-image: url(images/menu-icon-day.png) !important; }
+.calendar.pre3 .Rbutton .enyo-radiobutton:nth-child(2) .enyo-button-icon	{ background-image: url(images/menu-icon-week.png) !important; }
+.calendar.pre3 .Rbutton .enyo-radiobutton:nth-child(3) .enyo-button-icon	{ background-image: url(images/menu-icon-month.png) !important; }
+
+.calendar.pre3 .hourLabels .ampm	{ text-transform: lowercase; }
+
+/* Edit: the form in one column */
+.calendar.pre3 .edit .content-container	{ margin: 8px 8px 10px; }
+.calendar.pre3 .edit .horizontal-space	{ display: block; margin-bottom: 6px; }
+.calendar.pre3 .edit .horizontal-space .spacer	{ margin-left: 0; }
+.calendar.pre3 .edit .repeat-alerts		{ display: block; }
+.calendar.pre3 .edit .repeat-alert-space{ margin-right: 0; }
+.calendar.pre3 .edit .alert-list		{ width: 290px; }
+.calendar.pre3 .edit .enyo-menucheckitem-caption	{ width: 250px; }
+.calendar.pre3 .edit .btn-cancel,
+.calendar.pre3 .edit .btn-done			{ min-width: 0; -webkit-box-flex: 1; }
+.calendar.pre3 .edit .btn-done			{ margin-left: 8px; }
+.calendar.pre3 .edit .toolbar1			{ -webkit-box-pack: center; }
+.calendar.pre3 .edit .list-selector		{ -webkit-box-flex: 1; }
+
+/* Popups: to the card's width */
+.pre3-card .enyo-modaldialog.enyo-modaldialog-customWidth,
+.pre3-card .enyo-modaldialog	{ width: auto !important; max-width: none; left: 8px !important; right: 8px !important; }
+
+/* An event's details: a page of its own, as the Pre3's. Its header is the calendar's colour, deeper */
+.pre3-card .enyo-modaldialog.detail-popup {
+	position		: fixed !important;
+	left			: 0 !important;
+	right			: 0 !important;
+	top				: 0 !important;
+	bottom			: 0 !important;
+	width			: auto !important;
+	height			: auto !important;
+	margin			: 0 !important;
+	padding			: 0 !important;
+	border			: none !important;
+	-webkit-border-image: none !important;
+	border-radius	: 0;
+	background		: #e4e4e2;
+}
+.pre3-card .detail-popup .enyo-modaldialog-container	{ height: 100%; padding: 0; margin: 0; }
+.pre3-card .detail-popup .enyo-modaldialog-title		{ display: none; }
+.pre3-card .detail-popup .calendar-detail-view {
+	position		: absolute !important;
+	left			: 0;
+	right			: 0;
+	top				: 0;
+	bottom			: 0;
+	height			: auto !important;
+	font-size		: 20px;
+}
+.pre3-card .detail-popup .detail-view-subject {
+	height			: 53px;
+	padding			: 0 12px;
+	-webkit-box-sizing: border-box;
+	border-radius	: 0;
+	background-image: -webkit-linear-gradient(rgba(0,0,0,.42), rgba(0,0,0,.34));
+	color			: #fff;
+	font-size		: 22px;
+	line-height		: 53px;
+	white-space		: nowrap;
+}
+.pre3-card .detail-popup .detail-view-group				{ border: none; margin: 0; }
+.pre3-card .detail-popup .detail-view-group .enyo-scroller	{ margin: 0; }
+.pre3-card .detail-popup .enyo-view > .enyo-vflexbox:last-child {
+	-webkit-box-orient	: horizontal;
+	padding				: 6px 4px;
+}
+.pre3-card .detail-popup .enyo-view > .enyo-vflexbox:last-child .enyo-button { margin: 0 4px; }
+
+/* The popup lives on the body, outside .calendar's themes */
+.pre3-source-row .theme-blue { background: #91d3ea; }
+.pre3-source-row .theme-green { background: #8cf08c; }
+.pre3-source-row .theme-yellow { background: #e8e37c; }
+.pre3-source-row .theme-gray { background: #c2c2c2; }
+.pre3-source-row .theme-orange { background: #fbb474; }
+.pre3-source-row .theme-pink { background: #f59cbc; }
+.pre3-source-row .theme-red { background: #ff9797; }
+.pre3-source-row .theme-purple { background: #d9b7ff; }
+.pre3-source-row .theme-teal { background: #72dfd2; }
+
+/* Day: the all-day band */
+.calendar.pre3 .day > .allday-header {
+	padding			: 0 0 7px;
+	min-height		: 0;
+	background		: url(images/header-all-day-separator.png) left bottom repeat-x #c8c7c7;
+	background-size	: 1px 8px;
+}
+.calendar.pre3 .day > .allday-header .label		{ display: none; }
+.calendar.pre3 .day .allday-header .enyo-scroller,
+.calendar.pre3 .day .allday-header .enyo-scroller > *	{ height: 100%; }
+.calendar.pre3 .day .allday-header .allday-event {
+	display			: block !important;
+	float			: none !important;
+	height			: 24px;
+	margin			: 5px 4px;
+	padding			: 0 12px;
+	border-style	: solid;
+	border-width	: 0 12px;
+	-webkit-box-sizing: border-box;
+	border-radius	: 0;
+	background		: none;
+}
+.calendar.pre3 .day .allday-header .allday-event .text {
+	max-width		: none;
+	min-width		: 0;
+	margin			: 0 -12px;
+	padding			: 0;
+	text-align		: left;
+	opacity			: 1;
+	color			: #052029;
+	font-size		: 14px;
+	font-weight		: bold;
+	line-height		: 24px;
+}
+
+/* Week: the all-day strip */
+.calendar.pre3 .week-view .pre3-week-allday	{ background: #d8d8d6; border-bottom: 1px solid #b3b3b2; }
+.calendar.pre3 .week-view .pre3-week-bar	{ height: 8px; margin: 1px 2px 0; background-size: 100% 100%; }
+.calendar.pre3 .day .allday-header .allday-event.theme-blue { -webkit-border-image: url(images/day-allday-event-blue.png) 0 18 0 18 stretch stretch; }
+.calendar.pre3 .pre3-week-bar.theme-bar-blue { background-image: url(images/week-allday-event-blue.png); }
+.calendar.pre3 .day .allday-header .allday-event.theme-gray { -webkit-border-image: url(images/day-allday-event-gray.png) 0 18 0 18 stretch stretch; }
+.calendar.pre3 .pre3-week-bar.theme-bar-gray { background-image: url(images/week-allday-event-gray.png); }
+.calendar.pre3 .day .allday-header .allday-event.theme-green { -webkit-border-image: url(images/day-allday-event-green.png) 0 18 0 18 stretch stretch; }
+.calendar.pre3 .pre3-week-bar.theme-bar-green { background-image: url(images/week-allday-event-green.png); }
+.calendar.pre3 .day .allday-header .allday-event.theme-orange { -webkit-border-image: url(images/day-allday-event-orange.png) 0 18 0 18 stretch stretch; }
+.calendar.pre3 .pre3-week-bar.theme-bar-orange { background-image: url(images/week-allday-event-orange.png); }
+.calendar.pre3 .day .allday-header .allday-event.theme-pink { -webkit-border-image: url(images/day-allday-event-pink.png) 0 18 0 18 stretch stretch; }
+.calendar.pre3 .pre3-week-bar.theme-bar-pink { background-image: url(images/week-allday-event-pink.png); }
+.calendar.pre3 .day .allday-header .allday-event.theme-purple { -webkit-border-image: url(images/day-allday-event-purple.png) 0 18 0 18 stretch stretch; }
+.calendar.pre3 .pre3-week-bar.theme-bar-purple { background-image: url(images/week-allday-event-purple.png); }
+.calendar.pre3 .day .allday-header .allday-event.theme-red { -webkit-border-image: url(images/day-allday-event-red.png) 0 18 0 18 stretch stretch; }
+.calendar.pre3 .pre3-week-bar.theme-bar-red { background-image: url(images/week-allday-event-red.png); }
+.calendar.pre3 .day .allday-header .allday-event.theme-teal { -webkit-border-image: url(images/day-allday-event-teal.png) 0 18 0 18 stretch stretch; }
+.calendar.pre3 .pre3-week-bar.theme-bar-teal { background-image: url(images/week-allday-event-teal.png); }
+.calendar.pre3 .day .allday-header .allday-event.theme-yellow { -webkit-border-image: url(images/day-allday-event-yellow.png) 0 18 0 18 stretch stretch; }
+.calendar.pre3 .pre3-week-bar.theme-bar-yellow { background-image: url(images/week-allday-event-yellow.png); }

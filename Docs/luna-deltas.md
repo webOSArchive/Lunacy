@@ -755,3 +755,17 @@ no-suggestions flag, and the dialog appears at once, without Enyo's popup animat
 - **How it looks.** Accounts' own pages, plus a page in place of the sign-in form that says what the account does and, once it exists, lists Android's calendars to show: leaving one out is how an account set up on both sides isn't shown twice. Its icon is Contacts', scaled.
 - **Reminders are the owner's choice** (codepoet). Calendar's Preferences has an Android Calendars group with a Reminders switch, on by default. Android's own notifications are Android's setting, so either, both or neither can sound. A TouchPad has no such group; it shows only with the account.
 - **Known limit.** A permission taken away keeps the last copy; one given back from Android's settings takes effect at the next start of Lunacy.
+
+### B20. Calendar's Pre3 layout: what still differs from a Pre3
+
+**The layout is measured from a Pre3 ([phone.md](phone.md) §8). These differences come from
+keeping CE's Enyo app rather than Palm's Mojo one, and codepoet decides each.** Nothing here touches a tablet.
+
+- **A tap on an empty hour** opens the New Event form. The Pre3 opens an inline event on the day.
+- **Moving an event.** The Pre3 drags an event to a new time or length. Enyo's Calendar has no such thing.
+- **An event's page** has Edit, Delete and Close, and editing is a second page. The Pre3's page is editable in place, with a calendar pill in its header.
+- **Swiping days.** Enyo's carousel slides the day with its header. The Pre3 keeps the header still and shows a scrim with the big date.
+- **Month** pages sideways with cells that fill the card. The Pre3 scrolls weeks vertically with 50 px rows.
+- **One calendar chosen.** The Pre3 tints month and week hatching in that calendar's colour; here it stays grey.
+- **The App Menu** has CE's Import Calendar and Enyo's wording, and no Edit item.
+- **Landscape.** Not compared: the Pre3 wasn't turned. Here the layout holds and the accordion stays on.

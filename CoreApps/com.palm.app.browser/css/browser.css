@@ -364,6 +364,12 @@
 	.actionbar-bottom-3 { left: 50%; }
 	.actionbar-bottom-4 { left: 70%; }
 	.actionbar-bottom-5 { left: 90%; }
+	/* Without the tools the row is only as tall as the address, and the progress bar under it
+	   sat just below the address. As tall as the toolbar, the row puts the bar against the
+	   chrome's bottom edge; the address, centred, stays where it was. */
+	.actionbar .menu-container {
+		min-height: 54px;
+	}
 	.actionbar:after {
 		content: "";
 		position: fixed;

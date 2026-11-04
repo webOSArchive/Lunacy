@@ -2611,6 +2611,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         org.webosarchive.lunacy.card.ImageService(jsServices.root).register(bus)
         val db8 = org.webosarchive.lunacy.card.Db8("com.palm.db", java.io.File(filesDir, "db8.sqlite"),
             applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0).also { it.register(bus) }
+        db8.registerPickerRelay(bus)
         val tempdb = org.webosarchive.lunacy.card.Db8("com.palm.tempdb", null).also { it.register(bus) }
         closeOnDestroy += db8::close; closeOnDestroy += tempdb::close
         // Documents', photos' and videos' indexes, answered from the folders themselves (FileIndex, MediaIndex).

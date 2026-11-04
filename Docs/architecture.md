@@ -896,12 +896,25 @@ webOS served some UI from the OS itself, and apps reach it at its absolute path:
 `enyo.FilePicker` loads
 `/usr/lib/luna/system/luna-systemui/app/FilePicker/filepicker.html` in an iframe, passes its
 parameters in the query string and takes the result back through `postMessage`
-(`enyoCrossAppResult=`). Lunacy serves that path on every app origin, with its own page behind
-it, so the control works in every app without any app being changed.
+(`enyoCrossAppResult=`). Lunacy serves that path on every app origin, with Palm's own picker
+behind it (the TouchPad's `luna-systemui` FilePicker, unchanged; its NOTICE lists the files), so
+the control works in every app without any app being changed.
 
-- Palm's picker listed what the media indexer had in db8. Lunacy has no media indexer, so its
-  picker reads the webOS tree through `palm://org.webosarchive.lunacy/files/list`, grouped by
-  folder the way Palm's showed albums.
+- **Palm's picker reads the media index**, as on the TouchPad: photo albums
+  (`com.palm.media.image.album:1`), their pictures (`com.palm.media.types:1`, once the photos
+  service has made their grid thumbnails), videos, music (`com.palm.media.audio.file:1`) and
+  documents (`com.palm.media.misc.file:1`), all of which db8 answers from the files themselves
+  (`MediaIndex.kt`, `MusicLibrary.kt`, `FileIndex.kt`). On webOS the picker read them as the
+  system UI, `com.palm.systemui`, which every media kind lets read. Here the page runs in the
+  calling app's window, and the bridge takes the caller from the window, so the page points its
+  `DbService` at `palm://org.webosarchive.lunacy/media/find` and `media/search`, which answer
+  the same queries, watches included, as the system UI, for the media kinds only
+  (`Db8.registerPickerRelay`). **Ratchet item:** any page can call that relay, and so read the
+  media index (never change it), where on webOS only the media kinds' consumers could. What it
+  reads is what `files/list` already lists to any app; on a later target the relay checks that
+  the call comes from the picker's frame.
+- Palm's photo grid is three 107 px cells, 372 px with their frames; a popup narrower than
+  that (a phone's) shares its width between the three instead (`css/filepicker.css`).
 - **`/media/internal` is the user's own storage**, as it was on a device, so Android's shared
   folders are mapped into it under the names webOS used: `downloads`, `music`, `photos`,
   `documents`, `camera`, `video`, `ringtones`, which is Android's `Notifications/webOS`, and
@@ -925,11 +938,10 @@ it, so the control works in every app without any app being changed.
   (`isRingtone`). Which tone the system plays stays Android's setting: the `ringtones` sound
   class with no file plays Android's notification sound (`Sounds.kt`).
 - **Cropping.** A caller that asks for a single photo with `cropWidth` or `cropHeight`
-  (Contacts) gets Palm's ImagePicker flow: tapping a photo opens Enyo's `CroppableImage`
-  titled "Preview" (or the caller's `previewLabel`), Cancel becomes Back, and OK returns the
-  photo with its crop parameters as `cropInfo`. The crop view shows a scaled copy, so the
-  picker puts `cropInfo`'s pixel sizes back in the original's pixels (`com.palm.image/imageInfo`):
-  the caller crops the file itself.
+  (Contacts, Screen & Lock) gets Palm's crop step: tapping a photo opens its `ImageCropView`, an
+  Enyo `CroppableImage` of the photo itself titled "Preview" (or the caller's `previewLabel`),
+  and OK returns the photo with `CroppableImage`'s crop parameters as `cropInfo`, in the
+  photo's own pixels.
 - Thumbnails come from `?__lunacy_thumb=<px>` on an image under `/media/internal`, which the
   card host answers with a scaled JPEG. Full-size photos would not fit in 1 GB of RAM. The
   parameter carries Lunacy's own prefix so no app can stumble into it.

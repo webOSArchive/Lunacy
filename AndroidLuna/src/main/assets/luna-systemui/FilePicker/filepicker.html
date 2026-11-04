@@ -7,9 +7,14 @@
 </head>
 <body>
 <script type="text/javascript">
-	// Only ringtones asked for: Palm's ringtone picker (source/RingtonePicker.js).
 	(function () {
+		// Palm's picker read the media index as the system UI, com.palm.systemui. This page runs as
+		// the app that opened it, so its db8 reads go through Lunacy's relay, which answers them as
+		// the system UI for the media kinds only (Db8.registerPickerRelay).
+		enyo.DbService.prototype.service = "palm://org.webosarchive.lunacy/media/";
 		var p = enyo.windowParams || {}, t = p.fileTypes || (p.fileType ? [p.fileType] : []);
+		// Only ringtones asked for: Lunacy's ringtone picker (source/RingtonePicker.js), Palm's own
+		// fed from Android's notification sounds. Everything else: Palm's FilePickerApp (palm/).
 		var ringtones = t && t.length === 1 && t[0] === "ringtone";
 		(ringtones ? new RingtonePickerApp() : new FilePickerApp()).renderInto(document.body);
 	})();

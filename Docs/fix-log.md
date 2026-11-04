@@ -368,6 +368,7 @@ fixed-viewport fallback is allowed).
 | 2026-11-04 | An app's centred column is 0 px wide on a tablet's card, which stands empty under its header | BlueBubbles Synergy connector's settings (the Fold3 unfolded) | Its `.box-center` names only `max-width: 500px; margin: 0 auto` inside a vertical `-webkit-box`. The TouchPad's WebKit stretched the column regardless of auto margins; newer Chromium lays the box out as flexbox, where auto margins cancel the stretch, and an Enyo Scroller has no width of its own. A weightless rule fills the available width; an app's own width still wins | compat (`compat.js`, `:where(.enyo-vflexbox) > :where(.box-center)`) |
 | 2026-11-04 | A field's hint wrapped and stood three lines tall on a phone, until focused | Messaging ("Enter message here...") | Enyo 1's RichText shows its hint as the field's own text, so a hint wider than the field wrapped. Under 540 px it keeps to one line and ends in "..." | compat (`compat.js`, `.enyo-richtext-hint`) |
 | 2026-11-04 | On a phone, a picked conversation didn't bring its chat over the list | Messaging | Palm's code to slide the chat panel in on a single-panel `SlidingPane` was left commented out, against an older Enyo API | nowhere general: in the app, codepoet's exception to rule 5 (its NOTICE; [phone.md](phone.md) §6) |
+| 2026-11-04 | The file picker looked nothing like the TouchPad's | every app that opens `enyo.FilePicker` (Screen & Lock's Change Wallpaper, Contacts' photo and vCard import, Calendar's import) | Lunacy served a picker of its own, written before Lunacy had a media index | system UI: Palm's own FilePickerApp from the TouchPad, unchanged, reading db8's media kinds through a read-only relay that answers as `com.palm.systemui` (`Db8.registerPickerRelay`); its photo grid shares a phone's narrower popup (`css/filepicker.css`) |
 
 ## Known gaps, by the layer they belong to
 
@@ -388,6 +389,8 @@ Found while testing the apps below; each is general, not tied to one app.
   under the names a webOS device used (`downloads`, `music`, `photos`, `documents`, `camera`,
   `video`), so it shows the files the user actually has. Proved end to end: Papyrus imported
   and read an ePub from Android's Downloads folder, unchanged.
+  Since 2026-11-04 the picker is Palm's own, reading the media index db8 now answers from those
+  folders (architecture, "System UI").
 - ~~**bus, not implemented:** `com.palm.systemmanager` (`getSecurityPolicy`, `getDeviceLockMode`,
   `setDevicePasscode`)~~ — done 2026-10-10, answered from Android's own lock (luna-deltas A21):
   Screen & Lock's Secure Unlock shows Android's lock and sets it through Android's chooser, and

@@ -217,6 +217,11 @@ Two general fixes, nothing per app; neither changes a tablet.
   or the one already selected) or New Conversation brings the chat panel over, and back (the
   card's back, or Escape) slides the list back in. Palm's own `checkWideLayout` once did the
   first, against an older `SlidingPane` (`getWideLayout`), and was left commented out.
+- **The file picker's photo grid** (2026-11-04). Palm's picker is the TouchPad's, and its grid
+  is three 107 px cells, 372 px with their frames, wider than a phone's popup; the third column
+  was cut off. A popup narrower than that shares its width between the three cells, frames and
+  all (`luna-systemui/FilePicker/css/filepicker.css`); wider ones are Palm's exactly. A webOS
+  phone had no Enyo picker to measure against.
 
 ## 7. Notifications: the Pre3's (`NotificationArea`)
 

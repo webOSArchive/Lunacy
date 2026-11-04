@@ -272,9 +272,26 @@ class Db8(private val service: String, file: File?,
         bus.register(service, "internal/scheduledPurge", Bus.CallHandler { scheduledPurge(it) })
     }
 
-    private fun handle(method: String, call: Bus.Call) {
+    /**
+     * webOS's file picker read the media index as the system UI (com.palm.systemui, a consumer
+     * of every media kind). Lunacy's picker page runs as the app that opened it, which may not,
+     * so it reads through palm://org.webosarchive.lunacy/media/find and media/search: the same
+     * queries, watches included, answered as the system UI, for the media kinds only
+     * (luna-systemui/FilePicker, codepoet 2026-11-04).
+     */
+    fun registerPickerRelay(bus: Bus) {
+        for (m in listOf("find", "search")) {
+            bus.register(LunacyService.SERVICE, "media/$m", Bus.CallHandler { call ->
+                val from = call.params.optJSONObject("query")?.optString("from").orEmpty()
+                if (from !in PICKER_KINDS) return@CallHandler call.reply(error(-3963, "db: permission denied"))
+                work { handle(m, call, SYSTEM_UI) }
+            })
+        }
+    }
+
+    private fun handle(method: String, call: Bus.Call, caller: String = call.appId) {
         val reply = try {
-            exec(method, call.appId, call.params, call)
+            exec(method, caller, call.params, call)
         } catch (e: DbError) {
             error(e.code, e.text)
         } catch (e: Exception) {
@@ -1013,6 +1030,10 @@ class Db8(private val service: String, file: File?,
     private fun error(code: Int, text: String) = JSONObject().put("errorCode", code).put("errorText", text).put("returnValue", false).toString()
 
     companion object {
+        private const val SYSTEM_UI = "com.palm.systemui"
+        /** What the file picker reads (registerPickerRelay). */
+        private val PICKER_KINDS = setOf("com.palm.media.image.album:1", "com.palm.media.image.file:1", "com.palm.media.video.file:1",
+            "com.palm.media.types:1", "com.palm.media.audio.file:1", "com.palm.media.misc.file:1")
         /** meta: the one-time repair that gave older records' array objects their _ids has run. */
         private const val NESTED_IDS = "nestedIds"
         /** meta: the last purged revision, plus one (0 for none). */

@@ -1,27 +1,35 @@
-Lunacy's file picker.
+webOS's file picker.
 
 webOS served a file picker as system UI at
 /usr/lib/luna/system/luna-systemui/app/FilePicker/filepicker.html, and enyo.FilePicker (in
 Enyo 1) opens exactly that path in an iframe, passing its parameters in the query string and
-taking the result back through postMessage. Lunacy serves its own page there, so the control
+taking the result back through postMessage. Lunacy serves this page there, so the control
 works for every app without any app being changed.
 
-Palm's picker listed what the media indexer had in db8. Lunacy has no media indexer, so this
-one reads the same folders directly, through Lunacy's own service. The code is Lunacy's; the
-contract it keeps (parameters, result shape, path) is webOS's, read from Enyo 1.0's
-FilePicker.js and CrossAppUI.js, and its crop step follows Palm's ImagePicker and
-ImageCropView (the reference TouchPad's systemui).
+It is Palm's own picker (codepoet, 2026-11-04): its FilePickerApp, with the category list,
+photo albums and grid, preview and crop, videos, music and documents, reading the media
+index in db8 as on the TouchPad. These are the TouchPad's files, copied unchanged from
+/usr/lib/luna/system/luna-systemui on 2026-11-04 (webOS CE 3.1.0):
 
-The "ringtone" type is Palm's own ringtone picker (source/RingtonePicker.js follows Palm's
-FilePickerApp, RingtonePicker and AudioPicker, with its list fed by Lunacy's service rather
-than db8). These are the TouchPad's files, copied unchanged from
-/usr/lib/luna/system/luna-systemui/app/FilePicker on 2026-11-04:
+- palm/: every script app/FilePicker/depends.js loads (FPMainView, AlbumGridView,
+  MiscFilePicker, MiscFileItem, AudioPicker, AudioItem, RingtonePicker, ImageAlbumList,
+  ImageFullView, ImageCropView, ImagePicker, VideoPicker, VideoAlbumList, FilePickerApp);
+- css/: AudioPicker, FilePickerApp, ImageAlbum, ImageAlbumList, ImageAlbumThumbnails,
+  MiscFilePicker, RingtoneItem, VideoPicker;
+- images/: the folder, whole;
+- ../utils/utils.js and ../utils/FileFormatter.js (luna-systemui/utils), which it loads.
 
-- palm/AudioItem.js; palm/FPAudioPlayer.js (the FPAudioPlayer kind from AudioPicker.js);
-- css/AudioPicker.css, css/RingtoneItem.css;
-- images/: highlighticon.png, icn-play.png, icn-pause.png, icn-music.png, checkmark.png,
-  empty-folder-audio.png, progress-item.png, progress-item-inner.png, multi-select-9tile.png,
-  menu-icon-add-ringtone.png.
+Lunacy's own parts:
+
+- filepicker.html: Palm's page, plus one line pointing the page's DbService at Lunacy's relay
+  (palm://org.webosarchive.lunacy/media/), which answers db8 reads of the media kinds as the
+  system UI, the caller Palm's picker was; and the ringtone type opens the picker below.
+- source/RingtonePicker.js: Palm's ringtone picker (FilePickerApp, RingtonePicker and
+  AudioPicker) with its list fed from Android's notification sounds through Lunacy's service.
+- css/filepicker.css: the page fills its popup, and Palm's three-column photo grid shares a
+  popup narrower than its 372 px (a phone's) instead of cutting a column off.
+- depends.js: Palm's list, in its order, from palm/, then source/RingtonePicker.js.
 
 Copyright Palm, Inc. / Hewlett-Packard; never released under an open licence; distributed by
-Lunacy as abandonware, like Mojo and the Prelude fonts.
+Lunacy as abandonware, like Mojo and the Prelude fonts. (The TouchPad's AlbumGridView.js
+carries an Apache 2.0 header; the rest carry none.)

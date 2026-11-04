@@ -96,9 +96,11 @@ class AppServer(
         /**
          * webOS's own system UI, which apps reach at its absolute path: enyo.FilePicker
          * loads /usr/lib/luna/system/luna-systemui/app/FilePicker/filepicker.html in an
-         * iframe. Lunacy serves its own pages there, so the control works in every app.
+         * iframe. Lunacy serves Palm's picker there (assets/luna-systemui), so the control
+         * works in every app.
          */
         const val SYSTEM_UI = "usr/lib/luna/system/luna-systemui/app/"
+        const val SYSTEM_UI_UTILS = "usr/lib/luna/system/luna-systemui/utils/"
         /** Just Type's search engine icons, which com.palm.universalsearch names (UniversalSearch). */
         const val SEARCH_ICONS = "usr/lib/luna/system/luna-applauncher/images/"
         /** The Web app's bookmark thumbnails and icons, which its WebView writes (BrowserViews). */
@@ -185,6 +187,8 @@ class AppServer(
             mojo != null -> if (mojo.groupValues[1] == "mojo.js" && !resource) mojoJs("fw/mojo/mojo.js") else asset("fw/mojo/" + mojo.groupValues[1], path, resource)
             frameworks != null -> if (frameworks.groupValues[1] == "mojo2/mojo.js" && !resource) mojoJs("fw/frameworks/mojo2/mojo.js") else asset("fw/frameworks/" + frameworks.groupValues[1], path, resource)
             path.startsWith(SYSTEM_UI) -> asset("luna-systemui/" + path.removePrefix(SYSTEM_UI), path, resource)
+            // The system UI's shared scripts, beside its app/ folder (the file picker loads ../../utils).
+            path.startsWith(SYSTEM_UI_UTILS) -> asset("luna-systemui/utils/" + path.removePrefix(SYSTEM_UI_UTILS), path, resource)
             path.startsWith(SEARCH_ICONS) -> asset("luna-applauncher/images/" + path.removePrefix(SEARCH_ICONS), path, resource)
             path.startsWith(BROWSER_DATA) -> java.io.File(webosRoot, path).takeIf { it.isFile && it.canonicalPath.startsWith(java.io.File(webosRoot, BROWSER_DATA).canonicalPath + java.io.File.separator) }
                 ?.let { respond(it.inputStream(), path, resource, app) }

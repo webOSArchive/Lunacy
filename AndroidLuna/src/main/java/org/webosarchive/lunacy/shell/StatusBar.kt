@@ -564,7 +564,10 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
                 val arrowW = (luna.image("statusBar/menu-arrow.png")?.width ?: 0) + luna.px(14f)
                 var left = x - arrowW
                 notif.values.forEach { i -> i.image?.let { b -> left -= (b.width * Math.min(1f, luna.px(26f) / b.height) + luna.px(5f)) * i.width } }
-                drawTab(c, left - luna.px(2f), notificationRight, Paint().apply { alpha = (menuOverlay.value * notifGroupOpacity * 255).toInt() })
+                // Its fill reaches the system group's separator, where the group's bounds end
+                // (StatusBarItemGroup::paint: the tab is the bounds less the separator, plus its
+                // 11 px caps), so the drop-down's edge, at the separator's middle, is 1 px past it.
+                drawTab(c, left - luna.px(2f), notificationRight + luna.px(3f), Paint().apply { alpha = (menuOverlay.value * notifGroupOpacity * 255).toInt() })
             }
             val icons = Paint().apply { alpha = (notifGroupOpacity * notifIconsOpacity * 255).toInt() }
             x = drawArrowLeft(c, x, icons)

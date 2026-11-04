@@ -23,6 +23,7 @@ import org.webosarchive.lunacy.card.Bus
 import org.webosarchive.lunacy.card.Packages
 import org.webosarchive.lunacy.card.SystemProperties
 import org.webosarchive.lunacy.card.WindowHost
+import org.webosarchive.lunacy.card.WindowType
 import org.webosarchive.lunacy.card.ActivityManager
 import org.webosarchive.lunacy.card.AndroidCalendar
 import org.webosarchive.lunacy.card.AndroidContacts
@@ -1090,8 +1091,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         running.getOrPut(child.appId) { mutableListOf() } += child
         child.fixedOrientation = fixedOrientationOf(registry.get(child.appId))
         when (child.type) {
-            "dashboard" -> notifications.addDashboard(child, notificationHost.icon(child.attributes.optString("icon"), child.appId))
-            "popupalert" -> {
+            WindowType.DASHBOARD -> notifications.addDashboard(child, notificationHost.icon(child.attributes.optString("icon"), child.appId))
+            WindowType.POPUP_ALERT -> {
                 // A phone's list gives way to the alert in the same area: closed by the shell,
                 // so the scrim over the rest goes with it, or it would eat the next tap.
                 if (notificationsAtBottom) closeMenu()
@@ -1099,7 +1100,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             }
             // The headless app's first card: it fills the card its launch put up, and the root
             // goes on where a headless root lives.
-            "card" -> {
+            WindowType.CARD -> {
                 val card = placeholderOf(parent)
                 if (card == null) showAsCard(child, parent)
                 else {
@@ -1110,8 +1111,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 }
             }
             // An app's own Exhibition view: the dock's, never a card.
-            "dockMode" -> exhibitions.addDockWindow(child)
-            else -> showAsCard(child, parent)
+            WindowType.DOCK_MODE -> exhibitions.addDockWindow(child)
+            // A name the shell doesn't know.
+            null -> showAsCard(child, parent)
         }
     }
 

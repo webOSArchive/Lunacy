@@ -41,16 +41,18 @@ object FormFactor {
     const val PHONE_ASPECT = 1.7
 
     private const val PREFS = "device"
+    /** The device's own settings, which DeviceProfile keeps its nduid in too. */
+    fun prefs(context: Context): android.content.SharedPreferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private const val KEY = "layout"
 
     /** The owner's setting: "auto", "phone" or "tablet". */
     fun setting(context: Context): String =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, AUTO) ?: AUTO
+        prefs(context).getString(KEY, AUTO) ?: AUTO
 
     /** Stores a setting; returns false for a value that isn't one. The shell takes it up when it next rebuilds (ShellActivity.reshell). */
     fun setSetting(context: Context, value: String): Boolean {
         if (value != AUTO && value != PHONE && value != TABLET) return false
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, value).apply()
+        prefs(context).edit().putString(KEY, value).apply()
         return true
     }
 
@@ -64,10 +66,10 @@ object FormFactor {
     private const val APP_WIDTH_KEY = "appLayoutWidth"
 
     fun appLayoutWidth(context: Context): Int =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(APP_WIDTH_KEY, APP_LAYOUT_WIDTH_DEFAULT)
+        prefs(context).getInt(APP_WIDTH_KEY, APP_LAYOUT_WIDTH_DEFAULT)
 
     fun setAppLayoutWidth(context: Context, width: Int) =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putInt(APP_WIDTH_KEY, width.coerceIn(0, 2048)).apply()
+        prefs(context).edit().putInt(APP_WIDTH_KEY, width.coerceIn(0, 2048)).apply()
 
     /**
      * The layout the shell is showing, once it has decided one ([decide]); everything an app

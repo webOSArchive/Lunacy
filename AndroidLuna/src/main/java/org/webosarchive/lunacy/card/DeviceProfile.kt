@@ -252,12 +252,12 @@ enum class DeviceProfile(
          * app could read it.
          */
         fun nduid(context: Context): String =
-            context.getSharedPreferences("device", Context.MODE_PRIVATE).getString("nduid", null)
+            FormFactor.prefs(context).getString("nduid", null)
                 ?: derivedNduid(context)
 
         /** Whether the id is this device's own or one its owner carried over. */
         fun nduidSource(context: Context): String =
-            if (context.getSharedPreferences("device", Context.MODE_PRIVATE).contains("nduid")) USER else DERIVED
+            if (FormFactor.prefs(context).contains("nduid")) USER else DERIVED
 
         /**
          * This device's own id: the same after a reinstall, different on another device.
@@ -271,7 +271,7 @@ enum class DeviceProfile(
          * from the same hardware, which is what "the same after a reinstall" relies on.
          */
         fun derivedNduid(context: Context): String {
-            val prefs = context.getSharedPreferences("device", Context.MODE_PRIVATE)
+            val prefs = FormFactor.prefs(context)
             prefs.getString("derivedNduid", null)?.let { return it }
             @Suppress("HardwareIds")
             val androidId = android.provider.Settings.Secure.getString(
@@ -294,13 +294,13 @@ enum class DeviceProfile(
         fun setNduid(context: Context, raw: String): String? {
             val id = raw.filterNot { it == ' ' || it == '-' || it == ':' }.lowercase()
             if (!Regex("^[0-9a-f]{40}$").matches(id)) return null
-            context.getSharedPreferences("device", Context.MODE_PRIVATE).edit().putString("nduid", id).apply()
+            FormFactor.prefs(context).edit().putString("nduid", id).apply()
             return id
         }
 
         /** Back to this device's own id. Deterministic, so nothing sees a new device. */
         fun clearNduid(context: Context): String {
-            context.getSharedPreferences("device", Context.MODE_PRIVATE).edit().remove("nduid").apply()
+            FormFactor.prefs(context).edit().remove("nduid").apply()
             return derivedNduid(context)
         }
 

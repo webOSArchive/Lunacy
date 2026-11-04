@@ -44,13 +44,14 @@ class UniversalSearch(context: Context, private val apps: () -> List<AppInfo>) {
         const val SEARCH = "search"
         const val ACTION = "action"
         const val DBSEARCH = "dbsearch"
-        /** id, name, URL (#{searchTerms} for the words), on at first. */
+        /** A web search Just Type offers: [url] has #{searchTerms} for the words; [on] is whether it is on at first. */
+        private class Engine(val id: String, val name: String, val url: String, val on: Boolean)
         private val ENGINES = listOf(
-            listOf("duckduckgo", "DuckDuckGo", "https://lite.duckduckgo.com/lite/?q=#{searchTerms}", true),
-            listOf("wikipedia", "Wikipedia", "http://en.wikipedia.org/wiki/Special:Search?search=#{searchTerms}", true),
-            listOf("cnn", "CNN", "http://www.cnn.com/search/?query=#{searchTerms}", false),
-            listOf("amazon", "Amazon", "http://www.amazon.com/s/?k=#{searchTerms}", false),
-            listOf("imdb", "IMDb", "http://www.imdb.com/find?q=#{searchTerms}", false),
+            Engine("duckduckgo", "DuckDuckGo", "https://lite.duckduckgo.com/lite/?q=#{searchTerms}", true),
+            Engine("wikipedia", "Wikipedia", "http://en.wikipedia.org/wiki/Special:Search?search=#{searchTerms}", true),
+            Engine("cnn", "CNN", "http://www.cnn.com/search/?query=#{searchTerms}", false),
+            Engine("amazon", "Amazon", "http://www.amazon.com/s/?k=#{searchTerms}", false),
+            Engine("imdb", "IMDb", "http://www.imdb.com/find?q=#{searchTerms}", false),
         )
         /** The device's preferences out of the box (universalsearchprefs.db). */
         private val DEFAULT_PREFS = linkedMapOf("AppSearch" to "true", "ContactSearch" to "true", "GAL" to "false",
@@ -177,10 +178,10 @@ class UniversalSearch(context: Context, private val apps: () -> List<AppInfo>) {
 
     private fun engines(): List<Item> {
         val out = ArrayList<Item>()
-        for ((id, name, url, on) in ENGINES) {
-            out += Item(SEARCH, JSONObject().put("id", id).put("displayName", name)
-                .put("iconFilePath", "${ICONS}search-icon-$id.png").put("url", url)
-                .put("suggestURL", "").put("launchParam", "").put("type", "web").put("enabled", isOn(SEARCH, id as String, on as Boolean)))
+        for (e in ENGINES) {
+            out += Item(SEARCH, JSONObject().put("id", e.id).put("displayName", e.name)
+                .put("iconFilePath", "${ICONS}search-icon-${e.id}.png").put("url", e.url)
+                .put("suggestURL", "").put("launchParam", "").put("type", "web").put("enabled", isOn(SEARCH, e.id, e.on)))
         }
         val added = addedEngines()
         for (id in added.keys()) out += Item(SEARCH, JSONObject(added.getJSONObject(id).toString()).put("enabled", isOn(SEARCH, id, true)))
@@ -222,11 +223,8 @@ class UniversalSearch(context: Context, private val apps: () -> List<AppInfo>) {
     }
 
     /** A launchParam as the device keeps it: a name as it is, an object as its JSON text. */
-    private fun param(decl: JSONObject): String = when (val p = decl.opt("launchParam")) {
-        is JSONObject, is JSONArray -> p.toString()
-        null -> ""
-        else -> p.toString()
-    }
+    /** A declaration's launchParam as text: an object or array as its JSON, anything else as itself, none as "". */
+    private fun param(decl: JSONObject): String = decl.opt("launchParam")?.toString() ?: ""
 
     private fun prefsJson(): JSONObject {
         val out = JSONObject()

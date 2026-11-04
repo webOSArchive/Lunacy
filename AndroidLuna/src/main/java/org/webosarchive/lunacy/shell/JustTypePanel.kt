@@ -114,11 +114,14 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         private val EMAIL_RE = Regex("^([A-Za-z0-9_\\-.])+@([A-Za-z0-9_\\-.@])+\\.([A-Za-z]{2,4}) *$")
         // Util.Template's syntax: #{name}.
         private val TEMPLATE = Regex("#\\{\\s*(\\w+)\\s*\\}")
-        private val TABS = listOf("All", "Contacts", "Content", "Actions")
+        /** The tab row's cells: the four filters in cells 1 to 4, empty cells at either end on a tablet. */
+        const val TAB_CELLS = 6
+        private fun cellOf(f: Filter) = f.ordinal + 1
+        private fun filterAt(cell: Int): Filter? = Filter.values().getOrNull(cell - 1)
     }
 
     /** Which results the filter tabs show. */
-    enum class Filter { ALL, CONTACTS, CONTENT, ACTIONS }
+    enum class Filter(val label: String) { ALL("All"), CONTACTS("Contacts"), CONTENT("Content"), ACTIONS("Actions") }
 
     private val phone = luna.phone
     var onLaunch: (AppInfo) -> Unit = {}
@@ -542,11 +545,11 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
     /** Six cells on a tablet, the outer two empty; on a phone the four tabs alone span the width. */
     private fun tabRect(i: Int): RectF {
         if (phone) {
-            if (i !in 1..4) return RectF()
-            val w = width / 4f
+            if (filterAt(i) == null) return RectF()
+            val w = width / Filter.values().size.toFloat()
             return RectF((i - 1) * w, px(HEADER_H), i * w, px(HEADER_H) + px(TABS_H))
         }
-        val w = width / 6f; return RectF(i * w, px(HEADER_H), (i + 1) * w, px(HEADER_H) + px(TABS_H))
+        val w = width / TAB_CELLS.toFloat(); return RectF(i * w, px(HEADER_H), (i + 1) * w, px(HEADER_H) + px(TABS_H))
     }
 
     /** The TouchPad's 15 px, or on a phone too narrow for it, the size at which the widest label fits its cell. */
@@ -554,7 +557,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         val full = px(15f)
         if (!phone) return full
         tabText.textSize = full
-        val widest = TABS.maxOf { tabText.measureText(it.uppercase()) }
+        val widest = Filter.values().maxOf { tabText.measureText(it.label.uppercase()) }
         val room = width / 4f - px(TAB_PAD)
         return if (widest <= room) full else full * room / widest
     }
@@ -737,17 +740,17 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
     }
 
     private fun drawTabs(c: Canvas) {
-        val selected = if (actionsOnly) 4 else when (view) { Filter.ALL -> 1; Filter.CONTACTS -> 2; Filter.CONTENT -> 3; Filter.ACTIONS -> 4 }
+        val selected = cellOf(if (actionsOnly) Filter.ACTIONS else view)
         tabText.textSize = tabTextSize()
-        for (i in 0 until 6) {
-            if (phone && i !in 1..4) continue
+        for (i in 0 until TAB_CELLS) {
+            if (phone && filterAt(i) == null) continue
             val r = tabRect(i)
             // tab-button.png: the plain cell in rows 0-46, pressed (blue) in 49-95, chosen in 99-145.
             val rows = when (i) { pressedTab -> 49; selected -> 99; else -> 0 }
             drawTabCell(c, r, rows)
-            if (i in 1..4) {
+            if (filterAt(i) != null) {
                 tabText.color = if (i == selected || i == pressedTab) Color.WHITE else Color.rgb(0xc8, 0xc8, 0xc8)
-                c.drawText(TABS[i - 1].uppercase(), r.centerX(), r.top + px(31f), tabText)
+                c.drawText(filterAt(i)!!.label.uppercase(), r.centerX(), r.top + px(31f), tabText)
             }
         }
     }
@@ -782,7 +785,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
     }
 
     private fun tabAt(x: Float, y: Float): Int =
-        if (!searched || y < px(HEADER_H) || y >= topOfList()) -1 else (0 until 6).firstOrNull { tabRect(it).contains(x, y) }?.takeIf { it in 1..4 } ?: -1
+        if (!searched || y < px(HEADER_H) || y >= topOfList()) -1 else (0 until TAB_CELLS).firstOrNull { tabRect(it).contains(x, y) }?.takeIf { filterAt(it) != null } ?: -1
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
@@ -822,7 +825,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         actionsOnly = false
         detail = null
         moreSearch = false; moreActions = false
-        view = when (tab) { 2 -> Filter.CONTACTS; 3 -> Filter.CONTENT; 4 -> Filter.ACTIONS; else -> Filter.ALL }
+        view = filterAt(tab) ?: Filter.ALL
         scroll = 0f
     }
 

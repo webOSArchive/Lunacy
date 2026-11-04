@@ -144,12 +144,8 @@ open class AppWindow(
         private set
     /** webOS window attributes from window.open: "window" is card, dashboard, popupalert or dockMode. */
     var attributes = JSONObject()
-    /**
-     * The window's type, by its name whatever its case: Palm's Photos asks for its Exhibition
-     * window as "dockmode", and the same unchanged Photos opens it in the dock on the reference
-     * TouchPad, where Enyo passes the name through as written.
-     */
-    val type: String get() = attributes.optString("window", "card").let { t -> WINDOW_TYPES.firstOrNull { it.equals(t, ignoreCase = true) } ?: t }
+    /** The window's type ([WindowType.named]), or null for a name the shell doesn't know. */
+    val type: WindowType? get() = WindowType.named(attributes.optString("window", WindowType.CARD.wire))
     /**
      * The orientation the app has fixed its card at - "up", "down", "left", "right",
      * "landscape" or "portrait" - or null while it lets the card turn with the screen
@@ -255,7 +251,7 @@ open class AppWindow(
                 val child = AppWindow(context, appId, host, emulated)
                 child.attributes = pendingAttributes.poll() ?: JSONObject()
                 // Dashboards and popup alerts draw over Luna's dark frames: transparent pages.
-                if (child.type == "dashboard" || child.type == "popupalert") child.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                if (child.type == WindowType.DASHBOARD || child.type == WindowType.POPUP_ALERT) child.setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 (resultMsg.obj as WebViewTransport).webView = child
                 resultMsg.sendToTarget()
                 // The transport is handled on this thread, in order: after it, the window is bound.
@@ -288,7 +284,7 @@ open class AppWindow(
             override fun onPageFinished(view: WebView, url: String) {
                 host.onPageLoaded(this@AppWindow)
                 // The window.open transport resets the background; apply transparency again.
-                if (type == "dashboard" || type == "popupalert") view.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                if (type == WindowType.DASHBOARD || type == WindowType.POPUP_ALERT) view.setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 // Guarded: a window.open transport finishes with no body, and an unguarded
                 // read throws into the app's own console, where it looks like the app's fault.
                 view.evaluateJavascript("(function(){var b=document.body;if(!b){return 'no body';}" +
@@ -440,7 +436,7 @@ open class AppWindow(
         evaluateJavascript("if(window.PalmSystem){PalmSystem.isActivated=$active}", null)
         callMojo(if (active) "stageActivated" else "stageDeactivated")
         // A dashboard's focus is the drop-down's, not the app's card's.
-        if (type != "dashboard") host.stageFocused(this, active)
+        if (type != WindowType.DASHBOARD) host.stageFocused(this, active)
     }
 
     private fun onPageReady() {
@@ -516,8 +512,6 @@ open class AppWindow(
     private companion object {
         /** How long a closing page has to run its unload handlers (close). */
         const val UNLOAD_MS = 1000L
-        /** The window types the shell places, as it names them. */
-        val WINDOW_TYPES = listOf("card", "dashboard", "popupalert", "dockMode")
         /** URLs a page loads in itself, which never leave it. */
         val IN_PAGE_SCHEMES = setOf("about", "data", "javascript", "blob")
         /** How long an open holds the next one when no window comes of it. */

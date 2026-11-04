@@ -136,13 +136,16 @@ class SystemMenu(context: Context, private val luna: Luna, private val controls:
 
     // ---- the rows ----
 
+    /** What an action row does when tapped. */
+    private enum class Act { WIFI_ON_OFF, WIFI_PREFS, BT_ON_OFF, BT_PREFS, AIRPLANE, ROTATION, MUTE }
+
     private sealed class Row {
         object Date : Row()
         object Battery : Row()
         object Brightness : Row()
         object Divider : Row()
         data class Header(val drawer: String) : Row()
-        data class Action(val key: String, val text: String, val icon: String?, val last: Boolean = false, val sub: Boolean = false, val enabled: Boolean = true) : Row()
+        data class Action(val key: Act, val text: String, val icon: String?, val last: Boolean = false, val sub: Boolean = false, val enabled: Boolean = true) : Row()
         data class Net(val n: SystemControls.Network) : Row()
         data class Dev(val d: SystemControls.Device) : Row()
     }
@@ -163,36 +166,36 @@ class SystemMenu(context: Context, private val luna: Luna, private val controls:
         if (controls.wifiAvailable) {
             val body = ArrayList<Row>()
             body += Row.Divider
-            body += Row.Action("wifiOnOff", if (controls.wifiOn) "Turn off WiFi" else "Turn on WiFi", null, sub = true)
+            body += Row.Action(Act.WIFI_ON_OFF, if (controls.wifiOn) "Turn off WiFi" else "Turn on WiFi", null, sub = true)
             body += Row.Divider
             controls.networks.forEach { body += Row.Net(it); body += Row.Divider }
-            body += Row.Action("wifiPrefs", "Wi-Fi Preferences", null, sub = true)
+            body += Row.Action(Act.WIFI_PREFS, "Wi-Fi Preferences", null, sub = true)
             out += Block(listOf(Row.Header("wifi")), drawer("wifi"), body)
             out += Block(listOf(Row.Divider))
         }
         if (controls.bluetoothAvailable) {
             val body = ArrayList<Row>()
             body += Row.Divider
-            body += Row.Action("btOnOff", when {
+            body += Row.Action(Act.BT_ON_OFF, when {
                 controls.bluetoothTurningOn -> "Turning on Bluetooth..."
                 controls.bluetoothOn -> "Turn off Bluetooth"
                 else -> "Turn on Bluetooth"
             }, null, sub = true)
             body += Row.Divider
             controls.devices.forEach { body += Row.Dev(it); body += Row.Divider }
-            body += Row.Action("btPrefs", "Bluetooth Preferences", null, sub = true)
+            body += Row.Action(Act.BT_PREFS, "Bluetooth Preferences", null, sub = true)
             out += Block(listOf(Row.Header("bluetooth")), drawer("bluetooth"), body)
             out += Block(listOf(Row.Divider))
         }
         val air = controls.airplaneOn
         out += Block(listOf(
-            Row.Action("airplane", if (air) "Turn off Airplane Mode" else "Turn on Airplane Mode",
+            Row.Action(Act.AIRPLANE, if (air) "Turn off Airplane Mode" else "Turn on Airplane Mode",
                 if (air) "statusBar/icon-airplane-off.png" else "statusBar/icon-airplane.png"),
             Row.Divider,
-            Row.Action("rotation", if (shownRotationLocked) "Turn off Rotation Lock" else "Turn on Rotation Lock",
+            Row.Action(Act.ROTATION, if (shownRotationLocked) "Turn off Rotation Lock" else "Turn on Rotation Lock",
                 if (shownRotationLocked) "statusBar/icon-rotation-lock-off.png" else "statusBar/icon-rotation-lock.png"),
             Row.Divider,
-            Row.Action("mute", if (shownMuted) "Unmute Sound" else "Mute Sound",
+            Row.Action(Act.MUTE, if (shownMuted) "Unmute Sound" else "Mute Sound",
                 if (shownMuted) "statusBar/icon-mute-off.png" else "statusBar/icon-mute.png", last = true),
         ))
         return out
@@ -589,21 +592,21 @@ class SystemMenu(context: Context, private val luna: Luna, private val controls:
                 } else if (d.open) controls.loadDevices()
             }
             is Row.Action -> when (r.key) {
-                "wifiOnOff" -> {
+                Act.WIFI_ON_OFF -> {
                     val on = controls.wifiOn
                     controls.setWifi(!on)
                     // Turned off, the menu goes; turned on, it waits to close on the connection.
                     if (on) onCloseRequest(300)
                 }
-                "wifiPrefs" -> { controls.openWifiPrefs(); onCloseRequest(300) }
-                "btOnOff" -> {
+                Act.WIFI_PREFS -> { controls.openWifiPrefs(); onCloseRequest(300) }
+                Act.BT_ON_OFF -> {
                     if (controls.bluetoothOn && !controls.bluetoothTurningOn) onCloseRequest(300)
                     controls.setBluetooth(!controls.bluetoothOn)
                 }
-                "btPrefs" -> { controls.openBluetoothPrefs(); onCloseRequest(300) }
-                "airplane" -> { controls.openAirplane(); onCloseRequest(250) }
-                "rotation" -> { frozen = true; controls.toggleRotationLock(); onCloseRequest(250) }
-                "mute" -> { frozen = true; controls.toggleMute(); onCloseRequest(250) }
+                Act.BT_PREFS -> { controls.openBluetoothPrefs(); onCloseRequest(300) }
+                Act.AIRPLANE -> { controls.openAirplane(); onCloseRequest(250) }
+                Act.ROTATION -> { frozen = true; controls.toggleRotationLock(); onCloseRequest(250) }
+                Act.MUTE -> { frozen = true; controls.toggleMute(); onCloseRequest(250) }
             }
             is Row.Net -> if (controls.join(r.n)) onCloseRequest(300)
             is Row.Dev -> { controls.openBluetoothPrefs(); onCloseRequest(350) }

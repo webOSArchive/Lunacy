@@ -209,6 +209,19 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
     private var lunacyService: LunacyService? = null
     private lateinit var applicationManager: ApplicationManager
+    /** What the notifications ask of the shell. */
+    private val notificationShell = object : NotificationHost.Host {
+        override val luna get() = this@ShellActivity.luna
+        override val registry get() = this@ShellActivity.registry
+        override val server get() = this@ShellActivity.server
+        override val statusBar get() = this@ShellActivity.statusBar
+        override val sounds get() = this@ShellActivity.sounds
+        override val blinkNotifications get() = ::systemService.isInitialized && systemService.get("BlinkNotifications") == true
+        override fun launch(appId: String, params: JSONObject?) = this@ShellActivity.launch(appId, params)
+        override fun closeWindow(window: AppWindow) = this@ShellActivity.closeWindow(window)
+        override fun closeMenu() = this@ShellActivity.closeMenu()
+        override fun toggleMenu() = this@ShellActivity.toggleMenu()
+    }
     /** What Exhibition asks of the shell: its chrome, read afresh, since a reshell rebuilds it. */
     private val exhibitionHost = object : ExhibitionController.Host {
         override val luna get() = this@ShellActivity.luna
@@ -317,14 +330,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var tabDialog: TabDialog
     private lateinit var groupOverlay: GroupOverlay
     private var launcherOpen = false
-    private lateinit var notifications: Notifications
-    /** A phone's notifications, along the bottom of the screen (the Pre3's); null on a tablet. */
-    private var area: NotificationArea? = null
-    /** The TouchPad's hosts, from the bar: a tablet's, and a phone's in landscape. */
-    private lateinit var barMenu: DashboardMenu
-    private lateinit var barPopups: PopupLayer
-    /** Whether the notifications are in [area] now: a phone held upright. */
-    private var notificationsAtBottom = false
+    /** Banners, dashboards and alerts (NotificationHost). */
+    private val notificationHost = NotificationHost(this, notificationShell)
+    private val notifications: Notifications get() = notificationHost.notifications
+    private val notificationsAtBottom: Boolean get() = notificationHost.notificationsAtBottom
+    private val area: NotificationArea? get() = notificationHost.area
     private lateinit var systemMenu: SystemMenu
     private lateinit var systemControls: SystemControls
     private lateinit var dockMode: DockMode
@@ -334,7 +344,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private var inFront = false
     /** Catches taps outside the dashboard drop-down, which close it. */
     private lateinit var menuScrim: View
-    private val bannerIds = java.util.concurrent.atomic.AtomicInteger(1)
+
     /** Headless root windows of noWindow apps: attached so their scripts run, never shown. */
     private lateinit var hidden: FrameLayout
     /** A debuggable build (the debug build type), which keeps the adb development extras. */
@@ -568,26 +578,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             setOnClickListener { closeMenu(); exhibitions.closeExhibitionMenu() }
         }
         root.addView(menuScrim, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-        val menu = DashboardMenu(this, luna) { w -> notifications.removeDashboard(w); closeWindow(w) }
-        root.addView(menu, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = luna.px(StatusBar.HEIGHT); gravity = android.view.Gravity.TOP or android.view.Gravity.START
-        })
-        // A phone's are the Pre3's, in an area along the bottom that the shell's root gives way
-        // to (NotificationArea, Docs/phone.md §7); a tablet's are the TouchPad's, from the bar.
-        area = if (!luna.phone) null else NotificationArea(this, luna) { w -> notifications.removeDashboard(w); closeWindow(w) }.also { a ->
-            screen.addView(a, FrameLayout.LayoutParams(MATCH_PARENT, 0).apply { gravity = android.view.Gravity.BOTTOM })
-            a.onSpace = { px ->
-                (root.layoutParams as FrameLayout.LayoutParams).let { lp -> if (lp.bottomMargin != px) { lp.bottomMargin = px; root.layoutParams = lp } }
-            }
-            a.onNotificationTap = { if (!notifications.tapBanner()) toggleMenu() }
-            a.edgeTarget = root
-            statusBar.onSlide = { hidden -> a.fullScreen = hidden }
-        }
-        barMenu = menu; barPopups = popups
-        notificationsAtBottom = wantNotificationsAtBottom()
-        FormFactor.pre3Dashboards = notificationsAtBottom
-        notifications = newNotifications()
-        statusBar.onNotificationTap = { if (!notifications.tapBanner()) toggleMenu() }
+        notificationHost.build(screen, root, popups)
         // The system menu, right-aligned under the bar, its edge 11 px past the screen's.
         systemControls = SystemControls(this, ::askPermissions, ::openAndroidPanel) { key, value -> displayService.write(key, value) }
         systemMenu = SystemMenu(this, luna, systemControls)
@@ -673,7 +664,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 android.content.Intent.ACTION_SCREEN_ON, android.content.Intent.ACTION_SCREEN_OFF -> {
                     displayService.screenChanged()
                     // The owner is looking: the light has done its job.
-                    if (intent.action == android.content.Intent.ACTION_SCREEN_ON) notificationLight.clear()
+                    if (intent.action == android.content.Intent.ACTION_SCREEN_ON) notificationHost.clearLight()
                 }
             }
         }
@@ -1052,12 +1043,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         running.getOrPut(child.appId) { mutableListOf() } += child
         child.fixedOrientation = fixedOrientationOf(registry.get(child.appId))
         when (child.type) {
-            "dashboard" -> notifications.addDashboard(child, icon(child.attributes.optString("icon"), child.appId))
+            "dashboard" -> notifications.addDashboard(child, notificationHost.icon(child.attributes.optString("icon"), child.appId))
             "popupalert" -> {
                 // A phone's list gives way to the alert in the same area: closed by the shell,
                 // so the scrim over the rest goes with it, or it would eat the next tap.
                 if (notificationsAtBottom) closeMenu()
-                notifications.popups.show(child, alertHeight(child))
+                notifications.popups.show(child, notificationHost.alertHeight(child))
             }
             // The headless app's first card: it fills the card its launch put up, and the root
             // goes on where a headless root lives.
@@ -1088,37 +1079,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         closeWindow(window)
     }
 
-    /**
-     * An icon from an app's origin (a dashboard's `icon`, a banner's), else the app's mini
-     * icon, as LunaSysMgr fell back for both (DashboardWindow::icon, BannerMessageHandler::generateIcon).
-     */
-    private fun icon(url: String?, appId: String): android.graphics.Bitmap? {
-        val colour = NotificationIcons.colour(this)
-        if (url != null && url.startsWith("data:")) {
-            // How the Android Notifications app gives an Android app's icon: a launcher icon,
-            // so sized, and grey or not, as the mini icon made from one (Luna.miniIcon). A
-            // webOS icon's art fills about nine tenths of its square and Android's all of it,
-            // so it is drawn that much smaller in the middle, or it would fill the bar edge to edge.
-            runCatching {
-                android.util.Base64.decode(url.substringAfter(','), android.util.Base64.DEFAULT).let { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size) }
-            }.getOrNull()?.let {
-                val side = luna.px(28)
-                val sized = android.graphics.Bitmap.createBitmap(side, side, android.graphics.Bitmap.Config.ARGB_8888)
-                val inset = side * (1f - ANDROID_ICON_ART) / 2f
-                android.graphics.Canvas(sized).drawBitmap(it, null, android.graphics.RectF(inset, inset, side - inset, side - inset),
-                    android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG))
-                return if (colour) sized else Luna.grey(sized)
-            }
-        } else if (!url.isNullOrEmpty()) server.serve(android.net.Uri.parse(url))?.takeIf { it.statusCode == 200 }?.let { luna.decode(it.data)?.let { b -> return b } }
-        return registry.get(appId)?.let { luna.miniIcon(it, colour) }
-    }
-
-    override fun addBanner(window: AppWindow, message: String, params: String, icon: String, soundClass: String, soundFile: String, duration: Int): Int {
-        val id = bannerIds.getAndIncrement()
-        runOnUiThread { notifications.addBanner(Banner(id, window, window.appId, message, icon(icon, window.appId), params, soundClass, soundFile, duration)) }
-        return id
-    }
-
     private val sounds by lazy {
         Sounds(this, server) { id -> registry.get(id)?.dir ?: id }.apply {
             // Sounds & Alerts' switches, read as each sound plays.
@@ -1137,22 +1097,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         target.evaluateJavascript("window.__lunacyPaste&&__lunacyPaste(${jsString(text)})", null)
     }
 
-    /** The last "Selection Copied" banner, which the next one replaces (WebAppManager::copiedToClipboard). */
-    private var copiedBanner: Pair<AppWindow, Int>? = null
-
-    override fun copiedToClipboard(window: AppWindow) {
-        copiedBanner?.let { (w, id) -> notifications.removeBanner(w, id) }
-        val id = bannerIds.getAndIncrement()
-        notifications.addBanner(Banner(id, window, window.appId, "Selection Copied", icon(null, window.appId), "{ }"))
-        copiedBanner = window to id
-    }
-
     override fun playSound(window: AppWindow, soundClass: String, soundFile: String, duration: Int) =
         sounds.play(window.appId, soundClass, soundFile, duration)
-
-    /** A banner from the system itself, e.g. the package manager. Tapping it launches appId. */
-    private fun systemBanner(appId: String, message: String, params: String = "") =
-        notifications.addBanner(Banner(bannerIds.getAndIncrement(), null, appId, message, icon(null, appId), params))
 
     /**
      * Installs a package, as Preware did for the App Museum: banners report progress, and
@@ -1259,8 +1205,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
     }
 
-    override fun removeBanner(window: AppWindow, id: Int) = notifications.removeBanner(window, id)
-    override fun clearBanners(window: AppWindow) = notifications.clearBanners(window)
+    override fun addBanner(window: AppWindow, message: String, params: String, icon: String, soundClass: String, soundFile: String, duration: Int) =
+        notificationHost.addBanner(window, message, params, icon, soundClass, soundFile, duration)
+    override fun copiedToClipboard(window: AppWindow) = notificationHost.copiedToClipboard(window)
+    override fun removeBanner(window: AppWindow, id: Int) = notificationHost.removeBanner(window, id)
+    override fun clearBanners(window: AppWindow) = notificationHost.clearBanners(window)
+    /** A banner from the system itself, e.g. the package manager. Tapping it launches appId. */
+    private fun systemBanner(appId: String, message: String, params: String = "") = notificationHost.systemBanner(appId, message, params)
+    private fun notificationIconsChanged() = notificationHost.iconsChanged()
 
     private fun toggleMenu() = if (notifications.menu.isOpen) closeMenu() else openMenu()
 
@@ -1295,35 +1247,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     /**
-     * A phone held upright has the Pre3's notifications along the bottom; turned on its side
-     * it is short, so they go to the bar as on a tablet (a delta: the Pre3 kept them at the
-     * bottom; codepoet, 2026-10-16; Docs/luna-deltas.md B12).
-     */
-    private fun wantNotificationsAtBottom() =
-        area != null && resources.configuration.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE
-
-    private fun newNotifications(): Notifications {
-        val a = area?.takeIf { notificationsAtBottom }
-        return Notifications(luna, a ?: statusBar, a ?: barMenu, a ?: barPopups, onBannerTap = { b ->
-            closeMenu()
-            launch(b.appId, try { JSONObject(b.params) } catch (e: Exception) { null })
-        }, onNoDashboards = { closeMenu(); notificationLight.clear() }, onBannerShown = { b ->
-            sounds.play(b.appId, b.soundClass, b.soundFile, b.soundDuration)
-        }, onArrived = { notificationLight.arrived() })
-    }
-
-    /** Screen & Lock's Blink Notifications: the device's notification light, where it has one. */
-    private val notificationLight by lazy {
-        NotificationLight(this, enabled = { ::systemService.isInitialized && systemService.get("BlinkNotifications") == true },
-            screenOn = { (getSystemService(POWER_SERVICE) as android.os.PowerManager).isInteractive })
-    }
-
-    /** The owner chose colour or grey icons: the dashboards showing are drawn again. */
-    private fun notificationIconsChanged() {
-        notifications.dashboards.forEach { notifications.setIcon(it, icon(it.attributes.optString("icon"), it.appId)) }
-    }
-
-    /**
      * Android's notifications changed (AndroidNotifications): the Android Notifications app
      * hears it, or, not running, is started to show them, headless, as a service starts an app
      * on webOS. It ends again once its last dashboard goes. Not before the webOS root is up and
@@ -1337,37 +1260,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (!::webos.isInitialized || !LunacyService.firstUseDone(this)) return
         if (registry.get(ANDROID_NOTIFICATIONS_APP) == null) return
         launch(ANDROID_NOTIFICATIONS_APP, null, startupCard = false)
-    }
-
-    /** A popup alert's height, as its window asked, or [DEFAULT_ALERT_HEIGHT]. */
-    private fun alertHeight(w: AppWindow) = w.attributes.optInt("height", DEFAULT_ALERT_HEIGHT)
-
-    /** Dashboards, alerts and banners taken from the notifications a reshell or a turn replaced, given to the new ones. */
-    private fun giveNotifications(dashboards: List<AppWindow>, alerts: List<AppWindow>, banners: List<Banner>) {
-        dashboards.forEach { notifications.addDashboard(it, icon(it.attributes.optString("icon"), it.appId)) }
-        alerts.forEach { notifications.popups.show(it, alertHeight(it)) }
-        notifications.takeBanners(banners)
-    }
-
-    /** The phone turned: its dashboards, alerts and banners move between the area and the bar. */
-    private fun placeNotifications() {
-        val bottom = wantNotificationsAtBottom()
-        if (bottom == notificationsAtBottom) return
-        closeMenu()
-        val old = notifications
-        val dashboards = old.dashboards
-        val alerts = old.popups.windows
-        val banners = old.handOverBanners()
-        dashboards.forEach { old.removeDashboard(it) }
-        alerts.forEach { old.popups.remove(it) }
-        (if (notificationsAtBottom) area!! as BannerSurface else statusBar).let { it.banner = null; it.redrawBanner() }
-        notificationsAtBottom = bottom
-        FormFactor.pre3Dashboards = bottom
-        notifications = newNotifications()
-        giveNotifications(dashboards, alerts, banners)
-        statusBar.post { (dashboards + alerts).forEach { it.rescale() } }
-        // Their boxes are the other kind now (FormFactor.pre3Dashboards).
-        dashboards.forEach { it.evaluateJavascript(AppServer.REFETCH_LAYOUT_IMAGES, null) }
     }
 
     /**
@@ -1880,7 +1772,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         goImmersive()
         // A foldable folded or opened: the screen may now call for the other layout. Once the
         // display has its new size (the configuration can arrive first).
-        window.decorView.post { if (shownKind() != FormFactor.decide(this)) reshell() else placeNotifications() }
+        window.decorView.post { if (shownKind() != FormFactor.decide(this)) reshell() else notificationHost.placeNotifications() }
     }
 
     /**
@@ -1940,7 +1832,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
         headless.forEach { hidden.addView(it, FrameLayout.LayoutParams(1, 1)) }
         exhibitions.takeWindowsBack()
-        giveNotifications(dashboards, alerts, banners)
+        notificationHost.giveNotifications(dashboards, alerts, banners)
         // Once the pages are laid out in their new cards: the viewport is written from the card's size.
         cards.post { running.values.flatten().forEach { it.rescale() } }
         // Pages loaded under the other layout fetch the images served by layout again.
@@ -2530,8 +2422,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             "landscape" to android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
             "portrait" to android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT,
         )
-        /** A popup alert's height when its window gives none, in TouchPad px. */
-        private const val DEFAULT_ALERT_HEIGHT = 200
         private const val CONFIRM_LOCK = 201
         private const val FIRST_PERMISSION_REQUEST = 1000
         /** The launcher's launch point title, com.palm.launcher's on the reference TouchPad. */
@@ -2551,8 +2441,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         const val SHOW_WINDOW_TIMEOUT_MS = 3000L
         /** How long a headless app outlives its last visible window: long enough to hear that window go. */
         const val HEADLESS_LINGER_MS = 1000L
-        /** How much of a webOS launcher icon's square its art fills (Lunacy's bundled apps' icons: 0.88 to 0.97): an Android icon in the bar is drawn this size. */
-        const val ANDROID_ICON_ART = 0.9f
         /** Lunacy's app that shows Android's notifications as dashboards. */
         const val ANDROID_NOTIFICATIONS_APP = "org.webosarchive.lunacy.notifications"
         /** How long after a headless app is up its placeholder card waits for it to open one. */

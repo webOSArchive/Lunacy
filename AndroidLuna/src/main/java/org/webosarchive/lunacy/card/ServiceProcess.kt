@@ -35,6 +35,12 @@ class ServiceProcess(
     private val extractfs: ((spec: String, reply: (String?) -> Unit) -> Unit)? = null,
     private val start: () -> Process,
     private val onEnded: (ServiceProcess) -> Unit,
+    /**
+     * Whether its calls may name the app they are made for (LSCallFromApplication): only the
+     * system services Lunacy ships, as on webOS only system services could. Anything else is
+     * its own caller, whatever it says (rule 10; code review S2).
+     */
+    private val actsForApps: Boolean = false,
 ) {
     private val main = Handler(Looper.getMainLooper())
     private var process: Process? = null
@@ -112,7 +118,9 @@ class ServiceProcess(
             "call" -> {
                 val id = m.optString("id")
                 val sub = m.optBoolean("subscribe")
-                val caller = m.optString("appId").ifEmpty { name }
+                val named = m.optString("appId")
+                if (named.isNotEmpty() && !actsForApps) Log.w(AppServer.TAG, "$kind $name: call made as $named refused that name; it calls as itself")
+                val caller = named.takeIf { it.isNotEmpty() && actsForApps } ?: name
                 val c = bus.call(caller, m.optString("url"), m.optString("payload"), privateBus = true) { reply ->
                     send(JSONObject().put("t", "callResponse").put("id", id).put("payload", reply).put("subscribe", sub).put("sender", ""))
                 }

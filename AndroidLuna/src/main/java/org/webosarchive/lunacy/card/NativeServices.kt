@@ -52,7 +52,7 @@ class NativeServices(private val bus: Bus, private val webos: WebosRoot, private
 
     private fun call(call: Bus.Call) {
         val spec = specs[call.service] ?: return call.reply(Bus.error("Service does not exist: ${call.service}."))
-        val p = running[spec.name] ?: ServiceProcess(bus, spec.name, "native service", worker,
+        val p = running[spec.name] ?: ServiceProcess(bus, spec.name, "native service", worker, actsForApps = true,
             start = { launch(spec) }, onEnded = { ended -> if (running[spec.name] === ended) running.remove(spec.name) })
             .also { running[spec.name] = it }
         p.request(call)

@@ -312,11 +312,11 @@ EOA
 # liblunacygl.so, replays it on a GLES 1.1 context of its own. Both are generated from the
 # same headers so the opcodes agree. gen_gles1_log.py is the stage-one logging library.
 python3 "$SRC/libgles/gen_gles1.py" client "$PDK_INC/GLES/gl.h" "$PDK_INC/GLES/glext.h" > libgles_cm.c
-$CC -O2 -shared -fPIC -Wl,-soname,libGLES_CM.so -Wl,-Bsymbolic -I"$PDK_INC" -I"$SRC/libgles" libgles_cm.c -o "$OUT/lib/libGLES_CM.so"
+$CC -O2 -shared -fPIC -Wl,-soname,libGLES_CM.so -Wl,-Bsymbolic -I"$PDK_INC" -I"$SRC/libgles" -I"$SRC/sdl-lunacy" libgles_cm.c -o "$OUT/lib/libGLES_CM.so"
 python3 "$SRC/libgles/gen_gles1.py" server "$PDK_INC/GLES/gl.h" "$PDK_INC/GLES/glext.h" > gles_replay.inc
 # GLES 2 the same way (gen_gles2.py): libGLESv2.so for the app, liblunacygl2.so for the shell.
 python3 "$SRC/libgles/gen_gles2.py" client "$PDK_INC/GLES2/gl2.h" "$PDK_INC/GLES2/gl2ext.h" > libglesv2.c
-$CC -O2 -shared -fPIC -Wl,-soname,libGLESv2.so -Wl,-Bsymbolic -I"$PDK_INC" -I"$SRC/libgles" libglesv2.c -o "$OUT/lib/libGLESv2.so"
+$CC -O2 -shared -fPIC -Wl,-soname,libGLESv2.so -Wl,-Bsymbolic -I"$PDK_INC" -I"$SRC/libgles" -I"$SRC/sdl-lunacy" libglesv2.c -o "$OUT/lib/libGLESv2.so"
 python3 "$SRC/libgles/gen_gles2.py" server "$PDK_INC/GLES2/gl2.h" "$PDK_INC/GLES2/gl2ext.h" > gles2_replay.inc
 # Each client library binds its own lunacy_gl_* (-Bsymbolic above): an apkenv port loads both.
 # libEGL: the TouchPad's EGL as a PDK app saw it, over SDL's one context (Docs/pdk.md, "EGL").

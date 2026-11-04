@@ -68,7 +68,7 @@ LOCAL = {
     'glExtGetProgramBinarySourceQCOM', 'glEGLImageTargetTexture2DOES', 'glEGLImageTargetRenderbufferStorageOES',
     'glMultiDrawArraysEXT', 'glMultiDrawElementsEXT', 'glGetProgramivARB', 'glGetProgramStringARB',
 }
-ARRAY_OP = 0xFFFF
+ARRAY_OP = 0xFFFF   # as gl_protocol.h; the two must match
 
 # The client's record of GL state the app may read back: call -> the C that records it.
 FX = '/ 65536.0f'

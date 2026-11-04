@@ -80,7 +80,7 @@ OUTPUT = {
 RETURNS = {'glGetAttribLocation', 'glGetUniformLocation', 'glCheckFramebufferStatus', 'glIsBuffer', 'glIsEnabled',
            'glIsFramebuffer', 'glIsProgram', 'glIsRenderbuffer', 'glIsShader', 'glIsTexture'}
 MAPPED = {'program': 'prog_names', 'shader': 'prog_names', 'framebuffer': 'fb_names', 'renderbuffer': 'rb_names'}
-ATTRIB_OP = 0xFFFC
+ATTRIB_OP = 0xFFFC   # as gl_protocol.h; the two must match
 
 
 def params(text):

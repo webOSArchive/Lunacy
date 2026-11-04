@@ -17,7 +17,6 @@ typedef void *GLeglImageOES;
 #define STREAM_VERSION 2
 #include "client_transport.h"
 
-#define ATTRIB_OP 0xFFFCu
 #define ATTRIBS 16
 
 /* ---- vertex attribute arrays ---- */
@@ -25,10 +24,6 @@ typedef void *GLeglImageOES;
 struct attrib { int enabled; GLint size; GLenum type; GLboolean normalized; GLsizei stride; const void *ptr; GLuint buffer; };
 static struct attrib attribs[ATTRIBS];
 
-static size_t attrib_type_size(GLenum type)
-{
-	switch (type) { case GL_BYTE: case GL_UNSIGNED_BYTE: return 1; case GL_SHORT: case GL_UNSIGNED_SHORT: return 2; default: return 4; }
-}
 
 /* Before a draw: each enabled attribute array in the app's memory, the elements it covers. */
 static void send_attribs(size_t vertices, size_t count, GLenum index_type, const void *indices)
@@ -37,7 +32,7 @@ static void send_attribs(size_t vertices, size_t count, GLenum index_type, const
 	for (uint32_t i = 0; i < ATTRIBS; i++) {
 		struct attrib *a = &attribs[i];
 		if (!a->enabled || a->buffer || !a->ptr || !vertices) continue;
-		size_t elem = (size_t)a->size * attrib_type_size(a->type);
+		size_t elem = (size_t)a->size * gl_type_size(a->type);
 		size_t stride = a->stride > 0 ? (size_t)a->stride : elem;
 		size_t n = stride * (vertices - 1) + elem;
 		uint8_t *w = begin(ATTRIB_OP, 5 * 4 + 4 + blob_len(a->ptr, n));   /* the blob is padded to 4 */

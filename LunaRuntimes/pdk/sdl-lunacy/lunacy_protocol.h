@@ -42,4 +42,9 @@
 
 #define LPDK_HEADER 12
 
+/* The screen an app is told it has when the shell doesn't say (LUNACY_PDK_SCREEN_W/H): the
+   TouchPad's, in landscape. */
+#define LPDK_DEFAULT_SCREEN_W 1024
+#define LPDK_DEFAULT_SCREEN_H 768
+
 #endif

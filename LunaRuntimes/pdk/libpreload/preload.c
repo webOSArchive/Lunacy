@@ -82,6 +82,22 @@ static const char *webos_root(size_t *len)
 	return root_len ? root : NULL;
 }
 
+/* One entry of LUNACY_PDK_MEDIA ("name=dir:name=dir") from *at, which moves past it; 0 when
+   there are no more. An entry with no '=' is skipped. */
+struct mapping { const char *name; size_t name_len; const char *dir; size_t dir_len; };
+static int next_mapping(const char **at, struct mapping *m)
+{
+	while (*at && **at) {
+		const char *start = *at, *end = start + strcspn(start, ":"), *eq = memchr(start, '=', end - start);
+		*at = *end ? end + 1 : end;
+		if (!eq) continue;
+		m->name = start; m->name_len = (size_t)(eq - start);
+		m->dir = eq + 1; m->dir_len = (size_t)(end - eq - 1);
+		return 1;
+	}
+	return 0;
+}
+
 /*
  * /media/internal's folders that are Android's own (UserFiles.kt): Documents, Download and the
  * rest, which the shell names in LUNACY_PDK_MEDIA as "name=dir:name=dir". As in the shell, a
@@ -102,15 +118,15 @@ static const char *media(const char *path, char *buf)
 	if (!n || root_len + sizeof prefix + n >= sizeof own) return NULL;
 	snprintf(own, sizeof own, "%s%s%.*s", root, prefix, (int)n, rest);
 	if (fstatat(AT_FDCWD, own, &st, AT_SYMLINK_NOFOLLOW) == 0) return NULL;
-	for (at = spec; *at; ) {
-		const char *end = at + strcspn(at, ":"), *eq = memchr(at, '=', end - at);
-		if (eq && (size_t)(eq - at) == n && strncasecmp(at, rest, n) == 0) {
-			size_t dir = end - eq - 1;
-			if (dir + strlen(rest + n) + 1 > PATH_MAX) return NULL;
-			memcpy(buf, eq + 1, dir); strcpy(buf + dir, rest + n);
+	/* A webOS path's folder name matches whatever its case, as the TouchPad's FAT-formatted
+	   /media/internal did. */
+	struct mapping m;
+	for (at = spec; next_mapping(&at, &m); ) {
+		if (m.name_len == n && strncasecmp(m.name, rest, n) == 0) {
+			if (m.dir_len + strlen(rest + n) + 1 > PATH_MAX) return NULL;
+			memcpy(buf, m.dir, m.dir_len); strcpy(buf + m.dir_len, rest + n);
 			return buf;
 		}
-		at = *end ? end + 1 : end;
 	}
 	return NULL;
 }
@@ -118,16 +134,15 @@ static const char *media(const char *path, char *buf)
 /* A real path inside a mapped folder: its /media/internal path in out. */
 static int mapped_path(const char *cwd, char *out)
 {
+	/* A real path compares as Android's filesystem does: exactly. */
 	const char *at = getenv("LUNACY_PDK_MEDIA");
-	if (!at) return 0;
-	while (*at) {
-		const char *end = at + strcspn(at, ":"), *eq = memchr(at, '=', end - at);
-		size_t n = eq ? (size_t)(end - eq - 1) : 0;
-		if (n && strncmp(cwd, eq + 1, n) == 0 && (cwd[n] == 0 || cwd[n] == '/')) {
-			snprintf(out, PATH_MAX, "/media/internal/%.*s%s", (int)(eq - at), at, cwd + n);
+	struct mapping m;
+	while (next_mapping(&at, &m)) {
+		size_t n = m.dir_len;
+		if (n && strncmp(cwd, m.dir, n) == 0 && (cwd[n] == 0 || cwd[n] == '/')) {
+			snprintf(out, PATH_MAX, "/media/internal/%.*s%s", (int)m.name_len, m.name, cwd + n);
 			return 1;
 		}
-		at = *end ? end + 1 : end;
 	}
 	return 0;
 }
@@ -455,19 +470,17 @@ static int mapped_after(const char **at, char *name)
 {
 	size_t root_len;
 	const char *root = webos_root(&root_len);
-	int found = 0;
-	while (*at && **at && !found) {
-		const char *end = *at + strcspn(*at, ":"), *eq = memchr(*at, '=', end - *at);
-		size_t n = eq ? (size_t)(eq - *at) : 0;
+	struct mapping m;
+	while (next_mapping(at, &m)) {
+		size_t n = m.name_len;
 		char own[PATH_MAX];
 		struct stat st;
 		if (n && n <= NAME_MAX && root && root_len + n + 17 < sizeof own) {
-			snprintf(own, sizeof own, "%s/media/internal/%.*s", root, (int)n, *at);
-			if (fstatat(AT_FDCWD, own, &st, AT_SYMLINK_NOFOLLOW) != 0) { memcpy(name, *at, n); name[n] = 0; found = 1; }
+			snprintf(own, sizeof own, "%s/media/internal/%.*s", root, (int)n, m.name);
+			if (fstatat(AT_FDCWD, own, &st, AT_SYMLINK_NOFOLLOW) != 0) { memcpy(name, m.name, n); name[n] = 0; return 1; }
 		}
-		*at = *end ? end + 1 : end;
 	}
-	return found;
+	return 0;
 }
 
 /* The next mapped folder for this listing, or NULL: its name in name[NAME_MAX + 1]. */

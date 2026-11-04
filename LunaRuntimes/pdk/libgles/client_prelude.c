@@ -237,7 +237,7 @@ static void send_arrays(size_t vertices, size_t count, GLenum index_type, const 
 	for (int s = 0; s < ARRAYS; s++) {
 		struct array *a = &arrays[s];
 		if (!a->enabled || a->buffer || !a->ptr || !vertices) continue;
-		size_t elem = (size_t)a->size * type_size(a->type);
+		size_t elem = (size_t)a->size * gl_type_size(a->type);
 		size_t stride = a->stride > 0 ? (size_t)a->stride : elem;
 		size_t n = stride * (vertices - 1) + elem;
 		uint8_t *w = begin(ARRAY_OP, 6 * 4 + 4 + blob_len(a->ptr, n));   /* the blob is padded to 4 */

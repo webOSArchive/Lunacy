@@ -20,6 +20,7 @@
 
 #include "PDL.h"
 #include "lunacy_protocol.h"
+#include "lunacy_io.h"
 
 /* From the SDL video driver (SDL_lunacyvideo.c), in the same process. */
 extern int LUNACY_control_sock;
@@ -48,6 +49,7 @@ static void note(const char *what) { fprintf(stderr, "[pdl] %s: not backed by th
 static PDL_Err fail(const char *msg) { snprintf(last_error, sizeof last_error, "%s", msg); return PDL_ECONNECTION; }
 
 static const char *env_or(const char *name, const char *dflt) { const char *v = getenv(name); return v && *v ? v : dflt; }
+static int env_int_or(const char *name, int dflt) { const char *v = getenv(name); return v && *v ? atoi(v) : dflt; }
 
 static PDL_Err copy_out(char *buffer, int bufferLen, const char *value)
 {
@@ -72,8 +74,8 @@ PDL_bool PDL_IsFullscreenPlugin(void) { return PDL_FALSE; }
 PDL_Err PDL_GetScreenMetrics(PDL_ScreenMetrics *m)
 {
 	if (!m) return PDL_INVALIDINPUT;
-	m->horizontalPixels = atoi(env_or("LUNACY_PDK_SCREEN_W", "1024"));
-	m->verticalPixels = atoi(env_or("LUNACY_PDK_SCREEN_H", "768"));
+	m->horizontalPixels = env_int_or("LUNACY_PDK_SCREEN_W", LPDK_DEFAULT_SCREEN_W);
+	m->verticalPixels = env_int_or("LUNACY_PDK_SCREEN_H", LPDK_DEFAULT_SCREEN_H);
 	m->horizontalDPI = atoi(env_or("LUNACY_PDK_DPI", "132"));
 	m->verticalDPI = m->horizontalDPI;
 	m->aspectRatio = 1.0;
@@ -392,17 +394,6 @@ static void js_call(uint32_t id, char *buf, uint32_t len)
 	}
 }
 
-static int read_all(int fd, void *p, size_t n)
-{
-	char *c = p;
-	while (n) {
-		ssize_t r = read(fd, c, n);
-		if (r < 0 && errno == EINTR) continue;
-		if (r <= 0) return -1;
-		c += r; n -= r;
-	}
-	return 0;
-}
 
 /* The link's reader: the page's calls, until the shell closes it. */
 static void *js_reader(void *unused)

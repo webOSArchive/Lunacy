@@ -224,8 +224,8 @@ int LUNACY_VideoInit(_THIS, SDL_PixelFormat *vformat)
 	   turns its buffer, as it does one an app sized itself. PDL_GetScreenMetrics still
 	   reports the screen as measured. */
 	{
-		int w = getenv("LUNACY_PDK_SCREEN_W") ? atoi(getenv("LUNACY_PDK_SCREEN_W")) : 1024;
-		int h = getenv("LUNACY_PDK_SCREEN_H") ? atoi(getenv("LUNACY_PDK_SCREEN_H")) : 768;
+		int w = getenv("LUNACY_PDK_SCREEN_W") ? atoi(getenv("LUNACY_PDK_SCREEN_W")) : LPDK_DEFAULT_SCREEN_W;
+		int h = getenv("LUNACY_PDK_SCREEN_H") ? atoi(getenv("LUNACY_PDK_SCREEN_H")) : LPDK_DEFAULT_SCREEN_H;
 		this->info.current_w = w > h ? w : h;
 		this->info.current_h = w > h ? h : w;
 	}

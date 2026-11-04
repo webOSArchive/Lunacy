@@ -54,6 +54,8 @@
 #include <time.h>
 #include <unistd.h>
 #include "pvrtc.h"
+#include "gl_protocol.h"
+#include "gl_sizes.h"
 
 #define GLES_NAMES
 #include REPLAY_INC
@@ -90,6 +92,33 @@ struct ctx {
    up at once (Guitar Hero 5 left in its card, Family Guy started) shared one reply buffer,
    one set of client arrays and one framebuffer map, and the shell crashed. */
 static __thread struct ctx *cur;   /* the context the replay is for (one app at a time per thread) */
+
+/* files/pdk of the app this runs in, where its development switches (gldump, glerrors) and
+   dumps live: /data/user/<user>/<package>/files/pdk, the user from the uid and the package
+   from the process name, so a second Android user or another application id gets its own. */
+static const char *pdk_dir(void)
+{
+	static char dir[256];
+	if (dir[0]) return dir;
+	char name[160] = "org.webosarchive.lunacy";
+	FILE *f = fopen("/proc/self/cmdline", "r");
+	if (f) {
+		size_t n = fread(name, 1, sizeof name - 1, f);
+		fclose(f);
+		name[n] = 0;
+		char *colon = strchr(name, ':');   /* a process of its own: pkg:name */
+		if (colon) *colon = 0;
+		if (!name[0]) strcpy(name, "org.webosarchive.lunacy");
+	}
+	snprintf(dir, sizeof dir, "/data/user/%u/%s/files/pdk", (unsigned)(getuid() / 100000), name);
+	return dir;
+}
+/* A file in [pdk_dir]. */
+static const char *pdk_file(char *buf, size_t size, const char *name)
+{
+	snprintf(buf, size, "%s/%s", pdk_dir(), name);
+	return buf;
+}
 
 static void missing(const char *name) { LOGW("pdk gl: the device's GLES %d has no %s; skipped", GLES_VERSION, name); }
 
@@ -233,17 +262,7 @@ static __thread GLint unpack_alignment = 4;
 static int has_bgra = -1;
 static size_t upload_bytes(GLsizei w, GLsizei h, GLenum format, GLenum type)
 {
-	size_t bpp;
-	switch (type) {
-	case GL_UNSIGNED_SHORT_5_6_5: case GL_UNSIGNED_SHORT_4_4_4_4: case GL_UNSIGNED_SHORT_5_5_5_1: bpp = 2; break;
-	default:
-		switch (format) {
-		case GL_RGBA: case 0x80E1: bpp = 4; break; case GL_RGB: bpp = 3; break;
-		case GL_LUMINANCE_ALPHA: bpp = 2; break; default: bpp = 1; break;
-		}
-	}
-	size_t a = unpack_alignment > 0 ? (size_t)unpack_alignment : 1;
-	return ((size_t)w * bpp + a - 1) / a * a * (size_t)h;
+	return gl_image_bytes(w, h, format, type, unpack_alignment);
 }
 /*
  * Before glTexImage2D / glTexSubImage2D: the driver reads as many bytes as the size says,
@@ -302,8 +321,6 @@ static int compressed_upload(int sub, GLenum target, GLint level, GLint xoff, GL
    without glGenTextures. Framebuffers
    and renderbuffers may not, on Adreno at least: those are generated, and mapped below. */
 #define APP_TEX   0x7FFFFF02u
-#define LPDK_GL_PIXELS 7
-#define LPDK_GL_ACK    8
 
 /* The framebuffer entry points: GLES 1.1's extension, fetched by name, or GLES 2's core. */
 static void (*bind_fb)(GLenum, GLuint);
@@ -635,7 +652,6 @@ static void reply(uint32_t type, const void *payload, uint32_t len)
 
 #if GLES_VERSION == 2
 /* ---- GLES 2's queries: the answer is [u32 return value], then [u32 length][bytes] per output ---- */
-#define LPDK_GL_RESULT 9
 static __thread size_t answer_at;   /* where the answer's header is in the replies */
 static void answer_begin(uint32_t ret)
 {
@@ -771,7 +787,7 @@ static void dump_pixels(const char *what, GLuint fb, int w, int h)
 	/* And the whole of it, raw RGBA, as files/pdk/fb<real name>.raw. */
 	unsigned char *all = malloc((size_t)w * h * 4);
 	if (all) {
-		char path[128]; snprintf(path, sizeof path, "/data/data/org.webosarchive.lunacy/files/pdk/fb%u.raw", fb);
+		char path[320], file[32]; snprintf(file, sizeof file, "fb%u.raw", fb); pdk_file(path, sizeof path, file);
 		glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, all);
 		FILE *f = fopen(path, "wb"); if (f) { fwrite(all, 4, (size_t)w * h, f); fclose(f); }
 		free(all);
@@ -855,8 +871,9 @@ static void app_swap(struct ctx *c)
 	c->frames++;
 	reply(LPDK_GL_ACK, NULL, 0);
 	/* A dev tool: touching files/pdk/gldump logs one frame's commands (Docs/pdk.md). */
+	char path[320];
 	if (c->dump) { LOGI("pdk gl dump: end of frame %d", c->frames); c->dump = 0; }
-	else if (access("/data/data/org.webosarchive.lunacy/files/pdk/gldump", F_OK) == 0) { unlink("/data/data/org.webosarchive.lunacy/files/pdk/gldump"); c->dump = 1; LOGI("pdk gl dump: frame %d", c->frames + 1); }
+	else if (access(pdk_file(path, sizeof path, "gldump"), F_OK) == 0) { unlink(path); c->dump = 1; LOGI("pdk gl dump: frame %d", c->frames + 1); }
 	if (c->frames % 600 == 0) {
 		double t = now();
 		if (c->t_mark > 0) LOGI("pdk gl: %.1f frames/s", 600 / (t - c->t_mark));
@@ -918,13 +935,13 @@ static void replay(struct ctx *c, const uint8_t *data, size_t len)
 			if (told++ < 5) LOGW("pdk gl: a batch broke at op 0x%x, %u bytes declared, %d left", op, payload, (int)(r.end - r.p));
 			break;
 		}
-		if (c->dump && op >= 0xFFFCu) LOGI("pdk gl dump: %s %u bytes", op == 0xFFFFu ? "ARRAY" : op == 0xFFFCu ? "ATTRIB" : op == 0xFFFDu ? "SWAP" : "READ", payload);
+		if (c->dump && op >= ATTRIB_OP) LOGI("pdk gl dump: %s %u bytes", op == ARRAY_OP ? "ARRAY" : op == ATTRIB_OP ? "ATTRIB" : op == SWAP_OP ? "SWAP" : "READ", payload);
 		struct reader body = { r.p, r.p + payload };
 		r.p += payload;
-		if (op == 0xFFFFu) { take_array(&body, 0); continue; }
-		if (op == 0xFFFCu) { take_array(&body, 1); continue; }
-		if (op == 0xFFFEu) { app_read(&body); continue; }
-		if (op == 0xFFFDu) { app_swap(c); continue; }
+		if (op == ARRAY_OP) { take_array(&body, 0); continue; }
+		if (op == ATTRIB_OP) { take_array(&body, 1); continue; }
+		if (op == READ_OP) { app_read(&body); continue; }
+		if (op == SWAP_OP) { app_swap(c); continue; }
 		if (c->dump) {
 			char line[200]; int n = snprintf(line, sizeof line, "%s", op < sizeof op_names / sizeof *op_names ? op_names[op] : "?");
 			struct reader a = body;
@@ -1009,7 +1026,8 @@ static int create_contexts(struct ctx *c)
 	if (!current) { LOGW("pdk gl: make current failed (0x%x)", err); return 0; }
 	if (!make_app_framebuffer(c)) return 0;
 	fb_bound = app_fb;
-	c->check_all = access("/data/data/org.webosarchive.lunacy/files/pdk/glerrors", F_OK) == 0;
+	char path[320];
+	c->check_all = access(pdk_file(path, sizeof path, "glerrors"), F_OK) == 0;
 #if GLES_VERSION == 2
 	trace_programs = c->check_all;
 #endif

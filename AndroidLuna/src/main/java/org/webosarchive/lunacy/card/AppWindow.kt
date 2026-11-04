@@ -343,6 +343,9 @@ open class AppWindow(
     }
 
     override fun destroy() {
+        // Once: a window closing (close) may be destroyed by another path meanwhile (its app
+        // ending), and its SQL thread is gone after the first.
+        if (destroyed) return
         destroyed = true
         if (hasBrowserViews) browserViews.destroyAll()
         plugins?.stopAll()

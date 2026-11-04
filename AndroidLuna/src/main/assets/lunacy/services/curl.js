@@ -124,19 +124,30 @@ function writeOut(fmt, r) {
 	});
 }
 
-function fetchOnce(job, url, method, body, redirects, start, done) {
+function fetchOnce(job, url, method, body, redirects, start, finish) {
+	// One answer per request: a timeout destroys the request, which then reports an error too.
+	let answered = false;
+	const done = (code, text, result) => { if (!answered) { answered = true; finish(code, text, result); } };
 	let u;
 	try { u = new URL(url); } catch (e) { return done(E.URL_MALFORMAT, "URL rejected: Malformed input to a URL function"); }
 	const mod = u.protocol === "https:" ? https : u.protocol === "http:" ? http : null;
 	if (!mod) { return done(1, "Protocol \"" + u.protocol.replace(":", "") + "\" not supported"); }
-	const headers = { "User-Agent": opt.userAgent, Accept: "*/*" };
-	if (opt.compressed) { headers["Accept-Encoding"] = "deflate, gzip"; }
-	if (opt.referer) { headers.Referer = opt.referer; }
-	if (opt.user) { headers.Authorization = "Basic " + Buffer.from(opt.user).toString("base64"); }
-	if (body !== null) { headers["Content-Type"] = "application/x-www-form-urlencoded"; }
+	// Header names are case-insensitive, as curl treats them: -H "user-agent: x" replaces the
+	// default User-Agent, and -H "accept:" removes Accept, rather than sending both.
+	const headers = {};
+	const setHeader = (name, value) => {
+		for (const k of Object.keys(headers)) { if (k.toLowerCase() === name.toLowerCase()) { delete headers[k]; } }
+		if (value !== null) { headers[name] = value; }
+	};
+	setHeader("User-Agent", opt.userAgent);
+	setHeader("Accept", "*/*");
+	if (opt.compressed) { setHeader("Accept-Encoding", "deflate, gzip"); }
+	if (opt.referer) { setHeader("Referer", opt.referer); }
+	if (opt.user) { setHeader("Authorization", "Basic " + Buffer.from(opt.user).toString("base64")); }
+	if (body !== null) { setHeader("Content-Type", "application/x-www-form-urlencoded"); }
 	for (const h of opt.headers) {
 		const i = h.indexOf(":");
-		if (i > 0) { const v = h.slice(i + 1).trim(); if (v) { headers[h.slice(0, i).trim()] = v; } else { delete headers[h.slice(0, i).trim()]; } }
+		if (i > 0) { const v = h.slice(i + 1).trim(); setHeader(h.slice(0, i).trim(), v || null); }
 	}
 	const req = mod.request(u, { method: method, headers: headers, rejectUnauthorized: !opt.insecure }, (res) => {
 		const loc = res.headers.location;
@@ -169,7 +180,26 @@ function fetchOnce(job, url, method, body, redirects, start, done) {
 		const code = e.code === "ENOTFOUND" || e.code === "EAI_AGAIN" ? E.RESOLVE : e.code === "ECONNREFUSED" || e.code === "EHOSTUNREACH" ? E.CONNECT : E.RECV;
 		done(code, code === E.RESOLVE ? "Could not resolve host: " + u.hostname : code === E.CONNECT ? "Failed to connect to " + u.hostname + " port " + (u.port || (u.protocol === "https:" ? 443 : 80)) : String(e.message));
 	});
-	if (opt.connectTimeout) { req.setTimeout(opt.connectTimeout, () => { req.destroy(); done(E.TIMEOUT, "Connection timed out"); }); }
+	// --connect-timeout covers the connection only - TCP, and TLS for https - as curl's does;
+	// once connected, the transfer may take as long as it takes (--max-time is the limit on that).
+	if (opt.connectTimeout) {
+		// The timer looks once more after the I/O already waiting has run: on a slow device the
+		// first request blocks the loop while Node loads its HTTP code, and timers run before
+		// I/O callbacks, so a connection made in that time would otherwise count as timed out.
+		const t0 = Date.now();
+		let connected = false;
+		const timer = setTimeout(() => setImmediate(() => {
+			if (connected) { return; }
+			done(E.TIMEOUT, "Connection timed out after " + (Date.now() - t0) + " milliseconds");
+			req.destroy();
+		}), opt.connectTimeout);
+		const up = () => { connected = true; clearTimeout(timer); };
+		req.on("socket", (s) => {
+			if (!s.connecting) { up(); return; }
+			s.once(u.protocol === "https:" ? "secureConnect" : "connect", up);
+		});
+		req.on("close", () => clearTimeout(timer));
+	}
 	if (body !== null) { req.write(body); }
 	req.end();
 }

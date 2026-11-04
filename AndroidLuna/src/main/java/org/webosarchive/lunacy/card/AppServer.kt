@@ -26,6 +26,8 @@ class AppServer(
         const val HOST_SUFFIX = ".media.cryptofs.apps"
         /** Installed packages' tree, served from AppFiles (installed first, then bundled). */
         const val CRYPTOFS = "media/cryptofs/apps/"
+        /** The origin the Web app reads an app's folder through for a file:///usr/palm/applications URL. */
+        const val FILE_HOST = "com.palm.app.browser"
         const val APPS = CRYPTOFS + Packages.APPS + "/"
         const val MEDIA_INTERNAL = "media/internal/"
         const val IPKGS = "usr/palm/ipkgs/"

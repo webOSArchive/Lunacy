@@ -707,27 +707,59 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
             owner.send(id, "urlTitleChanged", url.orEmpty(), title.orEmpty(), canGoBack(), canGoForward())
         }
 
+        /** The page the view is showing, for its loads ([Client.shouldInterceptRequest] runs off the main thread). */
+        @Volatile private var topUrl: String? = null
+
         inner class Client : WebViewClient() {
             override fun onScaleChanged(view: WebView, oldScale: Float, newScale: Float) {
                 super.onScaleChanged(view, oldScale, newScale)
                 scaleChanged(newScale)
             }
 
-            // An app's own pages, on its origin, come from Lunacy's server as its card's do.
+            /**
+             * An app's own pages, on its origin, come from Lunacy's server as its card's do - for
+             * a page the view was asked to open, and for an app's page's own loads. A website
+             * that embeds or fetches an app's origin is refused (code review S7, codepoet
+             * 2026-11-04): on the TouchPad a web page couldn't read an app's files, while a link
+             * or an app could open an app's page (help and licence pages did). Lunacy's fonts,
+             * which every page here is given, stay open to all.
+             */
             override fun shouldInterceptRequest(view: WebView, req: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {
-                if (req.url.host.orEmpty().endsWith(AppServer.HOST_SUFFIX)) return owner.server.serve(req.url, ExifOrientation.isImageLoad(req))
-                // The file cache and user storage by their webOS paths (an email's inline images).
-                if (req.url.scheme == "file") {
-                    val p = req.url.path.orEmpty()
-                    if (p.startsWith("/var/file-cache/") || p.startsWith("/media/internal/")) {
-                        val f = owner.webosFile(p)?.takeIf { it.isFile }
-                        val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(f?.extension?.lowercase().orEmpty()) ?: "application/octet-stream"
-                        return if (f != null) android.webkit.WebResourceResponse(mime, null, f.inputStream())
-                            else android.webkit.WebResourceResponse("text/plain", null, 404, "Not Found", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0)))
-                    }
+                val url = req.url
+                if (url.host.orEmpty().endsWith(AppServer.HOST_SUFFIX)) {
+                    val fonts = url.path.orEmpty().trimStart('/').startsWith("__lunacy/")
+                    // Refused only under a website: an app's own pages, the documents apps load
+                    // into the view (Email's message, from a data or app base) and file: pages
+                    // are the app's, as before.
+                    val page = topUrl?.let { Uri.parse(it) }
+                    val website = page != null && page.scheme in setOf("http", "https") && !page.host.orEmpty().endsWith(AppServer.HOST_SUFFIX)
+                    if (fonts || req.isForMainFrame || !website) return owner.server.serve(url, ExifOrientation.isImageLoad(req))
+                    Log.i(AppServer.TAG, "web: refused $url to ${page?.host}")
+                    return notFound()
                 }
+                if (url.scheme == "file") return webosFileResponse(url)
                 return null
             }
+
+            /**
+             * A file: URL is a webOS path, as the TouchPad's browser read it: user storage, the
+             * file cache, an app's folder and the rest of the webOS root. Anything else - an
+             * Android path such as /data, /storage or /proc - is refused rather than read from
+             * Android's filesystem, which held Lunacy's private files (code review S8,
+             * codepoet 2026-11-04).
+             */
+            private fun webosFileResponse(url: Uri): android.webkit.WebResourceResponse {
+                val p = url.path.orEmpty().replace(Regex("/{2,}"), "/")
+                if (p.startsWith("/usr/palm/applications/"))
+                    return owner.server.serve(Uri.parse("https://${AppServer.FILE_HOST}${AppServer.HOST_SUFFIX}/${AppServer.CRYPTOFS}${p.trimStart('/')}"), false) ?: notFound()
+                val f = owner.webosFile(p)?.takeIf { it.isFile }
+                    ?: return notFound().also { Log.i(AppServer.TAG, "web: no webOS file at $p") }
+                val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.extension.lowercase()) ?: "application/octet-stream"
+                return android.webkit.WebResourceResponse(mime, null, f.inputStream())
+            }
+
+            private fun notFound() =
+                android.webkit.WebResourceResponse("text/plain", null, 404, "Not Found", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0)))
 
             @Suppress("OVERRIDE_DEPRECATION")
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
@@ -743,6 +775,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 return false
             }
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                topUrl = url
                 owner.send(id, "loadStarted")
                 titleChanged()
             }

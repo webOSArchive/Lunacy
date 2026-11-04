@@ -62,15 +62,15 @@ class WebSql(
      * page, which needs the answer to return from openDatabase; the work itself runs on the
      * worker so that every use of a connection is from one thread.
      */
-    fun open(name: String, version: String, host: String, hasCreationCallback: Boolean): String =
+    fun open(name: String, version: String, hasCreationCallback: Boolean): String =
         try {
-            worker.submit(Callable { openOn(name, version, host, hasCreationCallback) }).get()
+            worker.submit(Callable { openOn(name, version, hasCreationCallback) }).get()
         } catch (e: Exception) {
             JSONObject().put("error", e.cause?.message ?: e.message ?: "unable to open database").toString()
         }
 
-    private fun openOn(name: String, version: String, host: String, hasCreationCallback: Boolean): String {
-        val db = open[name] ?: openFile(name, host).also { open[name] = it }
+    private fun openOn(name: String, version: String, hasCreationCallback: Boolean): String {
+        val db = open[name] ?: openFile(name).also { open[name] = it }
         db.execSQL("CREATE TABLE IF NOT EXISTS $INFO_TABLE (key TEXT NOT NULL ON CONFLICT FAIL UNIQUE ON CONFLICT REPLACE, value TEXT NOT NULL ON CONFLICT FAIL)")
         val stored = readVersion(db)
         val r = JSONObject()
@@ -85,10 +85,12 @@ class WebSql(
         return r.put("version", stored).put("created", false).toString()
     }
 
-    private fun openFile(name: String, host: String): SQLiteDatabase {
+    private fun openFile(name: String): SQLiteDatabase {
         val dir = File(context.filesDir, "websql/$appId").also { it.mkdirs() }
         val file = File(dir, Base64.encodeToString(name.toByteArray(), Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP) + ".db")
-        if (!file.exists()) migrate(file, host, name)
+        // The WebView kept it under the app's own origin, worked out from its id rather than
+        // taken from the page, which could name another app's (code review S14, rule 10).
+        if (!file.exists()) migrate(file, appId + AppServer.HOST_SUFFIX, name)
         return SQLiteDatabase.openOrCreateDatabase(file, null)
     }
 

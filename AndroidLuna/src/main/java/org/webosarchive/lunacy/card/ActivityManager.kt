@@ -95,7 +95,16 @@ class ActivityManager(private val context: Context, private val power: Power) {
      */
     private var loaded = false
     private val held = ArrayList<() -> Unit>()
-    private var enabled = false
+    /**
+     * Activities run only while both of webOS's switches are on (ActivityManager::IsEnabled:
+     * "all bits must be enabled"): [started], Lunacy's own, once the webOS root is up (webOS's
+     * UI_ENABLE), and [external], which a system caller turns off and on with `disable` and
+     * `enable` (EXTERNAL_ENABLE, on from the start). Off, a new activity waits; one already
+     * running carries on.
+     */
+    private var started = false
+    private var external = true
+    private val enabled get() = started && external
     private val waitingForEnable = ArrayList<Activity>()
 
     fun register(bus: Bus) {
@@ -109,7 +118,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
             "pause" to { c -> withActivity(c) { a -> external(a, "pause", c) } },
             "focus" to ::focus, "unfocus" to ::unfocus, "addFocus" to ::addFocus,
             "list" to ::list, "getDetails" to ::getDetails,
-            "enable" to { c -> c.reply(Bus.ok()) }, "disable" to { c -> c.reply(Bus.ok()) },
+            "enable" to { c -> switchExternal(c, true) }, "disable" to { c -> switchExternal(c, false) },
         )) bus.register(SERVICE, m, Bus.CallHandler { c -> if (loaded) h(c) else held += { h(c) } })
         for (m in listOf("associateApp", "associateService", "associateProcess", "associateNetworkFlow",
                 "dissociateApp", "dissociateService", "dissociateProcess", "dissociateNetworkFlow", "unmapProcess"))
@@ -993,10 +1002,29 @@ class ActivityManager(private val context: Context, private val power: Power) {
      * subscribers, its callback is how its service hears of it.
      */
     fun enable() {
-        if (enabled) return
-        enabled = true
+        if (started) return
+        started = true
         Log.i(AppServer.TAG, "activities: running")
-        waitingForEnable.toList().also { waitingForEnable.clear() }.forEach { if (activities[it.id] === it) start(it) }
+        startWaiting()
+    }
+
+    private fun startWaiting() {
+        if (enabled) waitingForEnable.toList().also { waitingForEnable.clear() }.forEach { if (activities[it.id] === it) start(it) }
+    }
+
+    /**
+     * `enable` and `disable`: the external switch, private callers only, with webOS's refusal
+     * for others (Open webOS ActivityCategoryHandler::Enable, `MojErrAccessDenied`); measured
+     * on the reference TouchPad, both answer `{"returnValue":true}` to `{}`.
+     */
+    private fun switchExternal(c: Bus.Call, on: Boolean) {
+        if (!c.privateBus) return c.reply(error(13, "Only callers on the private bus are allowed to enable or disable Activity dispatch"))
+        if (external != on) {
+            external = on
+            Log.i(AppServer.TAG, "activities: ${if (on) "dispatch enabled" else "dispatch disabled"} by ${c.appId}")
+            startWaiting()
+        }
+        c.reply(Bus.ok())
     }
 
     /**
@@ -1005,7 +1033,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
      * schedule on its own bus beside the new one's.
      */
     fun stop() {
-        enabled = false
+        started = false
         batteryReceiver?.let { context.unregisterReceiver(it) }; batteryReceiver = null
         networkWatch?.cancel(); networkWatch = null
         main.removeCallbacksAndMessages(null)
@@ -1053,7 +1081,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
         held.toList().also { held.clear() }.forEach { it() }
         // The webOS root may have come up first (db8 answers late when Lunacy starts busy):
         // then nothing will call enable again, and what was restored has to start now.
-        if (enabled) waitingForEnable.toList().also { waitingForEnable.clear() }.forEach { if (activities[it.id] === it) start(it) }
+        startWaiting()
     }
 
     private fun error(code: Int, text: String) =

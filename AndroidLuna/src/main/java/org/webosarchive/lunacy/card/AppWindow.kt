@@ -551,8 +551,11 @@ open class AppWindow(
         @JavascriptInterface fun netSendSync(request: String): String = net.sendSync(request)
         @JavascriptInterface fun netAbort(id: Int) = net.abort(id)
 
-        /** The WebSQL polyfill (assets/lunacy/websql.js): openDatabase, then its transactions. */
-        @JavascriptInterface fun sqlOpen(name: String, version: String, host: String, creationCallback: Boolean): String = sql.open(name, version, host, creationCallback)
+        /**
+         * The WebSQL polyfill (assets/lunacy/websql.js): openDatabase, then its transactions.
+         * [host] is the page's own word for its origin, and isn't used: the app's id says it.
+         */
+        @JavascriptInterface fun sqlOpen(name: String, version: String, host: String, creationCallback: Boolean): String = sql.open(name, version, creationCallback)
         @JavascriptInterface fun sqlRequest(id: Int, request: String) = sql.request(id, request)
         @JavascriptInterface fun sqlResult(id: Int): String = sql.result(id)
 

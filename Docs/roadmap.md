@@ -92,7 +92,9 @@ measurements from the code review are done
 ([code-review-2026-11-03.md](code-review-2026-11-03.md), "Measured on the TouchPad"), and
 three changes they decided (db8's typed-parameter errors, `pauseDownload` and
 `resumeDownload` as the device answers them, `com.palm.systemmanager` private-bus only) are
-done and tested (2026-11-04), for the release after 0.9.1. Then the review's cleanup before OAuth (its triage: §5, §4.2, §4.1 with
+done and tested (2026-11-04), for the release after 0.9.1, with the review's other open
+security items codepoet decided that day: B5 (the activity manager's `enable`/`disable`), S7
+and S8 (the Web app's app origins and `file:` URLs) and two of S14's. Then the review's cleanup before OAuth (its triage: §5, §4.2, §4.1 with
 §3.2 and S2), since OAuth works in the accounts and services.
 
 **0.8.4, a mini release** of the fixes since 0.8.3 (2026-11-01, build 358 replacing build 352):

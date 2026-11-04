@@ -21,7 +21,7 @@ class DisplayService(private val context: Context) {
 
     fun register(bus: Bus) {
         bus.register(SERVICE, "control/getProperty") { _, p, reply -> reply(getProperty(p)) }
-        bus.register(SERVICE, "control/setProperty") { _, p, reply -> reply(setProperty(p)) }
+        bus.register(SERVICE, "control/setProperty", Bus.CallHandler { it.reply(setProperty(it.params, it.privateBus)) })
         bus.register(SERVICE, "control/status", Bus.CallHandler { status(it) })
         bus.register(SERVICE, "control/setState") { _, p, reply -> reply(setState(p)) }
     }
@@ -97,17 +97,18 @@ class DisplayService(private val context: Context) {
         return out.toString()
     }
 
-    private fun setProperty(p: JSONObject): String {
+    /** [mayAsk]: only a system caller (Screen & Lock) may bring up Android's permission screen. */
+    private fun setProperty(p: JSONObject, mayAsk: Boolean): String {
         val problems = ArrayList<String>()
         if (p.has("timeout")) {
             val seconds = p.optInt("timeout", 0)
             if (seconds <= 0) problems += "timeout must be a number of seconds"
-            else if (!write(Settings.System.SCREEN_OFF_TIMEOUT, seconds * 1000)) problems += "timeout"
+            else if (!write(Settings.System.SCREEN_OFF_TIMEOUT, seconds * 1000, mayAsk)) problems += "timeout"
         }
         if (p.has("maximumBrightness")) {
             val percent = p.optInt("maximumBrightness", -1)
             if (percent !in 1..100) problems += "maximumBrightness must be 1 to 100"
-            else if (!write(Settings.System.SCREEN_BRIGHTNESS, rawFromPercent(percent))) problems += "maximumBrightness"
+            else if (!write(Settings.System.SCREEN_BRIGHTNESS, rawFromPercent(percent), mayAsk)) problems += "maximumBrightness"
         }
         return if (problems.isEmpty()) Bus.ok()
         else Bus.error("Android wouldn't let Lunacy set: ${problems.joinToString(", ")}")
@@ -152,11 +153,13 @@ class DisplayService(private val context: Context) {
      * True when Android took the value. It refuses without WRITE_SETTINGS, and says so. From
      * Android 6 that is the user's to grant on Android's own screen, which is opened the first
      * time a write is refused in a run; the write itself still fails, and the next one after
-     * the user has said yes will take.
+     * the user has said yes will take. An app's own call doesn't open it ([mayAsk] false): only
+     * Lunacy and the system's settings apps put Android's screen in front of the user (code
+     * review S14, codepoet 2026-11-04).
      */
-    fun write(key: String, value: Int): Boolean {
+    fun write(key: String, value: Int, mayAsk: Boolean = true): Boolean {
         if (android.os.Build.VERSION.SDK_INT >= 23 && !Settings.System.canWrite(context)) {
-            if (!askedToWrite) {
+            if (mayAsk && !askedToWrite) {
                 askedToWrite = true
                 try {
                     context.startActivity(android.content.Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS,

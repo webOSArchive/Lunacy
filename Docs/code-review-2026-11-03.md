@@ -899,16 +899,21 @@ answer the device's word for word; they go into the release after 0.9.1.
 | Item | What the device does | So |
 |---|---|---|
 | B4 | A failed save answers `{"returnValue":true,"errorText":"Failed to save launch point"}`, true and all (LunaCE `servicecallback_addLaunchPoint`); an unknown id is "Unable to find id: <id>" | Lunacy already answers both; no change |
-| B5 | `enable` and `disable` are **global** switches for the whole activity manager (not per activity), and answer `{"returnValue":true}` to `{}`. Every `associate*`, `dissociate*` and `unmapProcess` answers `{"returnValue":true}`, even for an activity that doesn't exist | The association stubs are the device's behaviour: keep, with a note. A global disable that stops scheduling is open |
+| B5 | `enable` and `disable` are **global** switches for the whole activity manager (not per activity), and answer `{"returnValue":true}` to `{}`. Every `associate*`, `dissociate*` and `unmapProcess` answers `{"returnValue":true}`, even for an activity that doesn't exist | The association stubs are the device's behaviour: keep, with a note. `enable`/`disable` done 2026-11-04 as Open webOS has them: private bus only (error 13 for others), and `disable` holds new activities until `enable` (tested on the Fold3) |
 | B6 | `resumeDownload` answers `{"subscribed":false,"returnValue":false,"errorCode":"Ticket provided does not correspond to an interrupted transfer in history"}` for a finished, cancelled or unknown ticket, and "Missing ticket parameter" without one. `pauseDownload` (which Lunacy didn't register) answers "Ticket provided does not correspond to a downloading transfer", and on a live download (7.4 of 11.6 MB in) it **stops the transfer**: its state becomes "cancelled" | Change: refuse resumes as the device does; register `pauseDownload`, which stops a live download |
 | §4.3 | A wrong-typed parameter is code 22, "invalid parameters: caller='<id>' error='invalid type for property '<name>''" (`put` objects "x" or [5], `get` ids "x", `del` ids 5, `merge` objects {}); a `query` that isn't an object is "required property not found - 'from' for property 'query'"; a `from` that isn't a string, "invalid type for property 'from' for property 'query'" | Change: typed parameters with these texts in place of "internal error" |
 | S5 | The callee of an activity's callback sees `caller` and `sender` = `com.palm.activitymanager`; the creator appears only in the payload's `$activity.creator` (`appId`, or `anonId` for a shell) | Lunacy already calls as the activity manager; no change |
-| S7/S8 | The Web app opens `file:///usr/palm/applications/<app>/index.html` and a `/media/internal` file; `/etc/palm/luna.conf` gets "Cannot open MIME type" (refused by type, not by path) | Any fix may refuse only Android paths |
+| S7/S8 | The Web app opens `file:///usr/palm/applications/<app>/index.html` and a `/media/internal` file; `/etc/palm/luna.conf` gets "Cannot open MIME type" (refused by type, not by path) | Any fix may refuse only Android paths. Done 2026-11-04 (codepoet's call), tested on the Kyocera: a `file:` URL is a webOS path or refused; a website's loads of an app origin are refused |
 | S14 | `com.palm.systemmanager` has no public side: an `org.webosarchive` app gets "Service does not exist: com.palm.systemmanager." from every method, `getDeviceLockMode` included | Change: private-bus only |
 
-### For codepoet to decide
+### Decided (codepoet)
 
-- S1: after the measurement, refuse cross-origin frames or record the exposure as a ratchet item.
-- S14: silent pin acceptance in `PinShortcutActivity`, or a confirmation.
-- §3.3: a shared art library module for the keyboard, or keep the two copies in step by hand.
-- Whether `Docs/` is where this document should live, or whether it goes once acted on.
+- S1: no decision needed now; a recorded ratchet item that goes with the move to
+  `WebMessageListener` (2026-11-03).
+- S14: pins stay silent (2026-11-03). Of its smaller items (2026-11-04): Android's
+  write-settings screen opens only for a private caller, and WebSQL's migration takes the
+  app's origin from its id (both done); a notification icon from another app's origin stays.
+- §3.3: the corner clamp ported to `Luna.drawNineSlice`; the keyboard stays independent
+  (2026-11-03).
+
+Still open: whether `Docs/` is where this document should live, or whether it goes once acted on.

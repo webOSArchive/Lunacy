@@ -55,7 +55,19 @@ function collections() {
 	document.body.removeChild(box);
 }
 
+// Date strings in ISO's shape but not its digits ("2026-11-4T08:36:32", an unpadded day, as
+// the BlueBubbles connector stores lastSync): what new Date makes of them, as local times.
+function dates() {
+	var cases = ["2026-11-04T08:36:32", "2026-11-4T08:36:32", "2026-1-4T8:5:7", "2026-11-4", "2026-11-04", "2026-11-4 08:36:32", "2026/11/4 08:36:32"];
+	for (var i = 0; i < cases.length; i++) {
+		(function (c) {
+			ask("date[" + c + "]", function () { var d = new Date(c); return isNaN(d.getTime()) ? "Invalid" : d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate() + " " + d.getHours() + ":" + d.getMinutes() + ":" + d.getSeconds() + " tz" + d.getTimezoneOffset(); });
+		})(cases[i]);
+	}
+}
+
 window.onload = function () {
 	collections();
+	dates();
 	document.getElementById("out").appendChild(document.createTextNode(out.join("\n")));
 };

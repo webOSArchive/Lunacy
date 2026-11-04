@@ -1513,3 +1513,42 @@ __lunacyStyle(":where(.enyo-vflexbox) > :where(.box-center) { width: -webkit-fil
 // one line and ends in "..." where it doesn't fit. On a tablet, as on the TouchPad, it is as
 // Enyo drew it.
 __lunacyStyle("@media (max-width: 540px) { html .enyo-richtext-hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } }");
+
+// Dates written year-month-day, read as the TouchPad read them.
+//
+// The TouchPad's WebKit (534.6) read "2026-11-4T08:36:32" (an unpadded day), "2026-1-4T8:5:7"
+// and "2026-11-4 08:36:32" as local times, and a bare "2026-11-04" as local midnight
+// (Workbench/probe/org.webosarchive.lunacy.jsprobe 0.0.3, 2026-11-04). Chromium answers Invalid
+// Date for the unpadded ones and takes a bare date as UTC midnight, the evening before west of
+// Greenwich: the BlueBubbles connector's "Last sync attempt" read "NaN-NaN-NaN NaN:NaN:NaN"
+// (codepoet, 2026-11-04). A string in that shape, with no zone, is made a local time again,
+// in new Date(s) and Date.parse(s); everything else goes to the engine's own Date. The
+// constructor shares the engine's prototype, so instanceof Date and Date.now are as before.
+(function () {
+	var Native = Date, parse0 = Native.parse;
+	var YMD = /^\s*(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ](\d{1,2}):(\d{1,2})(?::(\d{1,2})(?:\.(\d+))?)?)?\s*$/;
+	function local(s) {
+		var m = typeof s === "string" && YMD.exec(s);
+		if (!m) { return null; }
+		var ms = m[7] ? +((m[7] + "00").slice(0, 3)) : 0;
+		return new Native(+m[1], m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0), ms).getTime();
+	}
+	function LunacyDate(a, b, c, d, e, f, g) {
+		if (!(this instanceof LunacyDate)) { return Native(); }
+		switch (arguments.length) {
+			case 0: return new Native();
+			case 1: var t = local(a); return new Native(t === null ? a : t);
+			case 2: return new Native(a, b);
+			case 3: return new Native(a, b, c);
+			case 4: return new Native(a, b, c, d);
+			case 5: return new Native(a, b, c, d, e);
+			case 6: return new Native(a, b, c, d, e, f);
+			default: return new Native(a, b, c, d, e, f, g);
+		}
+	}
+	LunacyDate.prototype = Native.prototype;
+	LunacyDate.now = Native.now;
+	LunacyDate.UTC = Native.UTC;
+	LunacyDate.parse = function (s) { var t = local(s); return t === null ? parse0.apply(Native, arguments) : t; };
+	window.Date = LunacyDate;
+})();

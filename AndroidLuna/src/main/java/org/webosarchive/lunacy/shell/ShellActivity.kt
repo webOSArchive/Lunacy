@@ -171,7 +171,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // An Android app opened over Exhibition (from a dashboard, say) is a card arriving, and
         // a card arriving ended dock mode (SystemUiController::cardWindowAdded). The shell is
         // already out of sight, so the screen saver's end doesn't send it there again.
-        if (interactive) cardArrivedInExhibition()
+        if (interactive) exhibitions.cardArrivedInExhibition()
         if (interactive && ::cards.isInitialized) cards.maximized?.window?.let { it.setStageActive(false); coveredCard = it }
         // A launch that Android answers (a settings shortcut, an Android app) covers the shell
         // while the launcher is still sliding away, and a stopped window's animation doesn't
@@ -209,6 +209,30 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
     private var lunacyService: LunacyService? = null
     private lateinit var applicationManager: ApplicationManager
+    /** What Exhibition asks of the shell: its chrome, read afresh, since a reshell rebuilds it. */
+    private val exhibitionHost = object : ExhibitionController.Host {
+        override val luna get() = this@ShellActivity.luna
+        override val registry get() = this@ShellActivity.registry
+        override val dockMode get() = this@ShellActivity.dockMode
+        override val statusBar get() = this@ShellActivity.statusBar
+        override val cards get() = this@ShellActivity.cards
+        override val menuScrim get() = this@ShellActivity.menuScrim
+        override val inFront get() = this@ShellActivity.inFront
+        override val launcherOpen get() = this@ShellActivity.launcherOpen
+        override val notificationsMenuOpen get() = notifications.menu.isOpen
+        override fun launchForDock(appId: String, params: JSONObject) = launch(appId, params, startupCard = false, dock = true)
+        override fun closeWindow(window: AppWindow) = onWindowClosed(window)
+        override fun closeMenu() = this@ShellActivity.closeMenu()
+        override fun closeLauncher() = this@ShellActivity.closeLauncher()
+        override fun hideKeyboard() = this@ShellActivity.hideKeyboard()
+        override fun releaseOrientation() = applyOrientation(null)
+        override fun holdScreen() = this@ShellActivity.holdScreen()
+        override fun showCardsAgain() { if (cards.maximized != null) onMaximized(cards.maximized!!) else onCardView() }
+        override fun showChrome(exhibiting: Boolean) {
+            fade(justType, !exhibiting && cards.maximized == null && !launcherOpen)
+            showDock(!exhibiting && cards.maximized == null)
+        }
+    }
     /** What the application manager asks of the shell. */
     private val appManagerShell = object : ApplicationManager.Shell {
         override fun launch(appId: String, params: JSONObject?, startupCard: Boolean, launcher: String?) =
@@ -303,30 +327,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private var notificationsAtBottom = false
     private lateinit var systemMenu: SystemMenu
     private lateinit var systemControls: SystemControls
-    /** Exhibition mode: webOS's dock-mode clock, over everything, while it is on. */
-    private lateinit var exhibition: ExhibitionLayer
     private lateinit var dockMode: DockMode
-    /** The drop-down the title opens while exhibiting, for changing face. */
-    private lateinit var exhibitionMenu: ExhibitionMenu
-    /** The app showing in exhibition mode, if it isn't the shell's own Time face. */
-    private var exhibitionApp: String? = null
-    /**
-     * LunaSysMgr's DockModeWindowManager: the apps' Exhibition windows, by app, in a layer of
-     * their own over the card view. They are never cards - an app on show in Exhibition is
-     * not in the card view, and choosing another one doesn't add a card (codepoet, measured
-     * on the reference TouchPad). Only the one on show is visible; the rest stay running
-     * behind it, as webOS kept them, until the mode ends.
-     */
-    private lateinit var dockLayer: FrameLayout
-    private val dockWindows = LinkedHashMap<String, AppWindow>()
-    /** What the dock shows: an app's dock window, or the Time face. */
-    private var dockShown: View? = null
-    private var exhibitionOn = false
-    /** True while what is exhibiting was started by Android's screen saver (ExhibitionDream). */
-    private var dreamExhibition = false
-    /** Whether the shell was out of sight when the screen saver put it into exhibition. */
-    private var dreamFromBackground = false
-    /** Whether the shell is the activity in front, which decides the two above. */
+    /** Exhibition and its dock (ExhibitionController). */
+    private val exhibitions = ExhibitionController(this, exhibitionHost)
+    /** Whether the shell is the activity in front, which decides where a screen saver's Exhibition goes back to. */
     private var inFront = false
     /** Catches taps outside the dashboard drop-down, which close it. */
     private lateinit var menuScrim: View
@@ -556,25 +560,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         statusBar = StatusBar(this, luna)
         statusBar.onBatteryFull = { sounds.batteryFull() }
         val popups = PopupLayer(this, luna)
-        exhibition = ExhibitionLayer(this, luna).apply {
-            visibility = View.GONE
-            onExit = { setExhibition(false) }
-        }
-        // The dock: black, as DockModeWindowManager::paint filled it, with the Time face and
-        // the apps' dock windows in it, one on show at a time. It covers the cards, launcher
-        // and dock; alerts, dashboards and the status bar stay over it, as on a device.
-        dockLayer = DockLayer().apply { visibility = View.GONE; setBackgroundColor(android.graphics.Color.BLACK) }
-        // A turn or a fold changes the dock's shape: its windows are fitted to it again.
-        dockLayer.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or, ob ->
-            if (r - l != or - ol || b - t != ob - ot) dockLayer.post { dockWindows.values.forEach { layDockWindow(it) } }
-        }
-        dockLayer.addView(exhibition, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-        root.addView(dockLayer, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        root.addView(exhibitions.buildDock(), FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
 
         root.addView(popups, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
         menuScrim = View(this).apply {
             visibility = View.GONE
-            setOnClickListener { closeMenu(); closeExhibitionMenu() }
+            setOnClickListener { closeMenu(); exhibitions.closeExhibitionMenu() }
         }
         root.addView(menuScrim, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         val menu = DashboardMenu(this, luna) { w -> notifications.removeDashboard(w); closeWindow(w) }
@@ -615,11 +606,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         statusBar.onSystemInfoChanged = { systemMenu.batteryPercent = statusBar.batteryPercent }
         root.addView(statusBar, FrameLayout.LayoutParams(MATCH_PARENT, luna.px(StatusBar.HEIGHT)))
 
-        exhibitionMenu = ExhibitionMenu(this, luna).apply {
-            visibility = View.GONE
-            onChoose = { appId -> chooseExhibition(appId) }
-        }
-        root.addView(exhibitionMenu, FrameLayout.LayoutParams(
+        root.addView(exhibitions.buildMenu(), FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
             topMargin = luna.px(StatusBar.HEIGHT); gravity = android.view.Gravity.TOP or android.view.Gravity.START
         })
@@ -628,7 +615,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         setContentView(screen)
         screen.requestApplyInsets()
         watchKeyboard(root)
-        statusBar.onTitleTap = { if (exhibitionOn) toggleExhibitionMenu() else toggleAppMenu() }
+        statusBar.onTitleTap = { if (exhibitions.exhibitionOn) exhibitions.toggleExhibitionMenu() else toggleAppMenu() }
         shellRoot = root
     }
 
@@ -638,7 +625,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (live?.get() === this) live = null
         (getSystemService(DISPLAY_SERVICE) as android.hardware.display.DisplayManager)
             .unregisterDisplayListener(displayListener)
-        if (watchingPower) { unregisterReceiver(powerReceiver); watchingPower = false }
+        exhibitions.stop()
         if (watchingPackages) { unregisterReceiver(packageReceiver); watchingPackages = false }
         if (PinnedShortcuts.onChanged == ::shortcutsChanged) PinnedShortcuts.onChanged = null
         if (NotificationIcons.onChanged == ::notificationIconsChanged) NotificationIcons.onChanged = null
@@ -757,7 +744,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             }
             launch(id, params)
         }
-        if (intent.getBooleanExtra(EXTRA_EXHIBITION, false)) { intent.removeExtra(EXTRA_EXHIBITION); startDreamExhibition() }
+        if (intent.getBooleanExtra(EXTRA_EXHIBITION, false)) { intent.removeExtra(EXTRA_EXHIBITION); exhibitions.startDreamExhibition() }
         // Android 5's am has no send-trim-memory; this stands in for it (Docs/dev-workflow.md).
         if (intent.hasExtra("trimMemory")) { val level = intent.getIntExtra("trimMemory", 0); intent.removeExtra("trimMemory"); onTrimMemory(level) }
     }
@@ -934,7 +921,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // dockModeWindow, gets its first window as a dock window, not a card. A headless app
         // opens its dock window itself (onWindowOpened).
         if (dock) {
-            if (app.noWindow) hidden.addView(rootWindow, FrameLayout.LayoutParams(1, 1)) else addDockWindow(rootWindow)
+            if (app.noWindow) hidden.addView(rootWindow, FrameLayout.LayoutParams(1, 1)) else exhibitions.addDockWindow(rootWindow)
             rootWindow.loadUrl(url)
             return
         }
@@ -998,7 +985,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun showAsCard(w: AppWindow, parent: AppWindow? = null, placeholder: Boolean = false, splash: Boolean = true) {
         // A card arriving ends Exhibition (SystemUiController::cardWindowAdded): an app opened
         // from a dashboard, or one that opens a card of its own.
-        cardArrivedInExhibition()
+        exhibitions.cardArrivedInExhibition()
         val card = newCard(w, splash)
         card.fullScreen = w.fullScreen && !w.emulated
         card.awaitingWindow = placeholder
@@ -1085,19 +1072,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 }
             }
             // An app's own Exhibition view: the dock's, never a card.
-            "dockMode" -> addDockWindow(child)
+            "dockMode" -> exhibitions.addDockWindow(child)
             else -> showAsCard(child, parent)
         }
     }
 
     override fun onWindowClosed(window: AppWindow) {
-        // Out of the exhibition set first: ending the mode below closes what is left in it,
-        // and this window mustn't be closed twice over.
-        val docked = dockWindows[window.appId] == window
-        if (docked) dockWindows.remove(window.appId)
-        // The app that was exhibiting has gone: so has exhibition mode, or the shell would sit
-        // there thinking it is still on and ignore the next press of Start Exhibition.
-        if (docked && exhibitionOn && window.appId == exhibitionApp) setExhibition(false)
+        exhibitions.windowClosed(window)
         cards.cards.firstOrNull { it.window == window }?.let { cards.remove(it) }
         // A full-screen card that closes itself while maximized takes the bar's absence with it,
         // and one that had fixed the screen's orientation lets it go.
@@ -1503,7 +1484,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 if (running[w.appId] === list && list.none { it.parent != hidden }) endApp(w.appId, list)
             }, HEADLESS_LINGER_MS)
         }
-        if (cards.cards.isEmpty() && !exhibitionOn) onCardView()
+        if (cards.cards.isEmpty() && !exhibitions.exhibitionOn) onCardView()
     }
 
     private fun endApp(appId: String, list: MutableList<AppWindow>) {
@@ -1639,7 +1620,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     /** The screen stays on while exhibiting (the point of a dock) or while a window asks. */
     private fun holdScreen() {
-        if (exhibitionOn || screenAwake.isNotEmpty()) {
+        if (exhibitions.exhibitionOn || screenAwake.isNotEmpty()) {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -1928,13 +1909,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (kind == shownKind()) return
         val old = shellRoot ?: return
         Log.i(AppServer.TAG, "layout: ${shownKind()} -> $kind; the shell is rebuilt, its cards kept")
-        if (exhibitionOn) setExhibition(false)
+        if (exhibitions.exhibitionOn) exhibitions.setExhibition(false)
         hideKeyboard()
         keyboardWatch?.let { old.viewTreeObserver.removeOnGlobalLayoutListener(it) }
         keyboardWatch = null
         keyboardHeight = 0
         launcherOpen = false
-        dockShown = null
+        exhibitions.forgetShown()
 
         // What the old views hold, before they go.
         val handover = cards.handOver()
@@ -1958,10 +1939,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             }
         }
         headless.forEach { hidden.addView(it, FrameLayout.LayoutParams(1, 1)) }
-        for (w in dockWindows.values) {
-            dockLayer.addView(w, FrameLayout.LayoutParams(0, 0))
-            layDockWindow(w)
-        }
+        exhibitions.takeWindowsBack()
         giveNotifications(dashboards, alerts, banners)
         // Once the pages are laid out in their new cards: the viewport is written from the card's size.
         cards.post { running.values.flatten().forEach { it.rescale() } }
@@ -2048,263 +2026,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
     }.start()
 
-    /**
-     * Exhibition as Android's screen saver. The dream itself has stood down by now (it would
-     * end at the first touch, and webOS's Exhibition survived being touched), so the shell
-     * takes on the rest of a dream's job for as long as it is standing in for one.
-     */
-    private fun startDreamExhibition() {
-        // Where to go back to when it ends: out of sight again if the screen saver is what
-        // brought the shell forward, and nowhere if its owner was already using it.
-        dreamFromBackground = !inFront
-        dreamExhibition = true
-        // A dream shows over the lock screen, and so did a TouchPad in its dock. The keyguard
-        // is not dismissed with it: leaving exhibition puts the shell back where it came from,
-        // so the lock comes back too.
-        window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
-        // Android ends a dream when the device comes off its charger. Nothing else would end
-        // this one - the screen is held on - so the shell watches for that itself, which is
-        // also what a TouchPad did when it was lifted off its Touchstone.
-        if (!watchingPower) {
-            // The battery's broadcast is sticky, and registering hands back the one last sent,
-            // so the charger is known now rather than at the next change.
-            dreamPlugged = plugged(registerReceiver(powerReceiver,
-                android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)))
-            watchingPower = true
-        }
-        Log.i(AppServer.TAG, "exhibition: Android's screen saver; on a charger = $dreamPlugged")
-        setExhibition(true)
-    }
-
-    private fun endDreamExhibition() {
-        dreamExhibition = false
-        dreamPlugged = false
-        if (watchingPower) { unregisterReceiver(powerReceiver); watchingPower = false }
-        window.clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
-        if (dreamFromBackground) moveTaskToBack(true)
-    }
-
-    private var watchingPower = false
-    /** Whether the device has been on a charger since the screen saver started exhibiting. */
-    private var dreamPlugged = false
-
-    /**
-     * The charger, watched through the battery's own broadcast rather than
-     * ACTION_POWER_DISCONNECTED: this one is sticky, so registering says at once whether the
-     * device is on a charger now, and it is the one a device really sends. (The reference
-     * tablet never broadcasts ACTION_POWER_DISCONNECTED for a simulated charger, so watching
-     * for that instead would be untestable over adb; see Docs/android5-setup.md.)
-     */
-    private val powerReceiver = object : android.content.BroadcastReceiver() {
-        override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
-            if (plugged(intent)) { dreamPlugged = true; return }
-            if (!dreamPlugged) return
-            Log.i(AppServer.TAG, "exhibition: off the charger, leaving")
-            setExhibition(false)
-        }
-    }
-
-    private fun plugged(battery: android.content.Intent?): Boolean =
-        (battery?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
-
-    /**
-     * Exhibition mode, which webOS entered when a TouchPad was put on its Touchstone and
-     * Palm's Exhibition app starts with display/control/setState {"state":"dock"}. The clock
-     * is the shell's own, as LunaSysMgr's was; the status bar says "Time", as a device does,
-     * and the home button comes back out.
-     */
-    /**
-     * The launch parameters webOS gave an app it was putting into Exhibition, exactly as
-     * LunaSysMgr's DockModeWindowManager::launchApp built them: the window type by name and
-     * `dockMode`. Apps test both - AccuWeather opens its exhibition view only when
-     * `windowType == "dockModeWindow"` *and* `dockMode == true`, and shows its ordinary
-     * interactive view otherwise - so a launch missing either one looks like the app ignoring
-     * Exhibition.
-     */
-    private fun dockModeParams() = JSONObject()
-        .put("windowType", "dockModeWindow").put("dockMode", true)
-
-    /**
-     * Puts an app on show in Exhibition (DockModeWindowManager::switchApplication). One whose
-     * dock window is already open is simply shown again; otherwise it is launched for the
-     * dock, and its window takes the screen when it opens (addDockWindow).
-     */
-    /**
-     * The status bar's title while [appId] is exhibiting: the app's own title. Measured on the
-     * reference TouchPad: Photos in Exhibition reads "Photos & Videos", its title, not the
-     * "Photos" of its exhibitionModeOptions (which the Exhibition app lists it by).
-     */
-    private fun barTitle(appId: String) = registry.get(appId)?.title ?: dockMode.title(appId)
-
-    private fun exhibit(appId: String) {
-        statusBar.title = barTitle(appId)
-        dockWindows[appId]?.let { showDockFace(it); return }
-        launch(appId, dockModeParams(), startupCard = false, dock = true)
-    }
-
-    /**
-     * A window for the dock (DockModeWindowManager::addWindow): it fills the positive space,
-     * and is shown if its app is the one on show. An app's second dock window replaces its
-     * first, as LunaSysMgr closed the one already running.
-     */
-    private fun addDockWindow(w: AppWindow) {
-        dockWindows.put(w.appId, w)?.takeIf { it != w }?.let { onWindowClosed(it) }
-        w.alpha = 0f
-        w.visibility = View.INVISIBLE
-        dockLayer.addView(w, FrameLayout.LayoutParams(0, 0))
-        layDockWindow(w)
-        if (exhibitionOn && w.appId == exhibitionApp) showDockFace(w)
-    }
-
-    /**
-     * An Exhibition window at the TouchPad's dock size: its screen, 1024 x 768, less the 28 px
-     * status bar above, upright or on its side as the dock is shaped. Exhibition was the
-     * Touchstone's, and its apps were written for exactly that window - Photos hard-codes its
-     * height in it, and on a dock any other height left its hidden controls on the screen. In
-     * the positive space under the status bar, as large as fits, centred, black around it
-     * (codepoet, 2026-10-19; Docs/luna-deltas.md B16).
-     */
-    private fun layDockWindow(w: AppWindow) {
-        val top = luna.px(StatusBar.HEIGHT)
-        val aw = dockLayer.width; val ah = dockLayer.height - top
-        val design = if (aw > ah) android.util.Size(1024, 768 - StatusBar.HEIGHT) else android.util.Size(768, 1024 - StatusBar.HEIGHT)
-        w.designSize = design
-        val lp = w.layoutParams as? FrameLayout.LayoutParams ?: return
-        if (aw <= 0 || ah <= 0) { lp.width = MATCH_PARENT; lp.height = MATCH_PARENT; lp.topMargin = top; w.layoutParams = lp; return }
-        val s = minOf(aw.toFloat() / design.width, ah.toFloat() / design.height)
-        lp.width = Math.round(design.width * s); lp.height = Math.round(design.height * s)
-        lp.gravity = android.view.Gravity.CENTER_HORIZONTAL or android.view.Gravity.TOP
-        lp.topMargin = top + (ah - lp.height) / 2
-        w.layoutParams = lp
-        w.post { w.rescale() }
-    }
-
-    /**
-     * The dock's layer. The swipe up from the bottom edge that minimizes a card ends the mode
-     * instead, as the home button does (SystemUiController: in dock mode both go to
-     * enterOrExitDockModeUi(false)). The edge band is the card layer's, dead zone included,
-     * so a swipe up never reaches the app on its way.
-     */
-    private inner class DockLayer : FrameLayout(this@ShellActivity) {
-        private var downY = 0f
-        private var downX = 0f
-        private var edge = false
-
-        override fun onInterceptTouchEvent(e: android.view.MotionEvent): Boolean {
-            when (e.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> {
-                    downX = e.x; downY = e.y
-                    edge = e.y >= height - 1 - luna.px(CardLayer.Params.EDGE)
-                    return edge
-                }
-                android.view.MotionEvent.ACTION_MOVE -> if (edge && swipedUp(e)) return true
-            }
-            return false
-        }
-
-        @android.annotation.SuppressLint("ClickableViewAccessibility")
-        override fun onTouchEvent(e: android.view.MotionEvent): Boolean {
-            if (!edge) return false
-            if (e.actionMasked == android.view.MotionEvent.ACTION_MOVE && swipedUp(e)) {
-                edge = false
-                setExhibition(false)
-            }
-            return true
-        }
-
-        private fun swipedUp(e: android.view.MotionEvent) =
-            downY - e.y >= luna.px(CardLayer.Params.TRIGGER) && downY - e.y > Math.abs(e.x - downX)
-    }
-
-    /**
-     * Shows [face] - an app's dock window, or the Time face - in place of what the dock was
-     * showing, the one fading out as the other fades in (animateWindowChange). Windows not on
-     * show stay running out of sight; only the one on show has the focus.
-     */
-    private fun showDockFace(face: View) {
-        val old = dockShown
-        dockShown = face
-        dockWindows.values.forEach { it.setStageActive(it == face) }
-        if (face == exhibition && old != exhibition) exhibition.reset()
-        face.animate().cancel()
-        face.visibility = View.VISIBLE
-        if (old == null || old == face) { face.alpha = 1f; return }
-        face.alpha = 0f
-        face.animate().alpha(1f).setDuration(DOCK_FADE_MS).setInterpolator(Easing.InOutQuad).start()
-        old.animate().cancel()
-        old.animate().alpha(0f).setDuration(DOCK_FADE_MS).setInterpolator(Easing.InOutQuad)
-            .withEndAction { if (dockShown != old) old.visibility = if (old == exhibition) View.GONE else View.INVISIBLE }
-            .start()
-    }
-
-    /**
-     * Something to show has arrived while Exhibition is on, which ends it: a card added or
-     * maximized (SystemUiController::cardWindowAdded, setCardWindowMaximized), or an Android
-     * app opened over the shell. Whatever it is, it is what the user is looking at, so the
-     * screen saver's end doesn't send the shell out of sight. True if Exhibition was on.
-     */
-    private fun cardArrivedInExhibition(): Boolean {
-        if (!exhibitionOn) return false
-        dreamFromBackground = false
-        setExhibition(false)
-        return true
-    }
-
-    private fun setExhibition(on: Boolean) {
-        // Entering again while it is already on is not a no-op: Palm's Exhibition app sends
-        // this every time its button is pressed, and if the exhibiting app's window has since
-        // closed, or the chosen app has changed, the press has to take effect.
-        // Only leaving is idempotent.
-        if (!on && !exhibitionOn) return
-        exhibitionOn = on
-        if (on) {
-            closeMenu()
-            if (launcherOpen) closeLauncher()
-            hideKeyboard()
-            // The face it was last left on, if that app is still switched on; otherwise the
-            // shell's own Time face. webOS launched the app with dockMode set, which is how it
-            // knows to show its exhibition view rather than its ordinary one.
-            exhibitionApp = dockMode.defaultApp()
-            // The dock covers the card view, which goes on underneath, untouched.
-            cards.visibility = View.INVISIBLE
-            cards.cards.forEach { it.window.setStageActive(false) }
-            val app = exhibitionApp
-            // Black until the app's window opens, as the dock was.
-            dockLayer.visibility = View.VISIBLE
-            if (app != null) {
-                exhibit(app)
-            } else {
-                showDockFace(exhibition)
-                statusBar.title = "Time"
-            }
-            statusBar.setMode(StatusBar.Mode.APP)
-            statusBar.slide(false)
-            applyOrientation(null)
-            holdScreen()
-        } else {
-            closeExhibitionMenu()
-            exhibition.animate().cancel()
-            exhibition.visibility = View.GONE
-            // webOS closed what it had put in the dock when dock mode ended
-            // (DockModeWindowManager::setDockModeState, DockModeCloseAppsOnExit), so an app's
-            // Exhibition view doesn't turn up anywhere afterwards. An app that was started for
-            // the dock ends with its window; one that was already running keeps its cards.
-            // What was showing is where the next Exhibition opens, as LunaSysMgr's default.
-            dockMode.setDefault(exhibitionApp)
-            exhibitionApp = null
-            dockShown = null
-            dockWindows.values.toList().forEach { onWindowClosed(it) }
-            dockLayer.visibility = View.GONE
-            exhibition.alpha = 1f
-            cards.visibility = View.VISIBLE
-            holdScreen()
-            if (dreamExhibition) endDreamExhibition()
-            if (cards.maximized != null) onMaximized(cards.maximized!!) else onCardView()
-        }
-        fade(justType, !on && cards.maximized == null && !launcherOpen)
-        showDock(!on && cards.maximized == null)
-    }
-
     /** The whole display in real pixels, the way round it is now, bars and cutouts included. */
     @Suppress("DEPRECATION")
     private fun realMetrics() = android.util.DisplayMetrics().also { windowManager.defaultDisplay.getRealMetrics(it) }
@@ -2350,8 +2071,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // webOS's preference and wallpaper store, and the two display settings Android lets
         // Lunacy really set. See Docs/architecture.md, "Settings".
         displayService = DisplayService(this)
-        displayService.onDockMode = { on -> runOnUiThread { setExhibition(on) } }
-        displayService.inDockMode = { exhibitionOn }
+        displayService.onDockMode = { on -> runOnUiThread { exhibitions.setExhibition(on) } }
+        displayService.inDockMode = { exhibitions.exhibitionOn }
         displayService.register(bus)
         dockMode = DockMode(this, registry).also { it.register(bus) }
         systemService = SystemService(jsServices.root, java.io.File(filesDir, "systemservice.json"))
@@ -2556,7 +2277,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     override fun onMaximized(card: Card) {
         // A running app brought forward ends Exhibition too (setCardWindowMaximized); leaving
         // it comes back here with the card.
-        if (cardArrivedInExhibition()) return
+        if (exhibitions.cardArrivedInExhibition()) return
         if (card.window.appId == directApp) directShown = true
         pendingLoads[card.window]?.run()
         quickLaunch.cancelLaunchFeedback()
@@ -2587,47 +2308,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         card.window.requestFocus()
     }
 
-    /**
-     * The title while exhibiting drops down the faces to choose from: the shell's own Time,
-     * and every app its owner turned on in Palm's Exhibition app. webOS drew the same menu
-     * from the same place, so the mode can be changed without leaving it.
-     */
-    private fun toggleExhibitionMenu() {
-        if (exhibitionMenu.visibility == View.VISIBLE) { closeExhibitionMenu(); return }
-        val entries = mutableListOf(ExhibitionMenu.Entry(null, "Time", luna.image("dockmode/time-icon-48x48.png")))
-        for (app in registry.apps) {
-            if (!dockMode.isEnabled(app.id)) continue
-            entries += ExhibitionMenu.Entry(app.id, dockMode.title(app.id), luna.appIcon(app))
-        }
-        exhibitionMenu.entries = entries
-        exhibitionMenu.visibility = View.VISIBLE
-        exhibitionMenu.bringToFront()
-        statusBar.bringToFront()
-        // The title reads "Choose an App" while the menu is down, as it does on a device.
-        statusBar.title = "Choose an App"
-        menuScrim.visibility = View.VISIBLE
-    }
-
-    private fun closeExhibitionMenu() {
-        if (exhibitionMenu.visibility != View.VISIBLE) return
-        exhibitionMenu.visibility = View.GONE
-        if (!notifications.menu.isOpen) menuScrim.visibility = View.GONE
-        statusBar.title = exhibitionApp?.let { barTitle(it) } ?: "Time"
-    }
-
-    /** A face chosen from that menu: null is the shell's own Time. */
-    private fun chooseExhibition(appId: String?) {
-        closeExhibitionMenu()
-        if (appId == exhibitionApp) return
-        // The app that was exhibiting stops being the one on show; webOS left it running.
-        exhibitionApp = appId
-        if (appId == null) {
-            showDockFace(exhibition)
-            statusBar.title = "Time"
-        } else {
-            exhibit(appId)
-        }
-    }
 
     /**
      * The title's ▾: LunaSysMgr relaunched the maximized card's app with
@@ -2683,8 +2363,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     override fun onBackPressed() = homePressed()
 
     private fun homePressed() {
-        if (exhibitionMenu.visibility == View.VISIBLE) { closeExhibitionMenu(); return }
-        if (exhibitionOn) { setExhibition(false); return }
+        if (exhibitions.menuOpen) { exhibitions.closeExhibitionMenu(); return }
+        if (exhibitions.exhibitionOn) { exhibitions.setExhibition(false); return }
         if (notifications.menu.isOpen || systemMenu.isOpen) { closeMenu(); return }
         notifications.popups.newest()?.let { onWindowClosed(it); return }
         if (justTypePanel.showing) { closeJustType(); return }
@@ -2864,7 +2544,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         /** Long enough for the launch glow to be drawn before the card work starts. */
         const val LAUNCH_DELAY_MS = 60L
         /** A change of face in the dock: AnimationSettings' dockFadeDockAnimationDuration. */
-        const val DOCK_FADE_MS = 500L
         /** Android's screen saver asking for Exhibition; see ExhibitionDream. */
         const val EXTRA_EXHIBITION = "exhibition"
         const val MEMORY_CHECK_MS = 10_000L
@@ -2891,7 +2570,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      */
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
         if (event.action == android.view.KeyEvent.ACTION_DOWN && !justTypePanel.showing && cards.maximized == null &&
-            !exhibitionOn && !tabDialog.showing && currentFocus !is android.widget.EditText &&
+            !exhibitions.exhibitionOn && !tabDialog.showing && currentFocus !is android.widget.EditText &&
             !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed) {
             val ch = event.unicodeChar
             if (ch != 0 && (ch and android.view.KeyCharacterMap.COMBINING_ACCENT) == 0 && !Character.isISOControl(ch) && !Character.isWhitespace(ch)) {

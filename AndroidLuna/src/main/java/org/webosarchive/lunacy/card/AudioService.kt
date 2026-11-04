@@ -17,7 +17,14 @@ import kotlin.math.roundToInt
  *   tablet Android ties that stream to its notification volume, so the two move together.
  * - Muting the system class mutes Lunacy's own system sounds: the shell's feedback sounds
  *   ([playFeedback]). Android's own touch sounds are Android's, and Lunacy leaves them alone.
- * - Other classes (media, ringtone) aren't here, and the bus says so.
+ * - The media class (Music, codepoet 2026-11-04) is Android's music stream the same way:
+ *   `media/getVolume`, `media/setVolume`, `media/status`, and `media/lockVolumeKeys`, which
+ *   points the device's volume keys at that stream while the caller holds it, as webOS locked
+ *   its keys to the media class for the app in front. Its status is the system class's shape
+ *   with "scenario":"media_back_speaker", "active":true and "mic_gain":-1, measured on the
+ *   TouchPad; `media/getVolume` is `{"returnValue":true,"scenario":"media_back_speaker","volume":70}`
+ *   and `media/lockVolumeKeys` `{"returnValue":true}`.
+ * - Other classes (ringtone, voice) aren't here, and the bus says so.
  *
  * Measured on the reference TouchPad with luna-send (webOS CE 3.1.0):
  * - `system/status`: `{"returnValue":true,"action":"requested","scenario":"system_default",
@@ -39,6 +46,8 @@ class AudioService(
     /** Whether the system class starts muted: webOS's systemSounds preference turned off. */
     startMuted: Boolean,
     private val playFeedback: (String) -> Unit,
+    /** The volume keys work the media stream (true) or Android's default (false): media/lockVolumeKeys. */
+    private val lockVolumeKeys: (Boolean) -> Unit = {},
 ) {
     private val app: Context = context.applicationContext
     private val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -54,10 +63,63 @@ class AudioService(
 
     // Android's own volume keys and its settings change the stream too.
     private val receiver = object : BroadcastReceiver() {
-        override fun onReceive(c: Context, i: Intent) { changed(listOf("volume")) }
+        override fun onReceive(c: Context, i: Intent) { changed(listOf("volume")); mediaChanged() }
+    }
+
+    // ---- the media class ----
+    private val mediaWatchers = ArrayList<Bus.Call>()
+    private var mediaAsked = -1
+    private var mediaReported = -1
+    private val locks = ArrayList<Bus.Call>()
+
+    private fun mediaMax() = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+
+    private fun mediaVolume(): Int {
+        val now = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+        if (mediaAsked >= 0 && (mediaAsked * mediaMax() / 100f).roundToInt() == now) return mediaAsked
+        mediaAsked = -1
+        return (now * 100f / mediaMax()).roundToInt()
+    }
+
+    private fun mediaState(): JSONObject = JSONObject().put("returnValue", true).put("scenario", "media_back_speaker")
+        .put("volume", mediaVolume()).put("mic_gain", -1).put("active", true).put("ringer switch", true)
+        .put("muted", false).put("slider", false).put("hac", false)
+
+    private fun mediaStatus(c: Bus.Call) {
+        c.reply(mediaState().put("action", "requested").put("subscribed", c.subscribe).toString())
+        if (c.subscribe && !c.cancelled) { mediaWatchers += c; c.onCancel { mediaWatchers.remove(c) } }
+    }
+
+    private fun mediaChanged() {
+        val v = mediaVolume()
+        if (v == mediaReported) return
+        mediaReported = v
+        val j = mediaState().put("action", "changed").put("changed", JSONArray().put("volume")).toString()
+        mediaWatchers.toList().forEach { it.reply(j) }
+    }
+
+    private fun mediaSetVolume(c: Bus.Call) {
+        val v = integer(c.params, "volume") ?: return c.reply(SCHEMA_ERROR)
+        if (v !in 0..100) {
+            return c.reply(JSONObject().put("returnValue", false).put("errorCode", 3)
+                .put("errorText", "Invalid 'volume' integer parameter value.").toString())
+        }
+        mediaAsked = v
+        am.setStreamVolume(AudioManager.STREAM_MUSIC, (v * mediaMax() / 100f).roundToInt(), 0)
+        c.reply(Bus.ok())
+        mediaChanged()
+    }
+
+    private fun lock(c: Bus.Call) {
+        c.reply(Bus.ok())
+        if (!c.subscribe || c.cancelled) return
+        locks += c
+        lockVolumeKeys(true)
+        c.onCancel { locks.remove(c); if (locks.isEmpty()) lockVolumeKeys(false) }
     }
 
     init {
+        mediaReported = mediaVolume()
         reported = volume()
         app.registerReceiver(receiver, IntentFilter(VOLUME_CHANGED))
     }
@@ -70,6 +132,11 @@ class AudioService(
         bus.register(SERVICE, "system/setVolume", Bus.CallHandler { setVolume(it) })
         bus.register(SERVICE, "system/setMuted", Bus.CallHandler { setMuted(it) })
         bus.register(SERVICE, "systemsounds/playFeedback", Bus.CallHandler { feedback(it) })
+        bus.register(SERVICE, "media/status", Bus.CallHandler { mediaStatus(it) })
+        bus.register(SERVICE, "media/getVolume", Bus.CallHandler { it.reply(JSONObject().put("returnValue", true)
+            .put("scenario", "media_back_speaker").put("volume", mediaVolume()).toString()) })
+        bus.register(SERVICE, "media/setVolume", Bus.CallHandler { mediaSetVolume(it) })
+        bus.register(SERVICE, "media/lockVolumeKeys", Bus.CallHandler { lock(it) })
     }
 
     private fun max() = am.getStreamMaxVolume(STREAM).coerceAtLeast(1)

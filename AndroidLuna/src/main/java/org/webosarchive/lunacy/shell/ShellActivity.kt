@@ -2597,7 +2597,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             addAction(android.content.Intent.ACTION_SCREEN_ON); addAction(android.content.Intent.ACTION_SCREEN_OFF)
         })
         watchingSystem = true
-        audio = org.webosarchive.lunacy.card.AudioService(this, startMuted = systemService.get("systemSounds") == false) { sounds.feedback(it) }
+        audio = org.webosarchive.lunacy.card.AudioService(this, startMuted = systemService.get("systemSounds") == false,
+            playFeedback = { sounds.feedback(it) },
+            // Music holds media/lockVolumeKeys while it is in front: the keys work its volume.
+            lockVolumeKeys = { on -> volumeControlStream = if (on) android.media.AudioManager.STREAM_MUSIC else android.media.AudioManager.USE_DEFAULT_STREAM_TYPE })
         audio.register(bus)
         // Lunacy's own service, on its own name: the environment it really runs in, and
         // Android's settings screens for the settings Android owns.

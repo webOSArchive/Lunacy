@@ -6,6 +6,14 @@ License 2.0; the TouchPad's copy matches that release but for line endings, appi
 (without its requiredPermissions and trustLevel) and index.html (Enyo loaded with
 launch="nobridge"). Copyright Hewlett-Packard Development Company, L.P., Apache License 2.0.
 
+One change of Lunacy's, codepoet's exception to rule 5 (2026-11-04), marked [Lunacy] in
+source/app.js: on a card under 640 px wide (a phone) the library panel and the list beside it
+take turns at the card's width, the library first, a list or Now Playing over it, and back
+stepping out, as the Pre3's Music drilled down. Nothing changes on a TouchPad or a tablet.
+
 Lunacy answers what it asks for: the music library in db8 (card/MusicLibrary.kt, from
-Android's media library), album art through extractfs. Its dashboard is also what the
+Android's media library), album art through extractfs, the media class's volume and status
+and its volume-key lock (card/AudioService.kt), and the playlist files (MusicLibrary).
+com.palm.service.mediabroadcast and com.palm.keys' media and headset status aren't answered
+yet. Its dashboard is also what the
 Android Notifications app shows for an Android app that is playing.

@@ -5,7 +5,7 @@ enyo.kind({
 	//className: "landscape",
 	width: "100%",
 	components: [
-		{ name: "appEvent", kind: "ApplicationEvents", onWindowActivated: "windowActivatedHandler", onWindowDeactivated: "windowDeactivatedHandler", onWindowHidden: "windowHiddenHandler", onWindowShown: "windowShownHandler", onWindowParamsChange: "windowParamsChangeHandler", onUnload: "unloadHandler", onApplicationRelaunch: "applicationRelaunchHandler"},
+		{ name: "appEvent", kind: "ApplicationEvents", onWindowActivated: "windowActivatedHandler", onWindowDeactivated: "windowDeactivatedHandler", onWindowHidden: "windowHiddenHandler", onWindowShown: "windowShownHandler", onWindowParamsChange: "windowParamsChangeHandler", onUnload: "unloadHandler", onApplicationRelaunch: "applicationRelaunchHandler", onBack: "lunacyBack"}, // [Lunacy] onBack: see lunacyLayout
 	
 		{name: "psSetVolumeLock", kind: "PalmService", service: "palm://com.palm.audio/", method: "media/lockVolumeKeys", subscribe: true},
 		{name: "psSetVolume", kind: "PalmService", service: "palm://com.palm.audio/", method: "media/setVolume"},
@@ -168,6 +168,7 @@ enyo.kind({
 	rendered: function()
 	{
 		this.inherited(arguments);
+		this.lunacyLayout(); // [Lunacy]
 		
 		this.log();
 		this.log("enyo.windowParamas: ", enyo.windowParams);
@@ -508,6 +509,58 @@ enyo.kind({
 	},
 	
 	
+	// [Lunacy] A phone's card (codepoet's exception to rule 5, 2026-11-04). Music was a
+	// TouchPad app: its 320 px library panel and the list beside it need a card wider than a
+	// phone's. Under 640 px they take turns at the card's width: the library first; a list,
+	// a playlist or Now Playing brings the list over it; back takes a detail view back to its
+	// list first, as on the TouchPad, then the list back to the library.
+	lunacyNarrow: function()
+	{
+		return window.innerWidth < 640;
+	},
+	lunacyLayout: function()
+	{
+		var nav = this.$.navPanel, main = this.$.paneMainView;
+		if (!nav || !main) { return; }
+		if (this.lunacyNarrow())
+		{
+			nav.applyStyle("width", "100%");
+			nav.setShowing(!this.lunacyMain);
+			main.setShowing(!!this.lunacyMain);
+		}
+		else
+		{
+			nav.applyStyle("width", "320px");
+			nav.setShowing(true);
+			main.setShowing(true);
+		}
+	},
+	lunacyShowMain: function()
+	{
+		this.lunacyMain = true;
+		if (this.lunacyNarrow())
+		{
+			this.lunacyLayout();
+			if (this.ListView && this.ListView.resizeList) { this.ListView.resizeList(); }
+		}
+	},
+	lunacyBack: function(inSender, inEvent)
+	{
+		if (!this.lunacyNarrow() || !this.lunacyMain || this.$.paneAll.getViewIndex() !== 0) { return; }
+		var view = this.$.paneMainView.getView();
+		if (view && view.getViewIndex && view.getViewIndex() > 0)
+		{
+			this.resetListViewSliderGroup(view);
+		}
+		else
+		{
+			this.lunacyMain = false;
+			this.lunacyLayout();
+		}
+		if (inEvent && inEvent.preventDefault) { inEvent.preventDefault(); }
+		return true;
+	},
+
 	resizeHandler: function()
 	{
 		this.log("window.innerWidth: ", window.innerWidth);
@@ -521,6 +574,7 @@ enyo.kind({
 		this.$.AlbumArtView.orientationChanged(this.boolLandscape);
 		
 		this.$.navPanel.resizeContent();
+		this.lunacyLayout(); // [Lunacy]
 		if(this.ListView)
 		{
 			if(this.ListView.resizeList)
@@ -1427,6 +1481,7 @@ enyo.kind({
 	///*****************************************
 	 
 	onClick_NowPlaying: function(sender, objParams){
+		this.lunacyShowMain(); // [Lunacy]
 		//listView gets changed in navPanel
 		//song and playlist are dealt with in navPanel
 		
@@ -1456,6 +1511,7 @@ enyo.kind({
 		//webosEvent.start("","SwitchView",strListViewType);
 		this.resetListViewSliderGroup(this.$.paneMainView.getView());
 		this.selectListView(strListViewType, objParams);
+		this.lunacyShowMain(); // [Lunacy]
 		
 	},
 	
@@ -1662,7 +1718,8 @@ enyo.kind({
 		if(objClickPlaylist)
 		{
 			objClickPlaylist.boolForceRender = true;
-			this.selectListView("Playlist", objClickPlaylist);			
+			this.selectListView("Playlist", objClickPlaylist);
+			this.lunacyShowMain(); // [Lunacy]			
 		}
 		
 		

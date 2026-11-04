@@ -46,6 +46,9 @@ class MusicLibrary(private val context: Context, private val webosRoot: File) {
 
     fun attach(db: Db8) {
         val keepers = setOf("serviced", "hasResizedThumbnails")
+        db.mirror(spec(PLAYLIST_FILE, listOf(listOf("path"), listOf("_rev"))),
+            MediaIndex.musicPermissions(PLAYLIST_FILE)) { playlists() }
+        db.configure(listOf(spec(PLAYLIST_OBJECT, listOf(listOf("title"), listOf("_rev")))), listOf(MediaIndex.musicPermissions(PLAYLIST_OBJECT)))
         db.mirror(spec(ALBUM, listOf(named("albumname", prop("name", "primary")), named("serviced", prop("serviced")),
                 named("hasResizedThumbnails", prop("hasResizedThumbnails")), listOf("genre"), listOf("artist"),
                 listOf("hasResizedThumbnails", "_del"), listOf("_rev"))),
@@ -64,6 +67,44 @@ class MusicLibrary(private val context: Context, private val webosRoot: File) {
     }
 
     private fun albumKey(o: JSONObject) = o.optString("name") + "\u0000" + o.optString("artist")
+
+    /**
+     * Playlist files: filenotifyd's playlist module filed each .m3u and .pls under
+     * /media/internal as {path, title (the file's name), songPaths (absolute webOS paths), and
+     * playlistObjId ""} in `com.palm.media.playlist.file:1`, which Music watches. The kind Music
+     * lists them from, `com.palm.media.playlist.object:1`, is registered empty: what made those
+     * records on a device is not yet measured.
+     */
+    private fun playlists(): List<JSONObject> {
+        val out = ArrayList<JSONObject>()
+        fun walk(dir: File, path: String, depth: Int) {
+            if (depth > 6 || out.size >= 500) return
+            for (f in dir.listFiles().orEmpty().sortedBy { it.name }) {
+                if (f.name.startsWith(".")) continue
+                val p = "$path/${f.name}"
+                if (f.isDirectory) { walk(f, p, depth + 1); continue }
+                val ext = f.name.substringAfterLast('.', "").lowercase(Locale.ROOT)
+                if (ext != "m3u" && ext != "m3u8" && ext != "pls") continue
+                val base = path
+                val songs = JSONArray()
+                runCatching {
+                    f.readLines().map { it.trim() }.forEach { line ->
+                        val entry = when {
+                            ext == "pls" -> line.takeIf { it.lowercase(Locale.ROOT).startsWith("file") && it.contains('=') }?.substringAfter('=')
+                            else -> line.takeIf { it.isNotEmpty() && !it.startsWith("#") }
+                        } ?: return@forEach
+                        val e = entry.removePrefix("file://").replace('\\', '/')
+                        songs.put(if (e.startsWith("/")) e else "$base/$e")
+                    }
+                }
+                out += JSONObject().put("path", p).put("title", f.name.substringBeforeLast('.')).put("songPaths", songs)
+                    .put("playlistObjId", "").put(Db8.STAMP, "${f.lastModified()}:${f.length()}")
+            }
+        }
+        walk(UserFiles.own(webosRoot), "/media/internal", 0)
+        for ((name, dir) in UserFiles.mappedFolders()) walk(dir, "/media/internal/$name", 0)
+        return out
+    }
 
     // ---- the songs ----
 
@@ -247,6 +288,8 @@ class MusicLibrary(private val context: Context, private val webosRoot: File) {
         const val ARTIST = "com.palm.media.audio.artist:1"
         const val GENRE = "com.palm.media.audio.genre:1"
         const val ARTIST_ALBUM = "com.palm.media.audio.artistalbum:1"
+        const val PLAYLIST_FILE = "com.palm.media.playlist.file:1"
+        const val PLAYLIST_OBJECT = "com.palm.media.playlist.object:1"
         private const val COL_ALBUM_ARTIST = "album_artist"
         private const val COL_GENRE = "genre"
         private const val UNKNOWN_ARTIST = "Unknown Artist"

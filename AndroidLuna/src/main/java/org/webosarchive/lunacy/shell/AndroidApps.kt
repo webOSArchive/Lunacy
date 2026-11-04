@@ -28,11 +28,9 @@ import java.io.ByteArrayOutputStream
  */
 class AndroidApps(private val context: Context, private val files: AppFiles, private val iconPx: Int) {
     /** Each activity's icon as a PNG, or null where none could be drawn; a miss is kept too. */
-    private val icons = java.util.Collections.synchronizedMap(HashMap<String, ByteArray?>())
+    private val icons = AndroidIconCache(context, PREFIX, iconPx)
 
-    private fun icon(id: String, ri: android.content.pm.ResolveInfo): ByteArray? = synchronized(icons) {
-        if (icons.containsKey(id)) icons[id] else (stand(ri) ?: png(ri)).also { icons[id] = it }
-    }
+    private fun icon(id: String, ri: android.content.pm.ResolveInfo): ByteArray? = icons.get(id) { stand(ri) ?: png(ri) }
 
     /** The packages whose icon is webOS's own (see [systemCameras]); found with the list. */
     @Volatile private var cameras: Set<String> = emptySet()
@@ -48,9 +46,7 @@ class AndroidApps(private val context: Context, private val files: AppFiles, pri
             else -> return null
         }
         return runCatching {
-            val art = context.assets.open(asset).use { android.graphics.BitmapFactory.decodeStream(it) }
-            val b = Bitmap.createScaledBitmap(art, iconPx, iconPx, true)
-            ByteArrayOutputStream().also { b.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+            icons.png(context.assets.open(asset).use { android.graphics.BitmapFactory.decodeStream(it) })
         }.getOrNull()
     }
 
@@ -89,15 +85,12 @@ class AndroidApps(private val context: Context, private val files: AppFiles, pri
      */
     private fun png(ri: android.content.pm.ResolveInfo): ByteArray? = runCatching {
         val pm = context.packageManager
-        val dpi = maxOf((iconPx * 160 + 47) / 48, (context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).launcherLargeIconDensity)
+        val dpi = icons.dpi
         val res = ri.activityInfo.iconResource
         @Suppress("DEPRECATION")
         val d = (if (res != 0) runCatching { pm.getResourcesForApplication(ri.activityInfo.applicationInfo).getDrawableForDensity(res, dpi) }.getOrNull() else null)
             ?: ri.loadIcon(pm)
-        val b = Bitmap.createBitmap(iconPx, iconPx, Bitmap.Config.ARGB_8888)
-        d.setBounds(0, 0, iconPx, iconPx)
-        d.draw(Canvas(b))
-        ByteArrayOutputStream().also { b.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+        icons.png(d)
     }.getOrNull()
 
     /**
@@ -118,7 +111,7 @@ class AndroidApps(private val context: Context, private val files: AppFiles, pri
         dialers(context, launchers.map { ComponentName(it.activityInfo.packageName, it.activityInfo.name) })
 
     /** A package was added, changed or removed: its icons are drawn again next time. */
-    fun forget(packageName: String) { icons.keys.removeAll { it.startsWith("$PREFIX$packageName/") } }
+    fun forget(packageName: String) = icons.forget(packageName)
 
     /** Starts the app. False if Android wouldn't. */
     fun launch(app: AppInfo): Boolean {

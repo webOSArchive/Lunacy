@@ -1085,7 +1085,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
     /** The active group's x as the finger took it (m_activeGroupPivot). */
     private var pivot = 0f
     private var dragCard: Card? = null
-    private var velocity: VelocityTracker? = null
+    private val flick = Flick()
     /** A touch that arrived while a card was maximizing, which LunaSysMgr had no state for. */
     private var ignoring = false
 
@@ -1160,8 +1160,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         if (maximized != null && drag != Drag.MINIMIZE) return deadZoneTouch(e)
         if (e.actionMasked == MotionEvent.ACTION_DOWN) ignoring = activating != null
         if (ignoring) return true
-        if (velocity == null) velocity = VelocityTracker.obtain()
-        velocity!!.addMovement(e)
+        flick.add(e)
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 anim?.cancel(); anim = null
@@ -1200,9 +1199,8 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 removeCallbacks(hold)
-                velocity!!.computeCurrentVelocity(1000)
-                val vx = velocity!!.xVelocity; val vy = velocity!!.yVelocity
-                velocity!!.recycle(); velocity = null
+                val (vx, vy) = flick.velocity().let { it.x to it.y }
+                flick.drop()
                 val card = dragCard
                 when (drag) {
                     Drag.SCROLL -> {
@@ -1265,8 +1263,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
             drag = Drag.MINIMIZE; dragCard = max
             cards.forEach { it.visibility = View.VISIBLE }
             max.chromeShown = false
-            if (velocity == null) velocity = VelocityTracker.obtain()
-            velocity!!.addMovement(e)
+            flick.add(e)
         }
         if (e.actionMasked == MotionEvent.ACTION_UP || e.actionMasked == MotionEvent.ACTION_CANCEL) { drag = Drag.NONE; dragCard = null; side = 0 }
         return true

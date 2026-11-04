@@ -62,13 +62,13 @@ class QuickLaunch(context: Context, private val luna: Luna, private val onLaunch
 
     private var pressed = -2  // -1 = launcher button
     /** The item glowing while its app launches, as in the launcher (LunaCE's launch feedback). */
-    private var feedback = -1
-    private val clearFeedback = Runnable { feedback = -1; invalidate() }
+    private val glow = LaunchGlow(this, -1)
+    private val feedback get() = glow.on
     private var dragging = -1
     private var dragX = 0f; private var dragY = 0f
     private var downX = 0f; private var downY = 0f
 
-    fun cancelLaunchFeedback() { removeCallbacks(clearFeedback); feedback = -1; invalidate() }
+    fun cancelLaunchFeedback() = glow.cancel()
 
     override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(MeasureSpec.getSize(w), luna.px(barHeight))
 
@@ -168,7 +168,7 @@ class QuickLaunch(context: Context, private val luna: Luna, private val onLaunch
                     }
                     pressed == h && h == -1 -> onLauncher()
                     pressed == h && h >= 0 && !editing -> {
-                        feedback = h; removeCallbacks(clearFeedback); postDelayed(clearFeedback, Launcher.Params.FEEDBACK_MS)
+                        glow.show(h)
                         onLaunch(apps[h])
                     }
                 }

@@ -43,7 +43,7 @@ class PinnedShortcuts(
     private val iconPx: Int = (context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).launcherLargeIconSize,
 ) {
     private val store = File(context.filesDir, "shortcuts.json")
-    private val icons = java.util.Collections.synchronizedMap(HashMap<String, ByteArray?>())
+    private val icons = AndroidIconCache(context, PREFIX, iconPx)
 
     fun list(): List<AppInfo> = if (Build.VERSION.SDK_INT >= 26) Pinned.list(this) else legacy().map { tile(it) }
 
@@ -65,7 +65,7 @@ class PinnedShortcuts(
     }
 
     /** A package's shortcuts changed: their icons are drawn again next time. */
-    fun forget(packageName: String) { icons.keys.removeAll { it.startsWith("$PREFIX$packageName/") } }
+    fun forget(packageName: String) = icons.forget(packageName)
 
     // ---- before Android 8: the INSTALL_SHORTCUT broadcast ----
 
@@ -140,23 +140,10 @@ class PinnedShortcuts(
         )
     }
 
-    internal fun cachedIcon(key: String, draw: () -> ByteArray?): ByteArray? = synchronized(icons) {
-        if (icons.containsKey(key)) icons[key] else draw().also { icons[key] = it }
-    }
-
-    internal fun png(d: Drawable): ByteArray {
-        val b = Bitmap.createBitmap(iconPx, iconPx, Bitmap.Config.ARGB_8888)
-        d.setBounds(0, 0, iconPx, iconPx)
-        d.draw(Canvas(b))
-        return png(b)
-    }
-
-    private fun png(b: Bitmap): ByteArray {
-        val scaled = if (b.width == iconPx && b.height == iconPx) b else Bitmap.createScaledBitmap(b, iconPx, iconPx, true)
-        return ByteArrayOutputStream().also { scaled.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
-    }
-
-    internal val dpi get() = maxOf((iconPx * 160 + 47) / 48, (context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).launcherLargeIconDensity)
+    internal fun cachedIcon(key: String, draw: () -> ByteArray?): ByteArray? = icons.get(key, draw)
+    internal fun png(d: Drawable): ByteArray = icons.png(d)
+    private fun png(b: Bitmap): ByteArray = icons.png(b)
+    internal val dpi get() = icons.dpi
     internal val launcherApps get() = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
 
     /** From Android 8: the pins LauncherApps keeps for the home app. */

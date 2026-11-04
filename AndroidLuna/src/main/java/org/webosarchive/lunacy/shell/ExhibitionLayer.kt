@@ -284,16 +284,16 @@ class ExhibitionLayer(context: Context, private val luna: Luna) : View(context) 
     private var dragging = false
     private val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
     private val flingMin = android.view.ViewConfiguration.get(context).scaledMinimumFlingVelocity * 4
-    private var velocity: android.view.VelocityTracker? = null
+    private val flick = Flick()
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
-        velocity?.addMovement(e)
+        flick.addIfTracking(e)
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 anim?.cancel(); downX = e.x; startPosition = position; dragging = false
-                velocity?.recycle()
-                velocity = android.view.VelocityTracker.obtain()
+                // The down itself isn't tracked: it went to the gesture this one replaces.
+                flick.restart()
             }
             MotionEvent.ACTION_MOVE -> {
                 if (!dragging && abs(e.x - downX) > slop) dragging = true
@@ -303,9 +303,8 @@ class ExhibitionLayer(context: Context, private val luna: Luna) : View(context) 
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                velocity?.computeCurrentVelocity(1000)
-                val vx = velocity?.xVelocity ?: 0f
-                velocity?.recycle(); velocity = null
+                val vx = flick.velocity().x
+                flick.drop()
                 if (dragging) {
                     // A flick turns the page even when the finger didn't travel half the
                     // screen, as the QML ListView's SnapOneItem does.

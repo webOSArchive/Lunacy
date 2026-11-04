@@ -456,21 +456,16 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
 
     // ---- launch feedback ----
 
-    private var feedbackId: String? = null
-    private val clearFeedback = Runnable { feedbackId = null; invalidate() }
+    private val launchGlow = LaunchGlow<String?>(this, null)
+    private val feedbackId get() = launchGlow.on
 
     /** The glow behind a tapped icon, until the launcher closes or LunaCE's 3 s run out. */
     fun showLaunchFeedback(app: AppInfo) = showLaunchFeedback(app.id)
 
     /** The same glow on any tile by its id: an app, or [LunaCE] a group being opened. */
-    fun showLaunchFeedback(tileId: String) {
-        feedbackId = tileId
-        removeCallbacks(clearFeedback)
-        postDelayed(clearFeedback, Params.FEEDBACK_MS)
-        invalidate()
-    }
+    fun showLaunchFeedback(tileId: String) = launchGlow.show(tileId)
 
-    fun cancelLaunchFeedback() { removeCallbacks(clearFeedback); feedbackId = null; invalidate() }
+    fun cancelLaunchFeedback() = launchGlow.cancel()
 
     // ---- geometry ----
 
@@ -1038,7 +1033,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private var drag = Drag.NONE
     private var downX = 0f; private var downY = 0f; private var downPage = 0f; private var downScroll = 0f
     private var downApp: Tile? = null
-    private var velocity: VelocityTracker? = null
+    private val flick = Flick()
     private var anim: ValueAnimator? = null
     /** Holding an icon enters edit mode and picks the icon up. */
     private val longPress = Runnable {
@@ -1069,8 +1064,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
         if (dialogApp != null) { dialogTouch(e); return true }
-        if (velocity == null) velocity = VelocityTracker.obtain()
-        velocity!!.addMovement(e)
+        flick.add(e)
         val page = currentPage()
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -1118,9 +1112,8 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 removeCallbacks(longPress); removeCallbacks(tabHold); removeCallbacks(addHold)
-                velocity!!.computeCurrentVelocity(1000)
-                val vx = velocity!!.xVelocity; val vy = velocity!!.yVelocity
-                velocity!!.recycle(); velocity = null
+                val (vx, vy) = flick.velocity().let { it.x to it.y }
+                flick.drop()
                 when (drag) {
                     Drag.ICON -> drop()
                     Drag.PAGE -> {

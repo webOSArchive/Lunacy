@@ -506,7 +506,7 @@ class SystemMenu(context: Context, private val luna: Luna, private val controls:
     private var flicking = false
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
     private val scroller = OverScroller(context)
-    private var velocity: VelocityTracker? = null
+    private val flick = Flick()
 
     private fun hit(x: Float, y: Float): Placed? {
         val cy = y + scrollY0
@@ -525,7 +525,7 @@ class SystemMenu(context: Context, private val luna: Luna, private val controls:
                 // Below the menu's background the touch is the scrim's: it closes the menu.
                 if (e.y > Math.min(height.toFloat(), contentH + luna.px(BOTTOM.toFloat()))) return false
                 scroller.forceFinished(true)
-                velocity?.recycle(); velocity = VelocityTracker.obtain().also { it.addMovement(e) }
+                flick.restart(e)
                 onHandle = false; onBar = false; flicking = false; downX = e.x; downY = e.y; lastY = e.y
                 val p = hit(e.x, e.y)
                 pressedPlaced = p
@@ -538,7 +538,7 @@ class SystemMenu(context: Context, private val luna: Luna, private val controls:
                 invalidate()
             }
             MotionEvent.ACTION_MOVE -> {
-                velocity?.addMovement(e)
+                flick.addIfTracking(e)
                 if (onHandle && s != null) { brightness = valueAt(e.x, s); onBrightness(brightness, false); return true }
                 // A finger that wanders off the bar isn't a tap on it any more.
                 if (onBar && Math.abs(e.x - downX) > luna.px(20f)) onBar = false
@@ -562,18 +562,17 @@ class SystemMenu(context: Context, private val luna: Luna, private val controls:
                     brightness += if (e.x < handleX(s, hw)) -RAIL_STEP else RAIL_STEP
                     onBrightness(brightness, true)
                 } else if (flicking) {
-                    velocity?.computeCurrentVelocity(1000)
-                    val vy = velocity?.yVelocity ?: 0f
+                    val vy = flick.velocity().y
                     scroller.fling(0, scrollY0.toInt(), 0, -vy.toInt(), 0, 0, 0, maxScroll.toInt())
                     postInvalidateOnAnimation()
                 } else pressed?.let { act(it) }
                 onHandle = false; onBar = false; flicking = false; pressed = null
-                velocity?.recycle(); velocity = null
+                flick.drop()
                 invalidate()
             }
             MotionEvent.ACTION_CANCEL -> {
                 onHandle = false; onBar = false; flicking = false; pressed = null
-                velocity?.recycle(); velocity = null
+                flick.drop()
                 invalidate()
             }
         }

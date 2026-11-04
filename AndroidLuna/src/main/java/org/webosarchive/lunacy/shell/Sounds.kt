@@ -63,14 +63,12 @@ class Sounds(private val context: Context, private val server: AppServer, privat
             "ringtones" -> AudioManager.STREAM_RING
             else -> AudioManager.STREAM_NOTIFICATION
         }
-        val player = MediaPlayer()
-        try {
-            @Suppress("DEPRECATION") player.setAudioStreamType(stream)
+        val player = start(stream, "[$appId] sound $soundClass $soundFile") { player ->
             val fromAndroid = if (file == null && cls == "ringtones") androidSound() else null
             if (file != null) player.setDataSource(file.path)
             else if (fromAndroid != null) {
                 // Android's own sound is "None": a ringtone sound plays nothing, as Android's would.
-                if (fromAndroid == android.net.Uri.EMPTY) { player.release(); return }
+                if (fromAndroid == android.net.Uri.EMPTY) return@start false
                 player.setDataSource(context, fromAndroid)
             }
             else context.assets.openFd("luna/sounds/" + when (cls) {
@@ -78,15 +76,30 @@ class Sounds(private val context: Context, private val server: AppServer, privat
                 "ringtones" -> "ringtone.mp3"
                 else -> "notification.wav"
             }).use { player.setDataSource(it.fileDescriptor, it.startOffset, it.length) }
+            true
+        } ?: return
+        if (duration > 0) main.postDelayed({ if (player in playing) release(player) }, duration.toLong())
+    }
+
+    /**
+     * A player on [stream], given its source by [source] (false: play nothing), started and
+     * kept until it finishes or fails; null if it didn't start, with [what] in the log.
+     */
+    private fun start(stream: Int, what: String, source: (MediaPlayer) -> Boolean): MediaPlayer? {
+        val player = MediaPlayer()
+        return try {
+            @Suppress("DEPRECATION") player.setAudioStreamType(stream)
+            if (!source(player)) { player.release(); return null }
             player.setOnCompletionListener { release(it) }
             player.setOnErrorListener { p, _, _ -> release(p); true }
             player.prepare()
             player.start()
             playing += player
-            if (duration > 0) main.postDelayed({ if (player in playing) release(player) }, duration.toLong())
+            player
         } catch (e: Exception) {
-            Log.w(AppServer.TAG, "[$appId] sound $soundClass $soundFile: $e")
+            Log.w(AppServer.TAG, "$what: $e")
             player.release()
+            null
         }
     }
 
@@ -109,17 +122,9 @@ class Sounds(private val context: Context, private val server: AppServer, privat
     fun batteryFull() = playAsset("battery_full.mp3", AudioManager.STREAM_NOTIFICATION)
 
     private fun playAsset(name: String, stream: Int) {
-        val player = MediaPlayer()
-        try {
-            @Suppress("DEPRECATION") player.setAudioStreamType(stream)
+        start(stream, "sound $name") { player ->
             context.assets.openFd("luna/sounds/$name").use { player.setDataSource(it.fileDescriptor, it.startOffset, it.length) }
-            player.setOnCompletionListener { release(it) }
-            player.setOnErrorListener { p, _, _ -> release(p); true }
-            player.prepare(); player.start()
-            playing += player
-        } catch (e: Exception) {
-            Log.w(AppServer.TAG, "sound $name: $e")
-            player.release()
+            true
         }
     }
 

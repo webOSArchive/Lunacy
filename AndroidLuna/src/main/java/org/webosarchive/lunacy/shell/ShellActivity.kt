@@ -22,6 +22,59 @@ import org.webosarchive.lunacy.card.Bus
 import org.webosarchive.lunacy.card.Packages
 import org.webosarchive.lunacy.card.SystemProperties
 import org.webosarchive.lunacy.card.WindowHost
+import org.webosarchive.lunacy.card.ActivityManager
+import org.webosarchive.lunacy.card.AndroidCalendar
+import org.webosarchive.lunacy.card.AndroidContacts
+import org.webosarchive.lunacy.card.AndroidNotifications
+import org.webosarchive.lunacy.card.AppInstallService
+import org.webosarchive.lunacy.card.AudioService
+import org.webosarchive.lunacy.card.Configurator
+import org.webosarchive.lunacy.card.ConnectionManager
+import org.webosarchive.lunacy.card.ContentHandlers
+import org.webosarchive.lunacy.card.CookieFlush
+import org.webosarchive.lunacy.card.Db8
+import org.webosarchive.lunacy.card.DeviceProfile
+import org.webosarchive.lunacy.card.DeviceProfileService
+import org.webosarchive.lunacy.card.DisplayService
+import org.webosarchive.lunacy.card.DockMode
+import org.webosarchive.lunacy.card.DownloadManager
+import org.webosarchive.lunacy.card.EmulatedCard
+import org.webosarchive.lunacy.card.FileIndex
+import org.webosarchive.lunacy.card.FixedViewport
+import org.webosarchive.lunacy.card.FormFactor
+import org.webosarchive.lunacy.card.HiddenApps
+import org.webosarchive.lunacy.card.HostNetwork
+import org.webosarchive.lunacy.card.HostWallpaper
+import org.webosarchive.lunacy.card.Http
+import org.webosarchive.lunacy.card.HybridPlugins
+import org.webosarchive.lunacy.card.ImageService
+import org.webosarchive.lunacy.card.JsServices
+import org.webosarchive.lunacy.card.KeyManager
+import org.webosarchive.lunacy.card.Keys
+import org.webosarchive.lunacy.card.LaunchPoint
+import org.webosarchive.lunacy.card.LaunchPoints
+import org.webosarchive.lunacy.card.LunacyService
+import org.webosarchive.lunacy.card.MediaBroadcast
+import org.webosarchive.lunacy.card.MediaIndex
+import org.webosarchive.lunacy.card.MediaServer
+import org.webosarchive.lunacy.card.MusicLibrary
+import org.webosarchive.lunacy.card.NativeServices
+import org.webosarchive.lunacy.card.NetTools
+import org.webosarchive.lunacy.card.NotificationIcons
+import org.webosarchive.lunacy.card.Novacom
+import org.webosarchive.lunacy.card.PdkRuntime
+import org.webosarchive.lunacy.card.PdkWindow
+import org.webosarchive.lunacy.card.Power
+import org.webosarchive.lunacy.card.PowerService
+import org.webosarchive.lunacy.card.Ringtones
+import org.webosarchive.lunacy.card.SecurityPolicy
+import org.webosarchive.lunacy.card.SharedMedia
+import org.webosarchive.lunacy.card.SleepWake
+import org.webosarchive.lunacy.card.SysLog
+import org.webosarchive.lunacy.card.SystemService
+import org.webosarchive.lunacy.card.UniversalSearch
+import org.webosarchive.lunacy.card.WebosLinks
+import org.webosarchive.lunacy.card.WebosRoot
 
 /**
  * The simulated Luna shell: wallpaper, cards, status bar, "Just type", quick launch.
@@ -33,13 +86,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var luna: Luna
     private lateinit var registry: AppRegistry
     /** Which app opens which type of file: installed apps' mimeTypes and the system's (ContentHandlers). */
-    private lateinit var handlers: org.webosarchive.lunacy.card.ContentHandlers
+    private lateinit var handlers: ContentHandlers
     /** Launch points apps have added (applicationManager/addLaunchPoint). */
-    private lateinit var addedLaunchPoints: org.webosarchive.lunacy.card.LaunchPoints
+    private lateinit var addedLaunchPoints: LaunchPoints
     private lateinit var packages: Packages
-    private lateinit var jsServices: org.webosarchive.lunacy.card.JsServices
+    private lateinit var jsServices: JsServices
     /** The TouchPad's native system services (mail, the file cache), from the webOS root. */
-    private lateinit var nativeServices: org.webosarchive.lunacy.card.NativeServices
+    private lateinit var nativeServices: NativeServices
     /**
      * The app /usr/palm/command-resource-handlers.json (the reference TouchPad's, in the ROM)
      * redirects a URL to, by its "redirects" patterns, or null.
@@ -59,28 +112,28 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     /** The app that launched each app, until that launch's card is shown (showAsCard). */
     private val launchers = HashMap<String, String>()
     /** powerd's part: timers that wake the device, and locks that keep it awake. */
-    private val powerLazy = lazy { org.webosarchive.lunacy.card.Power(applicationContext) }
+    private val powerLazy = lazy { Power(applicationContext) }
     private val power by powerLazy
     /** Every sign of having been asleep or frozen, answered as a webOS resume. */
-    private val sleepWakeLazy = lazy { org.webosarchive.lunacy.card.SleepWake(this, power) }
+    private val sleepWakeLazy = lazy { SleepWake(this, power) }
     private val sleepWake by sleepWakeLazy
-    private val powerService by lazy { org.webosarchive.lunacy.card.PowerService(this, power) }
-    private val activityManagerLazy = lazy { org.webosarchive.lunacy.card.ActivityManager(this, power) }
+    private val powerService by lazy { PowerService(this, power) }
+    private val activityManagerLazy = lazy { ActivityManager(this, power) }
     private val activityManager by activityManagerLazy
     /** The shell's db8s and connection manager, closed with it ([onDestroy]). */
     private val closeOnDestroy = ArrayList<() -> Unit>()
-    private lateinit var webos: org.webosarchive.lunacy.card.WebosRoot
-    private lateinit var mediaServer: org.webosarchive.lunacy.card.MediaServer
-    private lateinit var configurator: org.webosarchive.lunacy.card.Configurator
-    private lateinit var systemService: org.webosarchive.lunacy.card.SystemService
-    private lateinit var securityPolicy: org.webosarchive.lunacy.card.SecurityPolicy
+    private lateinit var webos: WebosRoot
+    private lateinit var mediaServer: MediaServer
+    private lateinit var configurator: Configurator
+    private lateinit var systemService: SystemService
+    private lateinit var securityPolicy: SecurityPolicy
     /** Android's screen-lock setup is open for a setDevicePasscode: what to do when the person is back. */
     private var lockReturn: (() -> Unit)? = null
     private var lockLeft = false
     /** Android's credential confirmation is open for a matchDevicePasscode. */
     private var confirmReturn: ((Boolean) -> Unit)? = null
-    private lateinit var audio: org.webosarchive.lunacy.card.AudioService
-    private lateinit var displayService: org.webosarchive.lunacy.card.DisplayService
+    private lateinit var audio: AudioService
+    private lateinit var displayService: DisplayService
     /** The wallpaper view, reloaded when the preference changes. */
     private lateinit var wallpaperView: ImageView
     /** /media/cryptofs/apps: installed packages first, then the apps bundled in the APK. */
@@ -89,21 +142,21 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * The webOS device Lunacy answers as, for every app-visible surface: the layout's, so it
      * follows a foldable folded or opened (reshell). A window keeps the one it started with.
      */
-    private val profile get() = org.webosarchive.lunacy.card.DeviceProfile.forScreen(this)
-    private var pdkRuntimeOf: Pair<org.webosarchive.lunacy.card.DeviceProfile, org.webosarchive.lunacy.card.PdkRuntime>? = null
+    private val profile get() = DeviceProfile.forScreen(this)
+    private var pdkRuntimeOf: Pair<DeviceProfile, PdkRuntime>? = null
     /**
      * The PDK runtime (Docs/pdk.md): present in the 32-bit build, absent in the 64-bit one.
      * One per profile: a native app started after the layout changed sees the new device's
      * screen, and one already running keeps its own.
      */
-    private val pdkRuntime: org.webosarchive.lunacy.card.PdkRuntime get() {
+    private val pdkRuntime: PdkRuntime get() {
         val d = profile
         pdkRuntimeOf?.takeIf { it.first == d }?.let { return it.second }
         // A PDK app saw its device's own screen, whatever way it was held: the TouchPad's
         // 1024 x 768 landscape panel, the Pre3's 480 x 800 portrait one. The card scales it.
-        val (w, h, dpi) = if (d == org.webosarchive.lunacy.card.DeviceProfile.PRE3) Triple(480, 800, 260) else Triple(1024, 768, 132)
-        return org.webosarchive.lunacy.card.PdkRuntime(this, java.io.File(filesDir, "cryptofs/apps/usr/palm/applications"),
-            w, h, dpi, d.platformVersion, d.modelNameAscii, org.webosarchive.lunacy.card.DeviceProfile.nduid(this), webos)
+        val (w, h, dpi) = if (d == DeviceProfile.PRE3) Triple(480, 800, 260) else Triple(1024, 768, 132)
+        return PdkRuntime(this, java.io.File(filesDir, "cryptofs/apps/usr/palm/applications"),
+            w, h, dpi, d.platformVersion, d.modelNameAscii, DeviceProfile.nduid(this), webos)
             .also { pdkRuntimeOf = d to it }
     }
     private var androidAppsAt: AndroidApps? = null
@@ -145,7 +198,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         started = false; super.onStop()
     }
     /** The maximized card that another Android app covered, to be activated again ([onStop]). */
-    private var coveredCard: org.webosarchive.lunacy.card.AppWindow? = null
+    private var coveredCard: AppWindow? = null
 
     /** Every app the launcher could show: webOS apps, the launch points they added, then Android's and the shortcuts pinned to it. */
     private fun allLaunchPoints(): List<AppInfo> {
@@ -156,7 +209,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     /** The apps the user has hidden with Software Manager: out of the launcher, the dock and Just Type. */
     private val hiddenApps by lazy {
-        org.webosarchive.lunacy.card.HiddenApps(this).also { h -> h.onChanged = { setLauncherApps(); showDock() } }
+        HiddenApps(this).also { h -> h.onChanged = { setLauncherApps(); showDock() } }
     }
 
     /** What the launcher shows: [allLaunchPoints] less the ones the user has hidden. */
@@ -168,7 +221,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         launcher.setApps(launchPoints())
         lunacyService?.launcherAppsChanged()
     }
-    private var lunacyService: org.webosarchive.lunacy.card.LunacyService? = null
+    private var lunacyService: LunacyService? = null
 
     /** The tiles of the added launch points whose app is installed, by tile id. */
     private var addedById: Map<String, AppInfo> = emptyMap()
@@ -196,7 +249,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             if (intent.action == android.content.Intent.ACTION_PACKAGE_REMOVED && intent.getBooleanExtra(android.content.Intent.EXTRA_REPLACING, false)) return
             if (pkg == packageName) return
             androidApps.forget(pkg)
-            org.webosarchive.lunacy.card.AndroidNotifications.forget(pkg)
+            AndroidNotifications.forget(pkg)
             androidById.keys.filter { it.startsWith("${AndroidApps.PREFIX}$pkg/") }.forEach { luna.forgetIcons(it) }
             setLauncherApps()
             showDock()
@@ -231,7 +284,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var justType: JustType
     private lateinit var justTypePanel: JustTypePanel
     /** com.palm.universalsearch: what Just Type offers besides apps, and its settings. */
-    private lateinit var universalSearch: org.webosarchive.lunacy.card.UniversalSearch
+    private lateinit var universalSearch: UniversalSearch
     private lateinit var quickLaunch: QuickLaunch
     private lateinit var launcher: Launcher
     private lateinit var tabDialog: TabDialog
@@ -249,7 +302,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var systemControls: SystemControls
     /** Exhibition mode: webOS's dock-mode clock, over everything, while it is on. */
     private lateinit var exhibition: ExhibitionLayer
-    private lateinit var dockMode: org.webosarchive.lunacy.card.DockMode
+    private lateinit var dockMode: DockMode
     /** The drop-down the title opens while exhibiting, for changing face. */
     private lateinit var exhibitionMenu: ExhibitionMenu
     /** The app showing in exhibition mode, if it isn't the shell's own Time face. */
@@ -301,28 +354,28 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
         // chrome://inspect is a debug build's only: a release one leaves its cards closed to it.
         WebView.setWebContentsDebuggingEnabled(devBuild)
-        org.webosarchive.lunacy.card.Bus.strict = devBuild
-        org.webosarchive.lunacy.card.FormFactor.shown = org.webosarchive.lunacy.card.FormFactor.decide(this)
-        luna = Luna(this, org.webosarchive.lunacy.card.FormFactor.shown == org.webosarchive.lunacy.card.FormFactor.Kind.PHONE)
+        Bus.strict = devBuild
+        FormFactor.shown = FormFactor.decide(this)
+        luna = Luna(this, FormFactor.shown == FormFactor.Kind.PHONE)
         val installed = java.io.File(filesDir, "cryptofs/apps")
         // The webOS root filesystem services and package scripts see as /. Its ROM is laid down
         // (again after an update) off the main thread, below; a service's first call and a
         // package script wait for it (WebosRoot.prepare is synchronized).
-        webos = org.webosarchive.lunacy.card.WebosRoot(this, bus, installed).apply { lunaSend.start() }
+        webos = WebosRoot(this, bus, installed).apply { lunaSend.start() }
         // Its /etc/resolv.conf and CA bundle, from Android's network and trust store.
-        org.webosarchive.lunacy.card.HostNetwork(this, webos.root).start()
+        HostNetwork(this, webos.root).start()
         // What webOS's syslogd kept, and novacomd's device side: the SDK's tools over adb.
-        org.webosarchive.lunacy.card.SysLog.start(webos.root)
-        org.webosarchive.lunacy.card.Novacom(webos) { org.webosarchive.lunacy.card.DeviceProfile.nduid(this) }.start()
+        SysLog.start(webos.root)
+        Novacom(webos) { DeviceProfile.nduid(this) }.start()
         files = AppFiles(assets, installed, webos.root, java.io.File(applicationInfo.sourceDir))
-        jsServices = org.webosarchive.lunacy.card.JsServices(bus, files.root, webos)
-        nativeServices = org.webosarchive.lunacy.card.NativeServices(bus, webos) { pdkRuntime }
+        jsServices = JsServices(bus, files.root, webos)
+        nativeServices = NativeServices(bus, webos) { pdkRuntime }
         server = AppServer(assets, files, jsServices.root, java.io.File(filesDir, "framework-art"))
-        mediaServer = org.webosarchive.lunacy.card.MediaServer(jsServices.root)
+        mediaServer = MediaServer(jsServices.root)
         registry = AppRegistry(files)
-        handlers = org.webosarchive.lunacy.card.ContentHandlers(registry, webos.root)
-        addedLaunchPoints = org.webosarchive.lunacy.card.LaunchPoints(webos.root, files)
-        org.webosarchive.lunacy.card.Http.init(assets)
+        handlers = ContentHandlers(registry, webos.root)
+        addedLaunchPoints = LaunchPoints(webos.root, files)
+        Http.init(assets)
         packages = Packages(files.root, java.io.File(cacheDir, "packages"), webos)
         // Native services already in the webOS root are on the bus from the start, before the
         // configurator sends the file cache its types, as ls-hubd knew every service file at
@@ -334,7 +387,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             val t = System.currentTimeMillis()
             webos.prepare()
             files.warm()
-            Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "webOS root ready in ${System.currentTimeMillis() - t} ms")
+            Log.i(AppServer.TAG, "webOS root ready in ${System.currentTimeMillis() - t} ms")
             removeOutdatedPackages()
             // What the ROM brought: its services and their db8 kinds, and any system apps.
             // Activities run once the root's services are on the bus, as webOS's waited for boot.
@@ -364,8 +417,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // First Use, as a webOS device put it in front of a new owner: once, on the first
         // start, it asks for Android's permissions (LunacyService). After it has run, the
         // shell asks for storage itself if it is still missing, as it did before First Use.
-        if (!org.webosarchive.lunacy.card.LunacyService.firstUseDone(this)) {
-            cards.post { launch(org.webosarchive.lunacy.card.LunacyService.FIRST_USE_APP) }
+        if (!LunacyService.firstUseDone(this)) {
+            cards.post { launch(LunacyService.FIRST_USE_APP) }
         } else {
             askForStorage()
         }
@@ -407,8 +460,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // The icon glows first; the launch follows a frame later, so the glow is seen.
         launcher = Launcher(this, luna) { app -> launcher.postDelayed({ launch(app.id); closeLauncher() }, LAUNCH_DELAY_MS) }
         PinnedShortcuts.onChanged = ::shortcutsChanged
-        org.webosarchive.lunacy.card.NotificationIcons.onChanged = ::notificationIconsChanged
-        org.webosarchive.lunacy.card.AndroidNotifications.onChanged = ::androidNotificationsChanged
+        NotificationIcons.onChanged = ::notificationIconsChanged
+        AndroidNotifications.onChanged = ::androidNotificationsChanged
         if (android.os.Build.VERSION.SDK_INT >= 26) watchShortcuts()
         launcher.onRemove = { app -> remove(app) }
         launcher.appTitle = { id -> registry.get(id)?.title }
@@ -464,13 +517,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         justTypePanel.onLaunchApp = { id, params ->
             closeJustType()
             bus.call(JUST_TYPE, "palm://com.palm.applicationManager/launch", JSONObject().put("id", id).put("params", params).toString()) { r ->
-                Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "just type: launch $id: $r")
+                Log.i(AppServer.TAG, "just type: launch $id: $r")
             }
         }
         justTypePanel.onOpenTarget = { target ->
             closeJustType()
             bus.call(JUST_TYPE, "palm://com.palm.applicationManager/open", JSONObject().put("target", target).toString()) { r ->
-                Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "just type: open: $r")
+                Log.i(AppServer.TAG, "just type: open: $r")
             }
         }
         justTypePanel.db = { method, params, reply ->
@@ -483,7 +536,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         justTypePanel.onSearch = { url ->
             closeJustType()
             if (registry.get(BROWSER) != null) launch(BROWSER, JSONObject().put("target", url))
-            else org.webosarchive.lunacy.card.WebosLinks.intentFor("", null, url)?.let { org.webosarchive.lunacy.card.WebosLinks.open(this, it) }
+            else WebosLinks.intentFor("", null, url)?.let { WebosLinks.open(this, it) }
         }
 
         quickLaunch = QuickLaunch(this, luna, onLaunch = { app -> quickLaunch.postDelayed({ launch(app.id) }, LAUNCH_DELAY_MS) }, onLauncher = { toggleLauncher() })
@@ -537,7 +590,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
         barMenu = menu; barPopups = popups
         notificationsAtBottom = wantNotificationsAtBottom()
-        org.webosarchive.lunacy.card.FormFactor.pre3Dashboards = notificationsAtBottom
+        FormFactor.pre3Dashboards = notificationsAtBottom
         notifications = newNotifications()
         statusBar.onNotificationTap = { if (!notifications.tapBanner()) toggleMenu() }
         // The system menu, right-aligned under the bar, its edge 11 px past the screen's.
@@ -584,8 +637,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (watchingPower) { unregisterReceiver(powerReceiver); watchingPower = false }
         if (::launcher.isInitialized) unregisterReceiver(packageReceiver)
         if (PinnedShortcuts.onChanged == ::shortcutsChanged) PinnedShortcuts.onChanged = null
-        if (org.webosarchive.lunacy.card.NotificationIcons.onChanged == ::notificationIconsChanged) org.webosarchive.lunacy.card.NotificationIcons.onChanged = null
-        if (org.webosarchive.lunacy.card.AndroidNotifications.onChanged == ::androidNotificationsChanged) org.webosarchive.lunacy.card.AndroidNotifications.onChanged = null
+        if (NotificationIcons.onChanged == ::notificationIconsChanged) NotificationIcons.onChanged = null
+        if (AndroidNotifications.onChanged == ::androidNotificationsChanged) AndroidNotifications.onChanged = null
         shortcutWatch?.let { if (android.os.Build.VERSION.SDK_INT >= 26) (getSystemService(LAUNCHER_APPS_SERVICE) as android.content.pm.LauncherApps).unregisterCallback(it as android.content.pm.LauncherApps.Callback) }
         if (watchingSystem) { unregisterReceiver(systemReceiver); watchingSystem = false }
         // Everything that would outlive the activity: the apps' pages (each a renderer in this
@@ -663,7 +716,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun handleIntent(intent: android.content.Intent) {
         if (devBuild) intent.takeString("install")?.let { install(it) }
         intent.getStringExtra("layout")?.let { v ->
-            if (org.webosarchive.lunacy.card.FormFactor.setSetting(this, v)) { intent.removeExtra("layout"); if (::cards.isInitialized) reshell() }
+            if (FormFactor.setSetting(this, v)) { intent.removeExtra("layout"); if (::cards.isInitialized) reshell() }
             else Log.w(AppServer.TAG, "layout: $v is not auto, phone or tablet")
         }
         if (intent.hasExtra("launcher")) { intent.removeExtra("launcher"); if (started && !launcherOpen) openLauncher() }
@@ -773,7 +826,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     override fun onPause() {
         inFront = false; if (lockReturn != null) lockLeft = true
-        org.webosarchive.lunacy.card.CookieFlush.now(); super.onPause()
+        CookieFlush.now(); super.onPause()
     }
 
     @Deprecated("Lunacy's minSdk 21 has no ActivityResult API")
@@ -783,7 +836,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     /** Android's side of webOS's device lock (SecurityPolicy): Android's own lock screen is the lock. */
-    private val lockHost = object : org.webosarchive.lunacy.card.SecurityPolicy.Host {
+    private val lockHost = object : SecurityPolicy.Host {
         private val keyguard get() = getSystemService(KEYGUARD_SERVICE) as android.app.KeyguardManager
         override fun isSecure() = keyguard.isKeyguardSecure
         override fun chooseLock(done: () -> Unit): Boolean {
@@ -822,7 +875,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // A shortcut to one of Android's settings screens: no window, no pretending that
         // Lunacy owns the setting. Only apps Lunacy ships declare this.
         if (app.androidSettings.isNotEmpty()) {
-            bus.call(appId, "palm://${org.webosarchive.lunacy.card.LunacyService.SERVICE}/android/openSettings",
+            bus.call(appId, "palm://${LunacyService.SERVICE}/android/openSettings",
                 JSONObject().put("panel", app.androidSettings).toString()) { reply ->
                 val r = runCatching { JSONObject(reply) }.getOrNull()
                 if (r?.optBoolean("returnValue") != true) {
@@ -841,7 +894,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 systemBanner(appId, "${app.title} is a native app; it needs Lunacy's 32-bit build on a 32-bit ARM device")
                 return
             }
-            val w = org.webosarchive.lunacy.card.PdkWindow(this, appId, this, app, pdkRuntime)
+            val w = PdkWindow(this, appId, this, app, pdkRuntime)
             running[appId] = mutableListOf(w)
             showAsCard(w)
             if (!w.start()) { systemBanner(appId, "Couldn't start ${app.title}"); onWindowClosed(w) }
@@ -851,7 +904,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             // Relaunch: webOS doesn't reload a running app. Unless the app handles the relaunch
             // itself, LunaSysMgr brings its first card forward.
             windows.first().relaunch(params?.toString() ?: "") { handled ->
-                Log.i(AppServer.TAG, "relaunch $appId ${if (org.webosarchive.lunacy.card.Bus.handlesPeople(appId)) "" else params} handled=$handled")
+                Log.i(AppServer.TAG, "relaunch $appId ${if (Bus.handlesPeople(appId)) "" else params} handled=$handled")
                 // A relaunch for the dock leaves the card view alone: the app answers it with
                 // a dockMode window, or the dock shows nothing of it, as on a device.
                 if (!handled && !dock) cards.cards.firstOrNull { it.window.appId == appId }?.let { cards.maximize(it, maximizeMs(appId)) }
@@ -861,7 +914,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // The emulated card is a tablet's answer to a phone app. A Pre3 ran the same app at
         // its own size, so on a phone - where apps are told they are on a Pre3 - there is
         // nothing to emulate.
-        val emulate = !dock && profile == org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD && registry.get(appId)?.emulated == true
+        val emulate = !dock && profile == DeviceProfile.TOUCHPAD && registry.get(appId)?.emulated == true
         val t0 = android.os.SystemClock.uptimeMillis()
         val rootWindow = AppWindow(this, appId, this, emulate)
         rootWindow.fixedOrientation = fixedOrientationOf(app)
@@ -980,8 +1033,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // An app that never said it was laid out for a tablet gets the phone-sized card a
         // TouchPad gave it, rather than being stretched across the whole one.
         val emu = if (!w.emulated) null else Pair(
-            luna.px(org.webosarchive.lunacy.card.EmulatedCard.WIDTH.toFloat()).toInt(),
-            luna.px((org.webosarchive.lunacy.card.EmulatedCard.HEIGHT - org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD.positiveSpaceTopPadding).toFloat()).toInt())
+            luna.px(EmulatedCard.WIDTH.toFloat()).toInt(),
+            luna.px((EmulatedCard.HEIGHT - DeviceProfile.TOUCHPAD.positiveSpaceTopPadding).toFloat()).toInt())
         val card = Card(this, w, luna.px(CardLayer.Params.CORNER), emu,
             if (emu == null) null else luna.image("emucard-device-frame.png"),
             // webOS held the card's space with the app's own icon until it had drawn.
@@ -1017,12 +1070,16 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             }
             // The headless app's first card: it fills the card its launch put up, and the root
             // goes on where a headless root lives.
-            "card" -> placeholderOf(parent)?.let { card ->
-                val root = card.attach(child)
-                hidden.addView(root, FrameLayout.LayoutParams(1, 1))
-                card.fullScreen = child.fullScreen && !child.emulated
-                if (cards.maximized == card) onMaximized(card)
-            } ?: showAsCard(child, parent)
+            "card" -> {
+                val card = placeholderOf(parent)
+                if (card == null) showAsCard(child, parent)
+                else {
+                    val root = card.attach(child)
+                    hidden.addView(root, FrameLayout.LayoutParams(1, 1))
+                    card.fullScreen = child.fullScreen && !child.emulated
+                    if (cards.maximized == card) onMaximized(card)
+                }
+            }
             // An app's own Exhibition view: the dock's, never a card.
             "dockMode" -> addDockWindow(child)
             else -> showAsCard(child, parent)
@@ -1051,7 +1108,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * icon, as LunaSysMgr fell back for both (DashboardWindow::icon, BannerMessageHandler::generateIcon).
      */
     private fun icon(url: String?, appId: String): android.graphics.Bitmap? {
-        val colour = org.webosarchive.lunacy.card.NotificationIcons.colour(this)
+        val colour = NotificationIcons.colour(this)
         if (url != null && url.startsWith("data:")) {
             // How the Android Notifications app gives an Android app's icon: a launcher icon,
             // so sized, and grey or not, as the mini icon made from one (Luna.miniIcon). A
@@ -1153,13 +1210,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * services are up, and when First Use finishes, where the device would reboot.
      */
     private fun afterFirstUse() {
-        if (!org.webosarchive.lunacy.card.LunacyService.firstUseDone(this) || !::webos.isInitialized) return
+        if (!LunacyService.firstUseDone(this) || !::webos.isInitialized) return
         launchBootTimeApps()
         val prefs = java.io.File(webos.root, "var/luna/preferences")
         runCatching { prefs.mkdirs(); java.io.File(prefs, "ran-first-use").createNewFile() }
         if (java.io.File(prefs, "first-use-profile-created").exists()) return
         bus.call("", "palm://com.palm.accountservices/createNovaAccount", "{\"createDefaultAccount\":true}", privateBus = true) { r ->
-            Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "firstuse-createDefaultAccount: $r")
+            Log.i(AppServer.TAG, "firstuse-createDefaultAccount: $r")
         }
     }
 
@@ -1185,7 +1242,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         registry.reload()
         configurator.run()
         securityPolicy.load()
-        Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "apps rescanned in ${System.currentTimeMillis() - start} ms")
+        Log.i(AppServer.TAG, "apps rescanned in ${System.currentTimeMillis() - start} ms")
         setLauncherApps()
         dockMode.launchPointsChanged()
         val after = registry.launchPoints.associateBy { it.id }
@@ -1213,7 +1270,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         accountTemplates = now
         if (was == null || was == now) return
         bus.call("com.palm.appinstaller", "palm://com.palm.service.accounts/appsChanged", "{}", privateBus = true) { r ->
-            Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "accounts: templates changed, appsChanged: $r")
+            Log.i(AppServer.TAG, "accounts: templates changed, appsChanged: $r")
         }
     }
 
@@ -1285,10 +1342,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             val pkgDir = java.io.File(files.root, "usr/palm/packages/${app.id}")
             val info = runCatching { JSONObject(java.io.File(pkgDir, "packageinfo.json").readText()) }.getOrNull()
             val services = org.json.JSONArray()
-            val ids = info?.optJSONArray("services")
-            for (i in 0 until (ids?.length() ?: 0)) {
-                val id = ids!!.optString(i)
-                val json = java.io.File(files.root, "${org.webosarchive.lunacy.card.JsServices.SERVICES}/$id/services.json")
+            val ids = info?.optJSONArray("services") ?: org.json.JSONArray()
+            for (i in 0 until ids.length()) {
+                val id = ids.optString(i)
+                val json = java.io.File(files.root, "${JsServices.SERVICES}/$id/services.json")
                 runCatching { JSONObject(json.readText()) }.getOrNull()?.let { services.put(JSONObject().put("id", id).also { o -> it.keys().forEach { k -> o.put(k, it.get(k)) } }) }
             }
             val entry = app.listEntry()
@@ -1329,7 +1386,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         launchPointWatchers.toList().forEach { it.reply(j) }
     }
 
-    private fun launchPointChanged(lp: org.webosarchive.lunacy.card.LaunchPoint, change: String) {
+    private fun launchPointChanged(lp: LaunchPoint, change: String) {
         if (launchPointWatchers.isEmpty()) return
         val j = lp.toJson(registry.get(lp.appId)).put("change", change).toString()
         launchPointWatchers.toList().forEach { it.reply(j) }
@@ -1395,7 +1452,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (id.isEmpty()) return Bus.error("Must provide launchPointId")
         if (!p.has("icon")) return Bus.error("Must provide icon path")
         // The app's own icon, its default launch point.
-        registry.get(id.removeSuffix("_default"))?.takeIf { id.endsWith("_default") }?.let { app ->
+        if (id.endsWith("_default")) registry.get(id.removeSuffix("_default"))?.let { app ->
             if (app.id != caller) return Bus.error("Attempted to change another application's launch point icon")
             val base = "/media/cryptofs/apps/${Packages.APPS}/${app.dir}/"
             val icon = p.optString("icon").removePrefix("file://").removePrefix(base)
@@ -1493,8 +1550,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val service = lunacyService ?: return
         service.notificationsChanged()
         if (service.notificationsWatched || running.containsKey(ANDROID_NOTIFICATIONS_APP)) return
-        if (!org.webosarchive.lunacy.card.AndroidNotifications.any()) return
-        if (!::webos.isInitialized || !org.webosarchive.lunacy.card.LunacyService.firstUseDone(this)) return
+        if (!AndroidNotifications.any()) return
+        if (!::webos.isInitialized || !LunacyService.firstUseDone(this)) return
         if (registry.get(ANDROID_NOTIFICATIONS_APP) == null) return
         launch(ANDROID_NOTIFICATIONS_APP, null, startupCard = false)
     }
@@ -1510,9 +1567,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val banners = old.handOverBanners()
         dashboards.forEach { old.removeDashboard(it) }
         alerts.forEach { old.popups.remove(it) }
-        (if (notificationsAtBottom) area!! as BannerSurface else statusBar).let { it.banner = null; it.invalidate() }
+        (if (notificationsAtBottom) area!! as BannerSurface else statusBar).let { it.banner = null; it.redrawBanner() }
         notificationsAtBottom = bottom
-        org.webosarchive.lunacy.card.FormFactor.pre3Dashboards = bottom
+        FormFactor.pre3Dashboards = bottom
         notifications = newNotifications()
         dashboards.forEach { notifications.addDashboard(it, icon(it.attributes.optString("icon"), it.appId)) }
         alerts.forEach { notifications.popups.show(it, it.attributes.optInt("height", 200)) }
@@ -1555,7 +1612,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     /** One of Android's settings screens, by LunacyService's panel name: where the system menu hands over. */
     private fun openAndroidPanel(panel: String) {
-        val action = org.webosarchive.lunacy.card.LunacyService.PANELS[panel] ?: return
+        val action = LunacyService.PANELS[panel] ?: return
         try {
             startActivity(android.content.Intent(action).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: Exception) {
@@ -1604,9 +1661,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     override fun activityId(window: AppWindow): Int = appActivities[window.appId] ?: -1
 
     /** Called on the bridge's thread, the first time the page embeds a plugin. */
-    override fun hybridPlugins(window: AppWindow): org.webosarchive.lunacy.card.HybridPlugins? {
+    override fun hybridPlugins(window: AppWindow): HybridPlugins? {
         val app = registry.get(window.appId) ?: return null
-        return org.webosarchive.lunacy.card.HybridPlugins(window, app, pdkRuntime) { webos.prepare() }
+        return HybridPlugins(window, app, pdkRuntime) { webos.prepare() }
     }
 
     /** WebAppBase::focusActivity and blurActivity, as the app's card gains and loses the focus. */
@@ -1854,8 +1911,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     // A phone's: a tablet's card is a TouchPad's size already, and its landscape card, shorter
     // than the 640 px a phone's shorter side is laid out at, would otherwise be shrunk.
     override fun fixedViewportWidth(appId: String) =
-        if (org.webosarchive.lunacy.card.FormFactor.isPhone(this) && org.webosarchive.lunacy.card.FixedViewport.isOn(this, appId))
-            org.webosarchive.lunacy.card.FormFactor.appLayoutWidth(this) else 0
+        if (FormFactor.isPhone(this) && FixedViewport.isOn(this, appId))
+            FormFactor.appLayoutWidth(this) else 0
 
     /**
      * The device an app sees. Which one is DeviceProfile's decision - a TouchPad on a
@@ -1890,17 +1947,17 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // (EmulatedCard): 320 x 480, a 452-high card and 8 touchable rows. Everything else -
         // the model, the version, the serial - is the device's own, as it is there.
         if (emulated) {
-            w = org.webosarchive.lunacy.card.EmulatedCard.WIDTH
-            h = org.webosarchive.lunacy.card.EmulatedCard.HEIGHT
-            minCardHeight = org.webosarchive.lunacy.card.EmulatedCard.MINIMUM_CARD_HEIGHT
-            rows = org.webosarchive.lunacy.card.EmulatedCard.TOUCHABLE_ROWS
+            w = EmulatedCard.WIDTH
+            h = EmulatedCard.HEIGHT
+            minCardHeight = EmulatedCard.MINIMUM_CARD_HEIGHT
+            rows = EmulatedCard.TOUCHABLE_ROWS
         }
         return JSONObject(mapOf(
             "modelName" to d.modelName, "modelNameAscii" to d.modelNameAscii,
             "platformVersion" to d.platformVersion, "platformVersionMajor" to d.platformVersionMajor,
             "platformVersionMinor" to d.platformVersionMinor, "platformVersionDot" to d.platformVersionDot,
             "carrierName" to d.carrierName,
-            "serialNumber" to org.webosarchive.lunacy.card.DeviceProfile.serial(this, d),
+            "serialNumber" to DeviceProfile.serial(this, d),
             "screenWidth" to w, "screenHeight" to h,
             "minimumCardWidth" to w, "minimumCardHeight" to minCardHeight,
             "maximumCardWidth" to w, "maximumCardHeight" to h - d.positiveSpaceTopPadding,
@@ -1998,8 +2055,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     override fun screenSize(emulated: Boolean): String {
         if (emulated) {
             return JSONObject()
-                .put("width", org.webosarchive.lunacy.card.EmulatedCard.WIDTH)
-                .put("height", org.webosarchive.lunacy.card.EmulatedCard.HEIGHT)
+                .put("width", EmulatedCard.WIDTH)
+                .put("height", EmulatedCard.HEIGHT)
                 .toString()
         }
         val dm = android.util.DisplayMetrics()
@@ -2042,7 +2099,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         goImmersive()
         // A foldable folded or opened: the screen may now call for the other layout. Once the
         // display has its new size (the configuration can arrive first).
-        window.decorView.post { if (shownKind() != org.webosarchive.lunacy.card.FormFactor.decide(this)) reshell() else placeNotifications() }
+        window.decorView.post { if (shownKind() != FormFactor.decide(this)) reshell() else placeNotifications() }
     }
 
     /**
@@ -2064,10 +2121,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * a second shell activity in the process (Lunacy as the home app, beside one started
      * another way), and the newer one's decision mustn't stop this one rebuilding.
      */
-    private fun shownKind() = if (luna.phone) org.webosarchive.lunacy.card.FormFactor.Kind.PHONE else org.webosarchive.lunacy.card.FormFactor.Kind.TABLET
+    private fun shownKind() = if (luna.phone) FormFactor.Kind.PHONE else FormFactor.Kind.TABLET
 
     private fun reshell() {
-        val kind = org.webosarchive.lunacy.card.FormFactor.decide(this)
+        val kind = FormFactor.decide(this)
         if (kind == shownKind()) return
         val old = shellRoot ?: return
         Log.i(AppServer.TAG, "layout: ${shownKind()} -> $kind; the shell is rebuilt, its cards kept")
@@ -2088,8 +2145,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // Every page out of the old views but the cards' own, which come out as their new cards take them.
         for (w in running.values.flatten()) if (w.parent !is Card) (w.parent as? android.view.ViewGroup)?.removeView(w)
 
-        org.webosarchive.lunacy.card.FormFactor.shown = kind
-        luna = Luna(this, kind == org.webosarchive.lunacy.card.FormFactor.Kind.PHONE)
+        FormFactor.shown = kind
+        luna = Luna(this, kind == FormFactor.Kind.PHONE)
         androidAppsAt = null
         buildShell()
 
@@ -2112,7 +2169,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         cards.post { running.values.flatten().forEach { it.rescale() } }
         // Pages loaded under the other layout fetch the images served by layout again.
         running.values.flatten().forEach { it.evaluateJavascript(AppServer.REFETCH_LAYOUT_IMAGES, null) }
-        cards.maximized?.let { onMaximized(it) } ?: onCardView()
+        val maximized = cards.maximized
+        if (maximized != null) onMaximized(maximized) else onCardView()
         goImmersive()
     }
 
@@ -2171,9 +2229,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             "wallpaper" -> {
                 showWallpaper()
                 // Android's own wallpaper follows, if the owner asked (Screen & Lock).
-                if (org.webosarchive.lunacy.card.HostWallpaper.isOn(this)) {
+                if (HostWallpaper.isOn(this)) {
                     val open = wallpaperSource()
-                    Thread { org.webosarchive.lunacy.card.HostWallpaper.follow(applicationContext, open) }.start()
+                    Thread { HostWallpaper.follow(applicationContext, open) }.start()
                 }
             }
             // webOS's Auto Dim: the display owner acts on it, and here that is Android's.
@@ -2187,7 +2245,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      */
     private fun seedMediaInternal() = Thread {
         try {
-            org.webosarchive.lunacy.card.SharedMedia.installWallpapers(this, jsServices.root)
+            SharedMedia.installWallpapers(this, jsServices.root)
         } catch (e: Exception) {
             Log.w(AppServer.TAG, "couldn't share the wallpapers", e)
         }
@@ -2523,8 +2581,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                     return@Handler
                 }
                 // An Android package goes to Android's installer (WebosLinks.androidPackage).
-                org.webosarchive.lunacy.card.WebosLinks.androidPackage(target, jsServices.root)?.let {
-                    reply(org.webosarchive.lunacy.card.WebosLinks.open(this, it))
+                WebosLinks.androidPackage(target, jsServices.root)?.let {
+                    reply(WebosLinks.open(this, it))
                     return@Handler
                 }
                 if (target.startsWith("file:", true) || target.startsWith("/")) {
@@ -2534,9 +2592,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             }
             // A link, an email, a phone number, a map: webOS's own apps owned these and Lunacy
             // doesn't have them, so Android's answer instead. See WebosLinks.
-            val link = org.webosarchive.lunacy.card.WebosLinks.intentFor(id, params, p.optString("target"))
+            val link = WebosLinks.intentFor(id, params, p.optString("target"))
             if (link != null && registry.get(id) == null) {
-                reply(org.webosarchive.lunacy.card.WebosLinks.open(this, link))
+                reply(WebosLinks.open(this, link))
                 return@Handler
             }
             // The App Museum installs through Preware (LuneOS's on LuneOS); Lunacy's package
@@ -2566,69 +2624,69 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         SystemProperties(this).register(bus)
         // webOS's preference and wallpaper store, and the two display settings Android lets
         // Lunacy really set. See Docs/architecture.md, "Settings".
-        displayService = org.webosarchive.lunacy.card.DisplayService(this)
+        displayService = DisplayService(this)
         displayService.onDockMode = { on -> runOnUiThread { setExhibition(on) } }
         displayService.inDockMode = { exhibitionOn }
         displayService.register(bus)
-        dockMode = org.webosarchive.lunacy.card.DockMode(this, registry).also { it.register(bus) }
-        systemService = org.webosarchive.lunacy.card.SystemService(jsServices.root, java.io.File(filesDir, "systemservice.json"))
+        dockMode = DockMode(this, registry).also { it.register(bus) }
+        systemService = SystemService(jsServices.root, java.io.File(filesDir, "systemservice.json"))
         systemService.onPreferenceChanged = { key, value -> onPreferenceChanged(key, value) }
         systemService.hostPreference = { key -> hostPreference(key) }
         systemService.register(bus)
         // webOS's ringtones, in Android's notification sounds and webOS's pickers alike (Ringtones).
-        org.webosarchive.lunacy.card.Ringtones(this, jsServices.root).also { it.register(bus); it.install() }
+        Ringtones(this, jsServices.root).also { it.register(bus); it.install() }
         registerReceiver(systemReceiver, android.content.IntentFilter().apply {
             addAction(android.content.Intent.ACTION_TIME_CHANGED); addAction(android.content.Intent.ACTION_TIMEZONE_CHANGED)
             addAction(android.content.Intent.ACTION_DATE_CHANGED)
             addAction(android.content.Intent.ACTION_SCREEN_ON); addAction(android.content.Intent.ACTION_SCREEN_OFF)
         })
         watchingSystem = true
-        audio = org.webosarchive.lunacy.card.AudioService(this, startMuted = systemService.get("systemSounds") == false,
+        audio = AudioService(this, startMuted = systemService.get("systemSounds") == false,
             playFeedback = { sounds.feedback(it) },
             // Music holds media/lockVolumeKeys while it is in front: the keys work its volume.
             lockVolumeKeys = { on -> volumeControlStream = if (on) android.media.AudioManager.STREAM_MUSIC else android.media.AudioManager.USE_DEFAULT_STREAM_TYPE })
         audio.register(bus)
         // Lunacy's own service, on its own name: the environment it really runs in, and
         // Android's settings screens for the settings Android owns.
-        lunacyService = org.webosarchive.lunacy.card.LunacyService(this, registry, jsServices, jsServices.root, { displayInfo() }, ::askPermissions,
+        lunacyService = LunacyService(this, registry, jsServices, jsServices.root, { displayInfo() }, ::askPermissions,
             { intent -> runCatching { startActivityForResult(intent, 200) }.isSuccess }, onLayoutChanged = { reshell() },
             wallpaper = ::wallpaperSource, onFirstUseDone = ::afterFirstUse,
             hidden = hiddenApps, launcherApps = ::allLaunchPoints, appIcon = { luna.appIcon(it) },
             pinStatus = { homeScreenPins.status() }, pinToHome = homeScreenPins::pin).also { it.register(bus) }
-        val connections = org.webosarchive.lunacy.card.ConnectionManager(this) { sleepWake.blocked }.also { it.register(bus) }
+        val connections = ConnectionManager(this) { sleepWake.blocked }.also { it.register(bus) }
         closeOnDestroy += connections::stop
         sleepWake.onBlockedChanged = connections::changed
         sleepWake.onBlocked = activityManager::networkBlocked
         // Secrets, where the accounts service keeps each account's credentials.
-        org.webosarchive.lunacy.card.KeyManager(java.io.File(filesDir, "keymanager.json")).register(bus)
-        org.webosarchive.lunacy.card.DeviceProfileService(this) { profile }.register(bus)
-        org.webosarchive.lunacy.card.NetTools(this).register(bus)
+        KeyManager(java.io.File(filesDir, "keymanager.json")).register(bus)
+        DeviceProfileService(this) { profile }.register(bus)
+        NetTools(this).register(bus)
         // webOS's downloader, which apps hand every file fetch to: drPodder's episodes and
         // album art, MeTube's "download first". It writes into the webOS tree.
-        org.webosarchive.lunacy.card.DownloadManager(jsServices.root).register(bus)
-        org.webosarchive.lunacy.card.ImageService(jsServices.root).register(bus)
-        val db8 = org.webosarchive.lunacy.card.Db8("com.palm.db", java.io.File(filesDir, "db8.sqlite"),
+        DownloadManager(jsServices.root).register(bus)
+        ImageService(jsServices.root).register(bus)
+        val db8 = Db8("com.palm.db", java.io.File(filesDir, "db8.sqlite"),
             applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0).also { it.register(bus) }
         db8.registerPickerRelay(bus)
-        val tempdb = org.webosarchive.lunacy.card.Db8("com.palm.tempdb", null).also { it.register(bus) }
+        val tempdb = Db8("com.palm.tempdb", null).also { it.register(bus) }
         closeOnDestroy += db8::close; closeOnDestroy += tempdb::close
         // Documents', photos' and videos' indexes, answered from the folders themselves (FileIndex, MediaIndex).
-        org.webosarchive.lunacy.card.FileIndex(jsServices.root).attach(db8)
+        FileIndex(jsServices.root).attach(db8)
         // The music library, from Android's media library (MusicLibrary): its songs go in with the ringtones.
-        val musicLibrary = org.webosarchive.lunacy.card.MusicLibrary(this, jsServices.root).also { it.attach(db8) }
-        org.webosarchive.lunacy.card.MediaIndex(jsServices.root).also { it.music = musicLibrary::songs }.attach(db8, bus)
+        val musicLibrary = MusicLibrary(this, jsServices.root).also { it.attach(db8) }
+        MediaIndex(jsServices.root).also { it.music = musicLibrary::songs }.attach(db8, bus)
         // After db8: it reads its persisted activities back as it registers.
         power.register()
         activityManager.register(bus)
         powerService.register(bus)
         sleepWake.start()
-        configurator = org.webosarchive.lunacy.card.Configurator(files, db8, tempdb, webos.root, bus)
+        configurator = Configurator(files, db8, tempdb, webos.root, bus)
         configurator.run()
         // Android's contacts and calendars, once the owner adds that account (AndroidContacts, AndroidCalendar).
-        org.webosarchive.lunacy.card.AndroidContacts(this, jsServices.root, db8).also { it.attach(bus); closeOnDestroy += it::close }
-        org.webosarchive.lunacy.card.AndroidCalendar(this, db8).also { it.attach(bus); closeOnDestroy += it::close }
+        AndroidContacts(this, jsServices.root, db8).also { it.attach(bus); closeOnDestroy += it::close }
+        AndroidCalendar(this, db8).also { it.attach(bus); closeOnDestroy += it::close }
         // Exchange's security policies and the device lock, once the kinds are there (SecurityPolicy).
-        securityPolicy = org.webosarchive.lunacy.card.SecurityPolicy(bus, lockHost, java.io.File(filesDir, "securitypolicy.json"))
+        securityPolicy = SecurityPolicy(bus, lockHost, java.io.File(filesDir, "securitypolicy.json"))
         securityPolicy.register()
         securityPolicy.load()
         bus.register(Bus.APPLICATION_MANAGER, "launch", launchHandler)
@@ -2640,9 +2698,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             reply(if (app == null) Bus.error("Application not found: ${p.optString("appId")}")
                   else Bus.ok(mapOf("appId" to app.id, "basePath" to app.filePath())))
         }
-        val keys = org.webosarchive.lunacy.card.Keys(this).also { it.register(bus) }
+        val keys = Keys(this).also { it.register(bus) }
         // What Music plays is Android's media session too; its controls come back as webOS's media keys (NowPlaying).
-        org.webosarchive.lunacy.card.MediaBroadcast(this).register(bus)
+        MediaBroadcast(this).register(bus)
         NowPlaying.onKey = { k -> runOnUiThread { keys.mediaKey(k) } }
         // Package scripts ask for this after putting an app in /usr/palm/applications
         // themselves. The reference TouchPad answers {"returnValue":true}.
@@ -2663,7 +2721,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         bus.register(Bus.APPLICATION_MANAGER, "getResourceInfo") { _, p, reply -> reply(resourceInfo(p)) }
         bus.register(Bus.APPLICATION_MANAGER, "getHandlerForExtension") { _, p, reply -> reply(handlers.handlerForExtension(p)) }
         bus.register(Bus.APPLICATION_MANAGER, "getHandlerForUrl") { _, p, reply -> reply(handlers.handlerForUrl(p)) }
-        universalSearch = org.webosarchive.lunacy.card.UniversalSearch(this) { registry.apps }.also {
+        universalSearch = UniversalSearch(this) { registry.apps }.also {
             it.register(bus)
             it.onChange = { runOnUiThread { if (::justTypePanel.isInitialized) justTypePanel.reload() } }
             if (::justTypePanel.isInitialized) justTypePanel.search = it
@@ -2680,7 +2738,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
         bus.registerPrivate(Bus.APPLICATION_MANAGER, "listPackages", wholeService = false, Bus.CallHandler { c -> c.reply(listPackages()) })
         // App Catalog's installer, over the same install path as Preware's (AppInstallService.kt).
-        org.webosarchive.lunacy.card.AppInstallService(object : org.webosarchive.lunacy.card.AppInstallService.Installer {
+        AppInstallService(object : AppInstallService.Installer {
             override fun install(url: String, requester: String, progress: (Int) -> Unit, done: (Packages.Result) -> Unit) =
                 this@ShellActivity.install(url, requester, progress, onDone = done)
             override fun remove(appId: String, done: (String?) -> Unit) {
@@ -2691,8 +2749,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             override fun isInstalled(appId: String) = registry.get(appId)?.userInstalled == true
         }).register(bus)
         // appinstaller's own installs and removals, which the SDK's palm-install makes.
-        org.webosarchive.lunacy.card.AppInstallService.AppInstaller({ filesDir.usableSpace },
-            object : org.webosarchive.lunacy.card.AppInstallService.PackageInstaller {
+        AppInstallService.AppInstaller({ filesDir.usableSpace },
+            object : AppInstallService.PackageInstaller {
                 override fun installFile(file: java.io.File, done: (Packages.Result) -> Unit) =
                     install(file.path, banners = false, onDone = done)
                 override fun removableVersion(id: String) = registry.get(id)?.takeIf { it.userInstalled }?.version
@@ -2741,7 +2799,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (outdated.isEmpty()) return
         val done = java.util.concurrent.CountDownLatch(outdated.size)
         for (id in outdated) {
-            Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "bundled $id is newer than the installed package: removing it")
+            Log.i(AppServer.TAG, "bundled $id is newer than the installed package: removing it")
             packages.remove(id) { done.countDown() }
         }
         done.await(30, java.util.concurrent.TimeUnit.SECONDS)
@@ -2753,7 +2811,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (app.androidComponent != null) { androidApps.uninstall(app); return }
         app.launchPoint?.let { lp -> removeLaunchPoint(lp.launchPointId); return }
         running[app.id]?.toList()?.forEach { w -> onWindowClosed(w) }
-        org.webosarchive.lunacy.card.FixedViewport.forget(this, app.id)
+        FixedViewport.forget(this, app.id)
         packages.remove(app.id, app.dir) { error ->
             appsChanged()
             jsServices.reload()

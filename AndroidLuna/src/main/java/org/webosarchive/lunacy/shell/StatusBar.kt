@@ -34,6 +34,7 @@ import java.util.Date
  */
 @SuppressLint("ViewConstructor")
 class StatusBar(context: Context, private val luna: Luna) : View(context), BannerSurface {
+    override fun redrawBanner() = invalidate()
     companion object {
         const val HEIGHT = 28  // TouchPad px; statusBar/status-bar-background.png is 28 high
         /** LunaCE's custom carrier string (sysUiCarrierString), shown when no app is maximized. */

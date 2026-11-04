@@ -524,7 +524,10 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         val out = HashMap<Card, Pose>()
         val ag = activeGroup ?: return out
         val gap = luna.px(Params.GAP)
+        /** A group's poses at [offset]; laying it out also sets its extents ([Group.left], [Group.right]). */
         fun poses(g: Group, offset: Float) = if (arr == Arrange.STACK) fan(g, offset) else linear(g)
+        /** Only the extents a group would have at [offset], for placing it. */
+        fun measure(g: Group, offset: Float) { poses(g, offset) }
         fun put(g: Group, gx: Float, ps: List<Pose>) = g.cards.forEachIndexed { i, c -> out[c] = Pose(gx, ps[i].rx, ps[i].cy, ps[i].scale, ps[i].rot) }
         put(ag, activeX, poses(ag, if (tracking) activeX else 0f))
         val ai = groups.indexOf(ag)
@@ -533,7 +536,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         var edge = activeX - ag.left - gap
         for (i in ai - 1 downTo 0) {
             val g = groups[i]
-            poses(g, -Float.MAX_VALUE / 4)
+            measure(g, -Float.MAX_VALUE / 4)
             val ps = poses(g, edge - g.right)
             val x = edge - g.right
             put(g, x, ps)
@@ -542,7 +545,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         edge = activeX + ag.right + gap
         for (i in ai + 1 until groups.size) {
             val g = groups[i]
-            poses(g, Float.MAX_VALUE / 4)
+            measure(g, Float.MAX_VALUE / 4)
             val ps = poses(g, edge + g.left)
             val x = edge + g.left
             put(g, x, ps)

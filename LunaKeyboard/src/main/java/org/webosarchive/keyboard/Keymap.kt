@@ -8,7 +8,6 @@ package org.webosarchive.keyboard
 
 /** What a key does when it isn't a character. Negative, so characters stay their code point. */
 object Fn {
-    const val NONE = 0
     const val SHIFT = -1
     const val BACKSPACE = -2
     const val RETURN = -3

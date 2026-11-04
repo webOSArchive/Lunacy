@@ -96,7 +96,9 @@ object AndroidNotifications {
         val e = entryOf(l, sbn, ranking)
         synchronized(entries) {
             val before = entries.remove(sbn.key)
-            if (e == null) { if (before == null) return } else {
+            // One Lunacy doesn't show, and didn't before: nothing has changed.
+            if (e == null && before == null) return
+            if (e != null) {
                 // An update to one already shown alerts again unless the app asked it not to.
                 val once = (sbn.notification.flags and Notification.FLAG_ONLY_ALERT_ONCE) != 0
                 e.fresh = e.loud && (before == null || !once)

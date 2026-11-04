@@ -209,9 +209,9 @@ class Db8(private val service: String, file: File?,
             for (o in current) {
                 val path = m.key(o)
                 val f = byPath.remove(path)
-                if (f == null) { delOne(o, purge = true); continue }
+                if (f == null) { delOne(o, hard = true); continue }
                 val was = m.stamps[path]
-                if (was != null && stamps[path] != null && was != stamps[path]) { delOne(o, purge = true); rewritten += f; continue }
+                if (was != null && stamps[path] != null && was != stamps[path]) { delOne(o, hard = true); rewritten += f; continue }
                 for (k in m.initial) f.remove(k)
                 if (f.keys().asSequence().any { k -> !same(o.opt(k), f.opt(k)) }) mergeOne(o, f)
             }
@@ -528,7 +528,8 @@ class Db8(private val service: String, file: File?,
         objects(kind)[id] = o
     }
 
-    private fun purge(o: JSONObject) {
+    /** The object's row gone, and its in-memory copy: what a purge (db8's hard delete) does to one object. */
+    private fun erase(o: JSONObject) {
         db.delete("objects", "id = ?", arrayOf(o.getString("_id")))
         objects(o.getString("_kind")).remove(o.getString("_id"))
     }
@@ -552,7 +553,7 @@ class Db8(private val service: String, file: File?,
             for ((old, o) in prepared) {
                 if (!o.has("_id")) o.put("_id", newId())
                 o.put("_rev", nextRev())
-                if (old != null && old.optString("_kind") != o.optString("_kind")) purge(old)
+                if (old != null && old.optString("_kind") != o.optString("_kind")) erase(old)
                 write(old, o)
                 results.put(idRev(o))
             }
@@ -653,8 +654,8 @@ class Db8(private val service: String, file: File?,
     }
 
     /** A soft delete marks _del and takes a revision; purge removes the object. */
-    private fun delOne(old: JSONObject, purge: Boolean): JSONObject? {
-        if (purge) { purge(old); changed(old, null); return null }
+    private fun delOne(old: JSONObject, hard: Boolean): JSONObject? {
+        if (hard) { erase(old); changed(old, null); return null }
         val o = JSONObject(old.toString()).put("_del", true).put("_rev", nextRev())
         write(old, o)
         return o
@@ -709,14 +710,14 @@ class Db8(private val service: String, file: File?,
             // search sorts what it finds itself (MojDbSearchCursor), so only find's order has
             // to be the index's: Email's address field searches people by searchProperty and
             // orders them by sortKey.
-            if (!indexed(k, where, if (search) null else orderBy)) throw DbError(-3965, "db: no index for query")
+            if (!indexServes(k, where, if (search) null else orderBy)) throw DbError(-3965, "db: no index for query")
         }
         val family = family(from)
         val collate = orderBy?.let { ob -> k.indexes.flatMap { it.props }.firstOrNull { it.name == ob }?.collate }
         val list = family.flatMap { objects(it).values }
             .filter { o -> (incDel || !o.optBoolean("_del")) && where.all { matches(o, it) } && filter.all { matches(o, it) } }
             .sortedWith(Comparator { a, b ->
-                val c = if (orderBy == null) 0 else compare(indexed(a, orderBy), indexed(b, orderBy), collate)
+                val c = if (orderBy == null) 0 else compare(indexedValue(a, orderBy), indexedValue(b, orderBy), collate)
                 if (c != 0) c else a.getString("_id").compareTo(b.getString("_id"))
             })
         return (if (q.optBoolean("desc")) list.reversed() else list) to family
@@ -727,7 +728,7 @@ class Db8(private val service: String, file: File?,
      * then at most one other prop (a range, prefix or search), and orderBy on that prop, or on
      * the next one when there's no range.
      */
-    private fun indexed(k: Kind, where: List<Clause>, orderBy: String?): Boolean {
+    private fun indexServes(k: Kind, where: List<Clause>, orderBy: String?): Boolean {
         if (where.isEmpty() && (orderBy == null || orderBy == "_id")) return true
         val eq = where.filter { it.op == "=" }.map { it.prop }.toSet()
         val range = where.filter { it.op != "=" }.map { it.prop }.toSet()
@@ -780,13 +781,12 @@ class Db8(private val service: String, file: File?,
         }
     }
 
-    /** A clause matches when any of the prop's values (arrays count element by element) matches any given value. */
     /**
      * A prop as db8's indexes held it: an object without the prop is indexed under the
      * index's "default" for it, so it is found by that value (Email's kind gives
      * "flags.visible" the default true, and the mail services never set it on a new message).
      */
-    private fun indexed(o: JSONObject, prop: String): Any? =
+    private fun indexedValue(o: JSONObject, prop: String): Any? =
         value(o, prop) ?: multi(o, prop) ?: defaultOf(o.optString("_kind"), prop, HashSet())
 
     /**
@@ -821,8 +821,9 @@ class Db8(private val service: String, file: File?,
         return null
     }
 
+    /** A clause matches when any of the prop's values (arrays count element by element) matches any given value. */
     private fun matches(o: JSONObject, c: Clause): Boolean {
-        val v = indexed(o, c.prop)
+        val v = indexedValue(o, c.prop)
         val have: List<Any?> = if (v is JSONArray) (0 until v.length()).map { v.opt(it) } else listOf(v)
         val want: List<Any?> = if (c.op == "=" && c.value is JSONArray) (c.value as JSONArray).let { a -> (0 until a.length()).map { a.opt(it) } } else listOf(c.value)
         return have.any { h -> want.any { w -> test(h, c.op, w) } }
@@ -936,7 +937,7 @@ class Db8(private val service: String, file: File?,
                     if (o.optBoolean("_del") && o.optLong("_rev") <= cut.first) gone += o
                 }
             }
-            gone.forEach { purge(it) }
+            gone.forEach { erase(it) }
             count = gone.size
             if (count > 0) setMeta(LAST_PURGED, cut.first + 1)
             db.delete("revtimes", "ts <= ?", arrayOf(cut.second.toString()))
@@ -1009,17 +1010,17 @@ class Db8(private val service: String, file: File?,
         try { f(); db.setTransactionSuccessful() } finally { db.endTransaction() }
     }
 
-    /** A required top-level parameter, or db8's schema error (code 22) naming it. */
     /** As the TouchPad answers (measured): 0 is no ids, a negative count is out of range, and
      *  more than 1000 is refused. mojomail-eas keeps a pool of ids and counts on exactly that. */
     private fun reserveIds(caller: String, p: JSONObject): String {
         val count = (required(caller, p, "count") as? Number)?.toLong()
             ?: throw DbError(22, "invalid parameters: caller='$caller' error='invalid type for property 'count''")
         if (count < 0) throw DbError(22, "invalid parameters: caller='$caller' error='value out of range for property 'count''")
-        if (count > 1000) throw DbError(-3967, "cannot reserve more than 1000 ids")
+        if (count > MAX_RESERVE) throw DbError(-3967, "cannot reserve more than $MAX_RESERVE ids")
         return JSONObject().put("returnValue", true).put("ids", JSONArray((0 until count).map { newId() })).toString()
     }
 
+    /** A required top-level parameter, or db8's schema error (code 22) naming it. */
     private fun required(caller: String, p: JSONObject, name: String): Any =
         p.opt(name) ?: throw DbError(22, "invalid parameters: caller='$caller' error='required property not found - '$name''")
 
@@ -1056,6 +1057,8 @@ class Db8(private val service: String, file: File?,
     private fun error(code: Int, text: String) = JSONObject().put("errorCode", code).put("errorText", text).put("returnValue", false).toString()
 
     companion object {
+        /** reserveIds' ceiling, as the TouchPad's (measured). */
+        private const val MAX_RESERVE = 1000
         private const val SYSTEM_UI = "com.palm.systemui"
         /** What the file picker reads (registerPickerRelay). */
         private val PICKER_KINDS = setOf("com.palm.media.image.album:1", "com.palm.media.image.file:1", "com.palm.media.video.file:1",

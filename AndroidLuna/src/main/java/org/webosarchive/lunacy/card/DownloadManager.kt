@@ -58,6 +58,8 @@ import java.io.IOException
  */
 class DownloadManager(private val webosRoot: File) {
     private companion object {
+        /** How often a download in progress is reported: a quarter of a second. */
+        const val REPORT_MS = 250L
         const val SERVICE = "com.palm.downloadmanager"
         /** webOS's own default, where a download with no targetDir landed. */
         const val DEFAULT_DIR = "/media/internal/downloads"
@@ -175,7 +177,7 @@ class DownloadManager(private val webosRoot: File) {
                         // The device reports as it goes rather than per byte; a quarter of a
                         // second is often enough for a progress bar and cheap for a small file.
                         val now = System.currentTimeMillis()
-                        if (now - lastReport >= 250) { lastReport = now; report(rec) }
+                        if (now - lastReport >= REPORT_MS) { lastReport = now; report(rec) }
                     }
                 }
             }
@@ -188,7 +190,6 @@ class DownloadManager(private val webosRoot: File) {
         } catch (e: Exception) {
             temp.delete()
             rec.interrupted = !rec.aborted
-            if (rec.httpStatus == 0) rec.httpStatus = 0
             Log.w(AppServer.TAG, "download ${rec.ticket} ${rec.url}: $e")
         }
         rec.finished = true

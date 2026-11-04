@@ -117,7 +117,8 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         private val TABS = listOf("All", "Contacts", "Content", "Actions")
     }
 
-    enum class View { ALL, CONTACTS, CONTENT, ACTIONS }
+    /** Which results the filter tabs show. */
+    enum class Filter { ALL, CONTACTS, CONTENT, ACTIONS }
 
     private val phone = luna.phone
     var onLaunch: (AppInfo) -> Unit = {}
@@ -137,7 +138,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
     // ---- state ----
     private var term = ""                        // what the results are for (after the debounce)
     private var searched = false                 // the tabs show once a search has run
-    private var view = View.ALL
+    private var view = Filter.ALL
     private var actionsOnly = false              // an email address
     private var detail: String? = null           // the content group whose results are listed
     private var moreSearch = false
@@ -251,14 +252,14 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         if (text.isEmpty()) {
             // JustType.clearSearchText: back to the start, tabs and all.
             handler.removeCallbacks(runDb)
-            term = ""; searched = false; view = View.ALL; actionsOnly = false; detail = null
+            term = ""; searched = false; view = Filter.ALL; actionsOnly = false; detail = null
             moreSearch = false; moreActions = false; results = emptyList(); dbResults.clear(); dbFailedFor = null
             scroll = 0f; invalidate(); return
         }
         // updateEmailOrWebDiv runs on every keystroke from three characters.
         if (text.length >= 3) {
-            if (EMAIL_RE.matches(text)) { actionsOnly = true; view = View.ACTIONS; detail = null }
-            else if (actionsOnly) { actionsOnly = false; view = View.ALL }
+            if (EMAIL_RE.matches(text)) { actionsOnly = true; view = Filter.ACTIONS; detail = null }
+            else if (actionsOnly) { actionsOnly = false; view = Filter.ALL }
         }
         handler.postDelayed(runSearch, SEARCH_DELAY_MS)
         invalidate()
@@ -285,7 +286,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         val dbFailed = dbFailedFor
         if (text.length < DB_MIN || (dbFailed != null && text.startsWith(dbFailed))) {
             dbResults.clear(); dbGeneration++
-            if (detail != null) { detail = null; view = View.CONTENT }
+            if (detail != null) { detail = null; view = Filter.CONTENT }
         } else {
             dbFailedFor = null
             handler.postDelayed(runDb, DB_DELAY_MS)
@@ -342,7 +343,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         for (item in on) got[item.id]?.let { dbResults[item.id] = it }
         if (dbResults.values.all { it.isEmpty() }) dbFailedFor = term
         // The results being looked at went away: back to the content groups.
-        detail?.let { if (dbResults[it].isNullOrEmpty()) { detail = null; view = View.CONTENT } }
+        detail?.let { if (dbResults[it].isNullOrEmpty()) { detail = null; view = Filter.CONTENT } }
         invalidate()
     }
 
@@ -414,7 +415,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         if (text.isEmpty()) return
         if (text != term || !searched) search(text)
         if (showGoToWeb()) { onSearch(term); return }
-        if (view != View.CONTENT && view != View.CONTACTS) results.firstOrNull()?.let { onLaunch(it); return }
+        if (view != Filter.CONTENT && view != Filter.CONTACTS) results.firstOrNull()?.let { onLaunch(it); return }
         defaultItem()?.let { searchWith(it) }
     }
 
@@ -436,14 +437,14 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
             out += Group("${item.displayName} (${list.size})", list.map { r -> resultRow(item, r, CONTENT_ROW_H, 32f, 52f, true) })
             return out
         }
-        if (view == View.CONTACTS) return out
+        if (view == Filter.CONTACTS) return out
         if (actionsOnly) { actionGroup()?.let { out += it }; return out }
-        val all = view == View.ALL
+        val all = view == Filter.ALL
         val goToWeb = all && showGoToWeb()
         if (goToWeb) out += Group(null, listOf(Row(px(WEB_ROW_H), { c, r -> drawWebRow(c, r) }, { onSearch(term) })), focused = true)
-        if ((all || view == View.ACTIONS) && results.isNotEmpty()) out += Group("Launch", emptyList(), launch = true)
-        if (all || view == View.CONTENT) out += contentGroups()
-        if (all || view == View.ACTIONS) {
+        if ((all || view == Filter.ACTIONS) && results.isNotEmpty()) out += Group("Launch", emptyList(), launch = true)
+        if (all || view == Filter.CONTENT) out += contentGroups()
+        if (all || view == Filter.ACTIONS) {
             defaultItem()?.let { d ->
                 out += Group(null, listOf(Row(px(ROW_H), { c, r -> drawItemRow(c, r, iconFor(d), "Search ${d.displayName}") }, { searchWith(d) })),
                     focused = !goToWeb && results.isEmpty())
@@ -484,7 +485,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         return out
     }
 
-    private fun showDetail(id: String) { detail = id; view = View.CONTENT; scroll = 0f; invalidate() }
+    private fun showDetail(id: String) { detail = id; view = Filter.CONTENT; scroll = 0f; invalidate() }
 
     private fun resultRow(item: UniversalSearch.Item, r: JSONObject, h: Float, l1: Float, l2: Float, kindIcon: Boolean) =
         Row(px(h), { c, rect -> drawResult(c, rect, item, r, l1, l2, kindIcon) }, { openResult(item, r) })
@@ -582,7 +583,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         c.save(); c.clipRect(0f, topOfList(), width.toFloat(), height.toFloat())
         val text = term.trim().lowercase()
         for (g in gs) drawGroup(c, g, text)
-        if (searched && gs.isEmpty() && (view == View.CONTENT || view == View.CONTACTS)) drawNoResults(c)
+        if (searched && gs.isEmpty() && (view == Filter.CONTENT || view == Filter.CONTACTS)) drawNoResults(c)
         c.restore()
         // The header and the tabs over what scrolls under them, and their shadow.
         luna.tile(c, "justtype/search-header-bg.png", RectF(0f, 0f, width.toFloat(), px(HEADER_H)))
@@ -736,7 +737,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
     }
 
     private fun drawTabs(c: Canvas) {
-        val selected = if (actionsOnly) 4 else when (view) { View.ALL -> 1; View.CONTACTS -> 2; View.CONTENT -> 3; View.ACTIONS -> 4 }
+        val selected = if (actionsOnly) 4 else when (view) { Filter.ALL -> 1; Filter.CONTACTS -> 2; Filter.CONTENT -> 3; Filter.ACTIONS -> 4 }
         tabText.textSize = tabTextSize()
         for (i in 0 until 6) {
             if (phone && i !in 1..4) continue
@@ -821,7 +822,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         actionsOnly = false
         detail = null
         moreSearch = false; moreActions = false
-        view = when (tab) { 2 -> View.CONTACTS; 3 -> View.CONTENT; 4 -> View.ACTIONS; else -> View.ALL }
+        view = when (tab) { 2 -> Filter.CONTACTS; 3 -> Filter.CONTENT; 4 -> Filter.ACTIONS; else -> Filter.ALL }
         scroll = 0f
     }
 

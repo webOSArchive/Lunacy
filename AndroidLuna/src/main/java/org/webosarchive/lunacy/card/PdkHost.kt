@@ -412,7 +412,6 @@ class PdkHost(
         } }
     }
     fun quit() = send(QUIT, 0)
-    fun pdlReply(id: Int, json: String) = send(PDL_REPLY, id, json.toByteArray())
 
     /** Asks the app to quit, and ends the process if it hasn't within a moment. */
     fun stop() {

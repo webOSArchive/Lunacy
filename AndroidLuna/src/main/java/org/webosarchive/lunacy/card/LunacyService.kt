@@ -330,7 +330,7 @@ class LunacyService(
                 reply(if (ok) Bus.ok(mapOf("permission" to which, "granted" to false, "opened" to true))
                       else Bus.error("Couldn't open Android's home screen choice"))
             }
-            else -> reply(Bus.error("No permission \"$which\": storage, systemSettings or homeLauncher"))
+            else -> reply(Bus.error("No permission \"$which\": ${PERMISSIONS.joinToString(", ")}"))
         }
     }
 
@@ -683,6 +683,8 @@ class LunacyService(
         private val OWN_APPS = setOf("com.palm.app.deviceinfo", "com.palm.app.screenlock", SOFTWARE_MANAGER)
         /** Bundled apps that host an account's setup page ([hostsAccountPages]). */
         private val ACCOUNT_PAGE_HOSTS = setOf("com.palm.app.contacts", "com.palm.app.calendar", "com.palm.app.accounts")
+        /** What permissions/request takes: its `when`, in order. */
+        private val PERMISSIONS = listOf("storage", "contacts", "calendar", "systemSettings", "homeLauncher")
         private val STORAGE = listOf(android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
         private val CONTACTS = listOf(android.Manifest.permission.READ_CONTACTS)
         private val CALENDAR = listOf(android.Manifest.permission.READ_CALENDAR)

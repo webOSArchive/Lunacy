@@ -21,6 +21,8 @@ class AppServer(
     private val artCacheDir: java.io.File,
 ) {
     companion object {
+        /** Pages waiting on their fonts that are remembered: more than are ever current. */
+        private const val FONT_WAITS = 64
         const val TAG = "Lunacy"
         /** Apps check location.hostname for this (the TouchPad reports ".media.cryptofs.apps..."). */
         const val HOST_SUFFIX = ".media.cryptofs.apps"
@@ -378,7 +380,7 @@ class AppServer(
     // goes, not - as before - every page still loading.
     private val fontWaits: MutableMap<String, java.util.concurrent.CountDownLatch> = java.util.Collections.synchronizedMap(
         object : LinkedHashMap<String, java.util.concurrent.CountDownLatch>() {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, java.util.concurrent.CountDownLatch>?) = size > 64
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, java.util.concurrent.CountDownLatch>?) = size > FONT_WAITS
         })
     private val fontTokens = java.util.concurrent.atomic.AtomicLong()
 

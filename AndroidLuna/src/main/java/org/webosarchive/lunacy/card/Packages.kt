@@ -49,8 +49,8 @@ class Packages(val root: File, private val cache: File, private val webos: Webos
             val error = try {
                 val app = File(root, "$APPS/$dir")
                 if (!app.isDirectory) throw IOException("$appId isn't installed")
-                val pkgs = File(root, PACKAGES).listFiles().orEmpty().filter { dir ->
-                    runCatching { org.json.JSONObject(File(dir, "packageinfo.json").readText()).optString("app") == appId }.getOrDefault(false)
+                val pkgs = File(root, PACKAGES).listFiles().orEmpty().filter { pkg ->
+                    runCatching { org.json.JSONObject(File(pkg, "packageinfo.json").readText()).optString("app") == appId }.getOrDefault(false)
                 }
                 // ipkg's own record names the package; an app installed before Lunacy kept one
                 // has only its packageinfo.json, whose id is the package's.
@@ -155,15 +155,15 @@ class Packages(val root: File, private val cache: File, private val webos: Webos
         for (name in listOf("control", "list", "preinst", "postinst", "prerm", "postrm", "conffiles")) File(info, "$pkg.$name").delete()
     }
 
+    /** A command through the same runner as a package's scripts, for development (`--es sh`). */
+    fun shell(command: String) = Thread { run("dev", "sh", command.toByteArray(), emptyList()) }.start()
+
     /**
      * Runs one of a package's scripts as ipkgservice did - `IPKG_OFFLINE_ROOT=/media/cryptofs/apps
      * /bin/sh <script>` - in Lunacy's webOS root: busybox's sh, webOS's paths pointed into the
      * root ([WebosRoot.mapPaths]), and luna-send calling the bus as the package. Returns the exit
      * code and what it printed, which the log gets line by line.
      */
-    /** A command through the same runner as a package's scripts, for development (`--es sh`). */
-    fun shell(command: String) = Thread { run("dev", "sh", command.toByteArray(), emptyList()) }.start()
-
     private fun run(pkg: String, name: String, body: ByteArray, args: List<String>): Pair<Int, List<String>> {
         webos.prepare()
         webos.lunaSend.start()
@@ -195,7 +195,7 @@ class Packages(val root: File, private val cache: File, private val webos: Webos
                     else Thread.sleep(50)
                 }
             }
-            reader.join(2000)
+            reader.join(OUTPUT_DRAIN_MS)
             exit
         } catch (e: Exception) {
             Log.w(AppServer.TAG, "script [$pkg $name] can't run: $e"); synchronized(out) { out += e.toString() }; 127
@@ -238,6 +238,8 @@ class Packages(val root: File, private val cache: File, private val webos: Webos
     }
 
     companion object {
+        /** How long a finished script's last output is waited for. */
+        private const val OUTPUT_DRAIN_MS = 2000L
         const val APPS = "usr/palm/applications"
         const val PACKAGES = "usr/palm/packages"
         const val SERVICES = "usr/palm/services"

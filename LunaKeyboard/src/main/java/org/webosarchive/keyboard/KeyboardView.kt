@@ -135,7 +135,7 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
     private fun usesAlt(key: Key): Boolean {
         if (key.alt == key.main && key.altText == null) return false
         val main = key.main.toChar()
-        val letter = main.isLetter() && !main.isDigit() && !key.alt.toChar().isDigit()
+        val letter = main.isLetter() && !key.alt.toChar().isDigit()
         return if (letter) symbols else shift == Shift.ONCE
     }
 
@@ -569,7 +569,7 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
             Fn.RETURN -> { host.onEnter(); return }
             Fn.TAB -> { host.onTab(); return }
             Fn.HIDE -> { host.onHide(); return }
-            Fn.TRACKBALL, Fn.NONE -> return
+            Fn.TRACKBALL -> return
         }
         // webOS mapped the key first and capitalised whatever came out (TabletKeyboard sends
         // QChar(key).toUpper() while caps are active), which leaves a symbol alone.

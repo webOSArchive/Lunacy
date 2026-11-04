@@ -43,10 +43,10 @@ class Luna(private val context: Context,
     private inline fun <T> HashMap<String, T?>.memo(key: String, f: () -> T?): T? =
         if (containsKey(key)) get(key) else f().also { put(key, it) }
 
-    /** TouchPad pixels to Android pixels. */
     /** SplashIconSize, from the reference TouchPad's luna-platform.conf. */
     val SPLASH_ICON_SIZE = 192
 
+    /** TouchPad pixels to Android pixels. */
     fun px(tp: Float) = tp * density
     fun px(tp: Int) = (tp * density).toInt()
 

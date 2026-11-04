@@ -178,7 +178,7 @@ class ExhibitionLayer(context: Context, private val luna: Luna) : View(context) 
         hand(c, "dockmode/time/analog/$kind/minute.png", cx, cy, minutes * 6f)
         if (!glass) hand(c, "dockmode/time/analog/$kind/second.png", cx, cy, now.get(Calendar.SECOND) * 6f)
 
-        faceText.textSize = luna.px(if (glass) 30f else 30f)
+        faceText.textSize = luna.px(30f)
         if (glass) {
             c.drawText(longDate(now.time), cx, cy + luna.px(300f), faceText)
         } else {

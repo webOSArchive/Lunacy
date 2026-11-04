@@ -84,7 +84,7 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
         set(v) { field = v; relayout(); bar.invalidate() }
     override var bannerProgress = 0f
     override var bannerAlpha = 1f
-    override fun invalidate() { super.invalidate(); bar.invalidate() }
+    override fun redrawBanner() = bar.invalidate()
 
     override fun addNotificationIcon(key: Any, icon: Bitmap?) { icons[key] = icon; relayout(); bar.invalidate() }
     override fun removeNotificationIcon(key: Any) { icons.remove(key); relayout(); bar.invalidate() }
@@ -154,7 +154,7 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
      */
     private val scroller = object : android.widget.ScrollView(context) {
         override fun fling(velocityY: Int) {}
-        override fun onScrollChanged(l: Int, t: Int, oldl: Int, oldt: Int) { super.onScrollChanged(l, t, oldl, oldt); this@NotificationArea.invalidate() }
+        override fun onScrollChanged(l: Int, t: Int, oldl: Int, oldt: Int) { super.onScrollChanged(l, t, oldl, oldt); this@NotificationArea.invalidate(); bar.invalidate() }
         @SuppressLint("ClickableViewAccessibility")
         override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
             // A finger down stops a snap still running, or it would pull the list from under it.

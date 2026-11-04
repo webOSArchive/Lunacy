@@ -144,13 +144,13 @@
 		// are hardware the tablet hasn't got, and are logged.
 		setWindowProperties: function (p) {
 			var props = p || {};
+			var ignored = { suppressBannerMessages: true, suppressGestures: true, rotationLockMaximized: true };
 			var rest = [];
 			for (var k in props) {
-				if (!Object.prototype.hasOwnProperty.call(props, k)) { continue; }
+				if (!Object.prototype.hasOwnProperty.call(props, k) || ignored[k]) { continue; }
 				if (k === "blockScreenTimeout") { N.blockScreenTimeout(Boolean(props[k])); }
 				else if (k === "statusBarColor") { N.statusBarColor(Number(props[k]) | 0); }
 				else if (k === "fullScreen") { N.fullScreen(Boolean(props[k])); }
-				else if (k === "suppressBannerMessages" || k === "suppressGestures" || k === "rotationLockMaximized") {}
 				else { rest.push(k); }
 			}
 			if (rest.length) { N.log("PalmSystem.setWindowProperties " + rest.join(",") + " (not implemented)"); }

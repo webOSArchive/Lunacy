@@ -487,7 +487,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
             // failure. After a moment, so a service that dies at once doesn't spin.
             Log.w(AppServer.TAG, "activity ${a.id} ${a.name}: callback failed ($text); trying again")
             a.running = false
-            main.postDelayed({ if (activities[a.id] === a && a.ending == null) { event(a, "start"); a.running = true; a.callback?.let { callCallback(a, it) } } }, 5000)
+            main.postDelayed({ if (activities[a.id] === a && a.ending == null) { event(a, "start"); a.running = true; a.callback?.let { callCallback(a, it) } } }, RETRY_MS)
             return
         }
         Log.w(AppServer.TAG, "activity ${a.id} ${a.name}: callback failed: $reply")
@@ -1085,6 +1085,8 @@ class ActivityManager(private val context: Context, private val power: Power) {
     }
 
     companion object {
+        /** How long a callback whose service went away waits before it is tried again. */
+        private const val RETRY_MS = 5000L
         const val SERVICE = "com.palm.activitymanager"
         /** Its timer with [Power], under the key it had with powerd. */
         private const val TIMER = "com.palm.activitymanager.wakeup"

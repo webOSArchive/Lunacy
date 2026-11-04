@@ -31,7 +31,8 @@ interface BannerSurface {
     /** 0…1: how far the banner on show has come in. */
     var bannerProgress: Float
     var bannerAlpha: Float
-    fun invalidate()
+    /** The banner's place redrawn: the status bar on a tablet, NotificationArea's bar on a phone. */
+    fun redrawBanner()
     fun addNotificationIcon(key: Any, icon: Bitmap?)
     fun removeNotificationIcon(key: Any)
 }
@@ -168,7 +169,7 @@ class Notifications(
                 val f = it.animatedValue as Float
                 statusBar.bannerProgress = from + (to - from) * f
                 statusBar.bannerAlpha = alphaFrom + (alphaTo - alphaFrom) * f
-                statusBar.invalidate()
+                statusBar.redrawBanner()
             }
             addListener(object : AnimatorListenerAdapter() { override fun onAnimationEnd(a: Animator) { done() } })
             start()
@@ -265,10 +266,9 @@ class DashboardMenu(context: Context, private val luna: Luna, private val onDism
 
     override fun add(w: AppWindow) {
         val row = Row(w)
-        // Newest first.
-        rows.addView(row, 0, LinearLayout.LayoutParams(luna.px(CONTENT_W), luna.px(ROW_H)).apply {
-            if (rows.childCount > 0) (rows.getChildAt(0).layoutParams as LinearLayout.LayoutParams).topMargin = divider()
-        })
+        // Newest first: the row that was on top gets the divider above it.
+        if (rows.childCount > 0) (rows.getChildAt(0).layoutParams as LinearLayout.LayoutParams).topMargin = divider()
+        rows.addView(row, 0, LinearLayout.LayoutParams(luna.px(CONTENT_W), luna.px(ROW_H)))
         requestLayout()        // DashboardWindowContainer::addWindow: focused if the drop-down is open, not if it isn't.
         w.sendFocus(isOpen)
     }

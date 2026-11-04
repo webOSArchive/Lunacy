@@ -165,7 +165,9 @@ static struct buffer *find_buffer(GLuint name, int make)
 {
 	for (struct buffer *b = buffers; b; b = b->next) if (b->name == name) return b;
 	if (!make) return NULL;
-	struct buffer *b = calloc(1, sizeof *b); b->name = name; b->next = buffers; buffers = b; return b;
+	struct buffer *b = calloc(1, sizeof *b);
+	if (!b) return NULL;
+	b->name = name; b->next = buffers; buffers = b; return b;
 }
 static void bind_buffer(GLenum target, GLuint buffer)
 {
@@ -177,14 +179,15 @@ static void remember_buffer(GLenum target, size_t size, const void *data)
 	GLuint name = target == GL_ELEMENT_ARRAY_BUFFER ? element_buffer : array_buffer;
 	if (!name) return;
 	struct buffer *b = find_buffer(name, 1);
-	free(b->data); b->data = calloc(1, size ? size : 1); b->size = size;
-	if (data && size) memcpy(b->data, data, size);
+	if (!b) return;
+	free(b->data); b->data = calloc(1, size ? size : 1); b->size = b->data ? size : 0;
+	if (b->data && data && size) memcpy(b->data, data, size);
 }
 static void remember_buffer_sub(GLenum target, size_t offset, size_t size, const void *data)
 {
 	GLuint name = target == GL_ELEMENT_ARRAY_BUFFER ? element_buffer : array_buffer;
 	struct buffer *b = name ? find_buffer(name, 0) : NULL;
-	if (b && data && offset + size <= b->size) memcpy(b->data + offset, data, size);
+	if (b && b->data && data && size <= b->size && offset <= b->size - size) memcpy(b->data + offset, data, size);
 }
 
 

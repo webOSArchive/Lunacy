@@ -17,6 +17,7 @@
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>
+#include <errno.h>
 #include <stdlib.h>
 #include "webos_exec.h"
 
@@ -24,5 +25,7 @@ int execve(const char *path, char *const argv[], char *const envp[])
 {
 	static int (*real)(const char *, char *const[], char *const[]);
 	if (!real) real = (int (*)(const char *, char *const[], char *const[]))dlsym(RTLD_NEXT, "execve");
+	/* No execve behind this one is a broken runtime: fail the exec, don't call a null pointer. */
+	if (!real) { errno = ENOSYS; return -1; }
 	return webos_exec(getenv("LUNACY_PDK_EXEC"), real, path, argv, envp);
 }

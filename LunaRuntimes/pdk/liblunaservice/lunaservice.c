@@ -188,6 +188,14 @@ void LSErrorPrint(LSError *e, FILE *out)
 	if (e && out) fprintf(out, "LUNASERVICE ERROR %d: %s (%s)\n", e->error_code, e->message ? e->message : "", e->func ? e->func : "");
 }
 
+/* An allocation the library can't go on without: a service out of memory stops here, with a
+   line in the log, rather than at a null pointer some calls later. */
+static void *must(void *p)
+{
+	if (!p) { syslog(LOG_ERR, "lunaservice: out of memory"); abort(); }
+	return p;
+}
+
 /* ---- JSON: enough for the link's envelopes, which are flat ---- */
 
 struct Out { char *buf; size_t len, cap; };
@@ -196,13 +204,26 @@ static void put(struct Out *o, const char *s, size_t n)
 {
 	if (o->len + n + 1 > o->cap) {
 		o->cap = (o->len + n + 1) * 2;
-		o->buf = realloc(o->buf, o->cap);
+		o->buf = must(realloc(o->buf, o->cap));
 	}
 	memcpy(o->buf + o->len, s, n);
 	o->len += n;
 	o->buf[o->len] = 0;
 }
 static void puts_(struct Out *o, const char *s) { put(o, s, strlen(s)); }
+/* Four hex digits at s, each checked before the next is read. */
+static int hex4(const char *s, unsigned *out)
+{
+	unsigned v = 0;
+	for (int i = 0; i < 4; i++) {
+		char ch = s[i];
+		int d = ch >= '0' && ch <= '9' ? ch - '0' : ch >= 'a' && ch <= 'f' ? ch - 'a' + 10 : ch >= 'A' && ch <= 'F' ? ch - 'A' + 10 : -1;
+		if (d < 0) return 0;
+		v = v * 16 + (unsigned)d;
+	}
+	*out = v;
+	return 1;
+}
 
 static void put_string(struct Out *o, const char *s)
 {
@@ -271,6 +292,7 @@ static char *field(const char *json, const char *key)
 				for (v++; *v && *v != '"'; v++) {
 					if (*v != '\\') { put(&o, v, 1); continue; }
 					v++;
+					if (!*v) { v--; break; }   /* a trailing backslash: the string ends */
 					switch (*v) {
 					case 'n': put(&o, "\n", 1); break;
 					case 'r': put(&o, "\r", 1); break;
@@ -279,11 +301,12 @@ static char *field(const char *json, const char *key)
 					case 'f': put(&o, "\f", 1); break;
 					case 'u': {
 						unsigned c = 0;
-						if (sscanf(v + 1, "%4x", &c) != 1) break;
+						/* All four digits, or none of it: a short escape mustn't step past the end. */
+						if (!hex4(v + 1, &c)) break;
 						v += 4;
 						if (c >= 0xd800 && c < 0xdc00 && v[1] == '\\' && v[2] == 'u') {
 							unsigned lo = 0;
-							if (sscanf(v + 3, "%4x", &lo) == 1 && lo >= 0xdc00 && lo < 0xe000) {
+							if (hex4(v + 3, &lo) && lo >= 0xdc00 && lo < 0xe000) {
 								c = 0x10000 + ((c - 0xd800) << 10) + (lo - 0xdc00);
 								v += 6;
 							}
@@ -312,7 +335,7 @@ static char *field(const char *json, const char *key)
 
 static LSMessage *message_new(void)
 {
-	LSMessage *m = calloc(1, sizeof *m);
+	LSMessage *m = must(calloc(1, sizeof *m));
 	m->refs = 1;
 	return m;
 }
@@ -366,7 +389,7 @@ bool LSMessageReply(LSHandle *sh, LSMessage *m, const char *payload, LSError *e)
 
 static LSHandle *handle_new(const char *name, bool isPublic)
 {
-	LSHandle *h = calloc(1, sizeof *h);
+	LSHandle *h = must(calloc(1, sizeof *h));
 	h->name = name ? strdup(name) : NULL;
 	h->isPublic = isPublic;
 	pthread_mutex_lock(&lock);
@@ -407,7 +430,7 @@ const char *LSHandleGetName(LSHandle *sh) { return sh ? sh->name : NULL; }
 bool LSRegisterPalmService(const char *name, LSPalmService **psh, LSError *e)
 {
 	if (!psh) return FAIL(e, "no handle");
-	LSPalmService *p = calloc(1, sizeof *p);
+	LSPalmService *p = must(calloc(1, sizeof *p));
 	p->pub = handle_new(name, true);
 	p->priv = handle_new(name, false);
 	p->pub->palm = p->priv->palm = p;
@@ -436,7 +459,7 @@ static struct Category *category(LSHandle *sh, const char *name, bool make)
 	if (n > 1 && norm[n - 1] == '/') norm[n - 1] = 0;
 	for (struct Category *c = sh->categories; c; c = c->next) if (strcmp(c->name, norm) == 0) return c;
 	if (!make) return NULL;
-	struct Category *c = calloc(1, sizeof *c);
+	struct Category *c = must(calloc(1, sizeof *c));
 	c->name = strdup(norm);
 	c->next = sh->categories;
 	sh->categories = c;
@@ -506,7 +529,7 @@ static char *dup0(const char *s) { return s ? strdup(s) : NULL; }
 bool LSSubscriptionAdd(LSHandle *sh, const char *key, LSMessage *m, LSError *e)
 {
 	if (!m) return FAIL(e, "no message");
-	struct Kept *k = calloc(1, sizeof *k);
+	struct Kept *k = must(calloc(1, sizeof *k));
 	k->token = m->token; k->handle = m->handle;
 	k->sender = dup0(m->sender); k->senderService = dup0(m->senderService); k->appId = dup0(m->appId);
 	k->category = dup0(m->category); k->method = dup0(m->method);
@@ -526,7 +549,7 @@ static bool call(LSHandle *sh, const char *uri, const char *payload, const char 
 	if (!s) return FAIL(e, "Invalid URI: %s", uri);
 	s += 3;
 	const char *slash = strchr(s, '/');
-	struct Call *c = calloc(1, sizeof *c);
+	struct Call *c = must(calloc(1, sizeof *c));
 	c->handle = sh; c->callback = callback; c->context = ctx; c->oneReply = oneReply;
 	c->service = slash ? strndup(s, slash - s) : strdup(s);
 	pthread_mutex_lock(&lock);
@@ -719,7 +742,7 @@ static gboolean readable(GIOChannel *ch, int cond, gpointer data)
 		syslog(LOG_INFO, "lunaservice: bus closed, exiting");
 		_exit(0);
 	}
-	if (inlen + n + 1 > incap) { incap = (inlen + n + 1) * 2; inbuf = realloc(inbuf, incap); }
+	if (inlen + n + 1 > incap) { incap = (inlen + n + 1) * 2; inbuf = must(realloc(inbuf, incap)); }
 	memcpy(inbuf + inlen, chunk, n);
 	inlen += n;
 	inbuf[inlen] = 0;

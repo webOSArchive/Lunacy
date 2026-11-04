@@ -143,14 +143,33 @@ static PDL_Err tell(const char *json)
 	return PDL_NOERROR;
 }
 
+/* A request to the shell. One that doesn't fit isn't sent cut short, which would be broken
+   JSON: it fails, as a request the shell couldn't take. */
 static PDL_Err tell_f(const char *fmt, ...)
 {
-	char buf[512];
+	char buf[2048];
 	va_list ap;
 	va_start(ap, fmt);
-	vsnprintf(buf, sizeof buf, fmt, ap);
+	int n = vsnprintf(buf, sizeof buf, fmt, ap);
 	va_end(ap);
+	if (n < 0 || (size_t)n >= sizeof buf) return fail("request too long");
 	return tell(buf);
+}
+
+/* s as the inside of a JSON string, in out (size cap); NULL when it doesn't fit. */
+static const char *json_escape(const char *s, char *out, size_t cap)
+{
+	size_t o = 0;
+	for (const unsigned char *p = (const unsigned char *)(s ? s : ""); *p; p++) {
+		char esc[8]; size_t n;
+		if (*p == '"' || *p == '\\') { esc[0] = '\\'; esc[1] = (char)*p; n = 2; }
+		else if (*p < 0x20) n = (size_t)snprintf(esc, sizeof esc, "\\u%04x", *p);
+		else { esc[0] = (char)*p; n = 1; }
+		if (o + n + 1 > cap) return NULL;
+		memcpy(out + o, esc, n); o += n;
+	}
+	out[o] = 0;
+	return out;
 }
 
 PDL_Err PDL_GesturesEnable(PDL_bool Enable) { return tell_f("{\"call\":\"gestures\",\"on\":%s}", Enable ? "true" : "false"); }
@@ -160,8 +179,18 @@ PDL_Err PDL_ScreenTimeoutEnable(PDL_bool Enable) { return tell_f("{\"call\":\"sc
 PDL_Err PDL_SetKeyboardState(PDL_bool visible) { return tell_f("{\"call\":\"keyboard\",\"on\":%s}", visible ? "true" : "false"); }
 PDL_Err PDL_Vibrate(int periodMS, int durationMS) { return tell_f("{\"call\":\"vibrate\",\"period\":%d,\"duration\":%d}", periodMS, durationMS); }
 PDL_Err PDL_Minimize(void) { return tell("{\"call\":\"minimize\"}"); }
-PDL_Err PDL_LaunchBrowser(const char *url) { return tell_f("{\"call\":\"browser\",\"url\":\"%s\"}", url ? url : ""); }
-PDL_Err PDL_LaunchEmail(const char *subject, const char *body) { return tell_f("{\"call\":\"email\",\"subject\":\"%s\"}", subject ? subject : ""); }
+PDL_Err PDL_LaunchBrowser(const char *url)
+{
+	char e[1536];
+	if (!json_escape(url, e, sizeof e)) return fail("url too long");
+	return tell_f("{\"call\":\"browser\",\"url\":\"%s\"}", e);
+}
+PDL_Err PDL_LaunchEmail(const char *subject, const char *body)
+{
+	char e[1536];
+	if (!json_escape(subject, e, sizeof e)) return fail("subject too long");
+	return tell_f("{\"call\":\"email\",\"subject\":\"%s\"}", e);
+}
 PDL_Err PDL_LaunchEmailTo(const char *subject, const char *body, int numRecipients, const char **recipients) { return PDL_LaunchEmail(subject, body); }
 PDL_Err PDL_BannerMessagesEnable(PDL_bool Enable) { return PDL_NOERROR; }
 PDL_Err PDL_CustomPauseUiEnable(PDL_bool Enable) { return PDL_NOERROR; }
@@ -382,7 +411,9 @@ static void *js_reader(void *unused)
 		uint32_t h[3];
 		char *buf;
 		if (read_all(js_sock, h, sizeof h) < 0) break;
-		buf = malloc(h[2] + 1);
+		/* A length the +1 would wrap, or past any call a page makes, ends the link. */
+		if (h[2] > (64u << 20)) break;
+		buf = malloc((size_t)h[2] + 1);
 		if (!buf) break;
 		if (h[2] && read_all(js_sock, buf, h[2]) < 0) { free(buf); break; }
 		buf[h[2]] = 0;

@@ -93,18 +93,39 @@ static __thread struct ctx *cur;   /* the context the replay is for (one app at 
 
 static void missing(const char *name) { LOGW("pdk gl: the device's GLES %d has no %s; skipped", GLES_VERSION, name); }
 
+/* Grows *buf to at least need bytes. On failure the buffer and its capacity stay as they were
+   and 0 comes back: the caller skips what it was about to write, rather than writing past it. */
+static int grow(void *buf, size_t *cap, size_t need)
+{
+	if (need <= *cap) return 1;
+	void *n = realloc(*(void **)buf, need);
+	if (!n) { LOGW("pdk gl: out of memory for %zu bytes", need); return 0; }
+	*(void **)buf = n; *cap = need;
+	return 1;
+}
+
 /* ---- the reader ---- */
 struct reader { const uint8_t *p, *end; };
+/* A length the app sent, and the same padded to 4 as the client pads, if both fit in what is
+   left of the batch. Tested before padding: a length near 2^32 would wrap to a small one. */
+static int fits(const struct reader *r, uint32_t len, size_t *padded)
+{
+	size_t left = (size_t)(r->end - r->p), pad = ((size_t)len + 3) & ~(size_t)3;
+	if ((size_t)len > left || pad > left) return 0;
+	*padded = pad;
+	return 1;
+}
 static uint32_t get_u32(struct reader *r) { uint32_t v = 0; if (r->p + 4 <= r->end) { memcpy(&v, r->p, 4); r->p += 4; } return v; }
 static float get_f32(struct reader *r) { float v = 0; if (r->p + 4 <= r->end) { memcpy(&v, r->p, 4); r->p += 4; } return v; }
 /* A copied pointer argument: [u32 len][bytes]; NULL when the app passed NULL. */
 static __thread uint32_t blob_len;   /* the last blob's length, for the checks before an upload */
 static const void *get_blob(struct reader *r, uint32_t present)
 {
-	uint32_t len = get_u32(r), padded = (len + 3) & ~3u;   /* the client pads blobs to 4 */
+	uint32_t len = get_u32(r);
+	size_t padded;   /* the client pads blobs to 4 */
 	blob_len = len;
 	const void *p = r->p;
-	if (r->p + padded > r->end) { r->p = r->end; return NULL; }
+	if (!fits(r, len, &padded)) { blob_len = 0; r->p = r->end; return NULL; }
 	r->p += padded;
 	return present ? p : NULL;
 }
@@ -129,14 +150,14 @@ static void take_array(struct reader *r, int attrib)
 	uint32_t s = get_u32(r), size, stride, type, normalized = 0;
 	if (attrib) { size = get_u32(r); type = get_u32(r); normalized = get_u32(r); stride = get_u32(r); }
 	else { size = get_u32(r); stride = get_u32(r); type = get_u32(r); get_u32(r); get_u32(r); }
-	uint32_t len = get_u32(r), padded = (len + 3) & ~3u;
-	if (r->p + padded > r->end) { r->p = r->end; return; }
+	uint32_t len = get_u32(r);
+	size_t padded;
+	if (!fits(r, len, &padded)) { r->p = r->end; return; }
 	if (s == 255) {
-		if (len > index_cap) { index_scratch = realloc(index_scratch, len); index_cap = len; }
-		memcpy(index_scratch, r->p, len);
+		if (grow(&index_scratch, &index_cap, len)) memcpy(index_scratch, r->p, len);
 	} else if (s < ARRAYS) {
 		struct array *a = &arrays[s];
-		if (len > a->cap) { a->data = realloc(a->data, len); a->cap = len; }
+		if (!grow(&a->data, &a->cap, len)) { r->p += padded; return; }
 		memcpy(a->data, r->p, len);
 		a->size = (GLint)size; a->stride = (GLsizei)stride; a->type = type; a->normalized = (GLboolean)normalized; a->fresh = 1; a->buffer = 0;
 	}
@@ -243,7 +264,7 @@ static const void *upload(const char *name, GLsizei w, GLsizei h, GLint *interna
 	if (*format != 0x80E1) return pixels;
 	if (has_bgra < 0) { const char *e = (const char *)glGetString(GL_EXTENSIONS); has_bgra = e && strstr(e, "GL_EXT_texture_format_BGRA8888") != NULL; }
 	if (has_bgra) return pixels;
-	if (need > swizzled_cap) { swizzled = realloc(swizzled, need); swizzled_cap = need; }
+	if (!grow(&swizzled, &swizzled_cap, need)) return (const void *)-1;
 	const uint8_t *s = pixels;
 	for (size_t i = 0; i + 3 < need; i += 4) { swizzled[i] = s[i + 2]; swizzled[i + 1] = s[i + 1]; swizzled[i + 2] = s[i]; swizzled[i + 3] = s[i + 3]; }
 	*format = GL_RGBA; if (internalformat && *internalformat == 0x80E1) *internalformat = GL_RGBA;
@@ -318,7 +339,11 @@ static GLuint map_name(struct names *t, GLuint name, int make)
 }
 static void add_name(struct names *t, GLuint name, GLuint real)
 {
-	if (t->n == t->cap) { t->cap = t->cap ? t->cap * 2 : 16; t->app = realloc(t->app, t->cap * sizeof *t->app); t->real = realloc(t->real, t->cap * sizeof *t->real); }
+	if (t->n == t->cap) {
+		size_t want = t->cap ? t->cap * 2 : 16, app_cap = t->cap * sizeof *t->app, real_cap = t->cap * sizeof *t->real;
+		if (!grow(&t->app, &app_cap, want * sizeof *t->app) || !grow(&t->real, &real_cap, want * sizeof *t->real)) return;
+		t->cap = want;
+	}
 	t->app[t->n] = name; t->real[t->n] = real; t->n++;
 }
 static void forget_name(struct names *t, GLuint real)
@@ -602,7 +627,7 @@ static int blit(struct ctx *c, int shown)
 static __thread uint8_t *replies; static __thread size_t replies_len, replies_cap;
 static void reply(uint32_t type, const void *payload, uint32_t len)
 {
-	if (replies_len + 12 + len > replies_cap) { replies_cap = (replies_len + 12 + len) * 2; replies = realloc(replies, replies_cap); }
+	if (!grow(&replies, &replies_cap, (replies_len + 12 + (size_t)len) * 2)) return;
 	uint32_t h[3] = { type, 0, len };
 	memcpy(replies + replies_len, h, 12); replies_len += 12;
 	if (len) { memcpy(replies + replies_len, payload, len); replies_len += len; }
@@ -620,7 +645,7 @@ static void answer_begin(uint32_t ret)
 static void answer_add(const void *p, uint32_t n)
 {
 	uint32_t padded = (n + 3) & ~3u, len;
-	if (replies_len + 4 + padded > replies_cap) { replies_cap = (replies_len + 4 + padded) * 2; replies = realloc(replies, replies_cap); }
+	if (!grow(&replies, &replies_cap, (replies_len + 4 + (size_t)padded) * 2)) return;
 	memcpy(replies + replies_len, &n, 4); replies_len += 4;
 	if (n) { if (p) memcpy(replies + replies_len, p, n); else memset(replies + replies_len, 0, n); memset(replies + replies_len + n, 0, padded - n); replies_len += padded; }
 	len = (uint32_t)(replies_len - answer_at - 12);
@@ -631,7 +656,7 @@ static __thread char *out_str; static __thread size_t out_cap;
 static char *out_buffer(GLsizei n)
 {
 	if (n <= 0) return NULL;
-	if ((size_t)n > out_cap) { out_str = realloc(out_str, (size_t)n); out_cap = (size_t)n; }
+	if (!grow(&out_str, &out_cap, (size_t)n)) return NULL;
 	memset(out_str, 0, (size_t)n);
 	return out_str;
 }
@@ -839,14 +864,44 @@ static void app_swap(struct ctx *c)
 	}
 }
 
+/* The bytes glReadPixels writes for a w x h read: rows of the format's pixels, each padded to
+   GL_PACK_ALIGNMENT. 0 for an empty read; an unknown format or type is taken at 16 bytes a
+   pixel, the most any GLES read gives. */
+static size_t read_size(GLsizei w, GLsizei h, GLenum format, GLenum type)
+{
+	if (w <= 0 || h <= 0) return 0;
+	size_t bpp;
+	switch (type) {
+	case GL_UNSIGNED_SHORT_5_6_5: case GL_UNSIGNED_SHORT_4_4_4_4: case GL_UNSIGNED_SHORT_5_5_5_1: bpp = 2; break;
+	case GL_UNSIGNED_BYTE:
+		switch (format) {
+		case GL_ALPHA: case GL_LUMINANCE: bpp = 1; break;
+		case GL_LUMINANCE_ALPHA: bpp = 2; break;
+		case GL_RGB: bpp = 3; break;
+		default: bpp = 4;
+		}
+		break;
+	default: bpp = 16;
+	}
+	GLint align = 4;
+	glGetIntegerv(GL_PACK_ALIGNMENT, &align);
+	if (align < 1) align = 1;
+	size_t row = ((size_t)w * bpp + (size_t)align - 1) / (size_t)align * (size_t)align;
+	return row * (size_t)h;
+}
+
 /* glReadPixels from the app's framebuffer (whichever the app has bound). */
 static void app_read(struct reader *r)
 {
 	GLint x = (GLint)get_u32(r), y = (GLint)get_u32(r); GLsizei w = (GLsizei)get_u32(r), h = (GLsizei)get_u32(r);
 	GLenum format = get_u32(r), type = get_u32(r); uint32_t n = get_u32(r);
 	if (n > 64u << 20) n = 0;
-	uint8_t *p = n ? calloc(1, n) : NULL;
-	if (p) glReadPixels(x, y, w, h, format, type, p);
+	/* glReadPixels writes what w, h, the format and the pack alignment make, whatever size the
+	   app's buffer was: the read gets room for that, and the app gets its own size back. */
+	size_t need = read_size(w, h, format, type);
+	if (need > 64u << 20) need = 0;
+	uint8_t *p = n ? calloc(1, need > n ? need : n) : NULL;
+	if (p && need) glReadPixels(x, y, w, h, format, type, p);
 	reply(LPDK_GL_PIXELS, p, p ? n : 0);
 	free(p);
 }
@@ -997,6 +1052,10 @@ JNIEXPORT jbyteArray JNICALL JNI(replay)(JNIEnv *env, jclass cls, jlong handle, 
 {
 	struct ctx *c = (struct ctx *)(intptr_t)handle;
 	if (!c) return NULL;
+	/* Never past the array, whatever length came with it. */
+	jsize have = (*env)->GetArrayLength(env, data);
+	if (len < 0) len = 0;
+	if (len > have) len = have;
 	jbyte *p = (*env)->GetByteArrayElements(env, data, NULL);
 	if (!p) return NULL;
 	replies_len = 0;

@@ -31,6 +31,8 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <dlfcn.h>
+#include <poll.h>
+#include <pthread.h>
 
 #include "SDL_video.h"
 #include "SDL_mouse.h"
@@ -68,12 +70,14 @@ int LUNACY_Connect(const char *hello)
 	struct sockaddr_un addr;
 	int s, len;
 	if (!name || !*name) { SDL_SetError("LUNACY_PDK_SOCKET is not set"); return -1; }
+	/* The name whole, or not at all: cut short it would be some other socket's. */
+	if (strlen(name) + 1 > sizeof(addr.sun_path)) { SDL_SetError("LUNACY_PDK_SOCKET is too long"); return -1; }
 	s = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (s < 0) { SDL_SetError("socket: %s", strerror(errno)); return -1; }
 	memset(&addr, 0, sizeof addr);
 	addr.sun_family = AF_UNIX;
 	addr.sun_path[0] = 0;  /* abstract namespace, as Android's LocalServerSocket listens */
-	strncpy(addr.sun_path + 1, name, sizeof(addr.sun_path) - 2);
+	memcpy(addr.sun_path + 1, name, strlen(name));
 	len = offsetof(struct sockaddr_un, sun_path) + 1 + strlen(name);
 	if (connect(s, (struct sockaddr *)&addr, len) < 0) {
 		SDL_SetError("connect %s: %s", name, strerror(errno));
@@ -89,19 +93,30 @@ static int write_all(int fd, const void *p, size_t n)
 	const char *c = p;
 	while (n) {
 		ssize_t w = write(fd, c, n);
-		if (w < 0) { if (errno == EINTR) continue; if (errno == EAGAIN) { usleep(1000); continue; } return -1; }
+		if (w < 0) {
+			if (errno == EINTR) continue;
+			/* A full socket: wait until the shell has read some, rather than spin. */
+			if (errno == EAGAIN) { struct pollfd pf = { fd, POLLOUT, 0 }; poll(&pf, 1, -1); continue; }
+			return -1;
+		}
 		c += w; n -= w;
 	}
 	return 0;
 }
 
+/* The video, audio and PDL threads all send; a message is a header and a payload written
+   separately, so one goes out whole before the next begins. */
+static pthread_mutex_t send_lock = PTHREAD_MUTEX_INITIALIZER;
+
 int LUNACY_Send(int sock, uint32_t type, uint32_t a, const void *payload, uint32_t len)
 {
 	uint32_t h[3] = { type, a, len };
+	int r = 0;
 	if (sock < 0) return -1;
-	if (write_all(sock, h, sizeof h) < 0) return -1;
-	if (len && write_all(sock, payload, len) < 0) return -1;
-	return 0;
+	pthread_mutex_lock(&send_lock);
+	if (write_all(sock, h, sizeof h) < 0 || (len && write_all(sock, payload, len) < 0)) r = -1;
+	pthread_mutex_unlock(&send_lock);
+	return r;
 }
 
 /* ---- the driver ---- */

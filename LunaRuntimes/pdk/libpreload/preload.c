@@ -195,7 +195,19 @@ static const char *map(const char *path, char *buf)
 /* glibc keeps these for old binaries but no longer declares them. */
 int __xstat(int, const char *, struct stat *); int __lxstat(int, const char *, struct stat *);
 int __xstat64(int, const char *, struct stat64 *); int __lxstat64(int, const char *, struct stat64 *);
-#define REAL(name) static __typeof__(&name) real_##name; if (!real_##name) real_##name = (__typeof__(&name))dlsym(RTLD_NEXT, #name)
+/* The libc function a wrapper stands in front of. One that isn't there is a broken runtime:
+   the process stops saying which, rather than calling a null pointer. */
+static void *next_sym(const char *name)
+{
+	void *p = dlsym(RTLD_NEXT, name);
+	if (!p) {
+		static const char msg[] = "lunacy preload: no libc function ";
+		write(2, msg, sizeof msg - 1); write(2, name, strlen(name)); write(2, "\n", 1);
+		abort();
+	}
+	return p;
+}
+#define REAL(name) static __typeof__(&name) real_##name; if (!real_##name) real_##name = (__typeof__(&name))next_sym(#name)
 #define MAPPED(p) char buf_[PATH_MAX]; const char *mp_ = map(p, buf_)
 
 ssize_t readlink(const char *path, char *buf, size_t len)
@@ -244,10 +256,14 @@ static int meminfo_fd(void)
 		char name[64]; unsigned long long kb;
 		nl = strchr(line, '\n');
 		if (nl) *nl = 0;
+		int w;
 		if (sscanf(line, "%63[^:]: %llu kB", name, &kb) == 2 && strstr(line, " kB"))
-			o += snprintf(out + o, sizeof out - o, "%s:%*llu kB\n", name, (int)(24 - strlen(name)), (unsigned long long)(kb * f + 0.5));
+			w = snprintf(out + o, sizeof out - o, "%s:%*llu kB\n", name, (int)(24 - strlen(name)), (unsigned long long)(kb * f + 0.5));
 		else
-			o += snprintf(out + o, sizeof out - o, "%s\n", line);
+			w = snprintf(out + o, sizeof out - o, "%s\n", line);
+		/* snprintf answers the length it wanted: a line that didn't fit ends the copy there. */
+		if (w < 0 || (size_t)w >= sizeof out - o) { o = sizeof out - 1; break; }
+		o += (size_t)w;
 		if (!nl) break;
 	}
 	memcpy(tmpl, root, root_len); strcpy(tmpl + root_len, "/tmp/.lunacy-meminfo-XXXXXX");
@@ -552,7 +568,16 @@ char *getcwd(char *buf, size_t size)
 	const char *root = webos_root(&root_len);
 	char *r = real_getcwd(buf, size), mapped[PATH_MAX];
 	if (r && in_mapped(mapped)) {
-		if (strlen(mapped) + 1 > (size ? size : PATH_MAX)) { errno = ERANGE; return NULL; }
+		size_t need = strlen(mapped) + 1;
+		/* With no buffer given, glibc allocated just the real path's length, which the webOS
+		   one may be longer than; a caller's buffer is its size. */
+		size_t room = buf ? size : (size ? size : strlen(r) + 1);
+		if (need > room) {
+			if (buf || size) { if (!buf) free(r); errno = ERANGE; return NULL; }
+			char *bigger = realloc(r, need);
+			if (!bigger) { free(r); errno = ENOMEM; return NULL; }
+			r = bigger;
+		}
 		strcpy(r, mapped);
 		return r;
 	}

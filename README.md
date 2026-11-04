@@ -120,6 +120,10 @@ Two Settings apps help you tweak system-wide and on a per-app basis:
 - Portions of the Android file system are mapped into the webOS environment automatically. Android's Downloads, Pictures, Camera (DCIM), Music, Movies and Documents are webOS's `/media/internal` folders. 
 - Photos & Videos, Music, the file picker and apps that import files all see what the user already has. Music plays the Android music library.
 
+#### Settings
+
+- Some Android settings can be controlled from webOS UI, if granted permission.
+
 #### Lunacy as Launcher
 
 Lunacy works best when it's the default Android Launcher (but you don't have to -- see below!) Common Android apps or features will be given webOS icons or entry points 
@@ -127,7 +131,7 @@ Lunacy works best when it's the default Android Launcher (but you don't have to 
 
 You can control how much Android appears in webOS in the **Software Manager** Settings app by toggling Android apps visibility on and off.
 
-If you prefer to use an Android equivalent (eg: Clock or Calculator), you can similarly turn the webOS app on and off.
+If you prefer to use an Android equivalent app (eg: Clock or Calculator), you can similarly turn the webOS app on and off.
 
 Hiding an app does not uninstall it, but it removes it from the Lunacy launcher and JustType UIs.
 
@@ -148,7 +152,9 @@ To pin a webOS app to an alternate Android Launcher, use **Software Manager**, f
 - **Multi-tasking:** Android and webOS both compete for edge swipes, experiment with Gesture and Button controls in Android, and toggling (side) Edge swipe in **Screen & Lock** to find what works best for your device.
 - **Calender and Contact Mirroring:** Android PIM data can be mirrored to webOS, if enabled and with your permission. Add this feature as a new "Account" in the webOS Calender and Contacts apps.
 - **Exhibition:** the webOS Exhibition feature is mapped to Daydream/Screensaver on Android. Choose Lunacy as your Android screensaver, to have Lunacy launch exhibition when the screen times out. Use the webOS **Exhibition** Settings app to determine which exhibitions are available. Tap the screen during Exhibition for controls (if the app provides them).
-- **webOS Keyboard:** A couple optional Android keyboards are available to complete the experience -- choose one that works for your device, or stick with an Android keyboard if you prefer.
+- **webOS Keyboard:** A couple optional Android keyboards are available to complete the webOS experience -- choose one that works for your device, or stick with an Android keyboard if you prefer.
+   - [LunaKeyboard](https://github.com/webOSArchive/Lunacy/releases): A separate APK in this project that simulates the TouchPad keyboard -- works best on larger screens.
+   - [PreKeyboard](https://github.com/alan-morford/prekeyboard): From Alan Morford, this one simulates the Palm Pre hardware keyboard -- works best on smaller screens.
 
 ## Building
 

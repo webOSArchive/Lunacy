@@ -58,7 +58,7 @@ configure() {  # $1 = build dir, $2 = more CONFIG_ names to turn off
 # 2026-10-03). BB_GLOBAL_CONST empty makes it a plain global that every applet reloads.
 CFLAGS_COMMON="-DBB_GLOBAL_CONST="
 build() {  # $1 = build dir, $2 = clang target, $3 = output, $4 = more CFLAGS
-  ( cd "$1" && make -j8 CC="$BIN/clang --target=$2 -Wno-error -L$WORK/stub $CFLAGS_COMMON $4" HOSTCC=cc CROSS_COMPILE= busybox_unstripped > make.log 2>&1 ) || { echo "busybox failed in $1; see $1/make.log"; exit 1; }
+  ( cd "$1" && make -j8 CC="$BIN/clang --target=$2 -Wno-error -L$WORK/stub $CFLAGS_COMMON $4" HOSTCC=cc CROSS_COMPILE= busybox_unstripped > make.log 2>&1 ) || { echo "busybox failed in $1; see $1/make.log" >&2; exit 1; }
   "$BIN/llvm-strip" -o "$3" "$1/busybox_unstripped"
   clear_flags_1 "$3"
   echo "built $3"

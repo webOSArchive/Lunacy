@@ -78,7 +78,7 @@ chmod -R u+w $L/fw/mojo $L/fw/mojocommon
 # Lunacy's changes to Mojo, as diffs against the device's own copy (LunaRuntimes/mojo/CHANGES.md).
 for patch in ../LunaRuntimes/mojo/patches/*.patch; do
     [ -e "$patch" ] || continue
-    (cd $L/fw/mojo && patch -p1 --forward --silent --follow-symlinks < "$HERE/$patch") ||
+    (cd $L/fw/mojo && patch -p1 --forward --silent --fuzz=0 --follow-symlinks < "$HERE/$patch") ||
         { echo "fetch-assets: $patch does not apply to the TouchPad's Mojo" >&2; exit 1; }
     echo "mojo: applied $(basename "$patch")"
 done
@@ -115,6 +115,7 @@ cp -r $V/webos-ce/system/usr/palm/frameworks/contacts/. $L/fw/frameworks/contact
 calendar_framework() {
     cp -r $V/webos-ce/system/usr/palm/frameworks/calendar/. "$1/"
     for patch in ../LunaRuntimes/calendar/patches/*.patch; do
+        [ -e "$patch" ] || continue
         (cd "$1" && patch -p1 --forward --silent --fuzz=0 < "$HERE/$patch") ||
             { echo "fetch-assets: $patch does not apply to CE's calendar framework" >&2; exit 1; }
     done
@@ -489,6 +490,7 @@ O=$V/oscar
 git -C $O cat-file -e "$OSCAR_COMMIT^{commit}" 2>/dev/null || git -C $O fetch -q origin ||
     { echo "fetch-assets: can't fetch webOS Chat from $OSCAR_REPO" >&2; exit 1; }
 WC=$(mktemp -d)
+trap 'rm -rf "$WC"' EXIT
 git -C $O archive $OSCAR_COMMIT client/webos-chat | tar -x -C $WC ||
     { echo "fetch-assets: webOS Chat commit $OSCAR_COMMIT isn't in $O" >&2; exit 1; }
 rm -rf $R/usr/palm/services/com.palm.webosarchive.chat

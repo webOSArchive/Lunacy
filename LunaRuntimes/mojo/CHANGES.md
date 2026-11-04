@@ -16,10 +16,10 @@ So Lunacy serves the builtins in front of the app's own `mojo.js` tag (a serve-t
 see "Mojo" in [architecture.md](../../Docs/architecture.md)), and the patches below make
 those files loadable as ordinary scripts. Everything else is Palm's, unchanged.
 
-**Adding a patch:** edit `AndroidLuna/local-assets/fw/mojo/`, then diff it against
-`Workbench/vendor/touchpad/mojo/` into `patches/`, the same way the Enyo fork works
-(`AndroidLuna/tools/make-enyo-patch.sh` does it there); `fetch-assets.sh` applies them in order
-and fails the build if one no longer applies.
+**Adding a patch:** edit `AndroidLuna/local-assets/fw/mojo/`, then, from `AndroidLuna/`,
+`tools/make-patch.sh mojo 000N-name <file>...`, which diffs it against the TouchPad's Mojo with
+the earlier patches applied; `fetch-assets.sh` applies them in order, with no fuzz, and fails
+the build if one no longer applies.
 
 **Then the SDK.** Every patch here goes into the SDK too (codepoet, 2026-10-05):
 [webos-sdk-redux](https://github.com/webOSArchive/webos-sdk-redux) ships Mojo for desktop

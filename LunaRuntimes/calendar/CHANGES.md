@@ -11,7 +11,9 @@ Each patch changes the same code in three places, because a MojoLoader reads eit
 `submission/42calendar.js`. `fetch-assets.sh` applies the patches in order, for the pages and for
 the JS services, and fails the build if one no longer applies.
 
-**Adding a patch:** change all three forms and diff against the tree before it. When CE's copy is
+**Adding a patch:** change all three forms in `AndroidLuna/local-assets/fw/frameworks/calendar/`,
+then, from `AndroidLuna/`, `tools/make-patch.sh calendar 000N-name <file>...` diffs them against
+the tree before it. When CE's copy is
 taken again, re-make these against it and drop what CE has taken. Run the sweeps in
 [Workbench/calendar-sweep](../../Workbench/calendar-sweep/README.md) and CE's `tools/calendar-sweep/`
 on both file forms.

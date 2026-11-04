@@ -18,7 +18,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 die() { echo "build.sh: $*" >&2; exit 1; }
-usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+# The header comment, all of it, whatever its length.
+usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit "${1:-0}"; }
 
 type=""; fetch=""; test_apps=0; lint=0; allow_dirty=0
 for a in "$@"; do

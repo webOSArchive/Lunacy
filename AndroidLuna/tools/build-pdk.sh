@@ -77,20 +77,20 @@ sed -i 's/DUMMY_bootstrap/LUNACY_bootstrap/g' $S/src/video/SDL_video.c $S/src/vi
 # (Transformers G1) quits on the refusal. Accepted here; the driver answers GetAttribute.
 if ! grep -q 'Palm attributes' $S/src/video/SDL_video.c; then
   sed -i '/^int SDL_GL_SetAttribute( SDL_GLattr attr, int value )/,/^}/ s/^\t\tdefault:/\t\tcase 17: case 18: case 19: \/* Palm attributes (16, SDL_GL_RETAINED_BACKING, is stock SDL_GL_SWAP_CONTROL here) *\/ retval = 0; break;\n\t\tdefault:/' $S/src/video/SDL_video.c
-  grep -q 'Palm attributes' $S/src/video/SDL_video.c || { echo "the SDL_GL_SetAttribute patch didn't apply"; exit 1; }
+  grep -q 'Palm attributes' $S/src/video/SDL_video.c || { echo "the SDL_GL_SetAttribute patch didn't apply" >&2; exit 1; }
 fi
 # The major version is kept for the driver (LUNACY_gl_major): it picks the GL library and
 # answers SDL_GL_GetAttribute, and libEGL reports it.
 if ! grep -q 'LUNACY_gl_major' $S/src/video/SDL_video.c; then
   sed -i 's|^\t\tcase 17: case 18: case 19: /\* Palm attributes|\t\tcase 17: { extern int LUNACY_gl_major; LUNACY_gl_major = value; }   /* fall through */\n\t\tcase 18: case 19: /* Palm attributes|' $S/src/video/SDL_video.c
-  grep -q 'LUNACY_gl_major' $S/src/video/SDL_video.c || { echo "the GLES major version patch didn't apply"; exit 1; }
+  grep -q 'LUNACY_gl_major' $S/src/video/SDL_video.c || { echo "the GLES major version patch didn't apply" >&2; exit 1; }
 fi
 sed -i 's/DUMMYAUD_bootstrap/LUNACYAUD_bootstrap/g' $S/src/audio/SDL_audio.c $S/src/audio/SDL_sysaudio.h
 # No pointer: webOS's SDL drew none, and stock SDL paints a software arrow into a 2D app's
 # screen until the app hides it (Drum Machine never does). Hidden from the start; an app
 # that calls SDL_ShowCursor(SDL_ENABLE) still gets it.
 sed -i 's/^volatile int SDL_cursorstate = CURSOR_VISIBLE;/volatile int SDL_cursorstate = 0;   \/* Lunacy: hidden, as on webOS *\//; s/^\tSDL_cursorstate = CURSOR_VISIBLE;$/\tSDL_cursorstate = 0;   \/* Lunacy: hidden, as on webOS *\//' $S/src/video/SDL_cursor.c
-grep -q 'Lunacy: hidden' $S/src/video/SDL_cursor.c || { echo "the SDL cursor patch didn't apply"; exit 1; }
+grep -q 'Lunacy: hidden' $S/src/video/SDL_cursor.c || { echo "the SDL cursor patch didn't apply" >&2; exit 1; }
 mkdir -p sdl-build && cd sdl-build
 if [ ! -f Makefile ]; then
   $S/configure --host=arm-linux-gnueabi --prefix=$WORK/sdl-out --disable-static --enable-shared \
@@ -138,7 +138,7 @@ if [ ! -f Makefile ] || [ "$(cat configure.opts 2>/dev/null)" != "$MIX_OPTS" ]; 
 fi
 # The library only: the example players don't link here and aren't shipped.
 make -j8 -k > make.log 2>&1 || true
-[ -f build/.libs/libSDL_mixer-1.2.so.0.12.0 ] || { echo "SDL_mixer failed to build; see $WORK/mixer-build/make.log"; exit 1; }
+[ -f build/.libs/libSDL_mixer-1.2.so.0.12.0 ] || { echo "SDL_mixer failed to build; see $WORK/mixer-build/make.log" >&2; exit 1; }
 make install-lib install-hdrs > install.log 2>&1
 cd "$WORK"
 cp mixer-out/lib/libSDL_mixer-1.2.so.0.12.0 "$OUT/lib/libSDL_mixer-1.2.so.0"
@@ -184,7 +184,7 @@ if [ ! -f Makefile ]; then
     --disable-tif --disable-webp --disable-sdltest > configure.log 2>&1
 fi
 make -j8 -k > make.log 2>&1 || true
-[ -f .libs/libSDL_image-1.2.so.0.8.4 ] || { echo "SDL_image failed; see $WORK/image-build/make.log"; exit 1; }
+[ -f .libs/libSDL_image-1.2.so.0.8.4 ] || { echo "SDL_image failed; see $WORK/image-build/make.log" >&2; exit 1; }
 make install-libLTLIBRARIES install-libSDL_imageincludeHEADERS > install.log 2>&1
 cd "$WORK"
 # SDL_ttf 2.0, against the FreeType above.
@@ -200,8 +200,8 @@ if [ ! -f Makefile ]; then
     --with-sdl-prefix=$WORK/sdl-out --with-freetype-prefix=$DEPS --without-x --disable-sdltest > configure.log 2>&1
 fi
 make -j8 -k > make.log 2>&1 || true
-[ -f .libs/libSDL_ttf-2.0.so.0.10.1 ] || { echo "SDL_ttf failed; see $WORK/ttf-build/make.log"; exit 1; }
-readelf -d .libs/libSDL_ttf-2.0.so.0.10.1 | grep -q libfreetype.so.6 || { echo "SDL_ttf does not name libfreetype.so.6"; exit 1; }
+[ -f .libs/libSDL_ttf-2.0.so.0.10.1 ] || { echo "SDL_ttf failed; see $WORK/ttf-build/make.log" >&2; exit 1; }
+readelf -d .libs/libSDL_ttf-2.0.so.0.10.1 | grep -q libfreetype.so.6 || { echo "SDL_ttf does not name libfreetype.so.6" >&2; exit 1; }
 make install-libLTLIBRARIES > install.log 2>&1
 cd "$WORK"
 # SDL_net 1.2.
@@ -213,7 +213,7 @@ if [ ! -f Makefile ]; then
     --with-sdl-prefix=$WORK/sdl-out --disable-gui --disable-sdltest > configure.log 2>&1
 fi
 make -j8 -k > make.log 2>&1 || true
-[ -f .libs/libSDL_net-1.2.so.0.8.0 ] || { echo "SDL_net failed; see $WORK/net-build/make.log"; exit 1; }
+[ -f .libs/libSDL_net-1.2.so.0.8.0 ] || { echo "SDL_net failed; see $WORK/net-build/make.log" >&2; exit 1; }
 make install-libLTLIBRARIES > install.log 2>&1
 cd "$WORK"
 cp addon-out/lib/libSDL_image-1.2.so.0.8.4 "$OUT/lib/libSDL_image-1.2.so.0"
@@ -363,7 +363,7 @@ cp $SRC/openal/sdl.c $A/Alc/sdl.c
 if ! grep -q alc_sdl_init $A/Alc/ALc.c; then
   sed -i 's|^    { "wave", alc_wave_init, alc_wave_deinit, alc_wave_probe, EmptyFuncs },|    { "sdl", alc_sdl_init, alc_sdl_deinit, alc_sdl_probe, EmptyFuncs },\n&|' $A/Alc/ALc.c
   sed -i 's|^void alc_wave_init(BackendFuncs \*func_list);|void alc_sdl_init(BackendFuncs *func_list);\nvoid alc_sdl_deinit(void);\nvoid alc_sdl_probe(int type);\n&|' $A/OpenAL32/Include/alMain.h
-  grep -q alc_sdl_init $A/Alc/ALc.c && grep -q alc_sdl_init $A/OpenAL32/Include/alMain.h || { echo "the OpenAL backend patch didn't apply"; exit 1; }
+  grep -q alc_sdl_init $A/Alc/ALc.c && grep -q alc_sdl_init $A/OpenAL32/Include/alMain.h || { echo "the OpenAL backend patch didn't apply" >&2; exit 1; }
 fi
 mkdir -p openal-build
 cat > openal-build/config.h <<CFG

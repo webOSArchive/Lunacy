@@ -142,7 +142,7 @@ class PowerService(context: Context, private val power: Power) {
                 Log.i(AppServer.TAG, "power: timeout ${t.key} of ${t.owner} fired${if (now - t.at > 60_000) ", ${(now - t.at) / 1000} s late" else ""}")
                 power.hold(t.holdMs)
                 // The callback's payload is an object; any other "params" goes as an empty one.
-                bus.call(SERVICE, t.uri, (t.params as? JSONObject)?.toString() ?: "{}", privateBus = true) { reply -> if (!reply.contains("\"returnValue\":true")) Log.w(AppServer.TAG, "power: timeout ${t.key}: $reply") }
+                bus.call(SERVICE, t.uri, (t.params as? JSONObject)?.toString() ?: "{}", privateBus = true) { reply -> if (!Bus.succeeded(reply)) Log.w(AppServer.TAG, "power: timeout ${t.key}: $reply") }
             }
             edit.apply()
         }

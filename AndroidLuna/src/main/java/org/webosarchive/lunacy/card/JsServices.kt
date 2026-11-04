@@ -15,6 +15,7 @@ import java.util.concurrent.Executors
  * See Docs/architecture.md, "JS services".
  */
 class JsServices(private val bus: Bus, private val installed: File, private val webos: WebosRoot) {
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
     /** Lunacy's copy of the webOS filesystem that services see (frameworks, /media/internal, curl). */
     val root get() = webos.root
     private val worker = Executors.newSingleThreadExecutor()
@@ -118,7 +119,7 @@ class JsServices(private val bus: Bus, private val installed: File, private val 
             val rel = "tmp/extractfs/${extracted++ % 16}"
             runCatching { File(root, rel).apply { parentFile?.mkdirs() }.writeBytes(it.bytes); "/$rel" }.getOrNull()
         }
-        android.os.Handler(android.os.Looper.getMainLooper()).post { reply(path) }
+        main.post { reply(path) }
     }
 
     /** An absolute webOS path as services see it: user storage (with Android's folders), installed packages, the rest of the tree. */

@@ -51,7 +51,7 @@ class AudioService(
 ) {
     private val app: Context = context.applicationContext
     private val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    private val watchers = ArrayList<Bus.Call>()
+    private val watchers = LinkedHashSet<Bus.Call>()
 
     /** The system class is muted: Lunacy's feedback sounds don't play. */
     var muted = startMuted
@@ -67,10 +67,10 @@ class AudioService(
     }
 
     // ---- the media class ----
-    private val mediaWatchers = ArrayList<Bus.Call>()
+    private val mediaWatchers = LinkedHashSet<Bus.Call>()
     private var mediaAsked = -1
     private var mediaReported = -1
-    private val locks = ArrayList<Bus.Call>()
+    private val locks = LinkedHashSet<Bus.Call>()
 
     private fun mediaMax() = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
 

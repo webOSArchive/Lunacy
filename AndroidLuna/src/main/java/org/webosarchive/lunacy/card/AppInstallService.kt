@@ -58,7 +58,7 @@ class AppInstallService(private val installer: Installer, private val icons: (St
     /** Installs the service knows about, by app id, with their details. Main thread. */
     private val apps = LinkedHashMap<String, JSONObject>()
     private val active = HashSet<String>()
-    private val watchers = ArrayList<Bus.Call>()
+    private val watchers = LinkedHashSet<Bus.Call>()
 
     fun register(bus: Bus) {
         for (m in listOf("install", "installLocal", "status", "cancel", "remove", "pause", "resume")) {

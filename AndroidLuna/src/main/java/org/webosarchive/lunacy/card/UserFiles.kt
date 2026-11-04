@@ -1,6 +1,7 @@
 package org.webosarchive.lunacy.card
 
 import android.os.Environment
+import org.json.JSONObject
 import java.io.File
 
 /**
@@ -88,6 +89,39 @@ object UserFiles {
         val roots = mappedFolders().map { it.second.canonicalPath }
         return c in roots && roots.any { it != c && c.startsWith(it + File.separator) }
     }
+
+    /**
+     * Every file in /media/internal as [record] makes it, the way filenotifyd walked user
+     * storage: Lunacy's own tree first (where a mapped folder's name exists there too, that copy
+     * is the one a path names), then each of Android's mapped folders; names in order, hidden
+     * files and folders left out, a folder mapped inside another walked once, each path once,
+     * [MAX_DEPTH] deep and [MAX_FILES] records at most. [record] gives null for a file it
+     * doesn't index.
+     */
+    fun walkMedia(webosRoot: File, record: (path: String, f: File) -> JSONObject?): List<JSONObject> {
+        val out = ArrayList<JSONObject>()
+        val paths = HashSet<String>()
+        fun walk(dir: File, path: String, depth: Int) {
+            if (depth > MAX_DEPTH || out.size >= MAX_FILES) return
+            val entries = dir.listFiles() ?: return
+            for (f in entries.sortedBy { it.name }) {
+                if (f.name.startsWith(".")) continue
+                val p = "$path/${f.name}"
+                if (f.isDirectory) { if (!nestedRoot(f)) walk(f, p, depth + 1); continue }
+                if (!f.isFile || p in paths) continue
+                val r = record(p, f) ?: continue
+                paths += p
+                out += r
+                if (out.size >= MAX_FILES) return
+            }
+        }
+        walk(own(webosRoot), "/media/internal", 0)
+        for ((name, dir) in mappedFolders()) walk(dir, "/media/internal/$name", 0)
+        return out
+    }
+
+    private const val MAX_DEPTH = 12
+    private const val MAX_FILES = 5000
 
     /**
      * Whether [f] is [root] or inside it, by their canonical paths: a link or a ".." can't take

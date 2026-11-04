@@ -33,8 +33,12 @@ for (const level of ["log", "info", "warn", "error", "debug"]) {
 // ---- webOS paths ----
 
 // Absolute paths under these roots are webOS paths; everything else (/data, /system, /proc,
-// /dev) is the real Android filesystem.
-const WEBOS = /^\/(usr|media|bin|sbin|var|etc|tmp|home|opt|lib)(\/|$)/;
+// /dev) is the real Android filesystem. The list is WebosRoot.ROOTS, passed in.
+const DIRS = process.env.LUNACY_WEBOS_DIRS || "usr|media|bin|sbin|var|etc|tmp|home|opt|lib";
+const WEBOS = new RegExp("^/(" + DIRS + ")(/|$)");
+// The same paths inside a shell command line, as WebosRoot.mapPaths finds them: the folder
+// name ends the word or is followed by a slash (/library is not /lib).
+const IN_COMMAND = new RegExp("(^|[\\s'\"=(;|&<>`])(/(?:" + DIRS + ")(?=$|[/\\s'\";|&<>)`])(?:/[^\\s'\";|&<>)`]*)?)", "gm");
 // /media/internal's folders that are Android's ("photos=/storage/emulated/0/Pictures:..."), as
 // UserFiles.kt maps them: a folder Lunacy's own tree hasn't got is Android's.
 const MEDIA = {};
@@ -52,8 +56,7 @@ function real(p) {
 }
 function realAll(s) {
 	// Absolute webOS paths inside a shell command line.
-	return String(s).replace(/(^|[\s'"=(;|&<>])(\/(?:usr|media|bin|sbin|var|etc|tmp|home|opt|lib)(?:\/[^\s'";|&<>)]*)?)/g,
-		(m, pre, p) => pre + real(p));
+	return String(s).replace(IN_COMMAND, (m, pre, p) => pre + real(p));
 }
 
 function wrap(obj, name, argIndexes) {

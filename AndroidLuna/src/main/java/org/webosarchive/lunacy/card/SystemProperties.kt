@@ -41,7 +41,7 @@ class SystemProperties(private val context: Context) {
 
     fun register(bus: Bus) {
         for (m in listOf("systemProperties/Get", "systemProperties/getSysProperty")) {
-            bus.register("com.palm.preferences", m) { _, p, reply -> reply(get(p.optString("key"))) }
+            bus.register(SERVICE, m) { _, p, reply -> reply(get(p.optString("key"))) }
         }
     }
 
@@ -51,5 +51,9 @@ class SystemProperties(private val context: Context) {
         val v = live[key]?.invoke() ?: values[key]
         return if (v == null) JSONObject().put("returnValue", false).put("errorText", "no such key").toString()
                else JSONObject().put(key, v).put("returnValue", true).toString()
+    }
+
+    companion object {
+        const val SERVICE = "com.palm.preferences"
     }
 }

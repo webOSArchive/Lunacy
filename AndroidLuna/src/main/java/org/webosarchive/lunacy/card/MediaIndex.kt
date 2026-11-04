@@ -127,34 +127,21 @@ class MediaIndex(private val webosRoot: File) {
     @Synchronized private fun scan(): List<JSONObject> {
         val now = android.os.SystemClock.uptimeMillis()
         if (scanned != 0L && now - scanned < 1000) return media
-        val out = ArrayList<JSONObject>()
         val paths = HashSet<String>()
-        // Lunacy's own tree first: where a mapped folder's name exists there too, that copy is the one.
-        walk(UserFiles.own(webosRoot), "/media/internal", 0, out, paths)
-        for ((name, dir) in UserFiles.mappedFolders()) walk(dir, "/media/internal/$name", 0, out, paths)
-        seen.keys.retainAll(paths)
-        media = out; scanned = now
-        return out
-    }
-
-    private fun walk(dir: File, path: String, depth: Int, out: MutableList<JSONObject>, paths: MutableSet<String>) {
-        if (depth > MAX_DEPTH || out.size >= MAX_FILES) return
-        val entries = dir.listFiles() ?: return
-        for (f in entries.sortedBy { it.name }) {
-            if (f.name.startsWith(".")) continue
-            val p = "$path/${f.name}"
-            if (f.isDirectory) { if (!UserFiles.nestedRoot(f)) walk(f, p, depth + 1, out, paths); continue }
+        val out = UserFiles.walkMedia(webosRoot) { p, f ->
             val ext = f.name.substringAfterLast('.', "").lowercase(Locale.US)
-            if (ext !in IMAGES && ext !in VIDEOS || !f.isFile || !paths.add(p)) continue
+            if (ext !in IMAGES && ext !in VIDEOS) return@walkMedia null
+            paths += p
             val old = seen[p]
             // A file rewritten in place (the photo editor's Replace Original) is a new record, as
             // filenotifyd filed it: the stamp tells db8 (Db8.mirror).
-            val record = if (old != null && old.modified == f.lastModified() && old.size == f.length()) old.record
-                else (if (ext in IMAGES) image(p, f) else video(p, f))?.put(Db8.STAMP, "${f.lastModified()}:${f.length()}")
-                    .also { seen[p] = Seen(f.lastModified(), f.length(), it) }
-            if (record != null) out += record
-            if (out.size >= MAX_FILES) return
+            if (old != null && old.modified == f.lastModified() && old.size == f.length()) old.record
+            else (if (ext in IMAGES) image(p, f) else video(p, f))?.put(Db8.STAMP, "${f.lastModified()}:${f.length()}")
+                .also { seen[p] = Seen(f.lastModified(), f.length(), it) }
         }
+        seen.keys.retainAll(paths)
+        media = out; scanned = now
+        return out
     }
 
     private fun image(path: String, f: File): JSONObject? {
@@ -402,7 +389,5 @@ class MediaIndex(private val webosRoot: File) {
         private const val TAG_DATETIME_ORIGINAL = "DateTimeOriginal"
         private const val TAG_SUBSEC_TIME = "SubSecTime"
         private const val TAG_SUBSEC_TIME_ORIGINAL = "SubSecTimeOriginal"
-        private const val MAX_DEPTH = 12
-        private const val MAX_FILES = 5000
     }
 }

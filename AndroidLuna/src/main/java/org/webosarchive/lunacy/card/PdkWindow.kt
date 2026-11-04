@@ -54,10 +54,23 @@ class PdkWindow(
     private val frameView = FrameView(context)
     private var drawn = false
     private var frame: Bitmap? = null
-    @Volatile private var gl: PdkGl? = null
+    /**
+     * An OpenGL ES app: its commands are replayed into a framebuffer of its own size and shown
+     * on a texture over the card, letterboxed and turned by the native side (PdkGl); the frame
+     * view stays on top for the touches. The view is built on the main thread once the stream starts.
+     */
+    private val glStream = GlStream(
+        make = { w, h, version ->
+            if (!PdkGl.available) null
+            else PdkGl(appId, w, h, version, host::glAnswer) {
+                post { if (!drawn) { drawn = true; shell.onStageReady(this); shell.onPageDrawn(this) } }
+            }
+        },
+        startOn = { start -> if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) start() else post(start) },
+        onStarted = { stream, waiting -> showGl(stream, waiting) },
+    )
+    private val gl get() = glStream.stream
     private var glView: TextureView? = null
-    /** Batches that came before the mode reached the main thread: the first one holds the textures. */
-    private val earlyBatches = ArrayList<ByteArray>()
     /** The PDL_Orientation the app asked for, if it did. */
     private var pdlOrientation: Int? = null
     /** How the buffer is shown: 0, 90, 180 or -90, clockwise. */
@@ -152,33 +165,12 @@ class PdkWindow(
 
     override fun onMode(width: Int, height: Int, gl: Boolean) {
         shell.fullScreen(this)   // the card exists by now
-        if (gl) { glMode = width to height; startGl() }
+        if (gl) glStream.onMode(width, height)
         orient()
     }
 
-    /** The GL mode, once the app has set one; with the version of the first batch, the stream can start. */
-    private var glMode: Pair<Int, Int>? = null
-    @Volatile private var glVersion = 0
-
-    /**
-     * An OpenGL ES app: its commands are replayed into a framebuffer of its own size and shown
-     * on a texture over the card, letterboxed and turned by the native side (PdkGl); the frame
-     * view stays on top for the touches. Starts when both the mode (main thread) and the first
-     * batch (which says GLES 1.1 or 2; reader thread) have come, in whichever order.
-     */
-    private fun startGl() {
-        val (width, height) = glMode ?: return
-        val version = glVersion
-        if (gl != null || version == 0 || !PdkGl.available) return
-        val stream = PdkGl(appId, width, height, version, host::glAnswer) {
-            post { if (!drawn) { drawn = true; shell.onStageReady(this); shell.onPageDrawn(this) } }
-        }
-        synchronized(earlyBatches) {
-            for (b in earlyBatches) stream.replay(b)
-            if (earlyBatches.isNotEmpty()) Log.i(AppServer.TAG, "pdk [$appId]: ${earlyBatches.size} GLES $version batches from before the stream")
-            earlyBatches.clear()
-            this.gl = stream
-        }
+    private fun showGl(stream: PdkGl, waiting: Int) {
+        if (waiting > 0) Log.i(AppServer.TAG, "pdk [$appId]: $waiting GLES batches from before the stream")
         val view = TextureView(context)
         view.isOpaque = true
         view.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
@@ -195,16 +187,7 @@ class PdkWindow(
         orient()
     }
 
-    override fun onGl(batch: ByteArray, version: Int) {
-        val stream = gl
-        if (stream != null) { stream.replay(batch); return }
-        synchronized(earlyBatches) {
-            val g = gl
-            if (g != null) { g.replay(batch); return }
-            earlyBatches.add(batch)
-            if (glVersion == 0) { glVersion = version; post { startGl() } }
-        }
-    }
+    override fun onGl(batch: ByteArray, version: Int) = glStream.onBatch(batch, version)
 
     override fun onFrame(frame: Bitmap) {
         this.frame = frame
@@ -390,7 +373,7 @@ class PdkWindow(
     override fun destroy() {
         stopAccel()
         shell.blockScreenTimeout(this, false)
-        gl?.destroy(); gl = null
+        glStream.destroy()
         host.stop()
         super.destroy()
     }

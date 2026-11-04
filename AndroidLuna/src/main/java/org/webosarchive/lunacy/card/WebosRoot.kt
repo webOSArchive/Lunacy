@@ -237,6 +237,8 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
         "HOME" to File(root, "home/root").path,
         "TMPDIR" to File(root, "tmp").path,
         "LUNACY_WEBOS_ROOT" to root.path,
+        // The folders an absolute path names to be a webOS one (ROOTS): Node's shims build theirs from it.
+        "LUNACY_WEBOS_DIRS" to ROOTS.joinToString("|"),
         "LUNACY_BUS" to lunaSend.address,
         "LUNACY_BUS_TOKEN" to lunaSend.token(caller),
     )
@@ -245,8 +247,14 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
         const val ROM = "rootfs"
         const val ROM_MANIFEST = ".lunacy-rom"
         const val TOOLS_LIST = ".lunacy-tools"
+        /**
+         * The top folders whose absolute paths are webOS's; everything else (/data, /system,
+         * /proc, /dev) is Android's. One list, which the JS services' shims get too
+         * (`LUNACY_WEBOS_DIRS`), so the two sides can't drift.
+         */
+        val ROOTS = listOf("usr", "media", "bin", "sbin", "var", "etc", "tmp", "home", "opt", "lib")
         // The folder name ends the word or is followed by a slash: /library and /usrx are not webOS's.
-        private val PATHS = Regex("(^|[\\s'\"=(;|&<>`])(/(?:usr|media|bin|sbin|var|etc|tmp|home|opt|lib)(?=$|[/\\s'\";|&<>)`])(?:/[^\\s'\";|&<>)`]*)?)", RegexOption.MULTILINE)
+        private val PATHS = Regex("(^|[\\s'\"=(;|&<>`])(/(?:${ROOTS.joinToString("|")})(?=$|[/\\s'\";|&<>)`])(?:/[^\\s'\";|&<>)`]*)?)", RegexOption.MULTILINE)
 
         internal fun mapPaths(s: String, rootPath: String): String = PATHS.replace(s) { m -> m.groupValues[1] + rootPath + m.groupValues[2] }
     }

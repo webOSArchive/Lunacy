@@ -113,7 +113,7 @@ class LunacyService(
         call.reply(AndroidNotifications.snapshot(context, consume = true).toString())
         if (call.subscribe && !call.cancelled) {
             notificationWatchers += call
-            call.onCancel { main.post { notificationWatchers.remove(call) } }
+            call.onCancel { notificationWatchers.remove(call) }
         }
     }
 
@@ -162,7 +162,7 @@ class LunacyService(
         sendLauncherApps(listOf(call))
         if (call.subscribe && !call.cancelled) {
             launcherWatchers += call
-            call.onCancel { main.post { launcherWatchers.remove(call) } }
+            call.onCancel { launcherWatchers.remove(call) }
         }
     }
 

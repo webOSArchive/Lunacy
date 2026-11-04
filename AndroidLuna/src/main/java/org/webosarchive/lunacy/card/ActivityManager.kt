@@ -140,14 +140,14 @@ class ActivityManager(private val context: Context, private val power: Power) {
     private fun lookup(call: Bus.Call): Activity? {
         val p = call.params
         if (p.has("activityId")) {
-            val id = p.opt("activityId") as? Number ?: return null.also { call.reply(error(2, "Error retrieving activityId of Activity to operate on")) }
-            return activities[id.toInt()] ?: null.also { call.reply(error(2, "activityId not found")) }
+            val id = p.opt("activityId") as? Number ?: return null.also { call.reply(Bus.error("Error retrieving activityId of Activity to operate on", 2)) }
+            return activities[id.toInt()] ?: null.also { call.reply(Bus.error("activityId not found", 2)) }
         }
         if (p.has("activityName")) {
-            val name = p.opt("activityName") as? String ?: return null.also { call.reply(error(2, "Error retrieving activityName of Activity to operate on")) }
-            return byName["$name\u0000${creatorKey(busId(call))}"] ?: null.also { call.reply(error(2, "Activity name/creator pair not found")) }
+            val name = p.opt("activityName") as? String ?: return null.also { call.reply(Bus.error("Error retrieving activityName of Activity to operate on", 2)) }
+            return byName["$name\u0000${creatorKey(busId(call))}"] ?: null.also { call.reply(Bus.error("Activity name/creator pair not found", 2)) }
         }
-        call.reply(error(2, "Activity ID or name not present in request"))
+        call.reply(Bus.error("Activity ID or name not present in request", 2))
         return null
     }
 
@@ -155,8 +155,8 @@ class ActivityManager(private val context: Context, private val power: Power) {
 
     private fun serialOk(a: Activity, call: Bus.Call): Boolean {
         if (!call.params.has("serial")) return true
-        if (a.callback == null) { call.reply(error(-1000, "Attempt to use callback sequence serial number match on Activity that does not have a callback")); return false }
-        if (call.params.optLong("serial") != a.serial) { call.reply(error(-1000, "Call sequence serial numbers do not match")); return false }
+        if (a.callback == null) { call.reply(Bus.error("Attempt to use callback sequence serial number match on Activity that does not have a callback", -1000)); return false }
+        if (call.params.optLong("serial") != a.serial) { call.reply(Bus.error("Call sequence serial numbers do not match", -1000)); return false }
         return true
     }
 
@@ -164,12 +164,12 @@ class ActivityManager(private val context: Context, private val power: Power) {
 
     private fun create(call: Bus.Call) {
         val p = call.params
-        val spec = p.optJSONObject("activity") ?: return call.reply(error(22, "Activity specification not present"))
-        val a = try { parse(spec, busId(call)) } catch (e: SpecError) { return call.reply(error(12, e.message ?: "")) }
+        val spec = p.optJSONObject("activity") ?: return call.reply(Bus.error("Activity specification not present", 22))
+        val a = try { parse(spec, busId(call)) } catch (e: SpecError) { return call.reply(Bus.error(e.message ?: "", 12)) }
         if (!p.optBoolean("subscribe") && !(p.optBoolean("start") && a.callback != null))
-            return call.reply(error(22, "Created Activity must specify \"start\" and a Callback if not subscribed"))
+            return call.reply(Bus.error("Created Activity must specify \"start\" and a Callback if not subscribed", 22))
         val old = byName[a.key]
-        if (old != null && !p.optBoolean("replace")) return call.reply(error(17, "Activity with that name already exists"))
+        if (old != null && !p.optBoolean("replace")) return call.reply(Bus.error("Activity with that name already exists", 17))
         a.id = newId()
         if (old != null) {
             // The new one takes the old one's place in db8; the old one is cancelled.
@@ -278,7 +278,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
     private fun subscribe(a: Activity, call: Bus.Call): Sub {
         val s = Sub(call, call.params.optBoolean("detailedEvents"), busId(call))
         a.subs += s
-        call.onCancel { main.post { dropped(a, s) } }
+        call.onCancel { dropped(a, s) }
         return s
     }
 
@@ -308,7 +308,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
     }
 
     private fun join(call: Bus.Call) = withActivity(call) { a ->
-        if (!call.subscribe) return@withActivity call.reply(error(22, "Join method calls must subscribe to the Activity"))
+        if (!call.subscribe) return@withActivity call.reply(Bus.error("Join method calls must subscribe to the Activity", 22))
         if (!serialOk(a, call)) return@withActivity
         subscribe(a, call)
         call.reply(Bus.ok())
@@ -321,11 +321,11 @@ class ActivityManager(private val context: Context, private val power: Power) {
     }
 
     private fun adopt(call: Bus.Call) = withActivity(call) { a ->
-        if (!call.subscribe) return@withActivity call.reply(error(22, "AdoptActivity requires subscription"))
+        if (!call.subscribe) return@withActivity call.reply(Bus.error("AdoptActivity requires subscription", 22))
         if (!serialOk(a, call)) return@withActivity
         val s = subscribe(a, call)
         if (a.parent != null) {
-            if (!call.params.optBoolean("wait")) return@withActivity call.reply(error(11, "Resource temporarily unavailable"))
+            if (!call.params.optBoolean("wait")) return@withActivity call.reply(Bus.error("Resource temporarily unavailable", 11))
             a.adopters += s
             call.reply(JSONObject().put("adopted", false).put("returnValue", true).toString())
         } else {
@@ -338,8 +338,8 @@ class ActivityManager(private val context: Context, private val power: Power) {
 
     private fun release(call: Bus.Call) = withActivity(call) { a ->
         val me = a.parent?.takeIf { creatorKey(it.who) == creatorKey(busId(call)) }
-        if (a.parent == null) return@withActivity call.reply(error(22, "Invalid argument"))
-        if (me == null) return@withActivity call.reply(error(13, "Permission denied"))
+        if (a.parent == null) return@withActivity call.reply(Bus.error("Invalid argument", 22))
+        if (me == null) return@withActivity call.reply(Bus.error("Permission denied", 13))
         a.releasedParent = me
         a.parent = null
         a.adopters.removeFirstOrNull()?.let { a.parent = it; event(a, "orphan", listOf(it)) }
@@ -349,7 +349,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
     // ---- commands ----
 
     private fun external(a: Activity, cmd: String, call: Bus.Call) {
-        if (a.ending != null) return call.reply(error(-1000, "The Activity Manager has already received a command to end the Activity"))
+        if (a.ending != null) return call.reply(Bus.error("The Activity Manager has already received a command to end the Activity", -1000))
         when (cmd) {
             "start" -> if (a.paused) { a.paused = false; event(a, "start"); evaluate(a) } else start(a)
             "pause" -> { a.paused = true; event(a, "pause") }
@@ -358,7 +358,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
     }
 
     private fun end(a: Activity, cmd: String, call: Bus.Call) {
-        if (a.ending != null) return call.reply(error(-1000, "The Activity Manager has already received a command to end the Activity"))
+        if (a.ending != null) return call.reply(Bus.error("The Activity Manager has already received a command to end the Activity", -1000))
         a.terminate = true
         byName.remove(a.key)
         val done = { call.reply(Bus.ok()) }
@@ -368,14 +368,14 @@ class ActivityManager(private val context: Context, private val power: Power) {
     }
 
     private fun complete(call: Bus.Call) = withActivity(call) { a ->
-        if (a.ending != null) return@withActivity call.reply(error(-1000, "The Activity Manager has already received a command to end the Activity"))
+        if (a.ending != null) return@withActivity call.reply(Bus.error("The Activity Manager has already received a command to end the Activity", -1000))
         if (!serialOk(a, call)) return@withActivity
         val caller = creatorKey(busId(call))
         if (!call.params.optBoolean("force") && caller != creatorKey(a.creator) && a.parent?.let { creatorKey(it.who) } != caller)
-            return@withActivity call.reply(error(13, "Permission denied"))
+            return@withActivity call.reply(Bus.error("Permission denied", 13))
         val p = call.params
         if (p.optBoolean("restart")) {
-            try { applyUpdates(a, p) } catch (e: SpecError) { return@withActivity call.reply(error(-1000, e.message ?: "")) }
+            try { applyUpdates(a, p) } catch (e: SpecError) { return@withActivity call.reply(Bus.error(e.message ?: "", -1000)) }
             a.restart = true
             command(a, "complete")
             if (a.persist) persist(a) { call.reply(Bus.ok()) } else call.reply(Bus.ok())
@@ -481,7 +481,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
         val r = runCatching { JSONObject(reply) }.getOrNull() ?: JSONObject()
         if (!r.has("returnValue") || r.optBoolean("returnValue")) return
         val text = r.optString("errorText")
-        if (text.startsWith("Service exited")) {
+        if (text.startsWith(ServiceProcess.EXITED)) {
             // The service went away mid-call (a crash, or its process ending): run it again
             // once it can, keeping the trigger and schedule, as webOS requeued a transient
             // failure. After a moment, so a service that dies at once doesn't spin.
@@ -888,15 +888,15 @@ class ActivityManager(private val context: Context, private val power: Power) {
     }
 
     private fun unfocus(call: Bus.Call) = withActivity(call) { a ->
-        if (!a.focused) return@withActivity call.reply(error(22, "Failed to unfocus Activity"))
+        if (!a.focused) return@withActivity call.reply(Bus.error("Failed to unfocus Activity", 22))
         a.focused = false; event(a, "unfocused")
         call.reply(Bus.ok())
     }
 
     private fun addFocus(call: Bus.Call) = withActivity(call) { a ->
-        val t = call.params.opt("targetActivityId") as? Number ?: return@withActivity call.reply(error(22, "'targetActivityId' must be specified"))
-        val target = activities[t.toInt()] ?: return@withActivity call.reply(error(2, "Target Activity not found"))
-        if (!a.focused) return@withActivity call.reply(error(22, "Failed to add focus"))
+        val t = call.params.opt("targetActivityId") as? Number ?: return@withActivity call.reply(Bus.error("'targetActivityId' must be specified", 22))
+        val target = activities[t.toInt()] ?: return@withActivity call.reply(Bus.error("Target Activity not found", 2))
+        if (!a.focused) return@withActivity call.reply(Bus.error("Failed to add focus", 22))
         if (!target.focused) { target.focused = true; event(target, "focused") }
         call.reply(Bus.ok())
     }
@@ -1018,7 +1018,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
      * on the reference TouchPad, both answer `{"returnValue":true}` to `{}`.
      */
     private fun switchExternal(c: Bus.Call, on: Boolean) {
-        if (!c.privateBus) return c.reply(error(13, "Only callers on the private bus are allowed to enable or disable Activity dispatch"))
+        if (!c.privateBus) return c.reply(Bus.error("Only callers on the private bus are allowed to enable or disable Activity dispatch", 13))
         if (external != on) {
             external = on
             Log.i(AppServer.TAG, "activities: ${if (on) "dispatch enabled" else "dispatch disabled"} by ${c.appId}")
@@ -1083,9 +1083,6 @@ class ActivityManager(private val context: Context, private val power: Power) {
         // then nothing will call enable again, and what was restored has to start now.
         startWaiting()
     }
-
-    private fun error(code: Int, text: String) =
-        JSONObject().put("returnValue", false).put("errorCode", code).put("errorText", text).toString()
 
     companion object {
         const val SERVICE = "com.palm.activitymanager"

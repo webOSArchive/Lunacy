@@ -32,6 +32,7 @@ class Keys(private val context: Context) {
         bus.register(SERVICE, "media/status", Bus.CallHandler { call ->
             if (!call.subscribe) return@CallHandler call.reply(needsSubscription())
             call.reply(subscribed())
+            if (call.cancelled) return@CallHandler
             mediaSubscribers += call
             call.onCancel { mediaSubscribers.remove(call) }
         })
@@ -40,6 +41,7 @@ class Keys(private val context: Context) {
     private fun headset(call: Bus.Call) {
         if (!call.subscribe) return call.reply(needsSubscription())
         call.reply(subscribed())
+        if (call.cancelled) return
         headsetSubscribers += call
         call.onCancel { headsetSubscribers.remove(call); if (headsetSubscribers.isEmpty()) stopWatching() }
         startWatching()

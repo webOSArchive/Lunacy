@@ -41,6 +41,8 @@ import java.util.concurrent.Executors
 class WebSql(
     private val context: Context,
     private val appId: String,
+    /** Which page of the window is loaded: an earlier page's answers are dropped (see NetShim's). */
+    private val page: () -> Int,
     private val deliver: (Int) -> Unit,
 ) {
     private val worker = Executors.newSingleThreadExecutor()
@@ -49,8 +51,8 @@ class WebSql(
     /** Open databases by name, and the ones with a transaction open. Worker thread only. */
     private val open = HashMap<String, SQLiteDatabase>()
     private val inTransaction = HashMap<String, Boolean>()  // name -> readOnly
-    /** Which page's requests these are; a new page's start over (see NetShim.page). */
-    @Volatile private var page = 0
+    /** The window is going: nothing more is answered. */
+    @Volatile private var closed = false
 
     /** A statement's failure, with its SQLError code. */
     private class SqlFailure(val code: Int, message: String) : Exception(message)
@@ -132,11 +134,11 @@ class WebSql(
 
     /** Queues a request; deliver(id) is called when result(id) has its answer. */
     fun request(id: Int, request: String) {
-        val from = page
+        val from = page()
         worker.execute {
-            if (from != page) return@execute
+            if (from != page() || closed) return@execute
             val r = try { handle(JSONObject(request)) } catch (e: Exception) { error(UNKNOWN_ERR, e.message ?: e.toString()) }
-            if (from != page) return@execute
+            if (from != page() || closed) return@execute
             results[id] = r.toString()
             deliver(id)
         }
@@ -144,16 +146,15 @@ class WebSql(
 
     fun result(id: Int): String = results.remove(id) ?: error(UNKNOWN_ERR, "no result").toString()
 
-    /** A new page in the window: its transactions are rolled back, its answers dropped. */
+    /** A new page in the window (its count already moved on): its transactions are rolled back, its answers dropped. */
     fun reset() {
-        page++
         results.clear()
         worker.execute { rollbackAll() }
     }
 
     /** The window is going away. */
     fun close() {
-        page++
+        closed = true
         results.clear()
         worker.execute {
             rollbackAll()

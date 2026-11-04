@@ -127,7 +127,8 @@ open class AppWindow(
 
     private val main = Handler(Looper.getMainLooper())
     /** Counts the pages this window has loaded; see [Native.call]. Main thread. */
-    private var page = 0
+    /** Which page is loaded: a new page counts on, and the network and WebSQL shims drop an earlier one's answers. */
+    @Volatile private var page = 0
     var stageReady = false
         private set
     /** webOS window attributes from window.open: "window" is card, dashboard, popupalert or dockMode. */
@@ -213,10 +214,10 @@ open class AppWindow(
         // loads and the network shim alike, so a server can't tell them apart.
         settings.userAgentString = profile.userAgent
         LocalNet.init(context)
-        net = NetShim(appId, settings.userAgentString, profile.carrierCode) { id ->
+        net = NetShim(appId, settings.userAgentString, profile.carrierCode, { page }) { id ->
             main.post { if (!destroyed) evaluateJavascript("window.__lunacyNetDone&&__lunacyNetDone($id)", null) }
         }
-        sql = WebSql(context, appId) { id ->
+        sql = WebSql(context, appId, { page }) { id ->
             main.post { if (!destroyed) evaluateJavascript("window.__lunacySqlDone&&__lunacySqlDone($id)", null) }
         }
         // 1 CSS px = 1 TouchPad px, as the shell uses; the layout width follows from it. On a

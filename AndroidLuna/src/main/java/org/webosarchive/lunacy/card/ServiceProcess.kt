@@ -157,13 +157,15 @@ class ServiceProcess(
         process?.destroy()
         onEnded(this)
         Log.i(AppServer.TAG, "$kind $name ended: $why")
-        requests.values.toList().also { requests.clear() }.forEach { it.reply(Bus.error("Service exited: ${it.service}.")) }
+        requests.values.toList().also { requests.clear() }.forEach { it.reply(Bus.error("$EXITED: ${it.service}.")) }
         outgoing.values.toList().also { outgoing.clear() }.forEach { it.cancel() }
         queue.clear()
     }
 
-    private companion object {
-        val SYSLOG = Regex("^<([0-7])>([^:]{1,63}): (.*)$")
-        val PRIORITIES = listOf("emerg", "alert", "crit", "err", "warning", "notice", "info", "debug")
+    companion object {
+        /** How an open call into a process that has gone is answered; the activity manager retries on it. */
+        const val EXITED = "Service exited"
+        private val SYSLOG = Regex("^<([0-7])>([^:]{1,63}): (.*)$")
+        private val PRIORITIES = listOf("emerg", "alert", "crit", "err", "warning", "notice", "info", "debug")
     }
 }

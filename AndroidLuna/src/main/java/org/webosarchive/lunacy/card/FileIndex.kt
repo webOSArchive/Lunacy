@@ -28,31 +28,8 @@ class FileIndex(private val webosRoot: File) {
     fun attach(db: Db8) = db.mirror(kindSpec(), permissions(), source = ::records)
 
     /** Every document under /media/internal, as filenotifyd's records. Runs on db8's thread. */
-    private fun records(): List<JSONObject> {
-        val out = ArrayList<JSONObject>()
-        val seen = HashSet<String>()
-        val own = UserFiles.own(webosRoot)
-        // Lunacy's own tree first: where a mapped folder's name exists there too, UserFiles
-        // resolves to Lunacy's copy, so that is the file the path names.
-        walk(own, "/media/internal", 0, out, seen)
-        for ((name, dir) in UserFiles.mappedFolders()) walk(dir, "/media/internal/$name", 0, out, seen)
-        return out
-    }
-
-    private fun walk(dir: File, path: String, depth: Int, out: MutableList<JSONObject>, seen: MutableSet<String>) {
-        if (depth > MAX_DEPTH || out.size >= MAX_FILES) return
-        val entries = dir.listFiles() ?: return
-        for (f in entries.sortedBy { it.name }) {
-            if (f.name.startsWith(".")) continue
-            val p = "$path/${f.name}"
-            if (f.isDirectory) {
-                if (!UserFiles.nestedRoot(f)) walk(f, p, depth + 1, out, seen)
-            } else if (f.isFile && isDocument(f.name) && seen.add(p)) {
-                out += record(p, f)
-                if (out.size >= MAX_FILES) return
-            }
-        }
-    }
+    private fun records(): List<JSONObject> =
+        UserFiles.walkMedia(webosRoot) { p, f -> if (isDocument(f.name)) record(p, f) else null }
 
     private fun record(path: String, f: File): JSONObject {
         val name = nameOf(path)
@@ -104,7 +81,5 @@ class FileIndex(private val webosRoot: File) {
             "mp3", "m4a", "m4b", "aac", "wav", "ogg", "oga", "flac", "amr", "qcp", "wma", "mid", "midi",
             "jpg", "jpeg", "png", "gif", "bmp", "webp", "heic",
             "mp4", "m4v", "mov", "3gp", "3g2", "avi", "mkv", "webm", "wmv")
-        private const val MAX_DEPTH = 12
-        private const val MAX_FILES = 5000
     }
 }

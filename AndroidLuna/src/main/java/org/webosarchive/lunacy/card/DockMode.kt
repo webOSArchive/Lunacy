@@ -107,7 +107,7 @@ class DockMode(context: Context, private val registry: AppRegistry) {
     }
 
     companion object {
-        const val SERVICE = "com.palm.applicationManager"
+        const val SERVICE = Bus.APPLICATION_MANAGER
         /** The default face's key, beside the per-app switches; no app id starts with a dot. */
         private const val DEFAULT = ".default"
     }

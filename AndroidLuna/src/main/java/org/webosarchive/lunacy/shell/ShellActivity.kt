@@ -2631,11 +2631,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         securityPolicy = org.webosarchive.lunacy.card.SecurityPolicy(bus, lockHost, java.io.File(filesDir, "securitypolicy.json"))
         securityPolicy.register()
         securityPolicy.load()
-        bus.register("com.palm.applicationManager", "launch", launchHandler)
-        bus.register("com.palm.applicationManager", "open", launchHandler)
+        bus.register(Bus.APPLICATION_MANAGER, "launch", launchHandler)
+        bus.register(Bus.APPLICATION_MANAGER, "open", launchHandler)
         // What Enyo's CrossAppUI asks for before loading another app's UI. The reference
         // TouchPad answers {"returnValue":true,"appId":...,"basePath":"file://…/index.html"}.
-        bus.register("com.palm.applicationManager", "getAppBasePath") { _, p, reply ->
+        bus.register(Bus.APPLICATION_MANAGER, "getAppBasePath") { _, p, reply ->
             val app = registry.get(p.optString("appId"))
             reply(if (app == null) Bus.error("Application not found: ${p.optString("appId")}")
                   else Bus.ok(mapOf("appId" to app.id, "basePath" to app.filePath())))
@@ -2646,23 +2646,23 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         NowPlaying.onKey = { k -> runOnUiThread { keys.mediaKey(k) } }
         // Package scripts ask for this after putting an app in /usr/palm/applications
         // themselves. The reference TouchPad answers {"returnValue":true}.
-        bus.register("com.palm.applicationManager", "rescan") { _, _, reply ->
+        bus.register(Bus.APPLICATION_MANAGER, "rescan") { _, _, reply ->
             appsChanged()
             reply(Bus.ok())
         }
-        bus.registerPrivate("com.palm.applicationManager", "launchPointChanges", wholeService = false, Bus.CallHandler { launchPointChanges(it) })
+        bus.registerPrivate(Bus.APPLICATION_MANAGER, "launchPointChanges", wholeService = false, Bus.CallHandler { launchPointChanges(it) })
         // Launch points an app adds: the Web app's Add to Launcher, the PWA Installer's shortcuts.
-        bus.register("com.palm.applicationManager", "addLaunchPoint") { _, p, reply -> reply(addLaunchPoint(p)) }
-        bus.register("com.palm.applicationManager", "removeLaunchPoint") { _, p, reply ->
+        bus.register(Bus.APPLICATION_MANAGER, "addLaunchPoint") { _, p, reply -> reply(addLaunchPoint(p)) }
+        bus.register(Bus.APPLICATION_MANAGER, "removeLaunchPoint") { _, p, reply ->
             val id = p.optString("launchPointId")
             reply(if (id.isEmpty()) Bus.error("Must provide a launchPointId")
                   else removeLaunchPoint(id)?.let { Bus.error(it) } ?: Bus.ok())
         }
-        bus.register("com.palm.applicationManager", "updateLaunchPointIcon") { caller, p, reply -> reply(updateLaunchPointIcon(caller, p)) }
-        bus.register("com.palm.applicationManager", "listAllHandlersForMime") { _, p, reply -> reply(handlersForMime(p)) }
-        bus.register("com.palm.applicationManager", "getResourceInfo") { _, p, reply -> reply(resourceInfo(p)) }
-        bus.register("com.palm.applicationManager", "getHandlerForExtension") { _, p, reply -> reply(handlers.handlerForExtension(p)) }
-        bus.register("com.palm.applicationManager", "getHandlerForUrl") { _, p, reply -> reply(handlers.handlerForUrl(p)) }
+        bus.register(Bus.APPLICATION_MANAGER, "updateLaunchPointIcon") { caller, p, reply -> reply(updateLaunchPointIcon(caller, p)) }
+        bus.register(Bus.APPLICATION_MANAGER, "listAllHandlersForMime") { _, p, reply -> reply(handlersForMime(p)) }
+        bus.register(Bus.APPLICATION_MANAGER, "getResourceInfo") { _, p, reply -> reply(resourceInfo(p)) }
+        bus.register(Bus.APPLICATION_MANAGER, "getHandlerForExtension") { _, p, reply -> reply(handlers.handlerForExtension(p)) }
+        bus.register(Bus.APPLICATION_MANAGER, "getHandlerForUrl") { _, p, reply -> reply(handlers.handlerForUrl(p)) }
         universalSearch = org.webosarchive.lunacy.card.UniversalSearch(this) { registry.apps }.also {
             it.register(bus)
             it.onChange = { runOnUiThread { if (::justTypePanel.isInitialized) justTypePanel.reload() } }
@@ -2678,7 +2678,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             // of Lunacy, so clearing the browser's would sign every app out as well.
             reply(Bus.error("Lunacy's browser shares its cookies with every app, so they can't be cleared on their own"))
         }
-        bus.registerPrivate("com.palm.applicationManager", "listPackages", wholeService = false, Bus.CallHandler { c -> c.reply(listPackages()) })
+        bus.registerPrivate(Bus.APPLICATION_MANAGER, "listPackages", wholeService = false, Bus.CallHandler { c -> c.reply(listPackages()) })
         // App Catalog's installer, over the same install path as Preware's (AppInstallService.kt).
         org.webosarchive.lunacy.card.AppInstallService(object : org.webosarchive.lunacy.card.AppInstallService.Installer {
             override fun install(url: String, requester: String, progress: (Int) -> Unit, done: (Packages.Result) -> Unit) =
@@ -2708,19 +2708,19 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // (LunaSysMgr's own system UI windows among them, which Lunacy draws natively and so
         // has none of); close {"processId"} answers {"returnValue":true}, an unknown id too, and
         // with none {"returnValue":false,"errorText":"Must provide a valid processId to close"}.
-        bus.registerPrivate("com.palm.applicationManager", "running", wholeService = false, Bus.CallHandler { c ->
+        bus.registerPrivate(Bus.APPLICATION_MANAGER, "running", wholeService = false, Bus.CallHandler { c ->
             val list = org.json.JSONArray()
             for ((id, windows) in running) for (w in windows) list.put(JSONObject().put("id", id).put("processid", w.pid.toString()))
             c.reply(JSONObject().put("running", list).put("returnValue", true).toString())
         })
-        bus.registerPrivate("com.palm.applicationManager", "close", wholeService = false, Bus.CallHandler { c ->
+        bus.registerPrivate(Bus.APPLICATION_MANAGER, "close", wholeService = false, Bus.CallHandler { c ->
             val pid = c.params.optString("processId")
             if (pid.isEmpty()) return@CallHandler c.reply(JSONObject().put("returnValue", false)
                 .put("errorText", "Must provide a valid processId to close").toString())
             running.values.flatten().firstOrNull { it.pid.toString() == pid }?.let { onWindowClosed(it) }
             c.reply(Bus.ok())
         })
-        bus.register("com.palm.applicationManager", "listApps") { _, _, reply ->
+        bus.register(Bus.APPLICATION_MANAGER, "listApps") { _, _, reply ->
             reply(Bus.ok(mapOf("apps" to org.json.JSONArray(registry.apps.map { it.listEntry() }))))
         }
     }

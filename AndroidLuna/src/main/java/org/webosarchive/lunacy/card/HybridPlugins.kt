@@ -65,7 +65,7 @@ class HybridPlugins(private val window: AppWindow, private val app: AppInfo, pri
         fun end() {
             ended = true
             host.stop()
-            synchronized(early) { gl?.destroy(); gl = null }
+            glStream.destroy()
             answers.values.forEach { it.offer(1 to "plugin disconnected") }
         }
 
@@ -79,36 +79,19 @@ class HybridPlugins(private val window: AppWindow, private val app: AppInfo, pri
             ended = true; connected = false
             answers.values.forEach { it.offer(1 to "plugin disconnected") }
             plugins.remove(id)
-            synchronized(early) { gl?.destroy(); gl = null }
+            glStream.destroy()
             if (was) event("status", "disconnected")
         }
 
         // OpenGL ES: replayed in the shell as a PDK card's is (PdkGl), with no view to show it
         // in. Quick Office's plugin draws a presentation's slides with GLES 2 and reads them
         // back, so it waits on the replay's answers.
-        private var gl: PdkGl? = null
-        private var glMode: Pair<Int, Int>? = null
-        private var glVersion = 0
-        private val early = ArrayList<ByteArray>()
+        private val glStream = GlStream(make = { w, h, version ->
+            if (ended || !PdkGl.available) null else PdkGl(app.id, maxOf(1, w), maxOf(1, h), version, host::glAnswer) {}
+        })
 
-        override fun onMode(width: Int, height: Int, gl: Boolean) { if (gl) synchronized(early) { glMode = width to height; startGl() } }
-        override fun onGl(batch: ByteArray, version: Int) {
-            synchronized(early) {
-                gl?.let { it.replay(batch); return }
-                early.add(batch)
-                if (glVersion == 0) glVersion = version
-                startGl()
-            }
-        }
-        /** Under the lock: once the mode and the first batch's version are known. */
-        private fun startGl() {
-            val (w, h) = glMode ?: return
-            if (gl != null || glVersion == 0 || ended || !PdkGl.available) return
-            val stream = PdkGl(app.id, maxOf(1, w), maxOf(1, h), glVersion, host::glAnswer) {}
-            early.forEach { stream.replay(it) }
-            early.clear()
-            gl = stream
-        }
+        override fun onMode(width: Int, height: Int, gl: Boolean) { if (gl) glStream.onMode(width, height) }
+        override fun onGl(batch: ByteArray, version: Int) = glStream.onBatch(batch, version)
         override fun onFrame(frame: Bitmap) {}
         override fun onCaption(title: String) {}
         override fun onPdl(request: JSONObject) {}

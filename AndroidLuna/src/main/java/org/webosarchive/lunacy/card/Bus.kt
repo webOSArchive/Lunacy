@@ -73,8 +73,8 @@ class Bus {
     }
 
     init {
-        register("com.palm.bus", "signal/registerServerStatus", CallHandler { serverStatus(it) })
-        register("com.palm.bus", "signal/addmatch", CallHandler { addMatch(it) })
+        register(BUS, "signal/registerServerStatus", CallHandler { serverStatus(it) })
+        register(BUS, "signal/addmatch", CallHandler { addMatch(it) })
     }
 
     /**
@@ -182,6 +182,11 @@ class Bus {
         fun staysOpen(method: String, params: JSONObject) =
             params.optBoolean("subscribe", false) || params.optBoolean("watch", false) || method == "watch"
 
+        /** ls-hubd's own name: its signals live here. */
+        const val BUS = "com.palm.bus"
+        /** LunaSysMgr's application manager: launching, launch points, dock mode, packages. */
+        const val APPLICATION_MANAGER = "com.palm.applicationManager"
+
         private val URL = Regex("^(?:palm|luna)://([^/]+)/(.*?)/?$")
 
         /** A bus URL's service and method ("time/getSystemTime", its category included). */
@@ -191,6 +196,12 @@ class Bus {
         /** [staysOpen] for a call by its URL and payload, before it is made (luna-send's relay, the pages' bridge). */
         fun staysOpen(url: String, payload: String): Boolean =
             staysOpen(serviceAndMethod(url).second, runCatching { JSONObject(payload.ifEmpty { "{}" }) }.getOrDefault(JSONObject()))
+
+        /** Whether a reply says it worked: its returnValue, read as JSON (never by searching the text). */
+        fun succeeded(reply: String): Boolean = parse(reply)?.optBoolean("returnValue") ?: false
+        fun errorText(reply: String): String = parse(reply)?.optString("errorText").orEmpty()
+        fun errorCode(reply: String): Int? = parse(reply)?.takeIf { it.has("errorCode") }?.optInt("errorCode")
+        private fun parse(reply: String) = runCatching { JSONObject(reply) }.getOrNull()
 
         fun noService(service: String) = error("Service does not exist: $service.")
 

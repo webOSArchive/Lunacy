@@ -114,7 +114,7 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
             params.remove("firstUseSafe")
             bus.call(CONFIGURATOR, "palm://com.palm.activitymanager/create", params.toString(), privateBus = true) { reply ->
                 // An activity that exists already counts as configured, as webOS's took it.
-                if (reply.contains("\"returnValue\":true") || reply.contains("\"errorCode\":17")) activitiesDone[path] = text
+                if (Bus.succeeded(reply) || Bus.errorCode(reply) == 17) activitiesDone[path] = text
                 else Log.w(AppServer.TAG, "configurator: activity $path: $reply")
             }
         }
@@ -132,8 +132,8 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
                 // Remembered once the cache has answered: before the webOS root is laid down the
                 // file cache isn't on the bus yet, and the next run defines the type. A type the
                 // cache already has answers that it exists, which is what a reboot did too.
-                if (!reply.contains("Service does not exist")) defined[name] = spec
-                if (!reply.contains("\"returnValue\":true")) Log.i(AppServer.TAG, "configurator: file cache type $name: $reply")
+                if (!Bus.errorText(reply).startsWith("Service does not exist")) defined[name] = spec
+                if (!Bus.succeeded(reply)) Log.i(AppServer.TAG, "configurator: file cache type $name: $reply")
             }
         }
     }
@@ -215,7 +215,7 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
             .put("defaultSignature", "-- Sent from Lunacy")
         bus.call(CUSTOMIZATION, "palm://com.palm.db/merge", JSONObject().put("objects", JSONArray().put(sig)).toString(),
             privateBus = true) { reply ->
-            if (!reply.contains("\"returnValue\":true")) Log.w(AppServer.TAG, "configurator: carrier defaults: $reply")
+            if (!Bus.succeeded(reply)) Log.w(AppServer.TAG, "configurator: carrier defaults: $reply")
         }
     }
 

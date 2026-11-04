@@ -54,6 +54,7 @@ import org.webosarchive.lunacy.card.Keys
 import org.webosarchive.lunacy.card.LaunchPoint
 import org.webosarchive.lunacy.card.LaunchPoints
 import org.webosarchive.lunacy.card.LunacyService
+import org.webosarchive.lunacy.card.ShellHooks
 import org.webosarchive.lunacy.card.MediaBroadcast
 import org.webosarchive.lunacy.card.MediaIndex
 import org.webosarchive.lunacy.card.MediaServer
@@ -2648,11 +2649,20 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         audio.register(bus)
         // Lunacy's own service, on its own name: the environment it really runs in, and
         // Android's settings screens for the settings Android owns.
-        lunacyService = LunacyService(this, registry, jsServices, jsServices.root, { displayInfo() }, ::askPermissions,
-            { intent -> runCatching { startActivityForResult(intent, 200) }.isSuccess }, onLayoutChanged = { reshell() },
-            wallpaper = ::wallpaperSource, onFirstUseDone = ::afterFirstUse,
-            hidden = hiddenApps, launcherApps = ::allLaunchPoints, appIcon = { luna.appIcon(it) },
-            pinStatus = { homeScreenPins.status() }, pinToHome = homeScreenPins::pin).also { it.register(bus) }
+        lunacyService = LunacyService(this, registry, jsServices, jsServices.root, object : ShellHooks {
+            override fun display() = displayInfo()
+            override fun requestPermissions(permissions: List<String>, answer: (granted: Boolean, askAgain: Boolean) -> Unit) =
+                askPermissions(permissions, answer)
+            override fun startForResult(intent: android.content.Intent) = runCatching { startActivityForResult(intent, 200) }.isSuccess
+            override fun onLayoutChanged() = reshell()
+            override fun wallpaper() = wallpaperSource()
+            override fun onFirstUseDone() = afterFirstUse()
+            override val hidden get() = hiddenApps
+            override fun launcherApps() = allLaunchPoints()
+            override fun appIcon(app: AppInfo) = luna.appIcon(app)
+            override fun pinStatus() = homeScreenPins.status()
+            override fun pinToHome(app: AppInfo, icon: android.graphics.Bitmap?) = homeScreenPins.pin(app, icon)
+        }).also { it.register(bus) }
         val connections = ConnectionManager(this) { sleepWake.blocked }.also { it.register(bus) }
         closeOnDestroy += connections::stop
         sleepWake.onBlockedChanged = connections::changed

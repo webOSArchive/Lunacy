@@ -20,67 +20,103 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
     /** File cache types already defined in this run of the shell, by name and definition. */
     private val defined = HashMap<String, String>()
 
+    /** Each phase in the order webOS's configurator kept: kinds before the activities that watch them. */
     fun run() {
-        // The system's own kinds first, as the device's configurator read /etc/palm: those of
-        // the services in the webOS root (accounts, palmprofile), in its ROM.
-        if (system != null) {
-            // Its permissions wait for db_kinds below: the device's configurator registered
-            // every kind of /etc/palm before any of its permissions (BusClient: kinds, then
-            // permissions), and one may name a kind from db_kinds (the carrier settings).
-            configureFiles(File(system, "etc/palm/db"), db, "/etc/palm/db", withPermissions = false)
-            configureFiles(File(system, "etc/palm/tempdb"), tempdb, "/etc/palm/tempdb")
-        }
+        systemKinds()
+        appKinds()
+        systemOwnedKinds()
+        fileCacheTypes()
+        carrierDefaults()
+        val activityFiles = serviceKinds()
+        activities(activityFiles + appActivities() + systemActivities())
+    }
+
+    /**
+     * The system's own kinds first, as the device's configurator read /etc/palm: those of the
+     * services in the webOS root (accounts, palmprofile), in its ROM. Its permissions wait for
+     * db_kinds ([systemOwnedKinds]): the device's configurator registered every kind of
+     * /etc/palm before any of its permissions (BusClient: kinds, then permissions), and one may
+     * name a kind from db_kinds (the carrier settings).
+     */
+    private fun systemKinds() {
+        if (system == null) return
+        configureFiles(File(system, "etc/palm/db"), db, "/etc/palm/db", withPermissions = false)
+        configureFiles(File(system, "etc/palm/tempdb"), tempdb, "/etc/palm/tempdb")
+    }
+
+    private fun appKinds() {
         for (id in files.appIds()) {
             configure("${Packages.APPS}/$id/configuration/db", db, id)
             configure("${Packages.APPS}/$id/configuration/tempdb", tempdb, id)
         }
-        // /etc/palm/db_kinds, the device's other kind folder: kind files with no folder for
-        // permissions, which the native services own (the mail transports' kinds). After the
-        // apps, since they extend kinds an app owns (com.palm.imap.account extends the Email
-        // app's com.palm.mail.account).
-        if (system != null) {
-            val kinds = parseFiles(File(system, "etc/palm/db_kinds"), "/etc/palm/db_kinds") { text, _ -> JSONObject(jsonC(text)) }
-            val permissions = parseFiles(File(system, "etc/palm/db/permissions"), "/etc/palm/db") { text, _ -> JSONArray(jsonC(text)) }
-            if (kinds.isNotEmpty() || permissions.isNotEmpty()) db.configure(kinds, permissions)
-        }
-        // The file cache's types, as webOS's configurator defined them at boot ("filecache"):
-        // /etc/palm/filecache_types and packages' configuration/filecache, each file a
-        // DefineType. The mail services keep message bodies in the "email" type.
+    }
+
+    /**
+     * /etc/palm/db_kinds, the device's other kind folder: kind files with no folder for
+     * permissions, which the native services own (the mail transports' kinds). After the apps,
+     * since they extend kinds an app owns (com.palm.imap.account extends the Email app's
+     * com.palm.mail.account). Then /etc/palm/db's permissions.
+     */
+    private fun systemOwnedKinds() {
+        if (system == null) return
+        val kinds = parseFiles(File(system, "etc/palm/db_kinds"), "/etc/palm/db_kinds") { text, _ -> JSONObject(jsonC(text)) }
+        val permissions = parseFiles(File(system, "etc/palm/db/permissions"), "/etc/palm/db") { text, _ -> JSONArray(jsonC(text)) }
+        if (kinds.isNotEmpty() || permissions.isNotEmpty()) db.configure(kinds, permissions)
+    }
+
+    /**
+     * The file cache's types, as webOS's configurator defined them at boot ("filecache"):
+     * /etc/palm/filecache_types and packages' configuration/filecache, each file a DefineType.
+     * The mail services keep message bodies in the "email" type.
+     */
+    private fun fileCacheTypes() {
         if (system != null) defineTypes(File(system, "etc/palm/filecache_types").listFiles().orEmpty().filter { it.isFile }.mapNotNull { f ->
             runCatching { f.readText() }.getOrNull()
         })
         for (id in files.appIds()) defineTypes(files.list("${Packages.APPS}/$id/configuration/filecache").mapNotNull { name ->
             files.open("${Packages.APPS}/$id/configuration/filecache/$name")?.use { it.bufferedReader().readText() }
         })
-        carrierDefaults()
-        // Services come from packages, or from the webOS root's /usr/palm/services.
-        val activityFiles = ArrayList<Triple<String, String, String>>()
+    }
+
+    /** Services' kinds, from packages or the webOS root's /usr/palm/services; returns their activity files for later. */
+    private fun serviceKinds(): List<ActivityFile> {
+        val found = ArrayList<ActivityFile>()
         (File(files.root, JsServices.SERVICES).listFiles().orEmpty().toList() +
             (system?.let { File(it, JsServices.SERVICES).listFiles() }.orEmpty())).forEach { dir ->
             val cfg = File(dir, "configuration")
             if (!cfg.isDirectory) return@forEach
             configureFiles(File(cfg, "db"), db, dir.name)
             configureFiles(File(cfg, "tempdb"), tempdb, dir.name)
-            activityFiles += folderFiles(File(cfg, "activities"), SERVICE_ID)
+            found += folderFiles(File(cfg, "activities"), SERVICE_ID)
         }
-        // Activities last, once the kinds their triggers watch are registered: the apps',
-        // the services' and the system's own (/etc/palm/activities).
+        return found
+    }
+
+    /** Apps' activity files. Activities go last, once the kinds their triggers watch are registered. */
+    private fun appActivities(): List<ActivityFile> {
+        val found = ArrayList<ActivityFile>()
         for (id in files.appIds()) {
             val dir = "${Packages.APPS}/$id/configuration/activities"
             for (creator in files.list(dir)) for (name in files.list("$dir/$creator")) {
                 val text = files.open("$dir/$creator/$name")?.use { it.bufferedReader().readText() } ?: continue
-                activityFiles += Triple("$dir/$creator/$name", "$APP_ID:$creator", text)
+                found += ActivityFile("$dir/$creator/$name", "$APP_ID:$creator", text)
             }
         }
-        system?.let { activityFiles += folderFiles(File(it, "etc/palm/activities"), SERVICE_ID) }
-        activities(activityFiles)
+        return found
     }
 
-    /** A configuration folder's files one folder down, named for their creator: (path, "kind:creator", text). */
-    private fun folderFiles(dir: File, kind: String): List<Triple<String, String, String>> =
+    /** The system's own activity files, /etc/palm/activities. */
+    private fun systemActivities(): List<ActivityFile> =
+        system?.let { folderFiles(File(it, "etc/palm/activities"), SERVICE_ID) }.orEmpty()
+
+    /** An activity file: its path, its creator ("kind:creator") and its text. */
+    private data class ActivityFile(val path: String, val creator: String, val text: String)
+
+    /** A configuration folder's files one folder down, named for their creator. */
+    private fun folderFiles(dir: File, kind: String): List<ActivityFile> =
         dir.listFiles().orEmpty().filter { it.isDirectory }.sortedBy { it.name }.flatMap { d ->
             d.listFiles().orEmpty().filter { it.isFile }.sortedBy { it.name }.mapNotNull { f ->
-                runCatching { Triple(f.path, "$kind:${d.name}", f.readText()) }.getOrNull()
+                runCatching { ActivityFile(f.path, "$kind:${d.name}", f.readText()) }.getOrNull()
             }
         }
 
@@ -98,7 +134,7 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
      * for "replace"; Lunacy does the same at every start, and within one run sends a file again
      * only when it changes. Not built: cancelling a removed package's activities.
      */
-    private fun activities(found: List<Triple<String, String, String>>) {
+    private fun activities(found: List<ActivityFile>) {
         val bus = bus ?: return
         val prefs = system?.let { File(it, "var/luna/preferences") }
         val firstUseOnly = prefs == null || !File(prefs, "ran-first-use").exists() || !File(prefs, "first-use-profile-created").exists()

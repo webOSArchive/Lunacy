@@ -145,7 +145,7 @@ class AppServer(
             "var n=w.length;function one(){if(--n<=0)document.title=\"$WARM_DONE\";}" +
             "if(!n)one();for(var i=0;i<w.length;i++)w[i].load().then(one,one);};</script></head>" +
             "<body></body></html>"
-        private fun html(s: String) = WebResourceResponse("text/html", "utf-8", 200, "OK", emptyMap(),
+        private fun htmlResponse(s: String) = WebResourceResponse("text/html", "utf-8", 200, "OK", emptyMap(),
             ByteArrayInputStream(s.toByteArray()))
     }
 
@@ -162,65 +162,93 @@ class AppServer(
         val encodedPath = uri.encodedPath.orEmpty().trimStart('/')
         val app = host.removeSuffix(HOST_SUFFIX)
         val resource = runCatching { uri.getQueryParameter(RESOURCE_PARAM) != null }.getOrDefault(false)
-        if (path == "__lunacy/fonts-loaded") return fontsLoaded(uri)
-        if (path == "__lunacy/warm.html") return html(WARM_PAGE)
-        if (path == "__lunacy/fonts-ready.js") return fontsReady(uri)
-        if (path.startsWith("__lunacy/fonts/")) return font(path.removePrefix("__lunacy/fonts/"))
-        // An Android app's icon, for the Android Notifications app's dashboards only, and only
-        // while that app has a notification showing.
-        if (path.startsWith(AndroidNotifications.ICON_PATH.trimStart('/'))) {
-            val bytes = if (app == AndroidNotifications.APP_ID) AndroidNotifications.dashboardIcon(path.removePrefix(AndroidNotifications.ICON_PATH.trimStart('/')).removeSuffix(".svg")) else null
-            return bytes?.let { WebResourceResponse("image/svg+xml", "utf-8", 200, "OK", emptyMap(), ByteArrayInputStream(it)) }
-                ?: WebResourceResponse("text/plain", "utf-8", 404, "Not Found", emptyMap(), ByteArrayInputStream(ByteArray(0)))
-        }
-        if (path.startsWith("__lunacy/")) return asset("lunacy/" + path.removePrefix("__lunacy/"), path)
-        // The TouchPad answers this one with 200 and an empty body; Enyo's Tellurium hooks
-        // read it while starting, and a 404 makes them throw where a device doesn't.
-        if (path == "usr/palm/frameworks/tellurium/tellurium_config.json") {
-            return WebResourceResponse("application/json", "utf-8", 200, "OK",
-                mapOf("Access-Control-Allow-Origin" to "*"), ByteArrayInputStream(ByteArray(0)))
-        }
-        val fw = FRAMEWORK.matchEntire(path)
-        val mojo = MOJO.matchEntire(path)
-        val mojoCommon = MOJO_COMMON.matchEntire(path)
-        val frameworks = FRAMEWORKS.matchEntire(path)
+        lunacyRoute(uri, path, app)?.let { return it.response }
         val thumb = runCatching { uri.getQueryParameter(THUMB_PARAM)?.toInt() }.getOrNull()
-        val resp = when {
-            fw != null -> asset("fw/enyo/1.0/" + fw.groupValues[1], path, resource)
-            mojoCommon != null -> asset("fw/mojocommon/" + mojoCommon.groupValues[1], path, resource)
-            mojo != null -> if (mojo.groupValues[1] == "mojo.js" && !resource) mojoJs("fw/mojo/mojo.js") else asset("fw/mojo/" + mojo.groupValues[1], path, resource)
-            frameworks != null -> if (frameworks.groupValues[1] == "mojo2/mojo.js" && !resource) mojoJs("fw/frameworks/mojo2/mojo.js") else asset("fw/frameworks/" + frameworks.groupValues[1], path, resource)
-            path.startsWith(SYSTEM_UI) -> asset("luna-systemui/" + path.removePrefix(SYSTEM_UI), path, resource)
-            // The system UI's shared scripts, beside its app/ folder (the file picker loads ../../utils).
-            path.startsWith(SYSTEM_UI_UTILS) -> asset("luna-systemui/utils/" + path.removePrefix(SYSTEM_UI_UTILS), path, resource)
-            path.startsWith(SEARCH_ICONS) -> asset("luna-applauncher/images/" + path.removePrefix(SEARCH_ICONS), path, resource)
-            path.startsWith(BROWSER_DATA) -> java.io.File(webosRoot, path).takeIf { it.isFile && UserFiles.inside(it, java.io.File(webosRoot, BROWSER_DATA)) }
-                ?.let { respond(it.inputStream(), path, resource, app) }
-            // The webOS root's list of the packages its ROM ships (WebosRoot), which App Catalog
-            // reads as the apps it can revert to their shipped version.
-            path.startsWith(IPKGS) -> java.io.File(webosRoot, path).takeIf { it.isFile && UserFiles.inside(it, java.io.File(webosRoot, IPKGS)) }
-                ?.let { respond(it.inputStream(), path, resource, app) }
-            // The rest of the webOS root that pages read by path on a device: the system's
-            // files under /usr/palm (command-resource-handlers.json, account templates' icons)
-            // and the file cache (Email's bodies and attachments, which mojomail writes there).
-            ROOT_READABLE.any { path.startsWith(it) } -> java.io.File(webosRoot, path).takeIf { f ->
-                f.isFile && ROOT_READABLE.any { UserFiles.inside(f, java.io.File(webosRoot, it)) }
-            }?.let { respond(it.inputStream(), path, resource, app) }
-            encodedPath.startsWith(EXTRACTFS) ->
-                extractfs(Uri.decode(encodedPath.removePrefix(EXTRACTFS)))
-            path.startsWith(CRYPTOFS) -> files.open(path.removePrefix(CRYPTOFS))?.let { respond(it, path, resource, app) }
-            // webOS's user storage, shared by apps and services (JS services write files here).
-            path.startsWith(MEDIA_INTERNAL) -> {
-                val rel = path.removePrefix(MEDIA_INTERNAL)
-                if (thumb != null) thumbnail(rel, thumb)
-                else internal(rel)?.let { s -> respond(LocalNet.playlist(s, rel, "file:///$path"), path, resource, app) }
-            }
-            else -> null
-        }
+        val resp = (frameworkRoute(path, resource)
+            ?: rootRoute(path, resource, app)
+            ?: userRoute(path, encodedPath, thumb, resource, app))?.response
         if (resp != null) noteArt(app, path) else Log.w(TAG, "404 $uri")
         if (image && resp?.mimeType == "image/jpeg" && resp.data != null) resp.data = ExifOrientation.ignored(resp.data)
         return resp ?: WebResourceResponse("text/plain", "utf-8", 404, "Not Found", emptyMap(),
             ByteArrayInputStream(ByteArray(0)))
+    }
+
+    /**
+     * A route's answer: the path is this route's, and here is the response, or null for a
+     * 404. A route that isn't the path's returns no Routed at all, and the next one is tried;
+     * one that is never hands the path on, as the frameworks' and the root's prefixes overlap.
+     */
+    private class Routed(val response: WebResourceResponse?)
+
+    /** Lunacy's own files (`__lunacy/`), and the answers it gives in the system's place. */
+    private fun lunacyRoute(uri: Uri, path: String, app: String): Routed? = when {
+        path == "__lunacy/fonts-loaded" -> Routed(fontsLoaded(uri))
+        path == "__lunacy/warm.html" -> Routed(htmlResponse(WARM_PAGE))
+        path == "__lunacy/fonts-ready.js" -> Routed(fontsReady(uri))
+        path.startsWith("__lunacy/fonts/") -> Routed(font(path.removePrefix("__lunacy/fonts/")))
+        // An Android app's icon, for the Android Notifications app's dashboards only, and only
+        // while that app has a notification showing.
+        path.startsWith(AndroidNotifications.ICON_PATH.trimStart('/')) -> {
+            val bytes = if (app == AndroidNotifications.APP_ID) AndroidNotifications.dashboardIcon(path.removePrefix(AndroidNotifications.ICON_PATH.trimStart('/')).removeSuffix(".svg")) else null
+            Routed(bytes?.let { WebResourceResponse("image/svg+xml", "utf-8", 200, "OK", emptyMap(), ByteArrayInputStream(it)) }
+                ?: WebResourceResponse("text/plain", "utf-8", 404, "Not Found", emptyMap(), ByteArrayInputStream(ByteArray(0))))
+        }
+        path.startsWith("__lunacy/") -> Routed(asset("lunacy/" + path.removePrefix("__lunacy/"), path))
+        // The TouchPad answers this one with 200 and an empty body; Enyo's Tellurium hooks
+        // read it while starting, and a 404 makes them throw where a device doesn't.
+        path == "usr/palm/frameworks/tellurium/tellurium_config.json" -> Routed(WebResourceResponse("application/json", "utf-8", 200, "OK",
+            mapOf("Access-Control-Allow-Origin" to "*"), ByteArrayInputStream(ByteArray(0))))
+        else -> null
+    }
+
+    /** The frameworks and the system UI's files, served from Lunacy's assets. */
+    private fun frameworkRoute(path: String, resource: Boolean): Routed? {
+        val fw = FRAMEWORK.matchEntire(path)
+        val mojo = MOJO.matchEntire(path)
+        val mojoCommon = MOJO_COMMON.matchEntire(path)
+        val frameworks = FRAMEWORKS.matchEntire(path)
+        return when {
+            fw != null -> Routed(asset("fw/enyo/1.0/" + fw.groupValues[1], path, resource))
+            mojoCommon != null -> Routed(asset("fw/mojocommon/" + mojoCommon.groupValues[1], path, resource))
+            mojo != null -> Routed(if (mojo.groupValues[1] == "mojo.js" && !resource) mojoJs("fw/mojo/mojo.js") else asset("fw/mojo/" + mojo.groupValues[1], path, resource))
+            frameworks != null -> Routed(if (frameworks.groupValues[1] == "mojo2/mojo.js" && !resource) mojoJs("fw/frameworks/mojo2/mojo.js")
+                else asset("fw/frameworks/" + frameworks.groupValues[1], path, resource))
+            path.startsWith(SYSTEM_UI) -> Routed(asset("luna-systemui/" + path.removePrefix(SYSTEM_UI), path, resource))
+            // The system UI's shared scripts, beside its app/ folder (the file picker loads ../../utils).
+            path.startsWith(SYSTEM_UI_UTILS) -> Routed(asset("luna-systemui/utils/" + path.removePrefix(SYSTEM_UI_UTILS), path, resource))
+            path.startsWith(SEARCH_ICONS) -> Routed(asset("luna-applauncher/images/" + path.removePrefix(SEARCH_ICONS), path, resource))
+            else -> null
+        }
+    }
+
+    /** [path]'s file in the webOS root, if it is one and lies under one of [prefixes]. */
+    private fun rootFile(path: String, vararg prefixes: String): java.io.File? =
+        java.io.File(webosRoot, path).takeIf { f -> f.isFile && prefixes.any { UserFiles.inside(f, java.io.File(webosRoot, it)) } }
+
+    /** The webOS root's files that pages read by path, and the installed apps' own. */
+    private fun rootRoute(path: String, resource: Boolean, app: String): Routed? = when {
+        path.startsWith(BROWSER_DATA) -> Routed(rootFile(path, BROWSER_DATA)?.let { respond(it.inputStream(), path, resource, app) })
+        // The webOS root's list of the packages its ROM ships (WebosRoot), which App Catalog
+        // reads as the apps it can revert to their shipped version.
+        path.startsWith(IPKGS) -> Routed(rootFile(path, IPKGS)?.let { respond(it.inputStream(), path, resource, app) })
+        // The rest of the webOS root that pages read by path on a device: the system's
+        // files under /usr/palm (command-resource-handlers.json, account templates' icons)
+        // and the file cache (Email's bodies and attachments, which mojomail writes there).
+        ROOT_READABLE.any { path.startsWith(it) } ->
+            Routed(rootFile(path, *ROOT_READABLE.toTypedArray())?.let { respond(it.inputStream(), path, resource, app) })
+        path.startsWith(CRYPTOFS) -> Routed(files.open(path.removePrefix(CRYPTOFS))?.let { respond(it, path, resource, app) })
+        else -> null
+    }
+
+    /** webOS's user storage, shared by apps and services (JS services write files here), and its thumbnailer. */
+    private fun userRoute(path: String, encodedPath: String, thumb: Int?, resource: Boolean, app: String): Routed? = when {
+        encodedPath.startsWith(EXTRACTFS) -> Routed(extractfs(Uri.decode(encodedPath.removePrefix(EXTRACTFS))))
+        path.startsWith(MEDIA_INTERNAL) -> {
+            val rel = path.removePrefix(MEDIA_INTERNAL)
+            Routed(if (thumb != null) thumbnail(rel, thumb)
+                else internal(rel)?.let { s -> respond(LocalNet.playlist(s, rel, "file:///$path"), path, resource, app) })
+        }
+        else -> null
     }
 
     /** webOS's user storage, Lunacy's own and the Android folders mapped into it (UserFiles). */
@@ -474,10 +502,13 @@ class AppServer(
 
     private fun artOf(app: String): Set<String> = synchronized(art) {
         if (!APP_ID.matches(app)) return emptySet()
-        art.getOrPut(app) {
-            val f = java.io.File(artCacheDir, app)
-            LinkedHashSet(runCatching { f.readLines().filter { it.isNotBlank() } }.getOrDefault(emptyList()))
-        }.toSet()
+        artSet(app).toSet()
+    }
+
+    /** This app's art list, read from disk the first time. Holding [art]'s lock. */
+    private fun artSet(app: String) = art.getOrPut(app) {
+        val f = java.io.File(artCacheDir, app)
+        LinkedHashSet(runCatching { f.readLines().filter { it.isNotBlank() } }.getOrDefault(emptyList()))
     }
 
     /**
@@ -489,10 +520,7 @@ class AppServer(
         if (!APP_ID.matches(app) || !path.contains("usr/palm/frameworks/") || !IMAGE.containsMatchIn(path)) return
         val url = "/$path"
         synchronized(art) {
-            val set = art.getOrPut(app) {
-                val f = java.io.File(artCacheDir, app)
-                LinkedHashSet(runCatching { f.readLines().filter { it.isNotBlank() } }.getOrDefault(emptyList()))
-            }
+            val set = artSet(app)
             if (set.size >= MAX_ART || !set.add(url)) return
             artFlushPending?.cancel(false)
             artFlushPending = artFlush.schedule({ flushArt() }, ART_FLUSH_MS, java.util.concurrent.TimeUnit.MILLISECONDS)

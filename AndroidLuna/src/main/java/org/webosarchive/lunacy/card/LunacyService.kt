@@ -32,36 +32,16 @@ import java.io.File
  *   `launcher/pinStatus` and `launcher/pin` put a webOS app on Android's own home screen, when
  *   Lunacy isn't the home app (shell/HomeScreenPins.kt).
  *
- * [requestPermissions] is the shell's: a runtime permission is asked for by an Activity, and
- * answered to it, with whether Android would put the question again (from Android 11 a
- * refusal given twice is final, and later asks are refused without a dialog). [startForResult]
- * is the shell's too, for the system dialogs that must be started for a result (the home
- * role).
+ *
+ * What it needs of the shell comes through [ShellHooks].
  */
 class LunacyService(
     private val context: Context,
     private val registry: AppRegistry,
     private val jsServices: JsServices,
     private val webosRoot: File,
-    private val display: () -> JSONObject,
-    private val requestPermissions: (List<String>, (granted: Boolean, askAgain: Boolean) -> Unit) -> Unit,
-    private val startForResult: (Intent) -> Boolean,
-    /** The layout setting changed: the shell restarts to take it up (ShellActivity.recreate). */
-    private val onLayoutChanged: () -> Unit = {},
-    /** How to read the wallpaper the shell shows, for [HostWallpaper]; asked on the main thread. */
-    private val wallpaper: () -> () -> java.io.InputStream = { { throw java.io.FileNotFoundException("no wallpaper") } },
-    /** First Use has just finished: what a webOS device did at the next boot follows (ShellActivity.afterFirstUse). */
-    private val onFirstUseDone: () -> Unit = {},
-    /** The apps the user has hidden from the launcher. */
-    private val hidden: HiddenApps? = null,
-    /** Every app the launcher could show, hidden or not: webOS, the launch points they added, then Android's. Asked on the main thread. */
-    private val launcherApps: () -> List<AppInfo> = { emptyList() },
-    /** An app's launcher icon, as the launcher draws it. Asked on the main thread. */
-    private val appIcon: (AppInfo) -> android.graphics.Bitmap? = { null },
-    /** Whether Lunacy is the home app, and whether the home app takes pins: {lunacyIsHome, canPin}. */
-    private val pinStatus: () -> JSONObject = { JSONObject().put("returnValue", true).put("lunacyIsHome", false).put("canPin", false) },
-    /** Asks Android's home app to pin a webOS app; null when asked, else what went wrong. */
-    private val pinToHome: (AppInfo, android.graphics.Bitmap?) -> String? = { _, _ -> "Pinning is not available" },
+    /** What the service asks of the shell. */
+    private val shell: ShellHooks,
 ) {
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     /** The two answers that take real time - Node's version is asked of Node, and a listing walks a folder - come from here. */
@@ -84,7 +64,7 @@ class LunacyService(
         bus.own("firstUse/done", "finish First Use") { c -> c.reply(firstUseDone()) }
         bus.own("launcher/listApps", "list the launcher's apps") { c -> listLauncherApps(c) }
         bus.own("launcher/setHidden", "hide an app") { c -> c.reply(setHidden(c.params)) }
-        bus.own("launcher/pinStatus", "pin apps") { c -> c.reply(pinStatus().toString()) }
+        bus.own("launcher/pinStatus", "pin apps") { c -> c.reply(shell.pinStatus().toString()) }
         bus.own("launcher/pin", "pin apps") { c -> c.reply(pin(c.params)) }
         bus.own("android/notifications", "read Android's notifications") { c -> watchNotifications(c) }
         bus.own("android/openNotification", "open Android's notifications") { c -> c.reply(openNotification(c.params)) }
@@ -172,11 +152,11 @@ class LunacyService(
     private fun sendLauncherApps(to: List<Bus.Call>) {
         // The list and the icons are the shell's and are read here, on the main thread; turning
         // forty-odd icons into PNGs is not, so that happens on the worker.
-        val apps = launcherApps().map { app ->
+        val apps = shell.launcherApps().map { app ->
             val key = app.id + ":" + app.version
-            Triple(app, key, if (iconUrls.containsKey(key)) null else appIcon(app))
+            Triple(app, key, if (iconUrls.containsKey(key)) null else shell.appIcon(app))
         }
-        val hiddenNow = hidden?.all().orEmpty()
+        val hiddenNow = shell.hidden?.all().orEmpty()
         worker.execute {
             val list = org.json.JSONArray()
             for ((app, key, bmp) in apps) {
@@ -209,17 +189,17 @@ class LunacyService(
     /** A webOS app on Android's home screen: its icon there opens it straight away. */
     private fun pin(p: JSONObject): String {
         val id = p.optString("id")
-        val app = launcherApps().firstOrNull { it.id == id } ?: return Bus.error("No launcher app $id", -1)
+        val app = shell.launcherApps().firstOrNull { it.id == id } ?: return Bus.error("No launcher app $id", -1)
         if (app.androidComponent != null) return Bus.error("${app.title} is Android's own: it is on Android's launcher already", -1)
-        return pinToHome(app, appIcon(app))?.let { Bus.error(it, -1) } ?: Bus.ok()
+        return shell.pinToHome(app, shell.appIcon(app))?.let { Bus.error(it, -1) } ?: Bus.ok()
     }
 
     private fun setHidden(p: JSONObject): String {
         val id = p.optString("id")
         if (id.isEmpty() || !p.has("hidden")) return Bus.error("setHidden needs an id and hidden", -1)
         if (id == SOFTWARE_MANAGER) return Bus.error("Software Manager can't be hidden: it is how hidden apps come back", -1)
-        val store = hidden ?: return Bus.error("Hiding apps is not available", -1)
-        if (launcherApps().none { it.id == id }) return Bus.error("No launcher app $id", -1)
+        val store = shell.hidden ?: return Bus.error("Hiding apps is not available", -1)
+        if (shell.launcherApps().none { it.id == id }) return Bus.error("No launcher app $id", -1)
         store.set(id, p.optBoolean("hidden"))
         return Bus.ok()
     }
@@ -298,7 +278,7 @@ class LunacyService(
                     })
                     return
                 }
-                requestPermissions(permissions) { granted, askAgain ->
+                shell.requestPermissions(permissions) { granted, askAgain ->
                     reply(Bus.ok(mapOf("permission" to which, "granted" to granted, "askAgain" to askAgain)))
                 }
             }
@@ -321,7 +301,7 @@ class LunacyService(
                 val opened = if (Build.VERSION.SDK_INT >= 29) {
                     val roles = context.getSystemService(android.app.role.RoleManager::class.java)
                     if (roles != null && roles.isRoleAvailable(android.app.role.RoleManager.ROLE_HOME)) {
-                        startForResult(roles.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME))
+                        shell.startForResult(roles.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME))
                     } else false
                 } else false
                 val ok = opened || runCatching {
@@ -337,7 +317,7 @@ class LunacyService(
     /** First Use has run. The shell won't launch it again, and asks for storage itself from then on if it is missing. */
     private fun firstUseDone(): String {
         setFirstUseDone(context)
-        onFirstUseDone()
+        shell.onFirstUseDone()
         return Bus.ok()
     }
 
@@ -370,7 +350,7 @@ class LunacyService(
             .put("storageTotal", storage(true)).put("storageFree", storage(false))
             .put("battery", battery()).put("charging", charging()))
         j.put("webview", webView())
-        j.put("display", display())
+        j.put("display", shell.display())
         j.put("layout", FormFactor.describe(context).put("appLayoutWidth", FormFactor.appLayoutWidth(context)))
         j.put("hostWallpaper", HostWallpaper.isOn(context))
         j.put("colourNotificationIcons", NotificationIcons.colour(context))
@@ -496,7 +476,7 @@ class LunacyService(
         }
         if (p.has("appLayoutWidth")) FormFactor.setAppLayoutWidth(context, p.optInt("appLayoutWidth"))
         val restart = FormFactor.decide(context) != before
-        if (restart) main.postDelayed({ onLayoutChanged() }, RESTART_DELAY_MS)
+        if (restart) main.postDelayed({ shell.onLayoutChanged() }, RESTART_DELAY_MS)
         return Bus.ok(mapOf("layout" to FormFactor.describe(context).put("appLayoutWidth", FormFactor.appLayoutWidth(context)), "restart" to restart))
     }
 
@@ -534,7 +514,7 @@ class LunacyService(
             HostWallpaper.setOn(context, false)
             return reply(Bus.ok(mapOf("on" to false)))
         }
-        val open = wallpaper()
+        val open = shell.wallpaper()
         worker.execute {
             val failed = HostWallpaper.apply(context, open)
             if (failed == null) HostWallpaper.setOn(context, true)
@@ -724,4 +704,34 @@ class LunacyService(
             "notificationaccess" to "android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS",
         )
     }
+}
+
+/**
+ * What [LunacyService] asks of the shell. [requestPermissions] is the shell's because a
+ * runtime permission is asked for by an Activity, and answered to it, with whether Android
+ * would put the question again (from Android 11 a refusal given twice is final, and later asks
+ * are refused without a dialog); [startForResult] likewise, for the system dialogs that must be
+ * started for a result (the home role).
+ */
+interface ShellHooks {
+    /** The display's facts, for system/getEnvironment. */
+    fun display(): JSONObject
+    fun requestPermissions(permissions: List<String>, answer: (granted: Boolean, askAgain: Boolean) -> Unit)
+    fun startForResult(intent: Intent): Boolean
+    /** The layout setting changed: the shell restarts to take it up (ShellActivity.recreate). */
+    fun onLayoutChanged()
+    /** How to read the wallpaper the shell shows, for [HostWallpaper]; asked on the main thread. */
+    fun wallpaper(): () -> java.io.InputStream
+    /** First Use has just finished: what a webOS device did at the next boot follows (ShellActivity.afterFirstUse). */
+    fun onFirstUseDone()
+    /** The apps the user has hidden from the launcher. */
+    val hidden: HiddenApps?
+    /** Every app the launcher could show, hidden or not: webOS, the launch points they added, then Android's. Asked on the main thread. */
+    fun launcherApps(): List<AppInfo>
+    /** An app's launcher icon, as the launcher draws it. Asked on the main thread. */
+    fun appIcon(app: AppInfo): android.graphics.Bitmap?
+    /** Whether Lunacy is the home app, and whether the home app takes pins: {lunacyIsHome, canPin}. */
+    fun pinStatus(): JSONObject
+    /** Asks Android's home app to pin a webOS app; null when asked, else what went wrong. */
+    fun pinToHome(app: AppInfo, icon: android.graphics.Bitmap?): String?
 }

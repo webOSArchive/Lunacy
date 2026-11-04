@@ -18,28 +18,16 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import org.json.JSONObject
 
-/** What a window needs from the shell. */
-interface WindowHost {
+/** A window's life in the shell: opened, ready, drawn, focused, closed, and what it asks of its card. */
+interface WindowLifecycle {
     val server: AppServer
     val bus: Bus
     /** An app opened a window with window.open; child.attributes says which kind. */
     fun onWindowOpened(parent: AppWindow, child: AppWindow)
-    /** PalmSystem banners. addBanner returns the banner's id. */
-    fun addBanner(window: AppWindow, message: String, params: String, icon: String, soundClass: String, soundFile: String, duration: Int): Int
-    /** PalmSystem.paste: the system clipboard into the focused field of the card that is up. */
-    fun paste(window: AppWindow)
-    /** PalmSystem.copiedToClipboard: the "Selection Copied" banner. */
-    fun copiedToClipboard(window: AppWindow)
-    /** PalmSystem.playSoundNotification: a banner's sound without the banner. */
-    fun playSound(window: AppWindow, soundClass: String, soundFile: String, duration: Int)
-    fun removeBanner(window: AppWindow, id: Int)
-    fun clearBanners(window: AppWindow)
     fun onWindowClosed(window: AppWindow)
     fun onStageReady(window: AppWindow)
     /** The page has finished loading; see [ShellActivity.onPageLoaded]. */
     fun onPageLoaded(window: AppWindow)
-    /** Where media players fetch /media/internal files: MediaServer's loopback base URL. */
-    fun mediaBase(): String
     /**
      * The page has put a frame on the screen. webOS took its loading card away when the app
      * had actually drawn, not when the framework said it was ready: Mojo calls `stageReady`
@@ -62,6 +50,32 @@ interface WindowHost {
     fun fullScreen(window: AppWindow)
     /** The app asked for a fixed orientation, or "free" again; it is on [AppWindow.fixedOrientation]. */
     fun orientationRequested(window: AppWindow)
+    /** The app's own activity (PalmSystem.activityId), shared by its windows; -1 until there is one. */
+    fun activityId(window: AppWindow): Int = -1
+    /** The window's stage gained or lost the focus, which its app's activity follows. */
+    fun stageFocused(window: AppWindow, focused: Boolean) {}
+    /** A hybrid app's plugins for this window (Docs/pdk.md, "Hybrid apps"); null where there is no PDK runtime. */
+    fun hybridPlugins(window: AppWindow): HybridPlugins? = null
+}
+
+/** What a page shows through the shell rather than in its card: banners, their sounds, the clipboard. */
+interface WindowBanners {
+    /** PalmSystem banners. addBanner returns the banner's id. */
+    fun addBanner(window: AppWindow, message: String, params: String, icon: String, soundClass: String, soundFile: String, duration: Int): Int
+    /** PalmSystem.paste: the system clipboard into the focused field of the card that is up. */
+    fun paste(window: AppWindow)
+    /** PalmSystem.copiedToClipboard: the "Selection Copied" banner. */
+    fun copiedToClipboard(window: AppWindow)
+    /** PalmSystem.playSoundNotification: a banner's sound without the banner. */
+    fun playSound(window: AppWindow, soundClass: String, soundFile: String, duration: Int)
+    fun removeBanner(window: AppWindow, id: Int)
+    fun clearBanners(window: AppWindow)
+}
+
+/** What a page is told about the device: its info, the screen and its way up, the locale, the sizes it lays out at, and where its media is served. */
+interface DeviceFacts {
+    /** Where media players fetch /media/internal files: MediaServer's loopback base URL. */
+    fun mediaBase(): String
     fun deviceInfo(emulated: Boolean): String
     /** webOS's screen orientation: "up", "down", "left" or "right". */
     fun screenOrientation(): String
@@ -85,13 +99,10 @@ interface WindowHost {
      * ([FixedViewport]), 0 for the card's own width.
      */
     fun fixedViewportWidth(appId: String): Int
-    /** The app's own activity (PalmSystem.activityId), shared by its windows; -1 until there is one. */
-    fun activityId(window: AppWindow): Int = -1
-    /** The window's stage gained or lost the focus, which its app's activity follows. */
-    fun stageFocused(window: AppWindow, focused: Boolean) {}
-    /** A hybrid app's plugins for this window (Docs/pdk.md, "Hybrid apps"); null where there is no PDK runtime. */
-    fun hybridPlugins(window: AppWindow): HybridPlugins? = null
 }
+
+/** What a window needs from the shell. */
+interface WindowHost : WindowLifecycle, WindowBanners, DeviceFacts
 
 /**
  * One webOS window: a WebView on its app's origin, with PalmSystem and PalmServiceBridge.

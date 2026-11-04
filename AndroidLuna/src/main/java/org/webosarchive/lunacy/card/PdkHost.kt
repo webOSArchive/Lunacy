@@ -13,7 +13,6 @@ import android.util.Log
 import org.json.JSONObject
 import java.io.DataInputStream
 import java.io.File
-import java.io.InputStream
 import java.io.OutputStream
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
@@ -89,11 +88,32 @@ class PdkHost(
     private var frames = arrayOfNulls<Bitmap>(2)
     private var frameIndex = 0
 
+    /**
+     * What a start has worked out, for building its command and environment: the app's
+     * binary as packaged ([original]) and what is run ([binary]), whether that is a start
+     * script, and how it runs - through [loader] (32-bit, with [enosys] from Android 10) or
+     * under [emulator] (64-bit only), with [prefix] the words before the binary either way.
+     */
+    private class Start(
+        val lib: File, val loader: File?, val emulator: File?, val enosys: File?,
+        val original: File, val binary: File, val script: Boolean,
+        val appDir: File, val dataDir: File, val webosRoot: File, val prefix: List<String>,
+    )
+
     fun start(): Boolean {
         val lib = runtime.libDir ?: return false
         val loader = runtime.loader
         val emulator = runtime.emulator
         if (loader == null && emulator == null) return false
+        if (!listen()) return false
+        val start = plan(lib, loader, emulator) ?: return false
+        val pb = ProcessBuilder(command(start)).directory(start.appDir).redirectErrorStream(true)
+        environment(pb.environment(), start)
+        return launch(pb, start)
+    }
+
+    /** The socket the app's SDL connects to, and the framebuffer file both sides map. */
+    private fun listen(): Boolean {
         try {
             server = LocalServerSocket(socketName)
         } catch (e: Exception) {
@@ -101,6 +121,11 @@ class PdkHost(
         }
         fbFile.delete()
         RandomAccessFile(fbFile, "rw").use { }
+        return true
+    }
+
+    /** Which binary runs, readied to run, and how. */
+    private fun plan(lib: File, loader: File?, emulator: File?): Start? {
         val original = File(app.dir.let { File(runtime.appsRoot, it) }, plugin?.exe ?: app.main)
         // The installer keeps a package's files as they came; a PDK binary wants its
         // execute bit back (the loader runs it, qemu checks it).
@@ -108,7 +133,7 @@ class PdkHost(
         // A start script (ScummVM's `start`), which LunaSysMgr's exec ran with /bin/sh, runs in
         // busybox's sh; the webOS binaries it runs go through the command below (libexecpdk).
         val script = plugin == null && PdkRuntime.isScript(original)
-        val binary = if (script) runtime.scriptCopy(original, File(runtime.appsRoot, app.dir)) ?: return false
+        val binary = if (script) runtime.scriptCopy(original, File(runtime.appsRoot, app.dir)) ?: return null
             else PdkRuntime.runnable(original)
         // A launcher (the explusalpha emulators') picks one of the binaries beside it and execs
         // it, through the preload; that one wants the same as main.
@@ -130,44 +155,53 @@ class PdkHost(
             // couldn't find libpdl.so (2026-10-07).
             else listOf(emulator!!.path, "-L", lib.parentFile!!.path, "-E", "LD_LIBRARY_PATH=$libraryPath",
                 "-E", "LD_PRELOAD=/lib/liblunacy-preload.so")
+        // In the app's own folder, as LunaSysMgr started a native app; the binary may sit in a
+        // subfolder (Transformers: transg1/transg1.exe) and still read its data from the top.
+        val appDir = File(runtime.appsRoot, app.dir)
+        return Start(lib, loader, emulator, enosys, original, binary, script, appDir, dataDir, webosRoot, prefix)
+    }
+
+    private fun command(s: Start): List<String> {
         // argv[0] as webOS gave it: Gameloft's games build paths from it in buffers sized for the
         // TouchPad's, and Lunacy's folder is longer (Oregon Trail overran its movie's path and
         // crashed). /proc/self/exe and getcwd stay Android's: apkenv finds itself through
         // /proc/self/exe and stats its files with raw system calls the preload never sees, so a
         // webOS path there broke Fruit Ninja.
-        val webosExe = PdkRuntime.webosPath(original, runtime.appsRoot)
-        val argv0 = if (webosExe == null || script) emptyList() else if (loader != null) listOf("--argv0", webosExe) else listOf("-0", webosExe)
+        val webosExe = PdkRuntime.webosPath(s.original, runtime.appsRoot)
+        val argv0 = if (webosExe == null || s.script) emptyList() else if (s.loader != null) listOf("--argv0", webosExe) else listOf("-0", webosExe)
         // The root's /bin/sh, busybox by the name it dispatches on, as a package script's.
-        val command = if (script) listOf(File(runtime.webos!!.root, "bin/sh").path, binary.path) else prefix + argv0 + binary.path
-        // In the app's own folder, as LunaSysMgr started a native app; the binary may sit in a
-        // subfolder (Transformers: transg1/transg1.exe) and still read its data from the top.
-        val appDir = File(runtime.appsRoot, app.dir)
-        val pb = ProcessBuilder(command).directory(appDir).redirectErrorStream(true)
+        return if (s.script) listOf(File(runtime.webos!!.root, "bin/sh").path, s.binary.path) else s.prefix + argv0 + s.binary.path
+    }
+
+    private fun environment(env: MutableMap<String, String>, s: Start) {
+        val loader = s.loader
+        val enosys = s.enosys
+        val appDir = s.appDir
         // qemu's own libraries (Termux's build), beside the runtime.
         if (loader == null) runtime.qemuLibDir?.let {
-            pb.environment()["LUNACY_PDK_HOST_LIBS"] = it.path
-            if (!script) pb.environment()["LD_LIBRARY_PATH"] = it.path
+            env["LUNACY_PDK_HOST_LIBS"] = it.path
+            if (!s.script) env["LD_LIBRARY_PATH"] = it.path
         }
         // The preload (LunaRuntimes/pdk/libpreload): /proc/self/exe as the binary, not the
         // loader (Transformers G1 finds its data from it), and webOS's own paths (/usr/share/fonts,
         // /media/internal...) in the webOS root. Under qemu it goes to the guest by -E above.
         // libenosys is a bionic program, so it hands the preload on to the app itself.
-        if (loader != null && !(script && enosys == null)) pb.environment()[if (enosys != null) "LUNACY_PDK_PRELOAD" else "LD_PRELOAD"] =
-            File(lib, "liblunacy-preload.so").path
+        if (loader != null && !(s.script && enosys == null)) env[if (enosys != null) "LUNACY_PDK_PRELOAD" else "LD_PRELOAD"] =
+            File(s.lib, "liblunacy-preload.so").path
         // What the glibc preload execs another webOS binary with. Not through libenosys: that one
         // goes on watching the process across the exec.
-        pb.environment()["LUNACY_PDK_REEXEC"] = prefix.filter { it != enosys?.path }.joinToString("\n")
-        if (loader != null) pb.environment()["LUNACY_PDK_GUEST_PRELOAD"] = File(lib, "liblunacy-preload.so").path
-        if (script) pb.environment().apply {
-            put("LD_PRELOAD", runtime.execPdk!!.path); put("LUNACY_PDK_EXEC", prefix.joinToString("\n"))
+        env["LUNACY_PDK_REEXEC"] = s.prefix.filter { it != enosys?.path }.joinToString("\n")
+        if (loader != null) env["LUNACY_PDK_GUEST_PRELOAD"] = File(s.lib, "liblunacy-preload.so").path
+        if (s.script) env.apply {
+            put("LD_PRELOAD", runtime.execPdk!!.path); put("LUNACY_PDK_EXEC", s.prefix.joinToString("\n"))
             runtime.webos?.let { put("PATH", it.environment(appId).getValue("PATH")) }
         }
-        pb.environment()["LUNACY_PDK_EXE"] = binary.path
-        pb.environment()["LUNACY_PDK_ROOT"] = File(context.filesDir, "webos").path
-        pb.environment().apply {
+        env["LUNACY_PDK_EXE"] = s.binary.path
+        env["LUNACY_PDK_ROOT"] = File(context.filesDir, "webos").path
+        env.apply {
             put("SDL_VIDEODRIVER", "lunacy"); put("SDL_AUDIODRIVER", "lunacy")
             put("LUNACY_PDK_SOCKET", socketName); put("LUNACY_PDK_FB", fbFile.path)
-            put("LUNACY_PDK_APP_DIR", appDir.path); put("LUNACY_PDK_DATA_DIR", dataDir.path)
+            put("LUNACY_PDK_APP_DIR", appDir.path); put("LUNACY_PDK_DATA_DIR", s.dataDir.path)
             put("LUNACY_PDK_SCREEN_W", runtime.screenWidth.toString()); put("LUNACY_PDK_SCREEN_H", runtime.screenHeight.toString())
             put("LUNACY_PDK_DPI", runtime.dpi.toString())
             put("LUNACY_PDK_HARDWARE_ID", runtime.hardwareId.toString())
@@ -182,7 +216,7 @@ class PdkHost(
             put("LUNACY_PDK_OS_VERSION", runtime.osVersion); put("LUNACY_PDK_DEVICE_NAME", runtime.deviceName)
             put("LUNACY_PDK_NDUID", runtime.nduid)
             put("LUNACY_PDK_APPINFO_id", app.id); put("LUNACY_PDK_APPINFO_title", app.title); put("LUNACY_PDK_APPINFO_version", app.version)
-            put("HOME", dataDir.path); put("TMPDIR", context.cacheDir.path)
+            put("HOME", s.dataDir.path); put("TMPDIR", context.cacheDir.path)
             // /media/internal's folders that are Android's (UserFiles), for the preload.
             put("LUNACY_PDK_MEDIA", UserFiles.mappedFolders().joinToString(":") { (name, dir) -> "$name=${dir.path}" })
             // A plugin, as the reference TouchPad's RemoteAdapter started Adobe Reader's
@@ -192,7 +226,7 @@ class PdkHost(
                 put("LUNACY_PDK_PLUGIN", "1")
                 put("HOME", appDir.path)
                 put("LUNACY_PDK_DATA_DIR", "/media/internal/appdata/$appId")
-                File(UserFiles.own(webosRoot), "appdata/$appId").mkdirs()
+                File(UserFiles.own(s.webosRoot), "appdata/$appId").mkdirs()
             }
             // Development: `files/pdk/env` holds KEY=VALUE lines added to every PDK process
             // (LD_DEBUG=bindings is how a game's calls into the runtime are seen in order).
@@ -200,11 +234,15 @@ class PdkHost(
                 val i = l.indexOf('='); if (i > 0 && !l.startsWith("#")) put(l.substring(0, i).trim(), l.substring(i + 1).trim())
             }
         }
+    }
+
+    /** The accept thread, the process, and the thread copying its output to the log until it exits. */
+    private fun launch(pb: ProcessBuilder, s: Start): Boolean {
         Thread({ accept() }, "pdk-accept-$appId").start()
         process = try { pb.start() } catch (e: Exception) {
-            Log.w(AppServer.TAG, "pdk [$appId]: can't start ${binary.path}: $e"); stop(); return false
+            Log.w(AppServer.TAG, "pdk [$appId]: can't start ${s.binary.path}: $e"); stop(); return false
         }
-        Log.i(AppServer.TAG, "pdk [$appId]: started ${binary.name} through ${listOfNotNull(runtime.busybox.takeIf { script }, enosys, loader ?: emulator).joinToString(" and ") { it.name }}")
+        Log.i(AppServer.TAG, "pdk [$appId]: started ${s.binary.name} through ${listOfNotNull(runtime.busybox.takeIf { s.script }, s.enosys, s.loader ?: s.emulator).joinToString(" and ") { it.name }}")
         Thread({
             try {
                 process!!.inputStream.bufferedReader().forEachLine { Log.i(AppServer.TAG, "pdk [$appId] $it") }
@@ -435,250 +473,5 @@ class PdkHost(
         const val JS_READY = 30; const val JS_CALL = 31; const val JS_REPLY = 32; const val CALL_JS = 33
         /** SDL 1.2 keysyms the shell sends. */
         const val SDLK_ESCAPE = 27
-    }
-}
-
-/**
- * The PDK runtime shipped in the APK (tools/build-pdk.sh): the glibc dynamic loader (the
- * 32-bit build) or a static qemu for 32-bit ARM (the 64-bit build), either of which lives
- * with the native libraries because it has to be exec'd, and the libraries, extracted from
- * the assets to the app's files the first time they are needed. The libraries folder is
- * laid out as a sysroot's /lib, with the loader in it by its own name, which is how qemu
- * finds an executable's interpreter (`-L`).
- */
-/**
- * webOS 3's portability, as the TouchPad's libnapp did it: an app's `metadata.json`
- * (`{"version": 1, "devices": [601]}`) lists the devices it was made for, and on a device not
- * in the list the app is shown one that is: `PDL_GetHardwareID` answers that device, the screen
- * is its screen, and its OpenGL surface is forced to that size (libnapp's `final_spoofing`,
- * `final_ogl`), which the card turns and fits like any other-shape buffer.
- *
- * The list's numbers are libnapp's own, not PDL's hardware ids: read from the reference
- * TouchPad's libnapp.so (2026-10-19), each device has an id, a machine name, a screen held its
- * own way up, and the devices it can stand in for, most alike first - the TouchPad (701,
- * "topaz") 601, 103, 102, 101, 401, 202, 201. The first of those the app lists is emulated.
- * Measured: Worms (devices [601], the Pre3) gets a 480 x 800 screen on the TouchPad and is
- * shown upright; ExZeus ([101], the Pre) gets 320 x 480, landscape with black bars.
- */
-object Portability {
-    class Device(val id: Int, val width: Int, val height: Int)
-
-    /** libnapp's table: id to its screen and the devices it stands in for, in order. */
-    private class Napp(val width: Int, val height: Int, val standsInFor: List<Int>)
-    private val napp = mapOf(
-        101 to Napp(320, 480, listOf(401, 202, 201)),                         // Pre ("castle")
-        102 to Napp(320, 480, listOf(101, 401, 202, 201)),                    // Pre Plus
-        103 to Napp(320, 480, listOf(102, 101, 401, 202, 201)),               // Pre 2 ("roadrunner")
-        201 to Napp(320, 400, emptyList()),                                   // Pixi ("pixie")
-        202 to Napp(320, 400, listOf(201)),                                   // Pixi Plus
-        401 to Napp(320, 400, listOf(202, 201)),                              // Veer ("broadway")
-        601 to Napp(480, 800, listOf(103, 102, 101, 401, 202, 201)),          // Pre3 ("mantaray")
-        701 to Napp(1024, 768, listOf(601, 103, 102, 101, 401, 202, 201)),    // TouchPad ("topaz")
-        702 to Napp(1024, 768, listOf(701, 601, 103, 102, 101, 401, 202, 201))) // TouchPad Go ("opal")
-
-    /** libnapp's id to PDL's hardware id (PDL_types.h), which PDL_GetHardwareID answers. */
-    private val pdlId = mapOf(101 to 101, 102 to 102, 103 to 401, 201 to 201, 202 to 201, 401 to 301,
-        601 to 501, 701 to 601, 702 to 701)
-
-    /** The profile's device in libnapp's numbers: the TouchPad, or the Pre3 on the phone profile. */
-    fun nappId(pdlHardwareId: Int): Int = if (pdlHardwareId == 501) 601 else 701
-
-    fun emulate(appDir: File, native: Int): Device? {
-        val meta = File(appDir, "metadata.json").takeIf { it.isFile } ?: return null
-        val json = runCatching { JSONObject(meta.readText()) }.getOrNull() ?: return null
-        if (!json.has("version")) return null
-        val list = json.optJSONArray("devices") ?: return null
-        val devices = (0 until list.length()).map { list.optInt(it, -1) }
-        val here = nappId(native)
-        if (devices.isEmpty() || here in devices) return null
-        val id = napp.getValue(here).standsInFor.firstOrNull { it in devices } ?: return null
-        val d = napp.getValue(id)
-        return Device(pdlId.getValue(id), d.width, d.height)
-    }
-}
-
-class PdkRuntime(private val context: Context, val appsRoot: File, val screenWidth: Int, val screenHeight: Int, val dpi: Int,
-                 val osVersion: String, val deviceName: String, val nduid: String,
-                 /** The webOS root a start script runs in: busybox's commands, webOS's paths. */
-                 val webos: WebosRoot? = null) {
-    /**
-     * The 32-bit glibc loader, for the native path. Both builds carry it; the 64-bit one uses
-     * it only where the device can still run 32-bit code (a Galaxy Z Fold3 can, a Pixel Tablet
-     * can't), and otherwise runs the app under qemu. Native is the TouchPad's own way and much
-     * the faster, and qemu fails some apps a device runs (Docs/pdk.md, "Native on 64-bit").
-     */
-    val loader: File? = File(context.applicationInfo.nativeLibraryDir, "libld-linux.so")
-        .takeIf { it.canExecute() && android.os.Build.SUPPORTED_32_BIT_ABIS.isNotEmpty() && !forceEmulated(context) }
-    val emulator: File? = File(context.applicationInfo.nativeLibraryDir, "libqemu-arm.so").takeIf { it.canExecute() }
-    /** The native path's guard on Android 10 and later (LunaRuntimes/pdk/enosys). */
-    val enosys: File? = File(context.applicationInfo.nativeLibraryDir, "libenosys.so").takeIf { it.canExecute() }
-    /** A start script's shell, and the preload that runs the script's webOS binaries (LunaRuntimes/pdk/execpdk). */
-    val busybox: File? = File(context.applicationInfo.nativeLibraryDir, "libbusybox.so").takeIf { it.canExecute() }
-    val execPdk: File? = File(context.applicationInfo.nativeLibraryDir, "libexecpdk.so").takeIf { it.isFile }
-    val libDir: File? by lazy { extract() }
-    /** The emulator's own libraries, extracted beside the runtime (64-bit build). */
-    val qemuLibDir: File? by lazy { libDir?.let { File(it.parentFile, "qemu-lib").takeIf { d -> d.isDirectory } } }
-    val available get() = loader != null || emulator != null
-    /** PDL_GetHardwareID: HARDWARE_TOUCHPAD (601) on the TouchPad profile, HARDWARE_PRE_3 (501) on the phone one. */
-    val hardwareId get() = if (screenWidth >= screenHeight) 601 else 501
-    /** How this build runs a PDK app, for Device Info and the log. */
-    val how get() = when { loader != null -> "native"; emulator != null -> "emulated"; else -> "unavailable" }
-
-    companion object {
-        /**
-         * A development switch: `files/pdk/emulate` present runs PDK apps under qemu even where
-         * the device runs 32-bit code, so the emulated path can be worked on with a device that
-         * runs both (and compared with native on the same machine).
-         */
-        fun forceEmulated(context: Context) = File(context.filesDir, "pdk/emulate").exists()
-        private const val PT_GNU_STACK = 0x6474e551L
-        private const val PT_INTERP = 3L
-        private const val PF_X = 1
-        /** The loader webOS's binaries name, which the runtime provides (pdk/lib/ld-linux.so.3). */
-        private const val LOADER = "/lib/ld-linux.so.3"
-
-        /**
-         * A 2010 toolchain left many PDK binaries asking for an executable stack
-         * (`PT_GNU_STACK` with its execute bit), usually from one assembly file without a
-         * `.note.GNU-stack` section, and Android refuses an app's process that: "cannot
-         * enable executable stack as shared object requires: Permission denied" (Transformers
-         * G1, 2026-10-02). The one mechanical fix `execstack -c` makes, applied to every PDK
-         * binary that asks: the flag cleared in a copy beside the original, named after it
-         * with a `.lunacy.` prefix, so a game that finds its data from its own path still
-         * does. The package's own file is never written to. Returns the original when it
-         * doesn't ask, or isn't an ELF the shell can read.
-         *
-         * The copy also names webOS's loader, /lib/ld-linux.so.3, as its interpreter when the
-         * binary names another: qemu (a 64-bit-only device) loads the interpreter the binary
-         * names, and webOS CE's IM transport names CE's own, /media/cryptofs/synergy-glibc/lib/
-         * ld-linux.so.3, which Lunacy doesn't have, so it exited at once on the Pixel Tablet
-         * (2026-10-13). The native path runs the loader itself and never reads the name.
-         */
-        /** [f], an installed app's file under [appsRoot], by its webOS path; null for any other. */
-        fun webosPath(f: File, appsRoot: File): String? {
-            val rel = f.path.removePrefix(appsRoot.path)
-            return if (rel != f.path && rel.startsWith("/")) "/" + AppServer.APPS.trimEnd('/') + rel else null
-        }
-
-        /** Whether a package's file is a script (`#!`), run by its interpreter. */
-        fun isScript(f: File): Boolean = head(f, 2).contentEquals(byteArrayOf('#'.code.toByte(), '!'.code.toByte()))
-
-        private fun isElf(f: File): Boolean = head(f, 4).contentEquals(byteArrayOf(0x7f, 'E'.code.toByte(), 'L'.code.toByte(), 'F'.code.toByte()))
-
-        private fun head(f: File, n: Int): ByteArray =
-            runCatching { f.inputStream().use { s -> ByteArray(n).also { if (s.read(it) != n) return ByteArray(0) } } }.getOrDefault(ByteArray(0))
-
-        /** The other binaries in a main binary's folder, readied as main is. */
-        fun readySiblings(main: File) {
-            main.parentFile?.listFiles()?.filter { it.isFile && it != main && !it.name.startsWith(".lunacy.") && !it.name.contains(".so") && isElf(it) }
-                ?.forEach { it.setExecutable(true, false); runnable(it) }
-        }
-
-        fun runnable(original: File): File {
-            try {
-                val bytes = original.readBytes()
-                if (bytes.size < 52 || bytes[0] != 0x7f.toByte() || bytes[1] != 'E'.code.toByte() || bytes[4] != 1.toByte()) return original
-                val bb = java.nio.ByteBuffer.wrap(bytes).order(java.nio.ByteOrder.LITTLE_ENDIAN)
-                val phoff = bb.getInt(28); val phentsize = bb.getShort(42).toInt(); val phnum = bb.getShort(44).toInt()
-                var changed = false
-                for (i in 0 until phnum) {
-                    val ph = phoff + i * phentsize
-                    if (ph + 32 > bytes.size) break
-                    val type = bb.getInt(ph).toLong() and 0xffffffffL
-                    if (type == PT_INTERP) {
-                        val off = bb.getInt(ph + 4); val size = bb.getInt(ph + 16)
-                        if (off < 0 || size <= LOADER.length || off + size > bytes.size) continue
-                        val name = String(bytes, off, size, Charsets.ISO_8859_1).substringBefore('\u0000')
-                        if (name != LOADER) {
-                            java.util.Arrays.fill(bytes, off, off + size, 0)
-                            LOADER.toByteArray(Charsets.ISO_8859_1).copyInto(bytes, off)
-                            changed = true
-                        }
-                        continue
-                    }
-                    if (type != PT_GNU_STACK) continue
-                    val flags = bb.getInt(ph + 24)
-                    if (flags and PF_X != 0) { bb.putInt(ph + 24, flags and PF_X.inv()); changed = true }
-                }
-                if (!changed) return original
-                val copy = File(original.parentFile, ".lunacy." + original.name)
-                if (!copy.isFile || copy.length() != original.length() || copy.lastModified() < original.lastModified()) {
-                    copy.writeBytes(bytes)
-                    Log.i(AppServer.TAG, "pdk: running a copy of ${original.name} without an executable stack and with webOS's loader")
-                }
-                copy.setExecutable(true, false)
-                return copy
-            } catch (e: Exception) {
-                Log.w(AppServer.TAG, "pdk: couldn't read ${original.name}'s headers: $e"); return original
-            }
-        }
-    }
-
-    /**
-     * A start script readied to run as LunaSysMgr ran it, or null when this build can't: a copy
-     * beside it, `.lunacy.<name>` so its own folder is still `dirname $0`, with webOS's paths
-     * pointed into the webOS root as a package script's are ([WebosRoot.mapPaths]); and every
-     * webOS binary in the app's folder given its execute bit and, where it needs one, its
-     * runnable copy ([runnable]), since the script may run any of them.
-     */
-    fun scriptCopy(original: File, appDir: File): File? {
-        val root = webos ?: return null
-        root.prepare()
-        if (busybox == null || execPdk == null || !File(root.root, "bin/sh").exists()) {
-            Log.w(AppServer.TAG, "pdk: no shell for ${original.name} in this build"); return null
-        }
-        appDir.walkTopDown().filter { it.isFile && !it.name.startsWith(".lunacy.") && !it.name.contains(".so") && isElf(it) }.forEach {
-            it.setExecutable(true, false); runnable(it)
-        }
-        val copy = File(original.parentFile, ".lunacy." + original.name)
-        copy.writeText(root.mapPaths(original.readText()))
-        copy.setExecutable(true, false)
-        return copy
-    }
-
-    /** The "alias target" lines of an asset, as symlinks in dir. */
-    private fun links(dir: File, asset: String) {
-        runCatching { context.assets.open(asset).bufferedReader().readLines() }.getOrNull()?.forEach { line ->
-            val (alias, target) = line.trim().split(Regex("\\s+")).takeIf { it.size == 2 } ?: return@forEach
-            val f = File(dir, alias)
-            f.delete()
-            runCatching { android.system.Os.symlink(target, f.path) }
-                .onFailure { Log.w(AppServer.TAG, "pdk: no alias $alias -> $target: ${it.message}") }
-        }
-    }
-
-    private fun extract(): File? {
-        val dir = File(context.filesDir, "pdk/lib")
-        val stamp = File(dir, ".version")
-        // The build's own id, so a new runtime replaces an extracted one (the NOTICE alone
-        // stayed the same across rebuilds and left stale libraries behind).
-        val notice = (runCatching { context.assets.open("pdk/BUILD").bufferedReader().readText() }.getOrNull() ?: "") +
-            (runCatching { context.assets.open("pdk/NOTICE").bufferedReader().readText() }.getOrNull() ?: return null)
-        if (stamp.exists() && stamp.readText() == notice) return dir
-        dir.mkdirs()
-        val names = context.assets.list("pdk/lib").orEmpty()
-        if (names.isEmpty()) return null
-        for (n in names) context.assets.open("pdk/lib/$n").use { s -> File(dir, n).outputStream().use { s.copyTo(it) } }
-        // Other names apps link the same libraries by (libSDL.so, libdl.so...): symlinks.
-        links(dir, "pdk/aliases")
-        // The system fonts, where webOS kept them: apps open them by path with SDL_ttf
-        // (/usr/share/fonts/PreludeCondensed-Medium.ttf). Laid down once per runtime.
-        val fonts = File(context.filesDir, "webos/usr/share/fonts").also { it.mkdirs() }
-        for (n in context.assets.list("luna/fonts").orEmpty()) if (n.endsWith(".ttf"))
-            context.assets.open("luna/fonts/$n").use { s -> File(fonts, n).outputStream().use { s.copyTo(it) } }
-        // The TouchPad's other fonts, by its names (arial.ttf...): free stand-ins (pdk/fonts/NOTICE).
-        for (n in context.assets.list("pdk/fonts").orEmpty()) {
-            if (n == "aliases") continue
-            context.assets.open("pdk/fonts/$n").use { s -> File(fonts, if (n == "NOTICE") "NOTICE.stand-ins" else n).outputStream().use { s.copyTo(it) } }
-        }
-        links(fonts, "pdk/fonts/aliases")
-        val qemuLibs = context.assets.list("pdk/qemu-lib").orEmpty()
-        if (qemuLibs.isNotEmpty()) {
-            val q = File(dir.parentFile, "qemu-lib").also { it.mkdirs() }
-            for (n in qemuLibs) context.assets.open("pdk/qemu-lib/$n").use { s -> File(q, n).outputStream().use { s.copyTo(it) } }
-        }
-        stamp.writeText(notice)
-        Log.i(AppServer.TAG, "pdk: runtime extracted, ${names.size} libraries")
-        return dir
     }
 }

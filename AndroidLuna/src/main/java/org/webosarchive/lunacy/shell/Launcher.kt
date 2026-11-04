@@ -210,7 +210,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
                 1 -> page.tiles[i] = Tile.App(g.members[0])
             }
         }
-        saveOrder(); invalidate()
+        store.save(pages, hidden); invalidate()
     }
 
     /** A member held in the group's panel comes out onto the page, just after the group. */
@@ -227,14 +227,14 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
 
     fun renameTab(index: Int, name: String) {
         pages.getOrNull(index)?.title = name
-        saveOrder(); invalidate()
+        store.save(pages, hidden); invalidate()
     }
 
     /** LauncherObject::createUserTab: a new, empty page at the end, with a designator of its own. */
     fun addTab(name: String) {
         if (pages.size >= Params.MAX_TABS) return
         pages += Page("usertab_" + java.util.UUID.randomUUID(), name)
-        saveOrder(); animatePage(pages.size - 1, Params.SNAP_MS, Easing.InQuad)
+        store.save(pages, hidden); animatePage(pages.size - 1, Params.SNAP_MS, Easing.InQuad)
     }
 
     /** LauncherObject::deleteUserTab: its icons go to the first page, in order. */
@@ -243,7 +243,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val dying = pages.removeAt(index)
         pages[0].tiles += dying.tiles
         pagePos = pagePos.coerceAtMost(pages.size - 1f)
-        saveOrder(); animatePage(pagePos.roundToInt().coerceIn(0, pages.size - 1), Params.SNAP_MS, Easing.InQuad)
+        store.save(pages, hidden); animatePage(pagePos.roundToInt().coerceIn(0, pages.size - 1), Params.SNAP_MS, Easing.InQuad)
     }
 
     /** A launcher cell: an app or, [LunaCE], a group of apps (LunaCE's GroupIcon). */
@@ -253,64 +253,10 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         class Group(override val id: String, var name: String, val members: MutableList<AppInfo>) : Tile()
     }
 
-    class Page(val designator: String, var title: String, val tiles: MutableList<Tile> = mutableListOf()) { var scrollY = 0f }
+    class Page(val designator: String, var title: String, val tiles: MutableList<Tile> = mutableListOf()) : KineticScroll.Target { override var scrollY = 0f }
 
-    /**
-     * The pages, their names and the keyword map, from assets/luna/launcher-pages.json (which
-     * says where each value comes from). LunaCE's four built-in pages, named as the reference
-     * TouchPad names them: APPS, DOWNLOADS, GAMES, SETTINGS.
-     */
-    private val pageMap = runCatching {
-        JSONObject(context.assets.open("luna/launcher-pages.json").bufferedReader().use { it.readText() })
-    }.getOrDefault(JSONObject())
-
-    val pages: MutableList<Page> = pageMap.optJSONArray("pages")?.let { a ->
-        (0 until a.length()).map { i ->
-            val p = a.getJSONObject(i)
-            Page(p.optString("designator"), p.optString("name", p.optString("designator")))
-        }.toMutableList()
-    }?.takeIf { it.isNotEmpty() } ?: mutableListOf(
-        Page("apps", "apps"), Page("downloads", "downloads"), Page("favorites", "android"), Page("prefs", "settings"))
-
-    /**
-     * Where a bundled app starts, from `layout` in that file: webOS shipped the same thing as
-     * /etc/palm/default-launcher-page-layout.json, which is what put Palm's settings apps on
-     * the prefs page. Page designator to app ids, in the order they should appear.
-     */
-    private val defaultLayout: List<Pair<String, List<String>>> =
-        pageMap.optJSONArray("layout")?.let { arr ->
-            (0 until arr.length()).mapNotNull { i ->
-                val o = arr.optJSONObject(i) ?: return@mapNotNull null
-                val items = o.optJSONArray("items")
-                o.optString("title") to (0 until (items?.length() ?: 0))
-                    .map { j -> items!!.optString(j).removeSuffix("_default") }
-            }
-        }.orEmpty()
-
-    /** keyword (lower case) to page designator. */
-    private val keywordPages: Map<String, String> = pageMap.optJSONObject("keywords")?.let { o ->
-        o.keys().asSequence().associate { it.lowercase() to o.optString(it) }
-    }.orEmpty()
-
-    /**
-     * The page an app with no place of its own belongs to, as LunaCE's
-     * AppMonitor::pageDesignatorForWebOSApp works it out: its category first, then each of its
-     * keywords. Anything unrecognised goes to the first page.
-     */
-    private fun pageFor(app: AppInfo): Int {
-        // Proof of concept: Android's apps start on the favorites page, named "android".
-        if (app.androidComponent != null) return pages.indexOfFirst { it.designator == "favorites" }.takeIf { it >= 0 } ?: 0
-        // LauncherObject::slotAppAuxiliaryIconAdd put a launch point an app adds on Favorites,
-        // which is Android's tab in Lunacy; codepoet's call: it goes on the first page.
-        if (app.launchPoint != null) return 0
-        val designator = keywordPages[app.category.lowercase()]
-            ?: app.keywords.firstNotNullOfOrNull { keywordPages[it.lowercase()] }
-            // LauncherObject::pageIndexForAppByPredefinedDesignators: an app the user installed
-            // goes on the downloads page (installedAppsPageIndex), as every installed app does
-            // on the reference TouchPad; the rest on the first.
-            ?: if (app.userInstalled) "downloads" else return 0
-        return pages.indexOfFirst { it.designator == designator }.takeIf { it >= 0 } ?: 0
-    }
+    private val store = LauncherStore(context)
+    val pages: MutableList<Page> = store.initialPages()
 
     // ---- packages being installed ----
 
@@ -338,7 +284,6 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     /** Edit mode began or ended here (the dock follows it). */
     var onEditModeChanged: (Boolean) -> Unit = {}
 
-    private val prefs = context.getSharedPreferences("launcher", Context.MODE_PRIVATE)
     private val tabText = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = luna.px(16f); typeface = luna.fontBold; textAlign = Paint.Align.CENTER }
     private val doneText = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = luna.px(15f); typeface = luna.fontBold; color = Color.WHITE; textAlign = Paint.Align.CENTER }
     private val label = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = luna.px(if (phone) Phone.LABEL_PX else 14f); typeface = luna.fontBold; color = Color.WHITE }
@@ -371,7 +316,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             }
             else -> null
         }
-        val tabs = runCatching { JSONArray(prefs.getString("tabs", null) ?: "") }.getOrNull()
+        val tabs = store.savedTabs()
         if (tabs != null) {
             // The user's own tabs: the stock ones by designator, keeping their names, and any
             // they added, in their order.
@@ -389,7 +334,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             pages.sortBy { p -> order.indexOf(p.designator).let { if (it < 0) Int.MAX_VALUE else it } }
         } else {
             // Before tabs could change: each page's apps by index.
-            val saved = runCatching { JSONArray(prefs.getString("pages", null) ?: "[" + (prefs.getString("order", null) ?: "[]") + "]") }.getOrDefault(JSONArray())
+            val saved = store.legacyPages()
             for (pi in 0 until minOf(saved.length(), pages.size)) {
                 val ids = saved.optJSONArray(pi) ?: continue
                 for (i in 0 until ids.length()) app(ids.optString(i))?.let { pages[pi].tiles += it }
@@ -407,13 +352,13 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             val cams = AndroidApps.cameraPackages(context)
             apps.firstOrNull { it.androidComponent?.packageName in cams }?.id
         }
-        for ((designator, ids) in defaultLayout) {
+        for ((designator, ids) in store.defaultLayout) {
             val page = pages.indexOfFirst { it.designator == designator }.takeIf { it >= 0 } ?: continue
             for (id in ids) (when (id) { ANDROID_PHONE -> phone; ANDROID_CAMERA -> camera; else -> id })?.let { app(it) }?.let { pages[page].tiles += it }
         }
         // Everything else by its keywords, alphabetically.
         for (app in apps.filter { it.id !in placed }.sortedBy { it.title.lowercase() }) {
-            pages[pageFor(app)].tiles += Tile.App(app)
+            pages[store.pageFor(app, pages)].tiles += Tile.App(app)
         }
         // A tile being dragged while the list changed is the new one with its id, if any.
         dragging = dragging?.let { d -> pages.flatMap { it.tiles }.firstOrNull { it.id == d.id } }
@@ -422,37 +367,9 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
 
     /**
      * The apps the user has hidden ([org.webosarchive.lunacy.card.HiddenApps]). They aren't
-     * in [setApps]'s list, but they keep their saved place: see [saveOrder].
+     * in [setApps]'s list, but they keep their saved place: see [LauncherStore.save].
      */
     var hidden: Set<String> = emptySet()
-
-    /**
-     * Each page's designator, name and apps, in order: the tabs themselves are the user's now.
-     * A hidden app isn't on the page, so it is put back where the last save had it, in its tab
-     * or its group, to come back there when it is shown again.
-     */
-    private fun saveOrder() {
-        val old = runCatching { JSONArray(prefs.getString("tabs", null) ?: "") }.getOrNull()
-        val oldTabs = (0 until (old?.length() ?: 0)).mapNotNull { old!!.optJSONObject(it) }.associateBy { it.optString("designator") }
-        fun ids(a: JSONArray?) = (0 until (a?.length() ?: 0)).map { a!!.opt(it) }
-        prefs.edit().putString("tabs", JSONArray(pages.map { p ->
-            val entries: MutableList<Any> = p.tiles.map { t ->
-                when (t) {
-                    is Tile.App -> t.app.id
-                    is Tile.Group -> {
-                        val members = t.members.map { it.id }.toMutableList()
-                        val was = ids(oldTabs[p.designator]?.optJSONArray("apps")).filterIsInstance<JSONObject>().firstOrNull { it.optString("uid") == t.id }
-                        ids(was?.optJSONArray("apps")).forEachIndexed { i, id -> if (id is String && id in hidden && id !in members) members.add(minOf(i, members.size), id) }
-                        JSONObject().put("group", t.name).put("uid", t.id).put("apps", JSONArray(members))
-                    }
-                }
-            }.toMutableList()
-            ids(oldTabs[p.designator]?.optJSONArray("apps")).forEachIndexed { i, id ->
-                if (id is String && id in hidden && id !in entries) entries.add(minOf(i, entries.size), id)
-            }
-            JSONObject().put("designator", p.designator).put("name", p.title).put("apps", JSONArray(entries))
-        }).toString()).apply()
-    }
 
     // ---- launch feedback ----
 
@@ -598,7 +515,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         drawTabBar(c)
         // The dragged icon, over everything, under the finger.
         dragging?.let { drawTile(c, it, PointF(dragX - grabDx, dragY - grabDy)) }
-        dialogApp?.let { drawDialog(c, it) }
+        removeDialog.draw(c)
     }
 
     private val emptyText = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = luna.px(18f); typeface = luna.fontBold; color = Color.rgb(0xAA, 0xAA, 0xAA) }
@@ -793,7 +710,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     /** Done, the home button, or the launcher closing. */
     fun exitEditMode() {
         if (!editing) return
-        editing = false; dragging = null; dialogApp = null; pressedDelete = null; donePressed = false
+        editing = false; dragging = null; removeDialog.app = null; pressedDelete = null; donePressed = false
         removeCallbacks(edgeFlip)
         onEditModeChanged(false)
         invalidate()
@@ -944,7 +861,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
                     is Tile.App -> page.tiles[page.tiles.indexOf(onto)] = Tile.Group("group_" + java.util.UUID.randomUUID(), Params.GROUP_NAME, mutableListOf(onto.app, app.app))
                 }
                 reorder { }
-                saveOrder()
+                store.save(pages, hidden)
                 return
             }
         }
@@ -953,79 +870,12 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         dragging = null
         reorder { }
         movedFrom[app.id] = finger
-        saveOrder()
+        store.save(pages, hidden)
     }
 
-    // ---- the remove dialog (LunaCE's AppInfoDialog) ----
+    // ---- the remove dialog ----
 
-    private var dialogApp: AppInfo? = null
-    private var dialogPressed = -1  // 0 Cancel, 1 Remove
-    private val dialogTitle = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = luna.px(18f); typeface = luna.fontBold; color = Color.WHITE }
-    private val dialogMessage = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = luna.px(14f); typeface = luna.fontBold; color = Color.WHITE }
-    private val buttonText = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = luna.px(16f); typeface = luna.fontBold; color = Color.WHITE; textAlign = Paint.Align.CENTER }
-
-    @Suppress("DEPRECATION")
-    private fun dialogText(t: String, p: TextPaint) =
-        StaticLayout(t, p, luna.px(Params.DIALOG_W - 2 * (Params.DIALOG_EDGE + Params.DIALOG_MARGIN)).toInt(), Layout.Alignment.ALIGN_CENTER, 1f, 0f, false)
-
-    private class DialogLayout(val frame: RectF, val title: StaticLayout, val titleY: Float, val message: StaticLayout, val messageY: Float, val buttons: List<RectF>)
-
-    /** An Android app's own name, for the shortcut it pinned; its package if it has none. */
-    private fun androidAppTitle(pkg: String): String = runCatching {
-        val pm = context.packageManager
-        pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
-    }.getOrDefault(pkg)
-
-    private fun dialogLayout(app: AppInfo): DialogLayout {
-        val edge = luna.px(Params.DIALOG_EDGE); val margin = luna.px(Params.DIALOG_MARGIN)
-        // LauncherObject::appDeleteDecoratorActivated: a launch point an app added is a shortcut,
-        // and so is one an Android app pinned (PinnedShortcuts), named by the app that pinned it.
-        val lp = app.launchPoint
-        val pinnedBy = app.androidShortcut?.let { androidAppTitle(app.androidComponent!!.packageName) }
-        val title = dialogText(if (lp != null || pinnedBy != null) "Remove Shortcut?" else "Remove Application?", dialogTitle)
-        val message = dialogText(when {
-            lp != null -> app.title + " (" + (appTitle(lp.appId) ?: lp.appId) + ")"
-            pinnedBy != null -> "${app.title} ($pinnedBy)"
-            else -> app.title + " - v." + app.version
-        }, dialogMessage)
-        val bh = luna.px(Params.DIALOG_BUTTON_H)
-        val w = luna.px(Params.DIALOG_W)
-        val h = title.height + message.height + 2 * bh + 2 * edge + 4 * margin + luna.px(Params.DIALOG_TOP)
-        val left = (width - w) / 2; val top = (height - h) / 2
-        val titleY = top + edge + margin + luna.px(Params.DIALOG_TOP)
-        val messageY = titleY + title.height + margin
-        val bx = left + edge + margin + luna.px(1f); val bw = w - 2 * (edge + margin) - luna.px(1f)
-        val cancel = RectF(bx, messageY + message.height + margin, bx + bw, messageY + message.height + margin + bh)
-        val remove = RectF(bx, cancel.bottom, bx + bw, cancel.bottom + bh)
-        return DialogLayout(RectF(left, top, left + w, top + h), title, titleY, message, messageY, listOf(cancel, remove))
-    }
-
-    private fun drawDialog(c: Canvas, app: AppInfo) {
-        luna.image("scrim.png")?.let { c.drawBitmap(it, null, RectF(0f, 0f, width.toFloat(), height.toFloat()), null) }
-        val d = dialogLayout(app)
-        luna.nine(c, "popup-bg.png", d.frame, 35, 40, 35, 40)
-        c.save(); c.translate(d.frame.centerX() - d.title.width / 2f, d.titleY); d.title.draw(c); c.restore()
-        c.save(); c.translate(d.frame.centerX() - d.message.width / 2f, d.messageY); d.message.draw(c); c.restore()
-        listOf("Cancel", "Remove").forEachIndexed { i, caption ->
-            val r = d.buttons[i]
-            luna.nine(c, if (dialogPressed == i) "pin/button-black-press.png" else "pin/button-black.png", r, 10, 10, 10, 10)
-            c.drawText(caption, r.centerX(), buttonText.centredBaseline(r.centerY()), buttonText)
-        }
-    }
-
-    private fun dialogTouch(e: MotionEvent) {
-        val app = dialogApp ?: return
-        val hit = dialogLayout(app).buttons.indexOfFirst { it.contains(e.x, e.y) }
-        when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> { dialogPressed = hit; invalidate() }
-            MotionEvent.ACTION_UP -> {
-                dialogPressed = -1
-                if (hit >= 0) { dialogApp = null; if (hit == 1) onRemove(app) }
-                invalidate()
-            }
-            MotionEvent.ACTION_CANCEL -> { dialogPressed = -1; invalidate() }
-        }
-    }
+    private val removeDialog = RemoveDialog(this, luna, { appTitle(it) }, { onRemove(it) })
 
     // ---- touch ----
 
@@ -1035,6 +885,12 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private var downApp: Tile? = null
     private val flick = Flick()
     private var anim: ValueAnimator? = null
+    /** Flicks and overscroll, on the same one animator as paging and edit-mode scrolling. */
+    private val kinetic = KineticScroll(luna, object : KineticScroll.Slot {
+        override var anim: ValueAnimator?
+            get() = this@Launcher.anim
+            set(v) { this@Launcher.anim = v }
+    }) { invalidate() }
     /** Holding an icon enters edit mode and picks the icon up. */
     private val longPress = Runnable {
         val app = downApp ?: return@Runnable
@@ -1063,7 +919,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
-        if (dialogApp != null) { dialogTouch(e); return true }
+        if (removeDialog.app != null) { removeDialog.touch(e); return true }
         flick.add(e)
         val page = currentPage()
         when (e.actionMasked) {
@@ -1124,7 +980,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
                             animatePage(target, ms, Easing.OutCubic)
                         } else animatePage(pagePos.roundToInt().coerceIn(0, pages.size - 1), Params.SNAP_MS, Easing.InQuad)
                     }
-                    Drag.SCROLL -> fling(page, -vy)
+                    Drag.SCROLL -> kinetic.fling(page, -vy) { maxScroll(page) }
                     Drag.TABS -> {}
                     Drag.UNDECIDED -> if (e.actionMasked == MotionEvent.ACTION_UP) tap(e.x, e.y)
                     Drag.NONE -> {}
@@ -1149,7 +1005,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         }
         if (editing) {
             if (doneTouchRect().contains(x, y)) { exitEditMode(); return }
-            deleteAt(x, y)?.let { dialogApp = it; return }
+            deleteAt(x, y)?.let { removeDialog.app = it; return }
         }
         if (y < tabBarH()) {
             val i = tabAt(x, y)
@@ -1171,98 +1027,4 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         anim = animateValue(pagePos, target.toFloat(), ms, easing) { pagePos = it; invalidate() }
     }
 
-    /** The velocity of the flick still running, for LunaCE's "keep increasing velocity". */
-    private var flickV = 0f
-
-    /**
-     * KineticScroller: a flick starts at its velocity over sFlickScalar and slows under a
-     * constant friction, eased OutCubic over the time it takes to stop; a flick in the same
-     * direction as one still running adds to it. Past the end it may run on up to 100 px, then
-     * comes back over 350 ms; let go while overscrolled without a flick, 500 ms OutCubic.
-     */
-    private fun fling(page: Page, v: Float) {
-        anim?.cancel()
-        val m = maxScroll(page)
-        val start = page.scrollY
-        if (abs(v) < luna.px(500f)) {
-            flickV = 0f
-            if (start < 0 || start > m) settle(page, Params.OVERSCROLL_SNAP_MS)
-            return
-        }
-        // In TouchPad px per ms.
-        var v0 = (v / luna.density) / Params.FLICK_SCALAR
-        // flickV is only still set if the last flick was stopped by this touch, not run out.
-        if (flickV != 0f && Math.signum(flickV) == Math.signum(v0)) v0 += flickV
-        v0 = v0.coerceIn(-100f, 100f)
-        flickV = v0
-        val t = abs(v0) / Params.FRICTION
-        val distance = v0 * v0 / (2 * Params.FRICTION) * Math.signum(v0) * luna.density
-        if (start < 0 || start > m) { overscrollFlick(page, v0); return }
-        val over = luna.px(Params.MAX_OVERSCROLL)
-        val target = (start + distance).coerceIn(-over, m + over)
-        val t0 = System.currentTimeMillis()
-        anim = ValueAnimator.ofFloat(start, target).apply {
-            duration = t.toLong().coerceAtLeast(1L); interpolator = Easing.OutCubic
-            addUpdateListener {
-                page.scrollY = it.animatedValue as Float; invalidate()
-                // Past the end the flick carries on under a friction that grows with how far
-                // past it is (KineticScroller's FlickOverScroll), not for its full time.
-                if (page.scrollY < 0 || page.scrollY > m) {
-                    val elapsed = (System.currentTimeMillis() - t0).toFloat()
-                    it.cancel()
-                    overscrollFlick(page, v0 - Params.FRICTION * Math.signum(v0) * elapsed)
-                }
-            }
-            addListener(object : android.animation.AnimatorListenerAdapter() {
-                var cancelled = false
-                override fun onAnimationCancel(a: android.animation.Animator) { cancelled = true }
-                override fun onAnimationEnd(a: android.animation.Animator) {
-                    if (cancelled) return
-                    flickV = 0f
-                    if (page.scrollY < 0 || page.scrollY > m) settle(page, Params.OVERSCROLL_FIX_MS)
-                }
-            })
-            start()
-        }
-    }
-
-    /**
-     * KineticScroller's FlickOverScroll state: a flick that is past the end (or starts there)
-     * keeps its velocity under an opposing friction that grows every frame by the fraction of
-     * the 100 px of overscroll it has used, so it dies in a few frames rather than crawling
-     * for the flick's whole time, and then the 350 ms correction brings it back. Before this
-     * the launcher let the eased flick run its full course against the overscroll clamp, and
-     * an over-scrolled grid hung pulled out of place for most of a second (codepoet,
-     * 2026-10-03). Velocities in TouchPad px per ms, as fling's.
-     */
-    private fun overscrollFlick(page: Page, v0: Float) {
-        anim?.cancel()
-        val m = maxScroll(page)
-        if (v0 == 0f) { flickV = 0f; settle(page, Params.OVERSCROLL_FIX_MS); return }
-        var v = v0
-        var friction = Params.FRICTION * -Math.signum(v0)
-        var last = System.currentTimeMillis()
-        val over = luna.px(Params.MAX_OVERSCROLL)
-        anim = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 10_000L; interpolator = Easing.Linear
-            addUpdateListener {
-                val now = System.currentTimeMillis(); val dt = (now - last).toFloat(); last = now
-                page.scrollY += v * dt * luna.density
-                v += friction * dt
-                val amount = if (page.scrollY < 0) -page.scrollY else if (page.scrollY > m) page.scrollY - m else 0f
-                friction += friction * (amount / over)
-                invalidate()
-                if (Math.signum(v) != Math.signum(v0)) {
-                    it.cancel(); flickV = 0f
-                    settle(page, Params.OVERSCROLL_FIX_MS)
-                }
-            }
-            start()
-        }
-    }
-
-    private fun settle(page: Page, ms: Long) {
-        val m = maxScroll(page)
-        anim = animateValue(page.scrollY, page.scrollY.coerceIn(0f, m), ms, Easing.OutCubic) { page.scrollY = it; invalidate() }
-    }
 }

@@ -25,7 +25,7 @@ class ApplicationManager(
     /** What the application manager asks of the shell. */
     interface Shell {
         /** Starts [appId], or brings it forward; see ShellActivity.launch. */
-        fun launch(appId: String, params: JSONObject? = null, startupCard: Boolean = true, launcher: String? = null)
+        fun launch(appId: String, params: JSONObject? = null, placement: Placement = Placement.CARD, launchedBy: String? = null)
         /** Installs a package from a URL or path; see ShellActivity.install. */
         fun install(source: String, requester: String = "", onProgress: (Int) -> Unit = {},
                     banners: Boolean = true, onDone: (Packages.Result) -> Unit = {})
@@ -66,7 +66,7 @@ class ApplicationManager(
         // A bare target an installed app claims in the system's command-resource-handlers
         // (mailto: is Email's), opened in that app, as webOS's application manager did.
         handlers.redirectFor(p.optString("target"))?.takeIf { id.isEmpty() && registry.get(it) != null }?.let { app ->
-            shell.launch(app, JSONObject().put("target", p.optString("target")), launcher = caller)
+            shell.launch(app, JSONObject().put("target", p.optString("target")), launchedBy = caller)
             reply(Bus.ok(mapOf("processId" to "success")))
             return@Handler
         }
@@ -76,7 +76,7 @@ class ApplicationManager(
         if (id.isEmpty() && p.optString("target").isNotEmpty() && !isWebUrl(p.optString("target"))) {
             val target = p.optString("target")
             handlers.forTarget(target)?.let { h ->
-                shell.launch(h.appId, JSONObject().put("target", target), launcher = caller)
+                shell.launch(h.appId, JSONObject().put("target", target), launchedBy = caller)
                 reply(Bus.ok(mapOf("processId" to "success")))
                 return@Handler
             }
@@ -118,7 +118,7 @@ class ApplicationManager(
             // until the app opened a card window, and its own loading card came with that
             // window. Lunacy's placeholder stands in for the tap that launched an app.
             val unseen = registry.get(id)?.noWindow == true && bus.has(caller)
-            shell.launch(id, params, startupCard = !unseen, launcher = caller); reply(Bus.ok(mapOf("processId" to "success")))
+            shell.launch(id, params, if (unseen) Placement.NO_CARD else Placement.CARD, launchedBy = caller); reply(Bus.ok(mapOf("processId" to "success")))
         }
     }
 

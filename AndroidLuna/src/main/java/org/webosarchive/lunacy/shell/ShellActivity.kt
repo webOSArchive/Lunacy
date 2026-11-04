@@ -66,6 +66,7 @@ import org.webosarchive.lunacy.card.NotificationIcons
 import org.webosarchive.lunacy.card.Novacom
 import org.webosarchive.lunacy.card.PdkRuntime
 import org.webosarchive.lunacy.card.PdkWindow
+import org.webosarchive.lunacy.card.Placement
 import org.webosarchive.lunacy.card.Power
 import org.webosarchive.lunacy.card.PowerService
 import org.webosarchive.lunacy.card.Ringtones
@@ -233,7 +234,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         override val inFront get() = this@ShellActivity.inFront
         override val launcherOpen get() = this@ShellActivity.launcherOpen
         override val notificationsMenuOpen get() = notifications.menu.isOpen
-        override fun launchForDock(appId: String, params: JSONObject) = launch(appId, params, startupCard = false, dock = true)
+        override fun launchForDock(appId: String, params: JSONObject) = launch(appId, params, Placement.DOCK)
         override fun closeWindow(window: AppWindow) = onWindowClosed(window)
         override fun closeMenu() = this@ShellActivity.closeMenu()
         override fun closeLauncher() = this@ShellActivity.closeLauncher()
@@ -248,8 +249,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
     /** What the application manager asks of the shell. */
     private val appManagerShell = object : ApplicationManager.Shell {
-        override fun launch(appId: String, params: JSONObject?, startupCard: Boolean, launcher: String?) =
-            this@ShellActivity.launch(appId, params, startupCard, launcher)
+        override fun launch(appId: String, params: JSONObject?, placement: Placement, launchedBy: String?) =
+            this@ShellActivity.launch(appId, params, placement, launchedBy)
         override fun install(source: String, requester: String, onProgress: (Int) -> Unit, banners: Boolean, onDone: (Packages.Result) -> Unit) =
             this@ShellActivity.install(source, requester, onProgress, banners, onDone)
         override val pdkAvailable get() = pdkRuntime.available
@@ -839,64 +840,84 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     // ---- apps ----
 
     /**
-     * [startupCard]: the launch puts the app's loading card up at once, as a launch from the
-     * launcher did on webOS. Exhibition's launches didn't (codepoet): the app is started for
-     * the dock, and only what it opens for the dock is shown.
+     * Starts an app, or brings it forward if it is running. [placement] is where its first
+     * window goes ([Placement]); [launchedBy] is who asked, for the card this launch brings
+     * (showAsCard): LunaSysMgr's launchingAppId.
      */
-    fun launch(appId: String, params: JSONObject? = null, startupCard: Boolean = true, launcher: String? = null, dock: Boolean = false) {
-        // Who asked, for the card this launch brings (showAsCard): LunaSysMgr's launchingAppId.
-        if (launcher != null && launcher != appId) launchers[appId] = launcher else launchers.remove(appId)
-        // An added launch point launches its app with its own params.
-        addedById[appId]?.launchPoint?.let { lp -> launch(lp.appId, lp.paramsObject(), startupCard); return }
-        androidById[appId]?.let { a ->
-            val opened = if (a.androidShortcut != null) pinned.launch(a) else androidApps.launch(a)
-            if (!opened) systemBanner("", "Couldn't open ${a.title}")
-            return
+    fun launch(appId: String, params: JSONObject? = null, placement: Placement = Placement.CARD, launchedBy: String? = null) {
+        if (launchedBy != null && launchedBy != appId) launchers[appId] = launchedBy else launchers.remove(appId)
+        // An added launch point launches its app with its own params, never into the dock.
+        addedById[appId]?.launchPoint?.let { lp ->
+            launch(lp.appId, lp.paramsObject(), if (placement == Placement.DOCK) Placement.NO_CARD else placement); return
         }
+        androidById[appId]?.let { launchAndroid(it); return }
         val app = registry.get(appId) ?: run { Log.w(AppServer.TAG, "launch: no app $appId"); return }
-        // A shortcut to one of Android's settings screens: no window, no pretending that
-        // Lunacy owns the setting. Only apps Lunacy ships declare this.
-        if (app.androidSettings.isNotEmpty()) {
-            bus.call(appId, "palm://${LunacyService.SERVICE}/android/openSettings",
-                JSONObject().put("panel", app.androidSettings).toString()) { reply ->
-                val r = runCatching { JSONObject(reply) }.getOrNull()
-                if (r?.optBoolean("returnValue") != true) {
-                    systemBanner(appId, r?.optString("errorText").orEmpty().ifEmpty { "Couldn't open ${app.title}" })
-                }
-            }
-            return
-        }
+        if (app.androidSettings.isNotEmpty()) { openAndroidSettings(app); return }
         val windows = running[appId]
         // The dock takes web apps' windows only; a native app has no Exhibition view.
-        if (dock && !app.isWeb) { Log.w(AppServer.TAG, "exhibition: $appId is a native app"); return }
-        if (!app.isWeb) {
-            // A PDK app: its own process, in a card of its own kind (Docs/pdk.md).
-            if (windows != null) { cards.cards.firstOrNull { it.window.appId == appId }?.let { cards.maximize(it, maximizeMs(appId)) }; return }
-            if (!pdkRuntime.available) {
-                systemBanner(appId, "${app.title} is a native app; it needs Lunacy's 32-bit build on a 32-bit ARM device")
-                return
+        if (placement == Placement.DOCK && !app.isWeb) { Log.w(AppServer.TAG, "exhibition: $appId is a native app"); return }
+        when {
+            !app.isWeb -> launchNative(app, windows)
+            windows != null -> relaunch(app, windows, params, placement)
+            else -> launchWeb(app, params, placement)
+        }
+    }
+
+    /** An Android app or a pinned shortcut, which Android opens. */
+    private fun launchAndroid(a: AppInfo) {
+        val opened = if (a.androidShortcut != null) pinned.launch(a) else androidApps.launch(a)
+        if (!opened) systemBanner("", "Couldn't open ${a.title}")
+    }
+
+    /**
+     * A shortcut to one of Android's settings screens: no window, no pretending that Lunacy
+     * owns the setting. Only apps Lunacy ships declare this.
+     */
+    private fun openAndroidSettings(app: AppInfo) {
+        bus.call(app.id, "palm://${LunacyService.SERVICE}/android/openSettings",
+            JSONObject().put("panel", app.androidSettings).toString()) { reply ->
+            val r = runCatching { JSONObject(reply) }.getOrNull()
+            if (r?.optBoolean("returnValue") != true) {
+                systemBanner(app.id, r?.optString("errorText").orEmpty().ifEmpty { "Couldn't open ${app.title}" })
             }
-            val w = PdkWindow(this, appId, this, app, pdkRuntime)
-            running[appId] = mutableListOf(w)
-            showAsCard(w)
-            if (!w.start()) { systemBanner(appId, "Couldn't start ${app.title}"); onWindowClosed(w) }
+        }
+    }
+
+    /** A PDK app: its own process, in a card of its own kind (Docs/pdk.md); brought forward if running. */
+    private fun launchNative(app: AppInfo, windows: List<AppWindow>?) {
+        val appId = app.id
+        if (windows != null) { cards.cards.firstOrNull { it.window.appId == appId }?.let { cards.maximize(it, maximizeMs(appId)) }; return }
+        if (!pdkRuntime.available) {
+            systemBanner(appId, "${app.title} is a native app; it needs Lunacy's 32-bit build on a 32-bit ARM device")
             return
         }
-        if (windows != null) {
-            // Relaunch: webOS doesn't reload a running app. Unless the app handles the relaunch
-            // itself, LunaSysMgr brings its first card forward.
-            windows.first().relaunch(params?.toString() ?: "") { handled ->
-                Log.i(AppServer.TAG, "relaunch $appId ${if (Bus.handlesPeople(appId)) "" else params} handled=$handled")
-                // A relaunch for the dock leaves the card view alone: the app answers it with
-                // a dockMode window, or the dock shows nothing of it, as on a device.
-                if (!handled && !dock) cards.cards.firstOrNull { it.window.appId == appId }?.let { cards.maximize(it, maximizeMs(appId)) }
-            }
-            return
+        val w = PdkWindow(this, appId, this, app, pdkRuntime)
+        running[appId] = mutableListOf(w)
+        showAsCard(w)
+        if (!w.start()) { systemBanner(appId, "Couldn't start ${app.title}"); onWindowClosed(w) }
+    }
+
+    /**
+     * Relaunch: webOS doesn't reload a running app. Unless the app handles the relaunch
+     * itself, LunaSysMgr brings its first card forward.
+     */
+    private fun relaunch(app: AppInfo, windows: List<AppWindow>, params: JSONObject?, placement: Placement) {
+        val appId = app.id
+        windows.first().relaunch(params?.toString() ?: "") { handled ->
+            Log.i(AppServer.TAG, "relaunch $appId ${if (Bus.handlesPeople(appId)) "" else params} handled=$handled")
+            // A relaunch for the dock leaves the card view alone: the app answers it with
+            // a dockMode window, or the dock shows nothing of it, as on a device.
+            if (!handled && placement != Placement.DOCK) cards.cards.firstOrNull { it.window.appId == appId }?.let { cards.maximize(it, maximizeMs(appId)) }
         }
+    }
+
+    /** A web app that isn't running: its root window, placed as [placement] says, and its page. */
+    private fun launchWeb(app: AppInfo, params: JSONObject?, placement: Placement) {
+        val appId = app.id
         // The emulated card is a tablet's answer to a phone app. A Pre3 ran the same app at
         // its own size, so on a phone - where apps are told they are on a Pre3 - there is
         // nothing to emulate.
-        val emulate = !dock && profile == DeviceProfile.TOUCHPAD && registry.get(appId)?.emulated == true
+        val emulate = placement != Placement.DOCK && profile == DeviceProfile.TOUCHPAD && app.emulated
         val t0 = android.os.SystemClock.uptimeMillis()
         val rootWindow = AppWindow(this, appId, this, emulate)
         rootWindow.fixedOrientation = fixedOrientationOf(app)
@@ -908,22 +929,24 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // its card itself once its page has run, so for it the card is a placeholder with the
         // app's splash, which its first card window fills (onWindowOpened); an app that never
         // opens one loses the placeholder once it is up and running (withdrawPlaceholder).
-        // ProcessManager::launch: an app that wasn't running, launched with windowType
-        // dockModeWindow, gets its first window as a dock window, not a card. A headless app
-        // opens its dock window itself (onWindowOpened).
-        if (dock) {
-            if (app.noWindow) hidden.addView(rootWindow, FrameLayout.LayoutParams(1, 1)) else exhibitions.addDockWindow(rootWindow)
-            rootWindow.loadUrl(url)
-            return
+        when (placement) {
+            // ProcessManager::launch: an app that wasn't running, launched with windowType
+            // dockModeWindow, gets its first window as a dock window, not a card. A headless
+            // app opens its dock window itself (onWindowOpened).
+            Placement.DOCK -> {
+                if (app.noWindow) hidden.addView(rootWindow, FrameLayout.LayoutParams(1, 1)) else exhibitions.addDockWindow(rootWindow)
+                rootWindow.loadUrl(url)
+            }
+            Placement.NO_CARD -> {
+                if (app.noWindow) hidden.addView(rootWindow, FrameLayout.LayoutParams(1, 1)) else showAsCard(rootWindow, splash = false)
+                rootWindow.loadUrl(url)
+            }
+            Placement.CARD -> {
+                showAsCard(rootWindow, placeholder = app.noWindow)
+                Log.i(AppServer.TAG, "launch $appId: window and card in ${android.os.SystemClock.uptimeMillis() - t0} ms")
+                loadWhenShown(rootWindow, url, t0)
+            }
         }
-        if (!startupCard) {
-            if (app.noWindow) hidden.addView(rootWindow, FrameLayout.LayoutParams(1, 1)) else showAsCard(rootWindow, splash = false)
-            rootWindow.loadUrl(url)
-            return
-        }
-        showAsCard(rootWindow, placeholder = app.noWindow)
-        Log.i(AppServer.TAG, "launch $appId: window and card in ${android.os.SystemClock.uptimeMillis() - t0} ms")
-        loadWhenShown(rootWindow, url, t0)
     }
 
     /** The card waiting for a headless app's first card window, if it is [window]'s. */
@@ -984,8 +1007,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // one an app opens for another app that launched it while that app's card was up
         // (CardWindowManager::prepareAddWindowSibling: the active card is focused and the
         // window's launching app is its app). Closing it then comes back to that card.
-        val launcher = launchers.remove(w.appId)
-        val up = cards.maximized?.takeIf { (parent != null && it.window.appId == w.appId) || (launcher != null && it.window.appId == launcher) }
+        val launchedBy = launchers.remove(w.appId)
+        val up = cards.maximized?.takeIf { (parent != null && it.window.appId == w.appId) || (launchedBy != null && it.window.appId == launchedBy) }
         cards.add(card, up)
         if (w.appId == directApp) cards.openMaximized(card) else cards.openLaunching(card)
     }
@@ -1163,7 +1186,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (bootTimeAppsLaunched) return
         bootTimeAppsLaunched = true
         for (id in LAUNCH_AT_BOOT) if (registry.get(id) != null && running[id] == null)
-            launch(id, JSONObject().put("launchedAtBoot", true), startupCard = false)
+            launch(id, JSONObject().put("launchedAtBoot", true), Placement.NO_CARD)
     }
 
     /** The installed apps changed (an install, a removal, a script's rescan): the launcher hears it. */
@@ -1259,7 +1282,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (!AndroidNotifications.any()) return
         if (!::webos.isInitialized || !LunacyService.firstUseDone(this)) return
         if (registry.get(ANDROID_NOTIFICATIONS_APP) == null) return
-        launch(ANDROID_NOTIFICATIONS_APP, null, startupCard = false)
+        launch(ANDROID_NOTIFICATIONS_APP, null, Placement.NO_CARD)
     }
 
     /**

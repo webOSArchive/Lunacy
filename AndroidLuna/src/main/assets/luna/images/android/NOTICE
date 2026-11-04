@@ -1,0 +1,9 @@
+webOS icons that the shell gives Android's own apps where they stand in for a webOS app
+Lunacy doesn't have (shell/AndroidApps.kt).
+
+camera.png: the Camera app's icon.png (com.palm.app.camera 3.0.2500, Palm's TouchPad camera,
+installed under /media/cryptofs/apps on the reference TouchPad, webOS CE 3.1.0), copied
+2026-11-04. It goes on the device's own camera app (codepoet, 2026-11-04).
+
+Copyright Palm, Inc. / Hewlett-Packard; never released under an open licence; distributed by
+Lunacy as abandonware, like Mojo, the Prelude fonts and the TouchPad wallpapers.

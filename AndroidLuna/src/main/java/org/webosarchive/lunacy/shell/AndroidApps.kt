@@ -20,7 +20,7 @@ import java.io.ByteArrayOutputStream
  * favorites page (named "android" in launcher-pages.json); launching one starts Android's
  * activity rather than opening a card. Apps the user installed (not part of the system image)
  * are userInstalled, so edit mode gives them the delete decorator, which hands them to
- * Android's uninstaller.
+ * Android's uninstaller. The device's own camera wears webOS's camera icon ([systemCameras]).
  *
  * [iconPx] is the icon's size on screen: the launcher's 64 TouchPad px at the shell's scale.
  * Icons are drawn at that size so they stay sharp whatever the scale.
@@ -30,7 +30,20 @@ class AndroidApps(private val context: Context, private val files: AppFiles, pri
     private val icons = java.util.Collections.synchronizedMap(HashMap<String, ByteArray?>())
 
     private fun icon(id: String, ri: android.content.pm.ResolveInfo): ByteArray? = synchronized(icons) {
-        if (icons.containsKey(id)) icons[id] else png(ri).also { icons[id] = it }
+        if (icons.containsKey(id)) icons[id] else (stand(ri) ?: png(ri)).also { icons[id] = it }
+    }
+
+    /** The packages whose icon is webOS's own (see [systemCameras]); found with the list. */
+    @Volatile private var cameras: Set<String> = emptySet()
+
+    /** webOS's icon for an app that stands in for one of its own, drawn at [iconPx] as Android's are. */
+    private fun stand(ri: android.content.pm.ResolveInfo): ByteArray? {
+        if (ri.activityInfo.packageName !in cameras) return null
+        return runCatching {
+            val art = context.assets.open(CAMERA_ICON).use { android.graphics.BitmapFactory.decodeStream(it) }
+            val b = Bitmap.createScaledBitmap(art, iconPx, iconPx, true)
+            ByteArrayOutputStream().also { b.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+        }.getOrNull()
     }
 
     fun list(): List<AppInfo> {
@@ -38,6 +51,7 @@ class AndroidApps(private val context: Context, private val files: AppFiles, pri
         val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         @Suppress("DEPRECATION")
         val found = pm.queryIntentActivities(main, 0).filter { it.activityInfo.packageName != context.packageName }
+        cameras = systemCameras()
         // Drawn ahead, off the main thread: rendering forty icons on the launcher's first
         // draw of the page cost it about half a second on the HP tablet.
         Thread({ for (ri in found) icon(PREFIX + ComponentName(ri.activityInfo.packageName, ri.activityInfo.name).flattenToShortString(), ri) }, "android-icons").start()
@@ -77,6 +91,19 @@ class AndroidApps(private val context: Context, private val files: AppFiles, pri
         ByteArrayOutputStream().also { b.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
     }.getOrNull()
 
+    /**
+     * The packages of the device's own camera: system apps that take a still picture
+     * (MediaStore's STILL_IMAGE_CAMERA, the intent the lock screen's camera uses). Lunacy has no
+     * camera app of its own, so the device's wears webOS's camera icon (codepoet, 2026-11-04);
+     * a camera the user installed keeps its own.
+     */
+    private fun systemCameras(): Set<String> = runCatching {
+        @Suppress("DEPRECATION")
+        context.packageManager.queryIntentActivities(Intent(android.provider.MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA), 0)
+            .filter { (it.activityInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 }
+            .map { it.activityInfo.packageName }.toSet()
+    }.getOrDefault(emptySet())
+
     /** A package was added, changed or removed: its icons are drawn again next time. */
     fun forget(packageName: String) { icons.keys.removeAll { it.startsWith("$PREFIX$packageName/") } }
 
@@ -100,5 +127,6 @@ class AndroidApps(private val context: Context, private val files: AppFiles, pri
 
     companion object {
         const val PREFIX = "android:"
+        const val CAMERA_ICON = "luna/images/android/camera.png"
     }
 }

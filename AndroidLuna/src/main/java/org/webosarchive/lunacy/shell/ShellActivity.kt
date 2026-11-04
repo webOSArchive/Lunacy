@@ -466,6 +466,22 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         hidden = FrameLayout(this)
         root.addView(hidden, FrameLayout.LayoutParams(1, 1))
 
+        buildCards(root)
+        buildLauncher(root)
+        buildJustType(root)
+        buildQuickLaunch(root)
+        buildBarAndMenus(screen, root)
+
+        fitCutout(screen, root)
+        setContentView(screen)
+        screen.requestApplyInsets()
+        watchKeyboard(root)
+        statusBar.onTitleTap = { if (exhibitions.exhibitionOn) exhibitions.toggleExhibitionMenu() else toggleAppMenu() }
+        shellRoot = root
+    }
+
+    /** The card layer, the whole screen, so that a full-screen card can be laid out under the status bar. */
+    private fun buildCards(root: FrameLayout) {
         // The whole screen, so that a full-screen card can be laid out under the status bar;
         // every other card starts below it (CardLayer.inset).
         cards = CardLayer(this, luna, this).apply { inset = luna.px(StatusBar.HEIGHT); feedback = { sounds.feedback(it) }
@@ -474,7 +490,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             // The TouchPad's landscape turned end for end, which Lunacy calls "left".
             upsideDown = { screenOrientation() == "left" } }
         root.addView(cards, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+    }
 
+    /** The launcher, with its groups' panel and its tab dialog. */
+    private fun buildLauncher(root: FrameLayout) {
         // Overlays, bottom to top as in LunaCE's OverlayWindowManager: launcher, pill, dock.
         // The icon glows first; the launch follows a frame later, so the glow is seen.
         launcher = Launcher(this, luna) { app -> launcher.postDelayed({ launch(app.id); closeLauncher() }, LAUNCH_DELAY_MS) }
@@ -512,7 +531,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 if (newName != null) launcher.addTab(newName)
             }
         }
+    }
 
+    /** The Just Type pill and its panel. */
+    private fun buildJustType(root: FrameLayout) {
         justType = JustType(this, luna)
         // The pill takes text now, so something else has to hold focus first, or the shell
         // opens with a cursor blinking in it.
@@ -557,7 +579,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             if (registry.get(ApplicationManager.BROWSER) != null) launch(ApplicationManager.BROWSER, JSONObject().put("target", url))
             else WebosLinks.intentFor("", null, url)?.let { WebosLinks.open(this, it) }
         }
+    }
 
+    /** The quick-launch dock along the bottom. */
+    private fun buildQuickLaunch(root: FrameLayout) {
         quickLaunch = QuickLaunch(this, luna, onLaunch = { app -> quickLaunch.postDelayed({ launch(app.id) }, LAUNCH_DELAY_MS) }, onLauncher = { toggleLauncher() })
         // By position in the dock as drawn, which leaves out apps since removed.
         quickLaunch.onRemoveItem = { i -> setDock(shownDock().toMutableList().apply { removeAt(i) }) }
@@ -566,7 +591,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         launcher.onEditModeChanged = { on -> quickLaunch.editing = on }
         showDock()
         root.addView(quickLaunch, FrameLayout.LayoutParams(MATCH_PARENT, luna.px(QuickLaunch.barHeight(luna.phone))).apply { gravity = android.view.Gravity.BOTTOM })
+    }
 
+    /**
+     * Everything over the cards and overlays, bottom to top: Exhibition's dock, the alerts,
+     * the menus' scrim, the notifications, the system menu, the status bar, Exhibition's menu.
+     */
+    private fun buildBarAndMenus(screen: FrameLayout, root: FrameLayout) {
         // Notifications layer (reference §1.1): popup alerts, then the dashboard drop-down, under the status bar.
         statusBar = StatusBar(this, luna)
         statusBar.onBatteryFull = { sounds.batteryFull() }
@@ -602,13 +633,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
             topMargin = luna.px(StatusBar.HEIGHT); gravity = android.view.Gravity.TOP or android.view.Gravity.START
         })
-
-        fitCutout(screen, root)
-        setContentView(screen)
-        screen.requestApplyInsets()
-        watchKeyboard(root)
-        statusBar.onTitleTap = { if (exhibitions.exhibitionOn) exhibitions.toggleExhibitionMenu() else toggleAppMenu() }
-        shellRoot = root
     }
 
     override fun onDestroy() {

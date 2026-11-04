@@ -109,6 +109,26 @@ Left by judgment:
 **Before 1.0:** §3.1, the other splits in §2, `compat.js` last; B14, B15, S13, the rest of §8
 and §10. Measurements on the TouchPad (§11) decide B4, B5, B6, S5, S7/S8, S14 and §4.3.
 
+**Done toward 1.0 (2026-11-04):** B14 (curl's headers and connect timeout); S13 and B15 (the
+PDK runtime's lengths and allocations); the rest of §8 (2D frames, browser windows left
+pending, Luna's silent misses, `syncAccount`, the group labels, the splash pulse, the keyboard
+on detach, frames' token ranges handed out in turn, the relay's reader; `FilePicker`'s
+`url()` no longer applies, the picker being Palm's own); §10's Workbench scripts, Gradle
+(one version name, `compilerOptions`, no `afterEvaluate`), `fetch-assets.sh` (Mojo at no fuzz,
+the calendar guard, the trap), failures on stderr, `make-patch.sh` for every framework,
+`build.sh --help`, and the GL server's data folder, opcodes, `LUNACY_PDK_MEDIA` parsing and
+shared helpers; §9's transforms, `privileged` and phone-or-tablet tests; and from §3.1
+`animateValue` (18 of 24 sites), `centredBaseline`, `Easing.InCubic` and the one
+`InOutQuad`, `appIconOrDefault`, `show/hideKeyboard` and `DialogPaints`.
+
+Left in §3.1 by judgment: the rename fields (they differ in size, colour, cursor and back
+key), the two-state sprites (each site picks its half its own way), and the two-line labels
+- the launcher elides each word on a phone and a group's panel doesn't, so one function
+would change what the panel shows there, which is codepoet's call. Still to do: §3.1's
+`Hold`, `Flick`, `DashboardRow`, `ScrollMasks`, `AndroidIconCache`, `Sounds.start`,
+`LaunchGlow` and the drawer's animator (each to be checked frame by frame), then §2's
+splits and `compat.js` last.
+
 ---
 
 ## 1. The short list

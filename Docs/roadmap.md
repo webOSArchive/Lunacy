@@ -34,6 +34,8 @@ and a phase is finished when its criterion is met, not when its task list runs o
   Calendar and App Catalog.
 - **Enyo:** the spinner turns as a ring on a high-density screen (patch 0013), and lists coast
   and spring back on a 120 Hz screen (patch 0014).
+- **Fixes:** a window closed twice no longer crashes Lunacy, and a page's unload handlers run
+  when Lunacy closes its window, on every Android's engine.
 - **LunaKeyboard:** webOS's Text Assist: auto-correction with the TouchPad's plop, dotted
   underline and bubble of alternates (Alan Morford's Pre Keyboard engine and word list),
   auto-capitalization, double space for period and shortcuts; Return says Enter, and Done in a

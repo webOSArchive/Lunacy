@@ -59,6 +59,9 @@ import org.webosarchive.lunacy.card.UniversalSearch
  * On a phone (Docs/phone.md) the TouchPad's 570 px field and 736 px groups would overrun a
  * 360 px screen, so both span the width less 12 px margins, and the tiles, still 85 × 113,
  * sit as many to a row as fit with equal gaps of at least 10 px between and around them.
+ * The filter tabs drop the two empty outer cells, so the four span the width; where even
+ * that is too narrow (the Fold3's outer screen, 320 px), all four labels shrink alike until
+ * CONTACTS fits 8 px inside its cell (codepoet, 2026-11-04).
  *
  * Which apps match is LunaSysMgr's `applicationManager/searchApps`
  * (ApplicationManager::searchLaunchPoints): a title that starts with the text, or has a word
@@ -73,6 +76,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         const val DB_DELAY_MS = 500L             // DbSearch's own, after that
         const val HEADER_H = 62f
         const val TABS_H = 47f                   // tab-button.png's rows
+        const val TAB_PAD = 8f                   // a phone tab's label, kept this far in from the cell's edges in all
         const val SHADOW_H = 10f
         const val FIELD_W = 570f
         const val FIELD_TOP = 13f
@@ -534,7 +538,25 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         return RectF(l, t, l + px(TILE_W), t + px(TILE_H))
     }
 
-    private fun tabRect(i: Int): RectF { val w = width / 6f; return RectF(i * w, px(HEADER_H), (i + 1) * w, px(HEADER_H) + px(TABS_H)) }
+    /** Six cells on a tablet, the outer two empty; on a phone the four tabs alone span the width. */
+    private fun tabRect(i: Int): RectF {
+        if (phone) {
+            if (i !in 1..4) return RectF()
+            val w = width / 4f
+            return RectF((i - 1) * w, px(HEADER_H), i * w, px(HEADER_H) + px(TABS_H))
+        }
+        val w = width / 6f; return RectF(i * w, px(HEADER_H), (i + 1) * w, px(HEADER_H) + px(TABS_H))
+    }
+
+    /** The TouchPad's 15 px, or on a phone too narrow for it, the size at which the widest label fits its cell. */
+    private fun tabTextSize(): Float {
+        val full = px(15f)
+        if (!phone) return full
+        tabText.textSize = full
+        val widest = TABS.maxOf { tabText.measureText(it.uppercase()) }
+        val room = width / 4f - px(TAB_PAD)
+        return if (widest <= room) full else full * room / widest
+    }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
         val f = fieldRect()
@@ -715,7 +737,9 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
 
     private fun drawTabs(c: Canvas) {
         val selected = if (actionsOnly) 4 else when (view) { View.ALL -> 1; View.CONTACTS -> 2; View.CONTENT -> 3; View.ACTIONS -> 4 }
+        tabText.textSize = tabTextSize()
         for (i in 0 until 6) {
+            if (phone && i !in 1..4) continue
             val r = tabRect(i)
             // tab-button.png: the plain cell in rows 0-46, pressed (blue) in 49-95, chosen in 99-145.
             val rows = when (i) { pressedTab -> 49; selected -> 99; else -> 0 }

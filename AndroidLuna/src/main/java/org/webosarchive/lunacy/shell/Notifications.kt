@@ -70,6 +70,8 @@ class Notifications(
     private val onNoDashboards: () -> Unit = {},
     /** A banner is starting to show: LunaSysMgr played its sound then, not when it was queued. */
     private val onBannerShown: (Banner) -> Unit = {},
+    /** A banner or a dashboard arrived (Blink Notifications, NotificationLight). */
+    private val onArrived: () -> Unit = {},
 ) {
     companion object {
         const val SHOW_MS = 1000L        // OutCubic
@@ -90,6 +92,7 @@ class Notifications(
     // ---- banners ----
 
     fun addBanner(b: Banner) {
+        onArrived()
         queue.addLast(b)
         if (current == null) showNext()
         else if (hold == HOLD_ALONE_MS) {
@@ -179,6 +182,7 @@ class Notifications(
     val dashboards: List<AppWindow> get() = icons.keys.toList()
 
     fun addDashboard(w: AppWindow, icon: Bitmap?) {
+        onArrived()
         icons[w] = icon
         menu.add(w)
         statusBar.addNotificationIcon(w, icon)

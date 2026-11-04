@@ -373,6 +373,8 @@ class LunacyService(
         j.put("navigationMode", if (Build.VERSION.SDK_INT >= 29 &&
             android.provider.Settings.Secure.getInt(context.contentResolver, "navigation_mode", 0) == 2) "gesture" else "buttons")
         j.put("androidNotifications", AndroidNotifications.accessGranted(context))
+        // A notification light to blink (Screen & Lock's Blink Notifications, NotificationLight).
+        j.put("notificationLight", org.webosarchive.lunacy.shell.NotificationLight.deviceHasLight())
         j.put("software", FixedViewport.describe(context, registry.apps.filter { it.androidComponent == null }.sortedBy { it.title.lowercase() }))
         return j.toString()
     }

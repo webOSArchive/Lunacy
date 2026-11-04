@@ -625,7 +625,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             when (intent.action) {
                 android.content.Intent.ACTION_TIME_CHANGED, android.content.Intent.ACTION_TIMEZONE_CHANGED,
                 android.content.Intent.ACTION_DATE_CHANGED -> systemService.timeChanged()
-                android.content.Intent.ACTION_SCREEN_ON, android.content.Intent.ACTION_SCREEN_OFF -> displayService.screenChanged()
+                android.content.Intent.ACTION_SCREEN_ON, android.content.Intent.ACTION_SCREEN_OFF -> {
+                    displayService.screenChanged()
+                    // The owner is looking: the light has done its job.
+                    if (intent.action == android.content.Intent.ACTION_SCREEN_ON) notificationLight.clear()
+                }
             }
         }
     }
@@ -1465,9 +1469,15 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         return Notifications(luna, a ?: statusBar, a ?: barMenu, a ?: barPopups, onBannerTap = { b ->
             closeMenu()
             launch(b.appId, try { JSONObject(b.params) } catch (e: Exception) { null })
-        }, onNoDashboards = { closeMenu() }, onBannerShown = { b ->
+        }, onNoDashboards = { closeMenu(); notificationLight.clear() }, onBannerShown = { b ->
             sounds.play(b.appId, b.soundClass, b.soundFile, b.soundDuration)
-        })
+        }, onArrived = { notificationLight.arrived() })
+    }
+
+    /** Screen & Lock's Blink Notifications: the device's notification light, where it has one. */
+    private val notificationLight by lazy {
+        NotificationLight(this, enabled = { ::systemService.isInitialized && systemService.get("BlinkNotifications") == true },
+            screenOn = { (getSystemService(POWER_SERVICE) as android.os.PowerManager).isInteractive })
     }
 
     /** The owner chose colour or grey icons: the dashboards showing are drawn again. */

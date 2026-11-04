@@ -103,17 +103,17 @@ enyo.kind({
 								 ]},
 								                     
 	        	]},
-				{kind: "RowGroup", caption:$L("Notifications"), components: [
-					{kind: "Item", tapHighlight: false, layoutKind: "HFlexLayout", components: [
-						{flex:1, content: $L("Show When Locked")},
-						{kind: "ToggleButton", name:"locknotification", state:false, onChange:"toggleLockNotification"}
-					]},
+				// [Lunacy] Palm's Show When Locked is gone: the lock screen is Android's, and Lunacy
+				// shows nothing on it (codepoet, 2026-11-04). Blink Notifications blinks the
+				// device's notification light (NotificationLight), so the group shows only on a
+				// device that has one (handleGetEnvironment), and its line names the light.
+				{kind: "RowGroup", name:"blinkGroup", showing:false, caption:$L("Notifications"), components: [
 					{kind: "Item", tapHighlight: false, layoutKind: "HFlexLayout", components: [
 					                                                    						{flex:1, content: $L("Blink Notifications")},
 					                                                    						{kind: "ToggleButton", name:"blinknotification", state:false, onChange:"toggleBlinkNotification"}
 					                                                    					]}
 				]},
-				{content: $L("The center button blinks when new notifications arrive."), className:"accounts-body-text"},
+				{name:"blinkText", showing:false, content: $L("The notification light blinks when new notifications arrive."), className:"accounts-body-text"},
 			]},
 		]}
 		]},
@@ -198,10 +198,6 @@ enyo.kind({
 	},
 	handleGetSystemPref: function(inSender, inResponse) {
 		
-		if (inResponse.showAlertsWhenLocked != undefined) {
-			this.$.locknotification.setState(inResponse.showAlertsWhenLocked);
-		}
-		
 		if (inResponse.sysUiEnableNextPrevGestures != undefined) {
 			this.$.enablegesture.setState(inResponse.sysUiEnableNextPrevGestures);
 		}
@@ -224,10 +220,15 @@ enyo.kind({
 	handleGetProperty: function(inSender, inResponse) {
 		this.$.displayTimer.setValue(inResponse.timeout);
 		this.$.brightnessSlider.setPosition(inResponse.maximumBrightness);	
-		this.$.getSystemPreferences.call({keys:["showAlertsWhenLocked","sysUiEnableNextPrevGestures","BlinkNotifications","onDeviceDemoRunning", "enableALS"]});
+		this.$.getSystemPreferences.call({keys:["sysUiEnableNextPrevGestures","BlinkNotifications","onDeviceDemoRunning", "enableALS"]});
 	},
 	// [Lunacy] The layout: what the shell decided and why, and the owner's word over it.
 	handleGetEnvironment: function(inSender, inResponse) {
+		// [Lunacy] Blink Notifications, on a device with a notification light.
+		if (inResponse && inResponse.notificationLight !== undefined) {
+			this.$.blinkGroup.setShowing(inResponse.notificationLight === true);
+			this.$.blinkText.setShowing(inResponse.notificationLight === true);
+		}
 		if (inResponse && inResponse.hostWallpaper !== undefined) {
 			this.$.hostWallpaper.setState(inResponse.hostWallpaper);
 		}
@@ -304,10 +305,6 @@ enyo.kind({
 	toggleEnableGesture: function(inSender, inEvent) {
 		var state = inSender.getState();
 		this.$.setSystemPreferences.call({sysUiEnableNextPrevGestures:state});
-	},
-	toggleLockNotification: function(inSender, inEvent) {
-		var state = inSender.getState();
-		this.$.setSystemPreferences.call({showAlertsWhenLocked:state});
 	},
 	toggleBlinkNotification: function(inSender, inEvent) {
 		var state = inSender.getState();

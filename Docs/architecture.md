@@ -1043,6 +1043,11 @@ model, so apps can't tell the difference.
   `"subscribe": true` stays open: the service keeps replying as things change, until the
   page calls `PalmServiceBridge.cancel()`, calls again on the same bridge, or its window
   closes. Services that don't change just answer once, as the TouchPad's do.
+- **One thread.** The bus lives on the main thread: calls, registrations and cancels happen
+  there and handlers run there, so its tables and the services' subscriber lists need no
+  locks. A caller on another thread (a page's bridge, a service process, db8's worker) posts
+  to it first, and a handler that works elsewhere replies from it. `Bus.mainOnly` holds every
+  entry point: a debug build stops at a call from another thread, a release build logs it.
 - **Honesty.** Unknown services or methods return a real error, in webOS's exact form:
   `{"returnValue":false,"errorCode":-1,"errorText":"Service does not exist: <service>."}`. The bus never fakes success.
 - **Coverage log.** Every call is recorded: app, service, method, and whether it was handled.
@@ -1406,7 +1411,9 @@ with webOS Chat's AIM plugin ([messaging.md](messaging.md)).
   stdout in the line protocol JS services speak (`ServiceProcess`, shared with `JsServices`).
   A public method is on both connections and a private one on the private connection only,
   as `LSPalmServiceRegisterCategory` registered them. `LSCallFromApplication` (a system
-  service calling on an app's behalf) is honoured.
+  service calling on an app's behalf) is honoured for these native services only: a JS
+  service's call that names an app is made as the service itself, and logged (rule 10; code
+  review S2).
 - **Logs.** The preload turns `syslog` into stderr lines, which the shell puts in
   `/var/log/messages` (`palm-log`) and Android's log. PmLogLib finds no PmLogDaemon shared
   memory and says so once (`sem_open error`); its own levels then leave only errors.

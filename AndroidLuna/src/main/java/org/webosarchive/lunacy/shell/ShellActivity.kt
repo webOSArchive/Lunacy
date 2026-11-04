@@ -301,6 +301,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
         // chrome://inspect is a debug build's only: a release one leaves its cards closed to it.
         WebView.setWebContentsDebuggingEnabled(devBuild)
+        org.webosarchive.lunacy.card.Bus.strict = devBuild
         org.webosarchive.lunacy.card.FormFactor.shown = org.webosarchive.lunacy.card.FormFactor.decide(this)
         luna = Luna(this, org.webosarchive.lunacy.card.FormFactor.shown == org.webosarchive.lunacy.card.FormFactor.Kind.PHONE)
         val installed = java.io.File(filesDir, "cryptofs/apps")
@@ -823,11 +824,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (app.androidSettings.isNotEmpty()) {
             bus.call(appId, "palm://${org.webosarchive.lunacy.card.LunacyService.SERVICE}/android/openSettings",
                 JSONObject().put("panel", app.androidSettings).toString()) { reply ->
-                runOnUiThread {
-                    val r = runCatching { JSONObject(reply) }.getOrNull()
-                    if (r?.optBoolean("returnValue") != true) {
-                        systemBanner(appId, r?.optString("errorText").orEmpty().ifEmpty { "Couldn't open ${app.title}" })
-                    }
+                val r = runCatching { JSONObject(reply) }.getOrNull()
+                if (r?.optBoolean("returnValue") != true) {
+                    systemBanner(appId, r?.optString("errorText").orEmpty().ifEmpty { "Couldn't open ${app.title}" })
                 }
             }
             return
@@ -2654,15 +2653,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
         bus.register("com.palm.applicationManager", "launchPointChanges", Bus.CallHandler { launchPointChanges(it) })
         // Launch points an app adds: the Web app's Add to Launcher, the PWA Installer's shortcuts.
-        bus.register("com.palm.applicationManager", "addLaunchPoint") { _, p, reply -> runOnUiThread { reply(addLaunchPoint(p)) } }
+        bus.register("com.palm.applicationManager", "addLaunchPoint") { _, p, reply -> reply(addLaunchPoint(p)) }
         bus.register("com.palm.applicationManager", "removeLaunchPoint") { _, p, reply ->
-            runOnUiThread {
-                val id = p.optString("launchPointId")
-                reply(if (id.isEmpty()) Bus.error("Must provide a launchPointId")
-                      else removeLaunchPoint(id)?.let { Bus.error(it) } ?: Bus.ok())
-            }
+            val id = p.optString("launchPointId")
+            reply(if (id.isEmpty()) Bus.error("Must provide a launchPointId")
+                  else removeLaunchPoint(id)?.let { Bus.error(it) } ?: Bus.ok())
         }
-        bus.register("com.palm.applicationManager", "updateLaunchPointIcon") { caller, p, reply -> runOnUiThread { reply(updateLaunchPointIcon(caller, p)) } }
+        bus.register("com.palm.applicationManager", "updateLaunchPointIcon") { caller, p, reply -> reply(updateLaunchPointIcon(caller, p)) }
         bus.register("com.palm.applicationManager", "listAllHandlersForMime") { _, p, reply -> reply(handlersForMime(p)) }
         bus.register("com.palm.applicationManager", "getResourceInfo") { _, p, reply -> reply(resourceInfo(p)) }
         bus.register("com.palm.applicationManager", "getHandlerForExtension") { _, p, reply -> reply(handlers.handlerForExtension(p)) }

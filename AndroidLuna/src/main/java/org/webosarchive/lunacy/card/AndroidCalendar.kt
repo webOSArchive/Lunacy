@@ -50,6 +50,7 @@ class AndroidCalendar(context: Context, private val db: Db8) {
     private val prefs = this.context.getSharedPreferences("androidcalendar", Context.MODE_PRIVATE)
     private val thread = HandlerThread("AndroidCalendar").apply { start() }
     private val handler = Handler(thread.looper)
+    private val mainHandler = Handler(android.os.Looper.getMainLooper())
     private val syncNow = Runnable { sync() }
     private val observer = object : ContentObserver(handler) {
         override fun onChange(selfChange: Boolean) = schedule(CHANGE_DELAY_MS)
@@ -139,7 +140,9 @@ class AndroidCalendar(context: Context, private val db: Db8) {
             val out = JSONArray()
             val list = try { calendars() } catch (e: Exception) { null }
             list?.forEach { (id, name) -> out.put(JSONObject().put("id", id).put("name", name).put("on", id !in excluded())) }
-            call.reply(if (list == null) Bus.error("Android's calendars can't be read") else Bus.ok(mapOf("calendars" to out)))
+            // Read here, answered on the bus's thread (Bus: the main thread).
+            val answer = if (list == null) Bus.error("Android's calendars can't be read") else Bus.ok(mapOf("calendars" to out))
+            mainHandler.post { call.reply(answer) }
         }
     }
 

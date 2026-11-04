@@ -8,6 +8,13 @@ import org.json.JSONObject
  * services get webOS's own error, never a fake success. A call with "subscribe": true stays
  * open: its handler keeps replying as things change, until the page cancels it or its window
  * closes. See Docs/architecture.md, "Luna bus".
+ *
+ * **The bus lives on the main thread.** Calls, registrations and cancels happen there, and
+ * handlers run there, so its tables and every service's subscriber lists are plain
+ * collections. A caller on another thread (a page's bridge, a service process, db8's worker)
+ * posts to the main thread first; a handler that works elsewhere replies from the main thread.
+ * [mainOnly] holds every entry point to it: a debug build stops at a call from elsewhere, and
+ * a release build logs it (audited across the bundled apps on 2026-11-04: none).
  */
 class Bus {
     /** A one-shot handler. */
@@ -34,6 +41,7 @@ class Bus {
         /** Runs when the subscription ends. */
         fun onCancel(f: () -> Unit) = synchronized(onCancel) { if (cancelled) f() else onCancel += f }
         fun cancel() {
+            mainOnly("cancel $service/$method")
             val fs = synchronized(onCancel) { if (cancelled) return; cancelled = true; onCancel.toList() }
             fs.forEach { it() }
         }
@@ -91,13 +99,14 @@ class Bus {
     }
 
     fun register(service: String, method: String, h: Handler) {
+        mainOnly("register")
         handlers["$service/$method"] = CallHandler { c -> h.handle(c.appId, c.params, c::reply) }
     }
 
-    fun register(service: String, method: String, h: CallHandler) { handlers["$service/$method"] = h }
+    fun register(service: String, method: String, h: CallHandler) { mainOnly("register"); handlers["$service/$method"] = h }
 
-    fun registerService(service: String, h: CallHandler) { services[service] = h; serverStatusChanged(service) }
-    fun unregisterService(service: String) { services.remove(service); serverStatusChanged(service) }
+    fun registerService(service: String, h: CallHandler) { mainOnly("registerService"); services[service] = h; serverStatusChanged(service) }
+    fun unregisterService(service: String) { mainOnly("unregisterService"); services.remove(service); serverStatusChanged(service) }
 
     /** Whether anything on this bus answers for a service name. */
     fun has(service: String) = services.containsKey(service) || handlers.keys.any { it.startsWith("$service/") }
@@ -133,6 +142,7 @@ class Bus {
      * only if its id is privileged ([privileged]).
      */
     fun call(appId: String, url: String, params: String, privateBus: Boolean = false, reply: (String) -> Unit): Call {
+        mainOnly("call $url")
         val m = Regex("^(?:palm|luna)://([^/]+)/(.*?)/?$").find(url)
         val service = m?.groupValues?.get(1) ?: ""
         val method = m?.groupValues?.get(2) ?: ""
@@ -155,6 +165,17 @@ class Bus {
     }
 
     companion object {
+        /** A debug build stops at a break of [mainOnly]'s rule; set by the shell as it starts. */
+        @Volatile var strict = false
+
+        /** The bus's one-thread rule: see the class doc. */
+        fun mainOnly(what: String) {
+            if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) return
+            val e = IllegalStateException("bus: $what off the main thread (${Thread.currentThread().name})")
+            if (strict) throw e
+            Log.e(AppServer.TAG, e.message, e)
+        }
+
         /**
          * Whether an app's page reaches the private bus: its id starts with "com.palm.".
          * Measured on the reference TouchPad with `Workbench/probe/busprobe.sh` - the same page

@@ -5,7 +5,7 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-11-04)
 
-**0.9.1** (2026-11-04, build 430), a point release. Everything since 0.9.0:
+**0.9.1** (2026-11-04, build 437), a point release. Everything since 0.9.0:
 
 - **Music:** Palm's Music app (HP's Apache 2.0 core app), its library from Android's media
   library with albums, artists, genres and covers as the TouchPad filed them, playing on with
@@ -34,6 +34,10 @@ and a phase is finished when its criterion is met, not when its task list runs o
   Calendar and App Catalog.
 - **Enyo:** the spinner turns as a ring on a high-density screen (patch 0013), and lists coast
   and spring back on a 120 Hz screen (patch 0014).
+- **LunaKeyboard:** webOS's Text Assist: auto-correction with the TouchPad's plop, dotted
+  underline and bubble of alternates (Alan Morford's Pre Keyboard engine and word list),
+  auto-capitalization, double space for period and shortcuts; Return says Enter, and Done in a
+  single-line field; a phone's number row is readable (superscripts); built for Android 15.
 
 **0.9.0, a preview release** (2026-11-03, build 394), the last before the OAuth work for
 Exchange and Google mail. Everything since 0.8.4:
@@ -227,9 +231,9 @@ One line per milestone; the detail is in [fix-log.md](fix-log.md), the topic doc
 - **2026-11-03, 0.9.0** (build 394): a preview release: the system menu, settings shortcuts,
   Just Type's app integration, the Android account, Contacts' and Calendar's imports and phone
   layouts, four more PDK games, and the code review's fixes before release.
-- **2026-11-04, 0.9.1** (build 430): a point release: Music, ringtones, Android notifications
+- **2026-11-04, 0.9.1** (build 437): a point release: Music, ringtones, Android notifications
   that stay dismissed, Blink Notifications, Messaging on a phone, the BlueBubbles connector,
-  shared wallpapers, Palm's file picker, smooth scrolling at 120 Hz.
+  shared wallpapers, Palm's file picker, smooth scrolling at 120 Hz, the keyboard's Text Assist.
 
 ## Open, carried forward
 

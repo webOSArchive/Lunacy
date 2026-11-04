@@ -91,6 +91,67 @@ Lunacy is sideloaded: there is no store listing for now.
    mode instead. Which face it shows is chosen in Lunacy's own Exhibition app, on the Settings
    tab. Lunacy never turns Daydream on by itself.
 
+## Customizing
+
+### Look and Feel
+
+Lunacy attempts to adapt to the environment it's running on -- with the wide range of Android devices and form-factors
+this doesn't always work perfectly. Its been tested on small screens, big low density screens, big high density screens, 
+and foldables with multiple screens... but your mileage may still vary. Similarly, GPUs are different than the TouchPad's 
+and may have issues rendering PDK games.
+
+For SDK apps (those written for one of Palm's open web frameworks) you have some control, if you're not happy with how things look.
+
+Two Settings apps help you tweak system-wide and on a per-app basis:
+
+- In **Device Info**, you can see the details Lunacy has found for your device, and how it has attempted to map your device
+ to one of the webOS form factors -- either simulating a TouchPad or a Pre3.
+   - Also in Device Info, you can over-ride how an app chooses its screen style: turn Phone Zoom on or off, to scale a tablet UI that doesn't adapt well to a smaller screen
+- In **Screen & Lock**, you can see the default system wide layout that has been selected.
+   - Automatic behaves as the detection describes (the text below the drop-down)
+   - Phone forces Lunacy to treat your device as a Pre3 by default
+   - Tablet forces Lunacy to treat your device as a TouchPad by default
+   - No matter what you select, you can still apply an app-specific override in Device Info
+
+### Android Integration
+
+#### Files
+
+- Portions of the Android file system are mapped into the webOS environment automatically. Android's Downloads, Pictures, Camera (DCIM), Music, Movies and Documents are webOS's `/media/internal` folders. 
+- Photos & Videos, Music, the file picker and apps that import files all see what the user already has. Music plays the Android music library.
+
+#### Lunacy as Launcher
+
+Lunacy works best when it's the default Android Launcher (but you don't have to -- see below!) Common Android apps or features will be given webOS icons or entry points 
+(eg: many webOS Settings apps will launch the Android settings panel, the Android camera and phone app will be given a webOS icon.)
+
+You can control how much Android appears in webOS in the **Software Manager** Settings app by toggling Android apps visibility on and off.
+
+If you prefer to use an Android equivalent (eg: Clock or Calculator), you can similarly turn the webOS app on and off.
+
+Hiding an app does not uninstall it, but it removes it from the Lunacy launcher and JustType UIs.
+
+To uninstall a webOS app, long press on the icon and tap the "X". If no "X" appears, the app is pre-loaded and cannot be removed (but *can* be hidden)
+
+To uninstall an Android app, use Android settings -- webOS will not remove Android apps (but it *can* hide them.)
+
+#### webOS with another Launcher
+
+If you prefer to use a different Launcher, webOS apps can be pinned to that Launcher and webOS notification sounds and wallpapers are added to Android, so you can still have a webOS experience.
+
+To pin a webOS app to an alternate Android Launcher, use **Software Manager**, find the webOS app, and tap the "Pin" button. 
+
+#### Other Integrations
+
+- **Android media notifications:** can be connected both ways: webOS media apps show up in Android media controls; Android media apps show a webOS Dashboard for controls. This feature requires that you grant the permission in Android.
+- **Android notification light:** if your device has a notification light, webOS notifications can pulse the light. You can disable this in **Screen & Lock** if you prefer.
+- **Multi-tasking:** Android and webOS both compete for edge swipes, experiment with Gesture and Button controls in Android, and toggling (side) Edge swipe in **Screen & Lock** to find what works best for your device.
+- **Calender and Contact Mirroring:** Android PIM data can be mirrored to webOS, if enabled and with your permission. Add this feature as a new "Account" in the webOS Calender and Contacts apps.
+- **Exhibition:** the webOS Exhibition feature is mapped to Daydream/Screensaver on Android. Choose Lunacy as your Android screensaver, to have Lunacy launch exhibition when the screen times out. Use the webOS **Exhibition** Settings app to determine which exhibitions are available. Tap the screen during Exhibition for controls (if the app provides them).
+- **webOS Keyboard:** A couple optional Android keyboards are available to complete the experience -- choose one that works for your device, or stick with an Android keyboard if you prefer.
+
+## Building
+
 Building from source is [BUILDING.md](BUILDING.md).
 
 ## Documentation

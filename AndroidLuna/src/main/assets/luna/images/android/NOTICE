@@ -7,3 +7,8 @@ installed under /media/cryptofs/apps on the reference TouchPad, webOS CE 3.1.0),
 
 Copyright Palm, Inc. / Hewlett-Packard; never released under an open licence; distributed by
 Lunacy as abandonware, like Mojo, the Prelude fonts and the TouchPad wallpapers.
+
+phone.png: Phone & Video Calls' icon.png (com.palm.app.phone, /usr/palm/applications on the
+reference TouchPad, webOS CE 3.1.0), copied 2026-11-04. It goes on the device's own phone app
+(codepoet, 2026-11-04). The same file is in HP's open-source webOS core apps: Copyright
+Hewlett-Packard Development Company, L.P., Apache License 2.0.

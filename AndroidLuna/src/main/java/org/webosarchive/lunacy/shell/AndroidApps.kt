@@ -20,7 +20,8 @@ import java.io.ByteArrayOutputStream
  * favorites page (named "android" in launcher-pages.json); launching one starts Android's
  * activity rather than opening a card. Apps the user installed (not part of the system image)
  * are userInstalled, so edit mode gives them the delete decorator, which hands them to
- * Android's uninstaller. The device's own camera wears webOS's camera icon ([systemCameras]).
+ * Android's uninstaller. The device's own camera wears webOS's camera icon ([systemCameras]),
+ * and its own phone webOS's Phone & Video Calls icon ([systemDialers]).
  *
  * [iconPx] is the icon's size on screen: the launcher's 64 TouchPad px at the shell's scale.
  * Icons are drawn at that size so they stay sharp whatever the scale.
@@ -35,12 +36,19 @@ class AndroidApps(private val context: Context, private val files: AppFiles, pri
 
     /** The packages whose icon is webOS's own (see [systemCameras]); found with the list. */
     @Volatile private var cameras: Set<String> = emptySet()
+    /** The launcher activities that are the device's own dialer (see [systemDialers]). */
+    @Volatile private var dialers: Set<ComponentName> = emptySet()
 
     /** webOS's icon for an app that stands in for one of its own, drawn at [iconPx] as Android's are. */
     private fun stand(ri: android.content.pm.ResolveInfo): ByteArray? {
-        if (ri.activityInfo.packageName !in cameras) return null
+        val cn = ComponentName(ri.activityInfo.packageName, ri.activityInfo.name)
+        val asset = when {
+            ri.activityInfo.packageName in cameras -> CAMERA_ICON
+            cn in dialers -> PHONE_ICON
+            else -> return null
+        }
         return runCatching {
-            val art = context.assets.open(CAMERA_ICON).use { android.graphics.BitmapFactory.decodeStream(it) }
+            val art = context.assets.open(asset).use { android.graphics.BitmapFactory.decodeStream(it) }
             val b = Bitmap.createScaledBitmap(art, iconPx, iconPx, true)
             ByteArrayOutputStream().also { b.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
         }.getOrNull()
@@ -52,6 +60,7 @@ class AndroidApps(private val context: Context, private val files: AppFiles, pri
         @Suppress("DEPRECATION")
         val found = pm.queryIntentActivities(main, 0).filter { it.activityInfo.packageName != context.packageName }
         cameras = systemCameras()
+        dialers = systemDialers(found)
         // Drawn ahead, off the main thread: rendering forty icons on the launcher's first
         // draw of the page cost it about half a second on the HP tablet.
         Thread({ for (ri in found) icon(PREFIX + ComponentName(ri.activityInfo.packageName, ri.activityInfo.name).flattenToShortString(), ri) }, "android-icons").start()
@@ -104,6 +113,24 @@ class AndroidApps(private val context: Context, private val files: AppFiles, pri
             .map { it.activityInfo.packageName }.toSet()
     }.getOrDefault(emptySet())
 
+    /**
+     * The device's own phone: the launcher activity of a system app that dials (ACTION_DIAL),
+     * which wears webOS's Phone & Video Calls icon (codepoet, 2026-11-04). Where one package
+     * holds the dialer and other apps (older Android's contacts package had Phone and People),
+     * only the launcher activity that dials does; a package with one launcher activity, that one.
+     */
+    private fun systemDialers(launchers: List<android.content.pm.ResolveInfo>): Set<ComponentName> = runCatching {
+        @Suppress("DEPRECATION")
+        val dial = context.packageManager.queryIntentActivities(Intent(Intent.ACTION_DIAL, android.net.Uri.parse("tel:")), 0)
+            .filter { (it.activityInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 }
+        val dialComponents = dial.map { ComponentName(it.activityInfo.packageName, it.activityInfo.name) }.toSet()
+        val dialPackages = dial.map { it.activityInfo.packageName }.toSet()
+        val byPackage = launchers.groupBy { it.activityInfo.packageName }
+        launchers.map { ComponentName(it.activityInfo.packageName, it.activityInfo.name) }.filter { cn ->
+            cn in dialComponents || (cn.packageName in dialPackages && byPackage[cn.packageName]?.size == 1)
+        }.toSet()
+    }.getOrDefault(emptySet())
+
     /** A package was added, changed or removed: its icons are drawn again next time. */
     fun forget(packageName: String) { icons.keys.removeAll { it.startsWith("$PREFIX$packageName/") } }
 
@@ -128,5 +155,6 @@ class AndroidApps(private val context: Context, private val files: AppFiles, pri
     companion object {
         const val PREFIX = "android:"
         const val CAMERA_ICON = "luna/images/android/camera.png"
+        const val PHONE_ICON = "luna/images/android/phone.png"
     }
 }

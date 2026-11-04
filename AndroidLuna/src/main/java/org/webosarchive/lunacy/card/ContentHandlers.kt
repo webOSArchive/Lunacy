@@ -23,6 +23,35 @@ import java.io.File
 class ContentHandlers(private val registry: AppRegistry, private val webosRoot: File) {
     class Entry(val mime: String, val extension: String, val appId: String, val streamable: Boolean, val system: Boolean, val index: Int)
 
+    /** The system's table, /usr/palm/command-resource-handlers.json, parsed: its redirects' patterns compiled. */
+    private class SystemTable(val resources: org.json.JSONArray?, val redirects: List<Pair<Regex, String>>)
+    private val tableFile = File(webosRoot, "usr/palm/command-resource-handlers.json")
+    private var table: SystemTable? = null
+    private var tableModified = 0L
+
+    /** The system's table, read again only when the file has changed. */
+    @Synchronized private fun systemTable(): SystemTable {
+        val modified = tableFile.lastModified()
+        table?.takeIf { modified == tableModified }?.let { return it }
+        val json = runCatching { JSONObject(tableFile.readText()) }.getOrNull()
+        val list = json?.optJSONArray("redirects")
+        val redirects = (0 until (list?.length() ?: 0)).mapNotNull { i ->
+            val r = list!!.optJSONObject(i) ?: return@mapNotNull null
+            val re = runCatching { Regex(r.optString("url"), RegexOption.IGNORE_CASE) }.getOrNull() ?: return@mapNotNull null
+            re to r.optString("appId")
+        }
+        return SystemTable(json?.optJSONArray("resources"), redirects).also { table = it; tableModified = modified }
+    }
+
+    /**
+     * The app the system's table redirects a URL to, by its "redirects" patterns (the
+     * reference TouchPad's, in the ROM), or null.
+     */
+    fun redirectFor(target: String): String? {
+        if (target.isEmpty()) return null
+        return systemTable().redirects.firstOrNull { it.first.containsMatchIn(target) }?.second?.ifEmpty { null }
+    }
+
     fun entries(): List<Entry> {
         val out = ArrayList<Entry>()
         fun add(mime: String, ext: String, app: String, stream: Boolean, system: Boolean) {
@@ -36,9 +65,7 @@ class ContentHandlers(private val registry: AppRegistry, private val webosRoot: 
                 add(m.optString("mime"), m.optString("extension"), app.id, m.optBoolean("stream", false), false)
             }
         }
-        val system = runCatching {
-            JSONObject(File(webosRoot, "usr/palm/command-resource-handlers.json").readText()).optJSONArray("resources")
-        }.getOrNull()
+        val system = systemTable().resources
         for (i in 0 until (system?.length() ?: 0)) {
             val r = system!!.optJSONObject(i) ?: continue
             add(r.optString("mime"), r.optString("extn"), r.optString("appId"), r.optBoolean("streamable", false), true)

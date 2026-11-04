@@ -222,6 +222,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         override fun launchPointsChanged() { setLauncherApps(); showDock() }
         override fun showDock() = this@ShellActivity.showDock()
         override fun forgetIcons(key: String) = luna.forgetIcons(key)
+        override fun removeInstalled(app: AppInfo, done: (String?) -> Unit) = this@ShellActivity.removeInstalled(app, done)
     }
 
     /** The tiles of the added launch points whose app is installed, by tile id. */
@@ -243,6 +244,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * disabled): the launcher, dock and Just Type follow, with the package's icons and
      * labels drawn again.
      */
+    private var watchingPackages = false
     private val packageReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
             val pkg = intent.data?.schemeSpecificPart ?: return
@@ -403,6 +405,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             addAction(android.content.Intent.ACTION_PACKAGE_REPLACED)
             addDataScheme("package")
         })
+        watchingPackages = true
         buildShell()
         // The splash was the window's background (Theme.Lunacy.Splash), which is what Android
         // painted while this was all being set up. The shell covers it now, so let the logo go
@@ -503,7 +506,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // screen (the shell keeps the TouchPad's proportions there); on a phone, the screen's
         // own, as the Pre3's shell laid it out on its 480 px (Docs/pre3.md).
         val shortSide = if (luna.phone) {
-            android.util.DisplayMetrics().also { @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(it) }.let { minOf(it.widthPixels, it.heightPixels) }
+            realMetrics().let { minOf(it.widthPixels, it.heightPixels) }
         } else (luna.density * 768).toInt()
         root.addView(justType, FrameLayout.LayoutParams((shortSide * JustType.WIDTH_OF_SHORT_SIDE).toInt(), luna.px(JustType.HEIGHT)).apply {
             topMargin = luna.px(StatusBar.HEIGHT + JustType.TOP_GAP); gravity = android.view.Gravity.CENTER_HORIZONTAL
@@ -636,7 +639,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         (getSystemService(DISPLAY_SERVICE) as android.hardware.display.DisplayManager)
             .unregisterDisplayListener(displayListener)
         if (watchingPower) { unregisterReceiver(powerReceiver); watchingPower = false }
-        if (::launcher.isInitialized) unregisterReceiver(packageReceiver)
+        if (watchingPackages) { unregisterReceiver(packageReceiver); watchingPackages = false }
         if (PinnedShortcuts.onChanged == ::shortcutsChanged) PinnedShortcuts.onChanged = null
         if (NotificationIcons.onChanged == ::notificationIconsChanged) NotificationIcons.onChanged = null
         if (AndroidNotifications.onChanged == ::androidNotificationsChanged) AndroidNotifications.onChanged = null
@@ -1056,7 +1059,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     /** appinfo.json's requestedWindowOrientation, which every card of the app starts with. */
     private fun fixedOrientationOf(app: AppInfo?): String? =
         app?.appinfo?.optString("requestedWindowOrientation")?.lowercase()
-            ?.takeIf { it in setOf("up", "down", "left", "right", "landscape", "portrait") }
+            ?.takeIf { it in ORIENTATIONS }
 
     override fun onWindowOpened(parent: AppWindow, child: AppWindow) {
         running.getOrPut(child.appId) { mutableListOf() } += child
@@ -1067,7 +1070,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 // A phone's list gives way to the alert in the same area: closed by the shell,
                 // so the scrim over the rest goes with it, or it would eat the next tap.
                 if (notificationsAtBottom) closeMenu()
-                notifications.popups.show(child, child.attributes.optInt("height", 200))
+                notifications.popups.show(child, alertHeight(child))
             }
             // The headless app's first card: it fills the card its launch put up, and the root
             // goes on where a headless root lives.
@@ -1355,6 +1358,16 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         launch(ANDROID_NOTIFICATIONS_APP, null, startupCard = false)
     }
 
+    /** A popup alert's height, as its window asked, or [DEFAULT_ALERT_HEIGHT]. */
+    private fun alertHeight(w: AppWindow) = w.attributes.optInt("height", DEFAULT_ALERT_HEIGHT)
+
+    /** Dashboards, alerts and banners taken from the notifications a reshell or a turn replaced, given to the new ones. */
+    private fun giveNotifications(dashboards: List<AppWindow>, alerts: List<AppWindow>, banners: List<Banner>) {
+        dashboards.forEach { notifications.addDashboard(it, icon(it.attributes.optString("icon"), it.appId)) }
+        alerts.forEach { notifications.popups.show(it, alertHeight(it)) }
+        notifications.takeBanners(banners)
+    }
+
     /** The phone turned: its dashboards, alerts and banners move between the area and the bar. */
     private fun placeNotifications() {
         val bottom = wantNotificationsAtBottom()
@@ -1370,9 +1383,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         notificationsAtBottom = bottom
         FormFactor.pre3Dashboards = bottom
         notifications = newNotifications()
-        dashboards.forEach { notifications.addDashboard(it, icon(it.attributes.optString("icon"), it.appId)) }
-        alerts.forEach { notifications.popups.show(it, it.attributes.optInt("height", 200)) }
-        notifications.takeBanners(banners)
+        giveNotifications(dashboards, alerts, banners)
         statusBar.post { (dashboards + alerts).forEach { it.rescale() } }
         // Their boxes are the other kind now (FormFactor.pre3Dashboards).
         dashboards.forEach { it.evaluateJavascript(AppServer.REFETCH_LAYOUT_IMAGES, null) }
@@ -1510,12 +1521,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (android.os.Build.VERSION.SDK_INT < 23) return
         val wanted = arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
         val missing = wanted.filter { checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
-        if (missing.isNotEmpty()) requestPermissions(missing.toTypedArray(), 1)
+        if (missing.isNotEmpty()) requestPermissions(missing.toTypedArray(), STORAGE_REQUEST)
     }
 
     /** Runtime permission requests made on the bus (LunacyService), each answered to its caller when Android has. */
     private val permissionCallbacks = mutableMapOf<Int, (Boolean, Boolean) -> Unit>()
-    private var nextPermissionCode = 100
+    private var nextPermissionCode = FIRST_PERMISSION_REQUEST
 
     /**
      * Asks Android for [permissions] and calls [done] with whether every one was granted and,
@@ -1590,15 +1601,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      */
     private fun applyOrientation(window: AppWindow?) {
         val o = window?.takeUnless { it.emulated }?.fixedOrientation
-        val want = when (o) {
-            "up" -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-            "down" -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT
-            "right" -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-            "left" -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE
-            "landscape" -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            "portrait" -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-            else -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
+        val want = ORIENTATIONS[o] ?: android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         if (requestedOrientation != want) requestedOrientation = want
     }
 
@@ -1728,8 +1731,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      */
     override fun deviceInfo(emulated: Boolean): String {
         // In TouchPad px, the unit apps lay out in.
-        val dm = android.util.DisplayMetrics().apply {
-            @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(this)
+        val dm = realMetrics().apply {
             density = luna.density
         }
         val long = (maxOf(dm.widthPixels, dm.heightPixels) / dm.density).toInt()
@@ -1858,8 +1860,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
                 .put("height", EmulatedCard.HEIGHT)
                 .toString()
         }
-        val dm = android.util.DisplayMetrics()
-        @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(dm)
+        val dm = realMetrics()
         return JSONObject()
             .put("width", Math.round(dm.widthPixels / luna.density))
             .put("height", Math.round(dm.heightPixels / luna.density))
@@ -1961,9 +1962,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             dockLayer.addView(w, FrameLayout.LayoutParams(0, 0))
             layDockWindow(w)
         }
-        dashboards.forEach { notifications.addDashboard(it, icon(it.attributes.optString("icon"), it.appId)) }
-        alerts.forEach { notifications.popups.show(it, it.attributes.optInt("height", 200)) }
-        notifications.takeBanners(banners)
+        giveNotifications(dashboards, alerts, banners)
         // Once the pages are laid out in their new cards: the viewport is written from the card's size.
         cards.post { running.values.flatten().forEach { it.rescale() } }
         // Pages loaded under the other layout fetch the images served by layout again.
@@ -1980,8 +1979,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      */
     private fun showWallpaper() {
         val chosen = systemService.fileOf(systemService.get("wallpaper") as? JSONObject)
-        val dm = android.util.DisplayMetrics()
-        @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(dm)
+        val dm = realMetrics()
         val bmp = chosen?.let { f -> luna.decodeFull(f, maxOf(dm.widthPixels, dm.heightPixels)) } ?: luna.wallpaper()
         if (bmp != null) {
             // LunaSysMgr filled the screen only with an image that could fill it one way up or
@@ -2307,10 +2305,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         showDock(!on && cards.maximized == null)
     }
 
+    /** The whole display in real pixels, the way round it is now, bars and cutouts included. */
+    @Suppress("DEPRECATION")
+    private fun realMetrics() = android.util.DisplayMetrics().also { windowManager.defaultDisplay.getRealMetrics(it) }
+
     /** What the shell knows about the screen: real pixels, and the TouchPad px apps lay out in. */
     private fun displayInfo(): JSONObject {
-        val dm = android.util.DisplayMetrics()
-        @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(dm)
+        val dm = realMetrics()
         return JSONObject()
             .put("width", dm.widthPixels).put("height", dm.heightPixels)
             .put("dpi", dm.densityDpi).put("androidDensity", dm.density)
@@ -2338,8 +2339,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * the size the page comes out as when they don't.
      */
     private fun pixelGrid(w: Int, h: Int): String {
-        val dm = android.util.DisplayMetrics()
-        @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(dm)
+        val dm = realMetrics()
         fun css(px: Int) = if (px <= 0 || dm.density <= 0f) px else Math.round(Math.round(px / dm.density) * dm.density)
         val cw = css(w); val ch = css(h)
         return if (cw == w && ch == h) "1:1" else "$cw \u00d7 $ch"
@@ -2377,7 +2377,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             override fun display() = displayInfo()
             override fun requestPermissions(permissions: List<String>, answer: (granted: Boolean, askAgain: Boolean) -> Unit) =
                 askPermissions(permissions, answer)
-            override fun startForResult(intent: android.content.Intent) = runCatching { startActivityForResult(intent, 200) }.isSuccess
+            override fun startForResult(intent: android.content.Intent) = runCatching { startActivityForResult(intent, HOME_ROLE_REQUEST) }.isSuccess
             override fun onLayoutChanged() = reshell()
             override fun wallpaper() = wallpaperSource()
             override fun onFirstUseDone() = afterFirstUse()
@@ -2473,13 +2473,24 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (app.androidShortcut != null) { pinned.remove(app); return }
         if (app.androidComponent != null) { androidApps.uninstall(app); return }
         app.launchPoint?.let { lp -> applicationManager.removeLaunchPoint(lp.launchPointId); return }
+        removeInstalled(app) { error ->
+            systemBanner("", if (error == null) "${app.title} removed" else "Couldn't remove ${app.title}: $error")
+        }
+    }
+
+    /**
+     * An installed app's package removed, by the launcher or an installer on the bus: its
+     * windows close and its viewport setting goes first, then the package, and the launcher,
+     * services, db8 kinds and dock are brought up to date before [done] hears how it went.
+     */
+    private fun removeInstalled(app: AppInfo, done: (String?) -> Unit) {
         running[app.id]?.toList()?.forEach { w -> onWindowClosed(w) }
         FixedViewport.forget(this, app.id)
         packages.remove(app.id, app.dir) { error ->
             appsChanged()
             jsServices.reload()
             showDock()
-            systemBanner("", if (error == null) "${app.title} removed" else "Couldn't remove ${app.title}: $error")
+            done(error)
         }
     }
 
@@ -2784,8 +2795,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             var tl = corner(android.view.RoundedCorner.POSITION_TOP_LEFT)
             var tr = corner(android.view.RoundedCorner.POSITION_TOP_RIGHT)
             if (cut != null && tl == 0f && tr == 0f) {
-                val dm = android.util.DisplayMetrics()
-                @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(dm)
+                val dm = realMetrics()
                 tl = minOf(dm.widthPixels, dm.heightPixels) * ASSUMED_CORNER; tr = tl
             }
             // A side the shell is kept off (the cutout's, turned) is clear of its corner.
@@ -2828,7 +2838,22 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         /** The shell that is up, if any: a second one hands off to it ([onCreate]). */
         private var live: java.lang.ref.WeakReference<ShellActivity>? = null
         /** onActivityResult code for Android's credential confirmation (matchDevicePasscode). */
+        /** Request codes: the storage permissions asked at start, the system's home-role dialog, the lock screen's confirmation, and the bus's permission requests from FIRST_PERMISSION_REQUEST up. */
+        private const val STORAGE_REQUEST = 1
+        private const val HOME_ROLE_REQUEST = 200
+        /** The orientations a card can be fixed at, and the Android orientation each holds the screen in. */
+        private val ORIENTATIONS = mapOf(
+            "up" to android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
+            "down" to android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT,
+            "right" to android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
+            "left" to android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE,
+            "landscape" to android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
+            "portrait" to android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT,
+        )
+        /** A popup alert's height when its window gives none, in TouchPad px. */
+        private const val DEFAULT_ALERT_HEIGHT = 200
         private const val CONFIRM_LOCK = 201
+        private const val FIRST_PERMISSION_REQUEST = 1000
         /** The launcher's launch point title, com.palm.launcher's on the reference TouchPad. */
         const val LAUNCHER_TITLE = "Launcher"
         /** An unreported rounded corner's radius on a screen with a cutout, as a part of its short side (fitCutout). */

@@ -41,26 +41,11 @@ class ApplicationManager(
         fun showDock()
         /** The icons drawn for an app or launch point are stale. */
         fun forgetIcons(key: String)
+        /** Removes an installed app's package, closing its windows first; [done] gets null or the error. */
+        fun removeInstalled(app: AppInfo, done: (String?) -> Unit)
     }
 
     private lateinit var bus: Bus
-
-    /**
-     * The app /usr/palm/command-resource-handlers.json (the reference TouchPad's, in the ROM)
-     * redirects a URL to, by its "redirects" patterns, or null.
-     */
-    private fun handlerFor(target: String): String? {
-        if (target.isEmpty()) return null
-        val f = java.io.File(webos.root, "usr/palm/command-resource-handlers.json")
-        val list = runCatching { JSONObject(f.readText()).optJSONArray("redirects") }.getOrNull() ?: return null
-        for (i in 0 until list.length()) {
-            val r = list.optJSONObject(i) ?: continue
-            val re = runCatching { Regex(r.optString("url"), RegexOption.IGNORE_CASE) }.getOrNull() ?: continue
-            if (re.containsMatchIn(target)) return r.optString("appId").ifEmpty { null }
-        }
-        return null
-    }
-
 
     private val launchHandler = Bus.Handler { caller, p, reply ->
         val id = p.optString("id")
@@ -80,7 +65,7 @@ class ApplicationManager(
         }
         // A bare target an installed app claims in the system's command-resource-handlers
         // (mailto: is Email's), opened in that app, as webOS's application manager did.
-        handlerFor(p.optString("target"))?.takeIf { id.isEmpty() && registry.get(it) != null }?.let { app ->
+        handlers.redirectFor(p.optString("target"))?.takeIf { id.isEmpty() && registry.get(it) != null }?.let { app ->
             shell.launch(app, JSONObject().put("target", p.optString("target")), launcher = caller)
             reply(Bus.ok(mapOf("processId" to "success")))
             return@Handler
@@ -175,7 +160,7 @@ class ApplicationManager(
             override fun remove(appId: String, done: (String?) -> Unit) {
                 val app = registry.get(appId)
                 if (app == null || !app.userInstalled) return done("$appId isn't installed")
-                packages.remove(appId, app.dir) { error -> shell.appsChanged(); jsServices.reload(); done(error) }
+                shell.removeInstalled(app, done)
             }
             override fun isInstalled(appId: String) = registry.get(appId)?.userInstalled == true
         }).register(bus)
@@ -187,8 +172,7 @@ class ApplicationManager(
                 override fun removableVersion(id: String) = registry.get(id)?.takeIf { it.userInstalled }?.version
                 override fun remove(id: String, done: (String?) -> Unit) {
                     val app = registry.get(id) ?: return done("$id isn't installed")
-                    shell.running[id]?.toList()?.forEach { w -> shell.closeWindow(w) }
-                    packages.remove(id, app.dir) { error -> shell.appsChanged(); jsServices.reload(); shell.showDock(); done(error) }
+                    shell.removeInstalled(app, done)
                 }
             }) { path -> java.io.File(webos.mapPaths(path)) }.register(bus)
         // Which windows are up, and closing one, as palm-launch -c and palm-run use them.

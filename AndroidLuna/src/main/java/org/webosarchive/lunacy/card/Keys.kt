@@ -16,19 +16,24 @@ import org.json.JSONObject
  * spelling), and a subscriber gets {"returnValue":true,"subscribed":true} and then an event
  * whenever the state changes.
  *
- * Lunacy backs the headset with Android's, and has no media keys of its own to report.
+ * Lunacy backs the headset with Android's. Its media keys are Android's media controls for
+ * what a webOS app is playing (shell/NowPlaying: the notification, lock screen, headset and
+ * car), sent as webOS's AVRCP events, {"key": "play" | "pause" | "next" | "prev" | "stop" |
+ * "togglePausePlay", "state": "down"} and then "up", which Music acts on at "down".
  */
 class Keys(private val context: Context) {
     private val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val headsetSubscribers = LinkedHashSet<Bus.Call>()
+    private val mediaSubscribers = LinkedHashSet<Bus.Call>()
     private var receiver: BroadcastReceiver? = null
 
     fun register(bus: Bus) {
         bus.register(SERVICE, "headset/status", Bus.CallHandler { headset(it) })
-        // Lunacy has no media keys. The subscription is honest - it stays open and would
-        // deliver if there were any - and it never claims a key was pressed.
         bus.register(SERVICE, "media/status", Bus.CallHandler { call ->
-            if (!call.subscribe) call.reply(needsSubscription()) else call.reply(subscribed())
+            if (!call.subscribe) return@CallHandler call.reply(needsSubscription())
+            call.reply(subscribed())
+            mediaSubscribers += call
+            call.onCancel { mediaSubscribers.remove(call) }
         })
     }
 
@@ -70,6 +75,14 @@ class Keys(private val context: Context) {
     private fun stopWatching() {
         receiver?.let { runCatching { context.unregisterReceiver(it) } }
         receiver = null
+    }
+
+    /** An Android media control was pressed (NowPlaying): its AVRCP key, down and up. */
+    fun mediaKey(key: String) {
+        for (state in listOf("down", "up")) {
+            val e = JSONObject().put("returnValue", true).put("key", key).put("state", state).toString()
+            mediaSubscribers.toList().forEach { it.reply(e) }
+        }
     }
 
     @Suppress("DEPRECATION")

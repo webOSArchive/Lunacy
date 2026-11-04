@@ -22,6 +22,9 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- display/control/setState "on": the SDK's palm-launch wakes the screen with it. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- What Music plays keeps playing with the screen off, behind Android's media notification (shell/NowPlaying). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <!-- A second shell brings the first one's task to the front (ShellActivity.takeOver). -->
     <uses-permission android:name="android.permission.REORDER_TASKS" />
     <!-- The status bar's Bluetooth icon: whether the adapter is on and connected. -->
@@ -116,6 +119,9 @@
         <!-- Android's notifications, as webOS dashboards (card/AndroidNotifications.kt). Only
              Android may bind it, and only once the owner allows it on Android's Notification
              access screen; until then Lunacy sees nothing. -->
+        <service android:name=".shell.NowPlayingService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
         <service android:name=".card.AndroidNotificationListener"
             android:exported="true"
             android:label="Lunacy"

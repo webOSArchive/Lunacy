@@ -2653,7 +2653,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             reply(if (app == null) Bus.error("Application not found: ${p.optString("appId")}")
                   else Bus.ok(mapOf("appId" to app.id, "basePath" to app.filePath())))
         }
-        org.webosarchive.lunacy.card.Keys(this).register(bus)
+        val keys = org.webosarchive.lunacy.card.Keys(this).also { it.register(bus) }
+        // What Music plays is Android's media session too; its controls come back as webOS's media keys (NowPlaying).
+        org.webosarchive.lunacy.card.MediaBroadcast(this).register(bus)
+        NowPlaying.onKey = { k -> runOnUiThread { keys.mediaKey(k) } }
         // Package scripts ask for this after putting an app in /usr/palm/applications
         // themselves. The reference TouchPad answers {"returnValue":true}.
         bus.register("com.palm.applicationManager", "rescan") { _, _, reply ->

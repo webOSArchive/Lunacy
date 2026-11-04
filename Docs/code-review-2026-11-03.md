@@ -81,19 +81,30 @@ ported to `Luna.drawNineSlice`, the keyboard kept independent, codepoet); §9's 
 `check`), §4.1 with §3.2 and S2, §2.6 then §2.1, §4.3 and §4.4. The OAuth work touches
 the accounts and the services, so the service conventions come first.
 
-**Done so far in that stage (2026-11-04):** S2; §4.2 (the bus checks its thread in debug
-builds, after a logging build found no call off it); §4.1 with §3.2 (`Bus.own`,
-`registerPrivate`, `UserFiles.inside` and `walkMedia`, `Db8.write`, `KindSpec`,
-`AndroidAccountSide`, `GlStream`, `Bus.succeeded`/`errorText`, one way to keep a subscriber);
-§5; §2.6 (`PdkHost.start`, `AppServer.serve`, `Configurator.run`, `WindowHost`, `ShellHooks`;
-the two `onTouchEvent`s were already split); and from §2.1 `ApplicationManager` and
-`ExhibitionController` out of `ShellActivity`, with `removeInstalled`, the handler table
-parsed once, `realMetrics`, `ORIENTATIONS`, named request codes and the hand-over helper.
-Left by judgment: raw `Thread`s to an executor (DownloadManager, `Packages.shell`,
-`AndroidApps.list`) and DownloadManager's and UniversalSearch's locks, which are touched off
-the main thread; `onDestroy`'s hand-written order, which is the leaked-shell fix (pages,
-services, the bus, then what runs under it) and reads better spelled out than registered. Still to do:
-`NotificationHost`, `AppLifecycle` and `ShellChrome`, then §4.3 and §4.4.
+**Done in that stage (2026-11-04):** S2; §4.2 (the bus checks its thread in debug builds,
+after a logging build found no call off it); §4.1 with §3.2 (`Bus.own`, `registerPrivate`,
+`UserFiles.inside` and `walkMedia`, `Db8.write`, `KindSpec`, `AndroidAccountSide`,
+`GlStream`, `Bus.succeeded`/`errorText`, one way to keep a subscriber); §5; §2.6
+(`PdkHost.start`, `AppServer.serve`, `Configurator.run`, `WindowHost`, `ShellHooks`; the two
+`onTouchEvent`s were already split); from §2.1 `ApplicationManager`, `ExhibitionController`
+and `NotificationHost` out of `ShellActivity` (3,240 lines to about 2,500), `launch()` split
+by `Placement`, `buildShell` split in place, `removeInstalled`, the handler table parsed
+once, `realMetrics`, `ORIENTATIONS`, named request codes; §4.3 (`WindowType`, `Act`, Just
+Type's `cellOf`/`filterAt`, `Engine`, `ActivityFile`, `FormFactor.prefs`); §4.4
+(`PageHooks`, with a test that finds each hook's definition in the page's scripts).
+
+Left by judgment:
+- `AppLifecycle` and `ShellChrome`. Measured: the lifecycle's 38 members use 43 of the
+  shell's others - the card layer, launcher, status bar, Just Type, the dock, keyboard,
+  orientation, menus, notifications - so as a class it needs a host as wide as the shell,
+  and this plan has it owning `cards` while `ShellChrome` builds them. They want one owner
+  for the card layer first (a design step, not a move), and belong with the rest of §2
+  before 1.0.
+- `registerServices` stays whole: 99 lines of construction in dependency order.
+- Raw `Thread`s to an executor (DownloadManager, `Packages.shell`, `AndroidApps.list`) and
+  DownloadManager's and UniversalSearch's locks, which are touched off the main thread.
+- `onDestroy`'s hand-written order, which is the leaked-shell fix (pages, services, the
+  bus, then what runs under it) and reads better spelled out than registered.
 
 **Before 1.0:** §3.1, the other splits in §2, `compat.js` last; B14, B15, S13, the rest of §8
 and §10. Measurements on the TouchPad (§11) decide B4, B5, B6, S5, S7/S8, S14 and §4.3.

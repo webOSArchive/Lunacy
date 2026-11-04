@@ -1615,7 +1615,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val list = running[w.appId] ?: return
         list.remove(w)
         (w.parent as? android.view.ViewGroup)?.removeView(w)
-        w.destroy()
+        // Its unload handlers first, as webOS ran them (a dashboard's onUserClose comes from there).
+        w.close()
         // An app ends when its last visible window closes; its headless root goes with it, a
         // moment later: a dashboard swiped away tells the root as it unloads (Enyo's
         // onUserClose), and the root acts on it, so it must still be there to hear it. A window
@@ -1631,7 +1632,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     private fun endApp(appId: String, list: MutableList<AppWindow>) {
-        list.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.destroy() }
+        list.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.close() }
         running.remove(appId)
         endAppActivity(appId)
     }

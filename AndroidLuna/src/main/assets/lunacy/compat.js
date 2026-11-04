@@ -1552,3 +1552,53 @@ __lunacyStyle("@media (max-width: 540px) { html .enyo-richtext-hint { white-spac
 	LunacyDate.parse = function (s) { var t = local(s); return t === null ? parse0.apply(Native, arguments) : t; };
 	window.Date = LunacyDate;
 })();
+
+// A page's unload handlers run when Lunacy closes its window, on every engine.
+//
+// webOS ran a window's unload handlers as it closed, and apps count on them: a dashboard
+// swiped away tells its app from its own unload handler (Enyo's DashboardContent posts
+// doUserClose to its opener, which fires the app's onUserClose), and Enyo apps' onUnload
+// saves and tidies up. Lunacy closes a window by destroying its WebView, and newer Chromium
+// won't register unload handlers at all ("Permissions policy violation: unload is not allowed
+// in this document"), so on those engines none of it happened: Android Notifications never
+// heard that a dashboard was swiped away and left the notification in Android, where it came
+// back each time Lunacy started (codepoet, 2026-11-04). So the page keeps its unload handlers
+// itself, and the shell runs them (window.__lunacyUnload) before it destroys the window
+// (AppWindow.close); a navigation away runs them too, from pagehide. They run once.
+(function () {
+	var handlers = [], ran = false;
+	var add = EventTarget.prototype.addEventListener, remove = EventTarget.prototype.removeEventListener;
+	EventTarget.prototype.addEventListener = function (type, listener) {
+		if (this === window && type === "unload") {
+			if (listener && handlers.indexOf(listener) < 0) { handlers.push(listener); }
+			return;
+		}
+		return add.apply(this, arguments);
+	};
+	EventTarget.prototype.removeEventListener = function (type, listener) {
+		if (this === window && type === "unload") {
+			var i = handlers.indexOf(listener);
+			if (i >= 0) { handlers.splice(i, 1); }
+			return;
+		}
+		return remove.apply(this, arguments);
+	};
+	window.__lunacyUnload = function () {
+		if (ran) { return; }
+		ran = true;
+		var e = document.createEvent("Event");
+		e.initEvent("unload", false, false);
+		var list = handlers.slice(0);
+		for (var i = 0; i < list.length; i++) {
+			try {
+				var h = list[i];
+				if (typeof h === "function") { h.call(window, e); } else if (h && typeof h.handleEvent === "function") { h.handleEvent(e); }
+			} catch (err) { console.error("unload handler: " + (err && err.stack || err)); }
+		}
+		// window.onunload too, once: an engine that still fires it natively finds it gone.
+		var on = window.onunload;
+		window.onunload = null;
+		if (typeof on === "function") { try { on.call(window, e); } catch (err) { console.error("onunload: " + (err && err.stack || err)); } }
+	};
+	add.call(window, "pagehide", function () { window.__lunacyUnload(); });
+})();

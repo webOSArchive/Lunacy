@@ -328,6 +328,20 @@ open class AppWindow(
         return handled
     }
 
+    /**
+     * Closes the window as webOS did: the page's unload handlers run first (compat.js keeps
+     * them, since newer engines won't run them as a WebView is destroyed), then it goes. A
+     * dashboard tells its app it was swiped away from there (Enyo's onUserClose). A page that
+     * doesn't answer within [UNLOAD_MS] is destroyed anyway.
+     */
+    fun close() {
+        if (destroyed) return
+        var done = false
+        val finish = { if (!done) { done = true; destroy() } }
+        evaluateJavascript("try{window.__lunacyUnload&&__lunacyUnload()}catch(e){}") { finish() }
+        main.postDelayed(finish, UNLOAD_MS)
+    }
+
     override fun destroy() {
         destroyed = true
         if (hasBrowserViews) browserViews.destroyAll()
@@ -485,6 +499,8 @@ open class AppWindow(
     }
 
     private companion object {
+        /** How long a closing page has to run its unload handlers (close). */
+        const val UNLOAD_MS = 1000L
         /** The window types the shell places, as it names them. */
         val WINDOW_TYPES = listOf("card", "dashboard", "popupalert", "dockMode")
         /** URLs a page loads in itself, which never leave it. */

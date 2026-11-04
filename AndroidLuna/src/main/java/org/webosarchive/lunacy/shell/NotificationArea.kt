@@ -119,7 +119,7 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
                 val text = fitted?.takeIf { it.first === b && it.second == room }?.third
                     ?: android.text.TextUtils.ellipsize(b.text, bannerText, room, android.text.TextUtils.TruncateAt.END).toString().also { fitted = Triple(b, room, it) }
                 bannerText.alpha = alpha
-                c.drawText(text, x, h / 2f - (bannerText.ascent() + bannerText.descent()) / 2, bannerText)
+                c.drawText(text, x, bannerText.centredBaseline(h / 2f), bannerText)
                 c.restore()
                 return
             }

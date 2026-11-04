@@ -81,7 +81,7 @@ class ExhibitionMenu(context: Context, private val luna: Luna) : View(context) {
                     RectF(x, row.centerY() - size / 2, x + size, row.centerY() + size / 2), null)
             }
             c.drawText(entry.title, luna.px(TITLE_X.toFloat()),
-                row.centerY() - (label.ascent() + label.descent()) / 2, label)
+                label.centredBaseline(row.centerY()), label)
             // The groove between rows: a dark line with a lighter one under it.
             if (i > 0) {
                 line.color = GROOVE_DARK; c.drawRect(0f, top - luna.px(1f), width.toFloat(), top, line)

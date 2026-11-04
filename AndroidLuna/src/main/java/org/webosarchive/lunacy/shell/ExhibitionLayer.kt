@@ -182,8 +182,8 @@ class ExhibitionLayer(context: Context, private val luna: Luna) : View(context) 
         if (glass) {
             c.drawText(longDate(now.time), cx, cy + luna.px(300f), faceText)
         } else {
-            c.drawText(now.get(Calendar.DAY_OF_MONTH).toString(), cx + luna.px(108f), cy - luna.px(2f) - (faceText.ascent() + faceText.descent()) / 2, faceText)
-            c.drawText(DateFormat.format("EEE", now.time).toString(), cx - luna.px(108f), cy - luna.px(2f) - (faceText.ascent() + faceText.descent()) / 2, faceText)
+            c.drawText(now.get(Calendar.DAY_OF_MONTH).toString(), cx + luna.px(108f), faceText.centredBaseline(cy - luna.px(2f)), faceText)
+            c.drawText(DateFormat.format("EEE", now.time).toString(), cx - luna.px(108f), faceText.centredBaseline(cy - luna.px(2f)), faceText)
         }
     }
 
@@ -227,7 +227,7 @@ class ExhibitionLayer(context: Context, private val luna: Luna) : View(context) 
             }
             c.drawBitmap(tile, x, timeTop, null)
             c.drawText(d.toString(), x + tile.width / 2f,
-                timeTop + tile.height / 2f - (faceText.ascent() + faceText.descent()) / 2 - luna.px(4f), faceText)
+                faceText.centredBaseline(timeTop + tile.height / 2f) - luna.px(4f), faceText)
             tileMask?.let { c.drawBitmap(it, x, timeTop, null) }
             // "12" then a wide gap before the minutes, 4 px between a pair's two digits.
             x += tile.width + if (i == 1) gapBig else gapSmall
@@ -255,7 +255,7 @@ class ExhibitionLayer(context: Context, private val luna: Luna) : View(context) 
             c.drawBitmap(dateTile, dx, dateTop, null)
             cell?.let {
                 c.drawText(it, dx + dateTile.width / 2f,
-                    dateTop + dateTile.height / 2f - (faceText.ascent() + faceText.descent()) / 2 - luna.px(4f), faceText)
+                    faceText.centredBaseline(dateTop + dateTile.height / 2f) - luna.px(4f), faceText)
             }
             dateMask?.let { c.drawBitmap(it, dx, dateTop, null) }
             dx += dateTile.width + gap

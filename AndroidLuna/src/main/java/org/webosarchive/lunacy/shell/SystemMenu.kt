@@ -333,7 +333,7 @@ class SystemMenu(context: Context, private val luna: Luna, private val controls:
     }
 
     private fun text(c: Canvas, s: String, x: Float, cy: Float, p: Paint) =
-        c.drawText(s, x, cy - (p.ascent() + p.descent()) / 2, p)
+        c.drawText(s, x, p.centredBaseline(cy), p)
 
     /** MenuDivider.qml: menu-divider.png across the content less 7 px, centred. */
     private fun divider(c: Canvas, y: Float) {
@@ -410,7 +410,7 @@ class SystemMenu(context: Context, private val luna: Luna, private val controls:
     /** The 16 px name centred on the row, a 10 px upper-case status a pixel under its baseline. */
     private fun entry(c: Canvas, name: String, status: String, x: Float, cy: Float, w: Float) {
         val shown = TextUtils.ellipsize(name, entryPaint, Math.max(0f, w), TextUtils.TruncateAt.END).toString()
-        val baseline = cy - (entryPaint.ascent() + entryPaint.descent()) / 2
+        val baseline = entryPaint.centredBaseline(cy)
         c.drawText(shown, x, baseline, entryPaint)
         if (status.isNotEmpty()) c.drawText(status.uppercase(), x, baseline + luna.px(1f) - statusPaint.ascent(), statusPaint)
     }

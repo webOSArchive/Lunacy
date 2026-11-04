@@ -40,13 +40,12 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
         /** LunaCE's custom carrier string (sysUiCarrierString), shown when no app is maximized. */
         const val CARRIER_TEXT = "Lunacy"
         const val TITLE_CHANGE_MS = 300L   // statusBarTitleChangeDuration, linear
-        const val ARROW_MS = 500L          // statusBarArrowSlideDuration, InOutQuad
-        const val ITEM_SLIDE_MS = 1000L    // statusBarItemSlideDuration, InOutQuad
+        const val ARROW_MS = 500L          // statusBarArrowSlideDuration, Easing.InOutQuad
+        const val ITEM_SLIDE_MS = 1000L    // statusBarItemSlideDuration, Easing.InOutQuad
         const val GROUP_FADE_MS = 300L     // statusBarTabFadeDuration, linear
         const val MENU_FADE_MS = 200L      // statusBarMenuFadeDuration, linear
         /** StatusBarBattery::m_chargeLevels: the first state whose level is at least the battery's. */
         val CHARGE_LEVELS = intArrayOf(12, 20, 28, 36, 44, 52, 60, 68, 76, 84, 88, 99, 100)
-        private val InOutQuad = android.animation.TimeInterpolator { if (it < 0.5f) 2 * it * it else 1 - (-2 * it + 2) * (-2 * it + 2) / 2 }
     }
 
     // ---- the title ----
@@ -70,7 +69,7 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
 
     /**
      * The title group's ▾ and separator: shown while an app is up, which is what LunaSysMgr
-     * called actionable (setMaximizedAppTitle), and faded in and out over 500 ms InOutQuad.
+     * called actionable (setMaximizedAppTitle), and faded in and out over 500 ms Easing.InOutQuad.
      * While it is gone the title group has no separator either - in the card view the
      * reference TouchPad draws "webOS CE" with nothing after it.
      */
@@ -81,7 +80,7 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
             arrowAnim?.cancel()
             arrowAnim = ValueAnimator.ofFloat(arrowProgress, if (v) 1f else 0f).apply {
                 duration = (ARROW_MS * Math.abs((if (v) 1f else 0f) - arrowProgress)).toLong()
-                interpolator = InOutQuad
+                interpolator = Easing.InOutQuad
                 addUpdateListener { arrowProgress = it.animatedValue as Float; invalidate() }
                 start()
             }
@@ -93,14 +92,14 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
 
     /**
      * An icon that slides in and out as LunaSysMgr's StatusBarIcon did: over 1000 ms its width
-     * grows in the first half (InOutQuad) while its opacity rises the whole way, and the
+     * grows in the first half (Easing.InOutQuad) while its opacity rises the whole way, and the
      * reverse to go.
      */
     private inner class SlidingIcon(var image: Bitmap?) {
         var progress = 0f
         var shown = false
         private var anim: ValueAnimator? = null
-        val width get() = InOutQuad.getInterpolation(Math.min(1f, progress * 2))
+        val width get() = Easing.InOutQuad.getInterpolation(Math.min(1f, progress * 2))
         val visible get() = progress > 0f
         fun set(on: Boolean, done: () -> Unit = {}) {
             if (on == shown) return
@@ -525,7 +524,7 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
         return right
     }
 
-    private fun baseline(p: Paint, h: Float) = h / 2 - (p.ascent() + p.descent()) / 2 - luna.px(1f)
+    private fun baseline(p: Paint, h: Float) = p.centredBaseline(h / 2) - luna.px(1f)
 
     /** status-bar-separator.png (2×28) with its left edge at x; returns its left edge. */
     private fun separator(c: Canvas, x: Float, p: Paint? = null): Float {
@@ -594,7 +593,7 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
         var cx = left + margin
         b.icon?.let { c.drawBitmap(it, null, RectF(cx, (height - iconS) / 2f, cx + iconS, (height + iconS) / 2f), android.graphics.Paint().apply { this.alpha = alpha }); cx += iconS + margin }
         bannerText.alpha = alpha
-        c.drawText(text, cx, height / 2f - (bannerText.ascent() + bannerText.descent()) / 2, bannerText)
+        c.drawText(text, cx, bannerText.centredBaseline(height / 2f), bannerText)
         c.restore()
     }
 

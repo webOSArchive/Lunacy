@@ -12,7 +12,6 @@ import android.text.TextWatcher
 import android.util.TypedValue
 import android.view.View
 import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 
 /**
@@ -71,8 +70,7 @@ class JustType(context: Context, private val luna: Luna) : EditText(context) {
         super.onVisibilityChanged(changed, visibility)
         if (changed === this && visibility != View.VISIBLE && isFocused) {
             clearFocus()
-            (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-                .hideSoftInputFromWindow(windowToken, 0)
+            hideKeyboard()
         }
     }
 }

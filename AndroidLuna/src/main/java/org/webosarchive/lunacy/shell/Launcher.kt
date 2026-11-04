@@ -680,7 +680,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             val gh = luna.px(glow) / 2
             luna.image("launcher3/launcher-touch-feedback.png")?.let { c.drawBitmap(it, null, RectF(cx - gh, iy - gh, cx + gh, iy + gh), null) }
         }
-        val bmp = luna.appIcon(app) ?: luna.image("default-app-icon.png")
+        val bmp = luna.appIconOrDefault(app)
         bmp?.let { c.drawBitmap(it, null, RectF(cx - half, iy - half, cx + half, iy + half), null) }
         val layout = labels.getOrPut(app.id) { twoLineLabel(app.title) }
         c.save(); c.translate(cx - layout.width / 2f, iy + half + luna.px(labelGap)); layout.draw(c); c.restore()
@@ -747,7 +747,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             val title = p.title.uppercase()
             val room = tw - luna.px(8f)
             tabText.textScaleX = tabText.measureText(title).let { w -> if (w > room) room / w else 1f }
-            c.drawText(title, r.centerX(), h / 2 - (tabText.ascent() + tabText.descent()) / 2, tabText)
+            c.drawText(title, r.centerX(), tabText.centredBaseline(h / 2), tabText)
             tabText.textScaleX = 1f
         }
         if (showAddTab) addTabRect()?.let { r ->
@@ -758,7 +758,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         if (editing) {
             val r = doneRect()
             drawDone(c, r, pressed = donePressed)
-            c.drawText("DONE", r.centerX(), r.centerY() - (doneText.ascent() + doneText.descent()) / 2 + luna.px(Params.DONE_TEXT_DY), doneText)
+            c.drawText("DONE", r.centerX(), doneText.centredBaseline(r.centerY()) + luna.px(Params.DONE_TEXT_DY), doneText)
         }
     }
 
@@ -1026,7 +1026,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         listOf("Cancel", "Remove").forEachIndexed { i, caption ->
             val r = d.buttons[i]
             luna.nine(c, if (dialogPressed == i) "pin/button-black-press.png" else "pin/button-black.png", r, 10, 10, 10, 10)
-            c.drawText(caption, r.centerX(), r.centerY() - (buttonText.ascent() + buttonText.descent()) / 2, buttonText)
+            c.drawText(caption, r.centerX(), buttonText.centredBaseline(r.centerY()), buttonText)
         }
     }
 

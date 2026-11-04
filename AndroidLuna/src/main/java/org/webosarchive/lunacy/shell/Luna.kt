@@ -102,6 +102,9 @@ class Luna(private val context: Context,
             else quietly("${app.id}'s icon") { app.openIcon()?.use { BitmapFactory.decodeStream(it) } }
         }
 
+    /** An app's icon, or webOS's default one when it has none that decodes, as the launcher drew it. */
+    fun appIconOrDefault(app: org.webosarchive.lunacy.card.AppInfo): Bitmap? = appIcon(app) ?: image("default-app-icon.png")
+
     /**
      * A launch point's icon, which can be any size (a site's 512 px icon from the PWA
      * Installer): squeezed to the launcher's 64 px square as LunaSysMgr's LaunchPoint::icon
@@ -254,4 +257,21 @@ class Luna(private val context: Context,
             }
         }
     }
+}
+
+/**
+ * The baseline that centres this paint's text on [cy]: cy less the middle of its ascent and
+ * descent. The expression every view wrote out by hand, in the same order, so a coordinate
+ * comes out as it did.
+ */
+fun Paint.centredBaseline(cy: Float): Float = cy - (ascent() + descent()) / 2
+
+/** The keyboard up for this view (a text field the shell draws: a tab's name, a group's, Just Type). */
+fun android.view.View.showKeyboard() {
+    (context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).showSoftInput(this, 0)
+}
+
+/** The keyboard down from this view's window. */
+fun android.view.View.hideKeyboard() {
+    (context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(windowToken, 0)
 }

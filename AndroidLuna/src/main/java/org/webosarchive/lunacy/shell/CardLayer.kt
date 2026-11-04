@@ -186,7 +186,7 @@ class Card(
         // title in appname-background.png (13 px left cap, 20 px right with the ▾ in it).
         if (!chromeFullScreen) titleRect()?.let { r ->
             l.nine(c, "statusBar/appname-background.png", r, 13, 0, 20, 0)
-            c.drawText(title, r.left + l.px(13f - 4f), r.centerY() - (titlePaint.ascent() + titlePaint.descent()) / 2 - l.px(1f), titlePaint)
+            c.drawText(title, r.left + l.px(13f - 4f), titlePaint.centredBaseline(r.centerY()) - l.px(1f), titlePaint)
         }
         // The virtual core navi, 66 px below the page: the light bar, bright while pressed.
         stripRect()?.let { r ->

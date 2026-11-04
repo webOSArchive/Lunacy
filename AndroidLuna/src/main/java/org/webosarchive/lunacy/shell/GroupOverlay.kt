@@ -21,7 +21,6 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
 import org.webosarchive.lunacy.card.AppInfo
@@ -60,10 +59,10 @@ object GroupArt {
             val x = margin + (i % 2) * (sub + gap); val y = margin + (i / 2) * (sub + gap)
             if (overflow && i == 3) {
                 val t = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(220, 255, 255, 255); textSize = 14f * k; typeface = luna.fontBold; textAlign = Paint.Align.CENTER }
-                c.drawText("+${members.size - 3}", x + sub / 2, y + sub / 2 - (t.ascent() + t.descent()) / 2, t)
+                c.drawText("+${members.size - 3}", x + sub / 2, t.centredBaseline(y + sub / 2), t)
                 continue
             }
-            (luna.appIcon(members[i]) ?: luna.image("default-app-icon.png"))?.let { c.drawBitmap(it, null, RectF(x, y, x + sub, y + sub), filter) }
+            luna.appIconOrDefault(members[i])?.let { c.drawBitmap(it, null, RectF(x, y, x + sub, y + sub), filter) }
         }
         return b
     }
@@ -118,14 +117,8 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
         color = Color.argb(235, 255, 255, 255); textSize = luna.px(22f); typeface = luna.fontBold; textAlign = Paint.Align.CENTER
     }
     private val label = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = luna.px(14f); typeface = luna.fontBold; color = Color.WHITE }
-    // GroupOverlay::paint's rounded rects: the panel (brush 25,25,25,235; pen 255,255,255,90,
-    // 1.5 px) and the name's edit box (brush 0,0,0,180; pen 140,180,255,220). The reference
-    // TouchPad's screen shows them so. (Its takeScreenShot doesn't: the capture fills each
-    // shape with the pen colour, a grey panel and a light-blue box. Compare by eye.)
-    private val panelFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(235, 25, 25, 25) }
-    private val panelEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = luna.px(1.5f); color = Color.argb(90, 255, 255, 255) }
-    private val boxFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(180, 0, 0, 0) }
-    private val boxEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = luna.px(1.5f); color = Color.argb(220, 140, 180, 255) }
+    // The panel and the name's edit box (DialogPaints).
+    private val dialog = DialogPaints(luna)
 
     private val field = object : EditText(context) {
         init { background = null }
@@ -180,7 +173,7 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
         val g = group ?: return
         if (editing) endEdit(commit = true)
         onDismissed(g, launching != null)
-        animateTo(0f, CLOSE_MS, android.animation.TimeInterpolator { it * it * it }) {
+        animateTo(0f, CLOSE_MS, Easing.InCubic) {
             group = null; launching = null; visibility = GONE
         }
     }
@@ -244,16 +237,16 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
         val alpha = (progress * 255).toInt()
         c.saveLayerAlpha(0f, 0f, width / scale + width, height / scale + height, alpha, Canvas.ALL_SAVE_FLAG)
         val r12 = luna.px(12f)
-        c.drawRoundRect(p, r12, r12, panelFill)
-        c.drawRoundRect(p, r12, r12, panelEdge)
+        c.drawRoundRect(p, r12, r12, dialog.panelFill)
+        c.drawRoundRect(p, r12, r12, dialog.panelEdge)
         val tr = titleRect(p)
         val text = if (editing) {
             val box = RectF(tr).apply { inset(luna.px(4f), luna.px(4f)) }
             val r6 = luna.px(6f)
-            c.drawRoundRect(box, r6, r6, boxFill); c.drawRoundRect(box, r6, r6, boxEdge)
+            c.drawRoundRect(box, r6, r6, dialog.boxFill); c.drawRoundRect(box, r6, r6, dialog.boxEdge)
             field.text.toString() + "|"
         } else g.name
-        c.drawText(text, tr.centerX(), tr.centerY() - (titlePaint.ascent() + titlePaint.descent()) / 2, titlePaint)
+        c.drawText(text, tr.centerX(), titlePaint.centredBaseline(tr.centerY()), titlePaint)
         shown().forEachIndexed { i, app -> drawMember(c, app, cellRect(p, i)) }
         c.restore()
         c.restore()
@@ -265,7 +258,7 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
     private fun drawMember(c: Canvas, app: AppInfo, cell: RectF) {
         val half = luna.px(ICON) / 2
         val cx = cell.centerX(); val iy = cell.centerY() + luna.px(ICON_DY)
-        (luna.appIcon(app) ?: luna.image("default-app-icon.png"))?.let { c.drawBitmap(it, null, RectF(cx - half, iy - half, cx + half, iy + half), null) }
+        luna.appIconOrDefault(app)?.let { c.drawBitmap(it, null, RectF(cx - half, iy - half, cx + half, iy + half), null) }
         val layout = labels.getOrPut(app.id) {
             val w = luna.px(LABEL_W).toInt()
             val full = StaticLayout(app.title, label, w, Layout.Alignment.ALIGN_CENTER, 1f, 0f, false)
@@ -286,7 +279,7 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
         field.visibility = VISIBLE
         requestLayout(); invalidate()
         field.requestFocus()
-        post { (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(field, 0) }
+        post { field.showKeyboard() }
     }
 
     private fun endEdit(commit: Boolean) {
@@ -295,7 +288,7 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
         val name = field.text.toString().trim()
         editing = false
         field.visibility = GONE
-        (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(field.windowToken, 0)
+        field.hideKeyboard()
         if (commit && g != null && name.isNotEmpty() && name != g.name) { g.name = name; onRenamed(g) }
         requestLayout(); invalidate()
     }

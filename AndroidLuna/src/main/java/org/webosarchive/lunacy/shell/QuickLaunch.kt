@@ -113,7 +113,7 @@ class QuickLaunch(context: Context, private val luna: Luna, private val onLaunch
                 val gh = luna.px(Launcher.Params.FEEDBACK) / 2
                 c.drawBitmap(g, null, RectF(r.centerX() - gh, r.centerY() - gh, r.centerX() + gh, r.centerY() + gh), null)
             }
-            val icon = luna.appIcon(app) ?: luna.image("default-app-icon.png")
+            val icon = luna.appIconOrDefault(app)
             icon?.let { c.drawBitmap(it, null, r, null) }
         }
         luna.image("launcher3/quicklaunch-button-launcher.png")?.let { b ->
@@ -126,7 +126,7 @@ class QuickLaunch(context: Context, private val luna: Luna, private val onLaunch
             val half = luna.px(iconSize.toFloat()) / 2; val cy = dragY - luna.px(LIFT)
             val r = RectF(dragX - half, cy - half, dragX + half, cy + half)
             val p = android.graphics.Paint().apply { alpha = if (dragY <= 0) 128 else 255 }
-            (luna.appIcon(apps[dragging]) ?: luna.image("default-app-icon.png"))?.let { c.drawBitmap(it, null, r, p) }
+            luna.appIconOrDefault(apps[dragging])?.let { c.drawBitmap(it, null, r, p) }
         }
     }
 

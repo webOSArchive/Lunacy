@@ -19,7 +19,6 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
 import org.json.JSONArray
@@ -223,12 +222,12 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         reload()
         field.setText(initial); field.setSelection(field.text.length)
         field.requestFocus()
-        post { (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(field, 0) }
+        post { field.showKeyboard() }
     }
 
     fun close() {
         if (visibility != VISIBLE) return
-        (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(field.windowToken, 0)
+        field.hideKeyboard()
         field.clearFocus()
         animate().cancel()
         animate().alpha(0f).setDuration(FADE_MS).setInterpolator(Easing.Linear)
@@ -624,7 +623,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
             val r = tileRect(g, i)
             luna.nine(c, if (i == 0) "justtype/groupbox-app-focus.png" else "justtype/groupbox-app-focus-empty.png", r, 6, 6, 6, 6)
             val half = px(32f); val cx = r.centerX(); val iy = r.top + px(37f)
-            (luna.appIcon(app) ?: luna.image("default-app-icon.png"))?.let { c.drawBitmap(it, null, RectF(cx - half, iy - half, cx + half, iy + half), iconPaint) }
+            luna.appIconOrDefault(app)?.let { c.drawBitmap(it, null, RectF(cx - half, iy - half, cx + half, iy + half), iconPaint) }
             drawTitle(c, app.title, term, cx, r.top + px(88f), px(75f))
         }
     }
@@ -641,7 +640,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         luna.tile(c, "justtype/underline.png", RectF(x0, baseline + px(1f), x1, baseline + px(4f)))
     }
 
-    private fun centreBaseline(r: RectF, p: Paint) = r.centerY() - (p.ascent() + p.descent()) / 2
+    private fun centreBaseline(r: RectF, p: Paint) = p.centredBaseline(r.centerY())
 
     /** A 48-px list icon, 10 px in, and the label at 69 px, as LaunchAndSearchItem and ActionItem lay out. */
     private fun drawItemRow(c: Canvas, r: RectF, icon: Bitmap?, text: String) {

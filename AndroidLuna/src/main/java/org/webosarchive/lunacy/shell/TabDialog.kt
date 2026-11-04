@@ -14,7 +14,6 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
 
@@ -64,10 +63,7 @@ class TabDialog(context: Context, private val luna: Luna) : FrameLayout(context)
     private val promptPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.argb(170, 255, 255, 255); textSize = luna.px(18f); typeface = luna.fontMedium; textAlign = Paint.Align.CENTER
     }
-    private val panelFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(235, 25, 25, 25) }
-    private val panelEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = luna.px(1.5f); color = Color.argb(90, 255, 255, 255) }
-    private val boxFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(180, 0, 0, 0) }
-    private val boxEdge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = luna.px(1.5f); color = Color.argb(220, 140, 180, 255) }
+    private val dialog = DialogPaints(luna)
 
     init {
         setWillNotDraw(false)
@@ -85,13 +81,13 @@ class TabDialog(context: Context, private val luna: Luna) : FrameLayout(context)
         visibility = VISIBLE
         requestLayout()
         field.requestFocus()
-        post { (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(field, 0) }
+        post { field.showKeyboard() }
     }
 
     private fun finish(commit: Boolean, delete: Boolean) {
         if (!showing) return
         val name = field.text.toString().trim()
-        (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(field.windowToken, 0)
+        field.hideKeyboard()
         field.clearFocus()
         visibility = GONE
         onDone(if (commit && name.isNotEmpty()) name else null, delete)
@@ -133,14 +129,14 @@ class TabDialog(context: Context, private val luna: Luna) : FrameLayout(context)
         c.drawColor(Color.argb(120, 0, 0, 0))
         val p = panel()
         val r12 = luna.px(12f)
-        c.drawRoundRect(p, r12, r12, panelFill)
-        c.drawRoundRect(p, r12, r12, panelEdge)
+        c.drawRoundRect(p, r12, r12, dialog.panelFill)
+        c.drawRoundRect(p, r12, r12, dialog.panelEdge)
         val pr = promptRect(p)
-        c.drawText(prompt, pr.centerX(), pr.centerY() - (promptPaint.ascent() + promptPaint.descent()) / 2, promptPaint)
+        c.drawText(prompt, pr.centerX(), promptPaint.centredBaseline(pr.centerY()), promptPaint)
         val box = RectF(editRect(p)).apply { inset(luna.px(4f), luna.px(4f)) }
         val r6 = luna.px(6f)
-        c.drawRoundRect(box, r6, r6, boxFill)
-        c.drawRoundRect(box, r6, r6, boxEdge)
+        c.drawRoundRect(box, r6, r6, dialog.boxFill)
+        c.drawRoundRect(box, r6, r6, dialog.boxEdge)
         if (deletable) luna.image("launcher3/tab-delete-icon.png")?.let { b ->
             c.drawBitmap(b, Rect(0, 0, b.width, b.height / 2), deleteRect(p), null)
         }

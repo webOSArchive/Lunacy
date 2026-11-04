@@ -1295,7 +1295,7 @@ webOS apps could ship JS services (`usr/palm/services/<id>/`, with `services.jso
   TouchPad by `fetch-assets.sh`). It supplies webOS's native node modules: `palmbus` (the bus,
   over the process's stdin and stdout, one JSON message per line), `webos` (`include`, and the
   per-library contexts MojoLoader's `require` expects, with `root` as the service's global) and
-  `pmloglib` (logs). Node 0.4 names that are gone (`path.exists`, `sys`) are put back.
+  `pmloglib` (logs). Node 0.4 names that are gone (`path.exists`, `sys`, `require.paths`) are put back.
 - **The webOS filesystem.** Services use absolute webOS paths. Paths under `/usr`, `/media`,
   `/bin`, `/var`, `/etc`, `/tmp` and a few more are mapped into Lunacy's copy of that tree
   (`files/webos`) for `fs`, for `child_process` (the executable, arguments, and `sh -c` command

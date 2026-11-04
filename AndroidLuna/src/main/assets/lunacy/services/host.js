@@ -397,6 +397,28 @@ Module._load = function (request, parent, isMain) {
 	return load0.call(Module, real(request), parent, isMain);
 };
 
+// require.paths: node 0.4's list of extra folders to look for modules in, shared by every
+// require and searched after the node_modules folders; a relative entry is taken from the
+// working directory (the service's). Node 0.5 removed it. A webOS service that added its own
+// folder (require.paths.push("./node_modules"), as Synergy connectors did) stopped at its first
+// line here: "Cannot read property 'push' of undefined". Every module's require is given the
+// one list again (Module.wrap, which Node 12 honours when it is replaced), and a module not
+// found the usual way is looked for in it.
+const requirePaths = [];
+global.__lunacyRequirePaths = requirePaths;
+const wrap0 = Module.wrap;
+Module.wrap = function (script) { return wrap0("require.paths = global.__lunacyRequirePaths; " + script); };
+const resolve0 = Module._resolveFilename;
+Module._resolveFilename = function (request, parent, isMain, options) {
+	try {
+		return resolve0.call(Module, request, parent, isMain, options);
+	} catch (e) {
+		if (e.code !== "MODULE_NOT_FOUND" || !requirePaths.length || /^\.{0,2}\//.test(request)) throw e;
+		const paths = requirePaths.map((p) => path.resolve(real(String(p))));
+		return resolve0.call(Module, request, parent, isMain, { paths: paths });
+	}
+};
+
 process.on("uncaughtException", (e) => { console.error("uncaught: " + (e && e.stack || e)); });
 
 // ---- start, as run-js-service did ----

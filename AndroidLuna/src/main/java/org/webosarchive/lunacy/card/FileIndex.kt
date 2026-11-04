@@ -46,7 +46,7 @@ class FileIndex(private val webosRoot: File) {
             if (f.name.startsWith(".")) continue
             val p = "$path/${f.name}"
             if (f.isDirectory) {
-                walk(f, p, depth + 1, out, seen)
+                if (!UserFiles.nestedRoot(f)) walk(f, p, depth + 1, out, seen)
             } else if (f.isFile && isDocument(f.name) && seen.add(p)) {
                 out += record(p, f)
                 if (out.size >= MAX_FILES) return

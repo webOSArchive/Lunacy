@@ -904,8 +904,11 @@ it, so the control works in every app without any app being changed.
   folder the way Palm's showed albums.
 - **`/media/internal` is the user's own storage**, as it was on a device, so Android's shared
   folders are mapped into it under the names webOS used: `downloads`, `music`, `photos`,
-  `documents`, `camera`, `video`, and `ringtones`, which is Android's `Notifications/webOS`
-  (`UserFiles.kt`). The card host, the media server and the
+  `documents`, `camera`, `video`, `ringtones`, which is Android's `Notifications/webOS`, and
+  `wallpapers`, which is Android's `Pictures/webOS Wallpapers` (`UserFiles.kt`). The TouchPad's
+  wallpapers are copied there once (`SharedMedia.kt`), so Android's gallery and wallpaper
+  chooser have them too; a folder mapped inside another (wallpapers in Pictures, which is
+  `photos`) is skipped by the walks of the outer one, so its files are listed once. The card host, the media server and the
   picker all resolve paths through it, and nothing outside those folders is reachable.
   Reading them needs `READ_EXTERNAL_STORAGE`, which Android 5 grants at install. From
   Android 6 the shell asks for it once at startup (`ShellActivity.askForStorage`). If it's

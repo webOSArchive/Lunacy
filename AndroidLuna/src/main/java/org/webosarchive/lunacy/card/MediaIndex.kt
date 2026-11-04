@@ -143,7 +143,7 @@ class MediaIndex(private val webosRoot: File) {
         for (f in entries.sortedBy { it.name }) {
             if (f.name.startsWith(".")) continue
             val p = "$path/${f.name}"
-            if (f.isDirectory) { walk(f, p, depth + 1, out, paths); continue }
+            if (f.isDirectory) { if (!UserFiles.nestedRoot(f)) walk(f, p, depth + 1, out, paths); continue }
             val ext = f.name.substringAfterLast('.', "").lowercase(Locale.US)
             if (ext !in IMAGES && ext !in VIDEOS || !f.isFile || !paths.add(p)) continue
             val old = seen[p]

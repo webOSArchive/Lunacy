@@ -593,7 +593,7 @@ class LunacyService(
         if (root == null || !root.isDirectory) return Bus.error("No such folder: $path")
         // Lunacy's own folders, then the Android ones mapped in beside them (UserFiles), which
         // is where the files a person actually has live.
-        val subfolders = (root.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") } ?: emptyList()) +
+        val subfolders = (root.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") && !UserFiles.nestedRoot(it) } ?: emptyList()) +
             (if (root == UserFiles.own(webosRoot)) UserFiles.mappedFolders().map { it.second }.filter { m ->
                 root.listFiles().orEmpty().none { it.canonicalPath == m.canonicalPath }
             } else emptyList())

@@ -82,7 +82,7 @@ class MusicLibrary(private val context: Context, private val webosRoot: File) {
             for (f in dir.listFiles().orEmpty().sortedBy { it.name }) {
                 if (f.name.startsWith(".")) continue
                 val p = "$path/${f.name}"
-                if (f.isDirectory) { walk(f, p, depth + 1); continue }
+                if (f.isDirectory) { if (!UserFiles.nestedRoot(f)) walk(f, p, depth + 1); continue }
                 val ext = f.name.substringAfterLast('.', "").lowercase(Locale.ROOT)
                 if (ext != "m3u" && ext != "m3u8" && ext != "pls") continue
                 val base = path

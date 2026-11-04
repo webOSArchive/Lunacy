@@ -2184,26 +2184,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     }
 
     /**
-     * What a device shipped with: the TouchPad's wallpapers in the user's own storage, where
-     * a picker can find them. Copied once per Lunacy build, off the main thread.
+     * What a device shipped with: the TouchPad's wallpapers, in Android's pictures where Android
+     * and its apps find them as well as Screen & Lock's picker (SharedMedia). Off the main thread.
      */
     private fun seedMediaInternal() = Thread {
         try {
-            val dir = java.io.File(jsServices.root, "media/internal/wallpapers")
-            val stamp = java.io.File(dir, ".lunacy-apk")
-            val apk = packageManager.getPackageInfo(packageName, 0).lastUpdateTime.toString()
-            if (stamp.isFile && stamp.readText() == apk) return@Thread
-            dir.mkdirs()
-            for (name in assets.list("luna/wallpapers").orEmpty()) {
-                if (!name.endsWith(".jpg", true) && !name.endsWith(".png", true)) continue
-                val out = java.io.File(dir, name)
-                if (out.isFile) continue
-                assets.open("luna/wallpapers/$name").use { i -> out.outputStream().use { i.copyTo(it) } }
-            }
-            stamp.writeText(apk)
-            Log.i(AppServer.TAG, "wallpapers in ${dir.path}")
+            org.webosarchive.lunacy.card.SharedMedia.installWallpapers(this, jsServices.root)
         } catch (e: Exception) {
-            Log.w(AppServer.TAG, "couldn't put the wallpapers in /media/internal", e)
+            Log.w(AppServer.TAG, "couldn't share the wallpapers", e)
         }
     }.start()
 
@@ -2790,13 +2778,15 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * assets/luna/default-dock-positions.json, in the shape of the device's
      * /usr/palm/default-dock-positions.json (whose "quicklauncher" LunaSysMgr read for a fresh
      * dock): Web, Email, Calendar, Photos & Videos and App Catalog (codepoet, 2026-10-08; the
-     * TouchPad's had Messaging where Lunacy has App Catalog). A phone's dock takes the first four.
+     * TouchPad's had Messaging where Lunacy has App Catalog). A phone's dock, four apps, has a
+     * list of its own, "quicklauncher-phone": Web, Email, Calendar and App Catalog (codepoet,
+     * 2026-11-04).
      */
     private fun dock(): List<String> {
         val a = dockPrefs.getString("dock", null)?.let { runCatching { org.json.JSONArray(it) }.getOrNull() }
             ?: runCatching {
-                org.json.JSONObject(assets.open("luna/default-dock-positions.json").bufferedReader().use { it.readText() })
-                    .getJSONArray("quicklauncher")
+                val o = org.json.JSONObject(assets.open("luna/default-dock-positions.json").bufferedReader().use { it.readText() })
+                (if (luna.phone) o.optJSONArray("quicklauncher-phone") else null) ?: o.getJSONArray("quicklauncher")
             }.getOrDefault(org.json.JSONArray())
         return (0 until a.length()).map { a.optString(it).removeSuffix("_default") }.take(quickLaunch.maxItems)
     }

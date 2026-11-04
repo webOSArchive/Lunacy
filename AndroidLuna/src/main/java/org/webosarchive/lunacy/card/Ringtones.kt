@@ -20,9 +20,7 @@ import java.io.File
  * pickers, for any webOS app that chooses its own sound (Messaging's "Ringtone").
  *
  * - **The shipped tones.** The TouchPad's ten short ringtones (assets/luna/ringtones) are copied
- *   there once. A tone the user deletes stays deleted; a later Lunacy doesn't copy it back.
- *   Until Android's storage can be written (Android 6-9 ask for it), the copy waits for the
- *   next start.
+ *   there once ([SharedMedia], which the wallpapers share).
  * - **palm://com.palm.systemservice/ringtone/addRingtone** {filePath} copies a local file into
  *   the folder, and **deleteRingtone** {filePath} removes one from it and nowhere else, as
  *   luna-sysservice's RingtonePrefsHandler did, with its error texts. Android's media library
@@ -45,58 +43,21 @@ class Ringtones(private val context: Context, private val webosRoot: File) {
     }
 
     /** Android's Notifications/webOS, made if it isn't there; null if Android's storage can't be written. */
-    private fun folder(): File? {
-        if (Environment.getExternalStorageState() != Environment.MEDIA_MOUNTED) return null
-        val dir = Environment.getExternalStoragePublicDirectory(ANDROID_DIR)
-        return dir.takeIf { (it.isDirectory || it.mkdirs()) && it.canWrite() }
-    }
+    private fun folder(): File? = SharedMedia.folder(ANDROID_DIR)
 
-    /** Copies the shipped tones into Android's storage, once. Off the main thread. */
+    /** Copies the shipped tones into Android's storage, once (SharedMedia). Off the main thread. */
     fun install() = worker.execute {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (prefs.getBoolean(INSTALLED, false)) return@execute
-        val names = context.assets.list(ASSETS)?.filter { it.endsWith(".mp3") }.orEmpty()
-        val dir = folder()
-        val done = if (dir != null) copyFiles(dir, names) else if (Build.VERSION.SDK_INT >= 29) insertMedia(names) else false
-        if (done) prefs.edit().putBoolean(INSTALLED, true).apply()
-        else Log.i(AppServer.TAG, "ringtones: Android's storage can't be written yet; trying again next start")
-    }
-
-    private fun copyFiles(dir: File, names: List<String>): Boolean = try {
-        val written = ArrayList<String>()
-        for (n in names) {
-            val out = File(dir, n)
-            if (out.exists()) continue
-            context.assets.open("$ASSETS/$n").use { i -> out.outputStream().use { i.copyTo(it) } }
-            written += out.path
+        // The flag 0.9.1 kept, carried over so tones the owner deleted stay deleted.
+        val old = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (old.getBoolean(INSTALLED, false)) {
+            context.getSharedPreferences("sharedmedia", Context.MODE_PRIVATE).edit().putBoolean("ringtones", true).apply()
         }
-        scan(written)
-        true
-    } catch (e: Exception) {
-        Log.w(AppServer.TAG, "ringtones: copy failed: $e"); false
-    }
-
-    /** Android 10 and later, where files may not be: Android's media library writes them for Lunacy. */
-    @android.annotation.TargetApi(29)
-    private fun insertMedia(names: List<String>): Boolean = try {
-        val resolver = context.contentResolver
-        names.all { n ->
-            val values = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, n)
-                put(MediaStore.MediaColumns.MIME_TYPE, "audio/mpeg")
-                put(MediaStore.MediaColumns.RELATIVE_PATH, "$ANDROID_DIR/")
-                put(MediaStore.Audio.AudioColumns.IS_NOTIFICATION, 1)
-            }
-            val uri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
-            uri != null && resolver.openOutputStream(uri)?.use { o -> context.assets.open("$ASSETS/$n").use { it.copyTo(o) } } != null
+        SharedMedia.install(context, "ringtones", ASSETS, ANDROID_DIR, { it.endsWith(".mp3") }, mime = { "audio/mpeg" }) {
+            if (Build.VERSION.SDK_INT >= 29) put(MediaStore.Audio.AudioColumns.IS_NOTIFICATION, 1)
         }
-    } catch (e: Exception) {
-        Log.w(AppServer.TAG, "ringtones: media library refused: $e"); false
     }
 
-    private fun scan(paths: List<String>) {
-        if (paths.isNotEmpty()) MediaScannerConnection.scanFile(context, paths.toTypedArray(), null, null)
-    }
+    private fun scan(paths: List<String>) = SharedMedia.scan(context, paths)
 
     /** A webOS path (or file:// URL) to the real file, if it is in the webOS tree. */
     private fun real(path: String): File? {

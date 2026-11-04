@@ -30,6 +30,8 @@ object UserFiles {
         "video" to Environment.DIRECTORY_MOVIES,
         // webOS's ringtones are Android notification sounds, in a folder of their own (Ringtones).
         "ringtones" to Ringtones.ANDROID_DIR,
+        // webOS's wallpapers, in Android's pictures under a folder of their own (SharedMedia).
+        "wallpapers" to SharedMedia.WALLPAPERS_DIR,
     )
 
     /** Lunacy's own /media/internal. */
@@ -66,7 +68,8 @@ object UserFiles {
         if (canonical.startsWith(mine + File.separator)) {
             return "/media/internal/" + canonical.removePrefix(mine + File.separator)
         }
-        for ((name, dir) in mappedFolders()) {
+        // The most specific folder: a wallpaper is /media/internal/wallpapers/x, not photos/webOS Wallpapers/x.
+        for ((name, dir) in mappedFolders().sortedByDescending { it.second.canonicalPath.length }) {
             val root = dir.canonicalPath
             if (canonical == root) return "/media/internal/$name"
             if (canonical.startsWith(root + File.separator)) {
@@ -74,6 +77,16 @@ object UserFiles {
             }
         }
         return null
+    }
+
+    /**
+     * A mapped folder inside another (wallpapers in Android's Pictures, which is photos): a
+     * walk of the outer one skips it, so its files are listed once, under their own name.
+     */
+    fun nestedRoot(dir: File): Boolean {
+        val c = runCatching { dir.canonicalPath }.getOrNull() ?: return false
+        val roots = mappedFolders().map { it.second.canonicalPath }
+        return c in roots && roots.any { it != c && c.startsWith(it + File.separator) }
     }
 
     private fun inside(f: File, root: File): Boolean = try {

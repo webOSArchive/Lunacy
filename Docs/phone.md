@@ -212,6 +212,11 @@ Two general fixes, nothing per app; neither changes a tablet.
   over" could be made Enyo's own for every stacked `SlidingPane` (a version was written as
   an Enyo patch and withdrawn the same day). codepoet expects most apps already bring their
   panels on themselves; Email and Photos were HP's unfinished ones.
+- **Messaging** does the same in the app (codepoet's exception to rule 5, 2026-11-04; its
+  NOTICE lists the changes): a conversation picked from the list (threads, buddies, channels,
+  or the one already selected) or New Conversation brings the chat panel over, and back (the
+  card's back, or Escape) slides the list back in. Palm's own `checkWideLayout` once did the
+  first, against an older `SlidingPane` (`getWideLayout`), and was left commented out.
 
 ## 7. Notifications: the Pre3's (`NotificationArea`)
 

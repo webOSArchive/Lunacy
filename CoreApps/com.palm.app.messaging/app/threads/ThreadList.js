@@ -82,6 +82,10 @@ enyo.kind({
 		this.selectedRecord = this.$.list.fetch(inEvent.rowIndex);
 		if(enyo.application.selectedThread && this.selectedRecord && enyo.application.selectedThread._id === this.selectedRecord._id){
 			//tap on current selected record, do nothing
+			// [Lunacy] but on a phone's card, where the list hides the chat, bring the chat back.
+			if (enyo.application.showChatPanel) {
+				enyo.application.showChatPanel();
+			}
 			return;
 		}
 		if (this.selectedRecord) {

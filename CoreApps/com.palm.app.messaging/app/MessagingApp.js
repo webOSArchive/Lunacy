@@ -56,6 +56,7 @@ enyo.kind({
 	],
 	create: function() {
 		this.inherited(arguments);
+		enyo.application.showChatPanel = enyo.bind(this, "showChatPanel"); // [Lunacy] for ThreadList
 		
 		// Mark main card as cachable off-screen.
 		// This means it will usually not be closed when the user throws it away.
@@ -129,6 +130,10 @@ enyo.kind({
 	selectThread: function(inSender, inThread){
 		//inThread could be null
 		this.checkWideLayout();
+		// [Lunacy] a phone's card shows one panel: a conversation picked from the list slides its chat in.
+		if (inSender === this.$.messaging && inThread) {
+			this.showChatPanel();
+		}
 		enyo.application.selectedThread = inThread;
 		if (inSender === "Messaging") {
 			this.$.chatView.setChatThread(inThread);
@@ -158,6 +163,19 @@ enyo.kind({
 		}
 		if (this.$.chatView.getViewName() !== "composeView") {
 			this.$.chatView.selectViewByName("composeView");
+		}
+		this.showChatPanel(); // [Lunacy]
+	},
+	// [Lunacy] On a card too narrow for both panels (enyo.SlidingPane's single view, under
+	// 500 px: a phone), the chat panel slides over the list, and back slides it away again.
+	// The TouchPad never shows one panel, so nothing changes there. The app's own
+	// checkWideLayout did this once, against an older SlidingPane; Palm left it commented out.
+	singlePanel: function() {
+		return !this.$.slidingGroup.getMultiView();
+	},
+	showChatPanel: function() {
+		if (this.singlePanel()) {
+			this.$.slidingGroup.selectView(this.$.conversationSliding);
 		}
 	},
 	checkWideLayout: function() {
@@ -283,7 +301,15 @@ enyo.kind({
 		enyo.application.messageDashboardManager.setFilter({filterAll: false, thread: selected});
 		enyo.application.inviteDashboardManager.setFilter({filterAll: false, thread: selected});
 	},
-	backHandler: function() {
+	backHandler: function(inSender, inEvent) {
+		// [Lunacy] back from a chat on a phone's card: the list slides back in.
+		if (this.getView() === this.$.slidingGroup && this.singlePanel() && this.$.slidingGroup.getView() === this.$.conversationSliding) {
+			this.$.slidingGroup.selectView(this.$.messagingSliding);
+			if (inEvent) {
+				inEvent.preventDefault();
+			}
+			return true;
+		}
 		this.back();
 	},
 	openAppMenuHandler: function() {

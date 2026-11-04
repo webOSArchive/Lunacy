@@ -14,4 +14,8 @@ free releases were licensed under Creative Commons Attribution 4.0 (CC BY 4.0); 
 isn't recorded in the app. Emoji artwork by EmojiOne (Ranks.com, now JoyPixels).
 
 The app is here as it was installed, with that version number and less one file: debug.log, a Windows Chrome crash log left in
-the CE package.
+the CE package, and for one change codepoet approved (rule 5 in CLAUDE.md, 2026-11-04): on a
+phone's card, where enyo.SlidingPane shows one panel at a time, a picked conversation or New
+Conversation slides the chat panel over the list, and back slides it away. The hooks are marked
+[Lunacy] in app/MessagingApp.js and app/threads/ThreadList.js; they change nothing on a
+TouchPad or a tablet, and have to be carried over when CE's Messaging is taken again.

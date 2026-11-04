@@ -91,6 +91,7 @@ class LunacyService(
         bus.register(SERVICE, "android/notifications", Bus.CallHandler { call -> watchNotifications(call) })
         bus.register(SERVICE, "android/openNotification") { caller, p, reply -> reply(openNotification(caller, p)) }
         bus.register(SERVICE, "android/dismissNotifications") { caller, p, reply -> reply(dismissNotifications(caller, p)) }
+        bus.register(SERVICE, "android/mediaControl") { caller, p, reply -> reply(mediaControl(caller, p)) }
     }
 
     // ---- Android's notifications, for the Android Notifications app ----
@@ -126,6 +127,14 @@ class LunacyService(
         if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can open Android's notifications (asked by $caller)", -1)
         val key = p.optString("key").ifEmpty { return Bus.error("key is required") }
         return AndroidNotifications.open(context, key)?.let { Bus.error(it) } ?: Bus.ok()
+    }
+
+    /** A media dashboard's button: `package`, `command` (previous, playpause, next, open). AndroidMedia. */
+    private fun mediaControl(caller: String, p: JSONObject): String {
+        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can control Android's players (asked by $caller)", -1)
+        val pkg = p.optString("package").ifEmpty { return Bus.error("package is required") }
+        val command = p.optString("command").ifEmpty { return Bus.error("command is required") }
+        return AndroidMedia.control(context, pkg, command)?.let { Bus.error(it) } ?: Bus.ok()
     }
 
     /** Notifications swiped away: `keys`. They go from Android too. */

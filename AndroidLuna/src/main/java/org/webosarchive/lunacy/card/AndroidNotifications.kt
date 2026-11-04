@@ -72,6 +72,8 @@ object AndroidNotifications {
     internal fun connected(l: AndroidNotificationListener) {
         listener = l
         appContext = l.applicationContext
+        // What Android apps are playing comes with the same permission (AndroidMedia).
+        AndroidMedia.start(l)
         // What was there before Lunacy was listening is shown, but not bannered: it isn't news.
         val now = runCatching { l.activeNotifications.orEmpty().toList() }.getOrDefault(emptyList())
         val ranking = runCatching { l.currentRanking }.getOrNull()
@@ -85,6 +87,7 @@ object AndroidNotifications {
     internal fun disconnected(l: AndroidNotificationListener) {
         if (listener != l) return
         listener = null
+        AndroidMedia.stop()
         synchronized(entries) { entries.clear() }
         changed()
     }
@@ -167,7 +170,7 @@ object AndroidNotifications {
         for (e in fresh) alerts.put(JSONObject().put("key", e.key).put("package", e.pkg).put("title", e.title.ifEmpty { label(e.pkg) })
             .put("text", e.text).put("icon", iconUrl(context, e.pkg)))
         return JSONObject().put("returnValue", true).put("access", accessGranted(context)).put("connected", connected)
-            .put("apps", apps).put("alerts", alerts)
+            .put("apps", apps).put("alerts", alerts).put("media", AndroidMedia.snapshot(context) { iconUrl(context, it) })
     }
 
     /**
@@ -195,7 +198,7 @@ object AndroidNotifications {
      */
     fun dashboardIcon(pkg: String): ByteArray? {
         val c = appContext ?: return null
-        if (synchronized(entries) { entries.values.none { it.pkg == pkg } }) return null
+        if (synchronized(entries) { entries.values.none { it.pkg == pkg } } && !AndroidMedia.has(pkg)) return null
         val png = icon(c, pkg) ?: return null
         val b64 = android.util.Base64.encodeToString(png, android.util.Base64.NO_WRAP)
         return ("<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"48\" height=\"48\">" +
@@ -215,7 +218,7 @@ object AndroidNotifications {
     fun forget(pkg: String) { synchronized(icons) { icons.remove(pkg) } }
 
     /** Whether any notification is showing: the shell starts the Android Notifications app for them. */
-    fun any(): Boolean = synchronized(entries) { entries.isNotEmpty() }
+    fun any(): Boolean = synchronized(entries) { entries.isNotEmpty() } || AndroidMedia.any()
 
     /**
      * A notification tapped: what Android's own shade does - its intent is sent, and it goes

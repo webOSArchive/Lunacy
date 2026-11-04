@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+<head>
+	<title>Now Playing</title>
+	<meta name="viewport" content="width=device-width initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+	<script src="/usr/palm/frameworks/enyo/1.0/framework/enyo.js" type="text/javascript"></script>
+	<link href="palm/dashControls.css" rel="stylesheet" type="text/css" />
+	<script src="palm/dashControls.js" type="text/javascript"></script>
+	<script src="source/MediaDashboard.js" type="text/javascript"></script>
+</head>
+<body>
+<script type="text/javascript">
+	window.PalmSystem && PalmSystem.stageReady();
+	new AndroidMediaDashboard().renderInto(document.body);
+</script>
+</body>
+</html>

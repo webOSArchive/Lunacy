@@ -28,6 +28,11 @@ enyo.kind({
 		this.inherited(arguments);
 		// By Android package: {dashboard, signature}.
 		this.dashboards = {};
+		// By Android package: the open Now Playing window (showMedia), and the title the owner
+		// swiped away, which stays away until the next track.
+		this.players = {};
+		this.dismissedTitles = {};
+		window.mediaDashboardClosed = enyo.bind(this, "mediaDashboardClosed");
 		this.openFrom(enyo.windowParams);
 		this.$.watch.call({subscribe: true});
 	},
@@ -49,6 +54,7 @@ enyo.kind({
 		for (var pkg in this.dashboards) {
 			if (!seen[pkg]) { this.drop(pkg); }
 		}
+		this.showMedia(r.media || []);
 		var alerts = r.alerts || [];
 		for (i = 0; i < alerts.length; i++) {
 			var a = alerts[i];
@@ -102,8 +108,60 @@ enyo.kind({
 		this.$.dismiss.call({keys: d.keys});
 		inSender.destroy();
 	},
+	/**
+	 * What Android apps are playing: one webOS Music dashboard each (media-dashboard.html),
+	 * opened as Music opened its own, and kept up to date through its window params.
+	 */
+	showMedia: function(media) {
+		this.lastMedia = media;
+		var seen = {}, i;
+		for (i = 0; i < media.length; i++) {
+			var m = media[i], pkg = m["package"];
+			seen[pkg] = true;
+			var params = {objTrackInfo: {strTrackTitle: m.title, strTrackArtist: m.artist}, boolAudioPlaying: m.playing};
+			if (this.dismissedTitles[pkg] !== undefined) {
+				if (this.dismissedTitles[pkg] === m.title) { continue; }
+				delete this.dismissedTitles[pkg];
+			}
+			var w = this.players[pkg];
+			if (w && !w.closed) {
+				enyo.windows.setWindowParams(w, params);
+			} else {
+				params["package"] = pkg;
+				this.players[pkg] = enyo.windows.openDashboard("media-dashboard.html", "media_" + pkg.replace(/[^A-Za-z0-9_]/g, "_"),
+					params, {clickableWhenLocked: true, icon: m.icon});
+			}
+		}
+		for (var p in this.players) {
+			if (!seen[p]) { this.closePlayer(p); }
+		}
+		for (var d in this.dismissedTitles) {
+			if (!seen[d]) { delete this.dismissedTitles[d]; }
+		}
+	},
+	closePlayer: function(pkg) {
+		var w = this.players[pkg];
+		delete this.players[pkg];
+		if (w && !w.closed) { w.close(); }
+	},
+	//* A Now Playing dashboard unloaded: swiped away by the owner, unless this app closed it.
+	mediaDashboardClosed: function(pkg) {
+		if (!pkg || !this.players[pkg]) { return; }
+		delete this.players[pkg];
+		this.dismissedTitles[pkg] = this.lastTitle(pkg);
+		this.closeIfEmpty();
+	},
+	lastTitle: function(pkg) {
+		var media = (this.lastMedia || []);
+		for (var i = 0; i < media.length; i++) { if (media[i]["package"] === pkg) { return media[i].title; } }
+		return "";
+	},
 	closeIfEmpty: function() {
 		for (var pkg in this.dashboards) { return; }
+		for (var p in this.players) { return; }
+		// A player swiped away still plays: staying keeps it away (Lunacy would start this app
+		// again for it, with its dashboard).
+		for (var d in this.dismissedTitles) { return; }
 		window.close();
 	}
 });

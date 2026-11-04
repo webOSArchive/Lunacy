@@ -13,3 +13,11 @@ while Android has them, and never written down or sent anywhere.
 
 The app's code is Lunacy's, under the same terms as the rest of Lunacy. Its dashboards are
 Enyo's own (enyo.Dashboard); it carries no art of its own.
+
+What Android apps are playing shows as webOS Music's dashboard (media-dashboard.html,
+source/MediaDashboard.js), fed from palm://org.webosarchive.lunacy/android/notifications'
+`media` and controlled through android/mediaControl. palm/dashControls.js,
+palm/dashControls.css and images/btn_dashboard_prev.png, btn_dashboard_play.png and
+btn_dashboard_next.png are Palm's Music app's (com.palm.app.musicplayer 3.0.8000), unchanged,
+copied from the reference TouchPad on 2026-11-04; the same files are in HP's open-source
+webOS core apps. Copyright Hewlett-Packard Development Company, L.P., Apache License 2.0.

@@ -29,7 +29,10 @@ import java.io.InputStream
  *
  *   So the box is a bound, not a shape: the image is scaled to fit inside it with its aspect
  *   ratio kept, never cropped or stretched, and never scaled up. Modes 0 and 3 returned the
- *   same bytes, and the first two numbers were 0 in everything seen, so neither is acted on.
+ *   same bytes, so the mode is not acted on. The first two numbers are an embedded image's
+ *   offset and length in the source, 0 and 0 for the file itself: Music asks for a song's
+ *   cover as `<song>:<offset>:<length>:90:90:3`, and on the TouchPad (2026-11-04) an MP3 with a
+ *   300 x 300 cover at 240:2328 came back 90 x 90, while `:0:0:` on the MP3 failed to read.
  *   The device returned an uncompressed BMP; this returns a PNG, which no page can tell apart
  *   and which is a tenth the size.
  * - **Long**, `<source>::3:<w0>:<h0>:<hpad>:<vpad>:<format>:<offset>:<length>:<width>:<height>:<crop>`
@@ -73,7 +76,11 @@ object Extractfs {
         val box = parts.takeLast(5).map { it.toIntOrNull() ?: return null }
         val w = box[2]; val h = box[3]
         if (w !in 1..4096 || h !in 1..4096) return null
-        val source = Source(opener.open(parts.dropLast(5).joinToString(":")) ?: return null, 0, 0)
+        // The first two are an embedded image's offset and length in the source, as Music names
+        // a song's cover (its filenotifyd thumbnail "path:offset:length"); 0 and 0, the file itself.
+        val offset = box[0]; val length = box[1]
+        if (offset < 0 || length < 0 || length > MAX_EMBEDDED) return null
+        val source = Source(opener.open(parts.dropLast(5).joinToString(":")) ?: return null, offset, length)
         val size = source.size() ?: return null
         val (ow, oh) = fit(size, w, h)
         return Result(encode(source.scaled(ow, oh, false) ?: return null, Bitmap.CompressFormat.PNG), "image/png")

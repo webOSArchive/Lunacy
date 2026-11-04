@@ -169,6 +169,8 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
     }
 
     fun show(g: Launcher.Tile.Group, from: PointF) {
+        // Titles may have changed since the panel was last open (an app updated in place).
+        labels.clear()
         group = g; origin = from; editing = false; launching = null
         visibility = VISIBLE
         animateTo(1f, OPEN_MS, Easing.OutCubic)

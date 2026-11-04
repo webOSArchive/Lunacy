@@ -582,6 +582,16 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
         if (shift == Shift.ONCE) shift = Shift.OFF
     }
 
+    /**
+     * The service swapped this view out: a held key's repeat, a long press or a trackball tick
+     * still posted would go on acting on the field after it, so they go with the view.
+     */
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        handler.removeCallbacksAndMessages(null)
+        pressed = null; pressedZone = null
+    }
+
     /** Called when the field being edited changes, so the keyboard starts from a clean state. */
     fun reset() {
         shift = Shift.OFF; symbols = false; autoCap = false

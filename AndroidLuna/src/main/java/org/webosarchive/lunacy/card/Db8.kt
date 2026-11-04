@@ -158,7 +158,9 @@ class Db8(private val service: String, file: File?,
      * resumes from the highest revision it saw, deleted or not. A record names every property
      * the source owns, each replaced whole, so an empty one must be there; a property it never
      * names, as Calendar's colour, stays. A record may carry its own `_id`, which is how one
-     * refers to another. [done] gets the added, changed and removed counts, on db8's thread. Not through the bus,
+     * refers to another. [done] gets the added, changed and removed counts, on db8's thread, after
+     * a pass that worked; one that failed is rolled back, the kind's cache dropped to be read
+     * again from the database, and logged with its stack instead. Not through the bus,
      * whose log these records would land in.
      */
     fun syncAccount(kind: String, accountId: String, records: List<JSONObject>, done: (Int, Int, Int) -> Unit = { _, _, _ -> }) = work {
@@ -188,7 +190,11 @@ class Db8(private val service: String, file: File?,
                 }
             }
             done(added, updated, gone.size)
-        } catch (e: Exception) { Log.w(AppServer.TAG, "$service: syncAccount $kind: ${e.javaClass.simpleName}") }
+        } catch (e: Exception) {
+            // The transaction rolled back, but the cache took each write as it went.
+            cache.remove(kind)
+            Log.w(AppServer.TAG, "$service: syncAccount $kind for account $accountId failed and was rolled back", e)
+        }
     }
 
     private fun syncMirror(kind: String, m: Mirror) {

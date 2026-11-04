@@ -14,9 +14,10 @@
 	// is often one here: the Accounts app shows Email's account wizard, from Email's origin. On
 	// webOS every frame of a card made its calls as the card's app (which is why Accounts asks
 	// for the mail services' permissions), and so do they here. Such a frame numbers its calls
-	// from a range of its own, tells the main frame the range by postMessage, and the main
-	// frame posts each reply in it to that frame alone. See the ratchet item on frames in
-	// docs/architecture.md.
+	// from a range of its own, which the main frame hands out from a counter (so no two frames
+	// share one) in answer to the frame's hello; the main frame posts each reply in it to that
+	// frame alone, and a frame that goes gives its range back. Calls made before the range
+	// arrives wait for it. See the ratchet item on frames in docs/architecture.md.
 	var shared = (function () {
 		try {
 			var t = window.top;
@@ -25,26 +26,50 @@
 			return t;
 		} catch (e) { return null; }
 	})();
-	var RANGE = 1000000;
+	var RANGE = 1000000, RANGES = 2000;   /* the highest token stays under 2^31 */
 	var ownBase = 0;
+	var waiting = [];   /* bridges whose call waits for this frame's range */
 	if (!shared) {
-		ownBase = RANGE * (1 + Math.floor(Math.random() * 2000));
-		window.__lunacyToken = ownBase;
 		// Strings, as Enyo's own messages are: its handlers read every message with indexOf.
-		try { window.top.postMessage("lunacyFrameBase=" + ownBase, "*"); } catch (e) {}
+		try { window.top.postMessage("lunacyFrameHello", "*"); } catch (e) {}
 		window.addEventListener("message", function (e) {
-			var m = typeof e.data === "string" && e.source === window.top && /^lunacyReply=/.test(e.data) ? e.data : null;
-			if (!m) { return; }
-			var d; try { d = JSON.parse(m.slice(12)); } catch (x) { return; }
-			if (d.token >= ownBase && d.token < ownBase + RANGE) { Bridge.__replyLocal(d.token, d.json); }
+			if (typeof e.data !== "string" || e.source !== window.top) { return; }
+			var b = /^lunacyFrameBase=(\d+)$/.exec(e.data);
+			if (b) {
+				if (ownBase) { return; }
+				ownBase = Number(b[1]);
+				window.__lunacyToken = ownBase;
+				var w = waiting; waiting = [];
+				for (var i = 0; i < w.length; i++) { if (w[i].waitingCall) { var c = w[i].waitingCall; w[i].waitingCall = null; w[i].call(c[0], c[1]); } }
+				return;
+			}
+			if (!/^lunacyReply=/.test(e.data)) { return; }
+			var d; try { d = JSON.parse(e.data.slice(12)); } catch (x) { return; }
+			if (ownBase && d.token >= ownBase && d.token < ownBase + RANGE) { Bridge.__replyLocal(d.token, d.json); }
+		});
+		window.addEventListener("pagehide", function () {
+			if (ownBase) { try { window.top.postMessage("lunacyFrameGone=" + ownBase, "*"); } catch (e) {} }
 		});
 	}
-	// The main frame: which cross-origin frame owns which range of tokens.
-	var foreign = {};
+	// The main frame: which cross-origin frame owns which range of tokens, handed out in turn.
+	var foreign = {}, nextRange = 0;
 	if (window.top === window) {
 		window.addEventListener("message", function (e) {
-			var m = typeof e.data === "string" && /^lunacyFrameBase=\d+$/.test(e.data) ? e.data : null;
-			if (m && e.source) { foreign[Number(m.slice(16))] = e.source; }
+			if (typeof e.data !== "string" || !e.source) { return; }
+			if (e.data === "lunacyFrameHello") {
+				var base = 0;
+				for (var n = 0; n < RANGES && !base; n++) {
+					var b = RANGE * (1 + nextRange);
+					nextRange = (nextRange + 1) % RANGES;
+					if (!foreign[b]) { base = b; }
+				}
+				if (!base) { return; }
+				foreign[base] = e.source;
+				try { e.source.postMessage("lunacyFrameBase=" + base, "*"); } catch (x) {}
+				return;
+			}
+			var gone = /^lunacyFrameGone=(\d+)$/.exec(e.data);
+			if (gone && foreign[Number(gone[1])] === e.source) { delete foreign[Number(gone[1])]; }
 		});
 	}
 	function nextToken() {
@@ -61,6 +86,8 @@
 	function Bridge() { this.token = 0; }
 	Bridge.prototype.call = function (url, params) {
 		this.cancel();
+		// A cross-origin frame's first calls wait for the range the main frame gives it.
+		if (!shared && !ownBase) { this.waitingCall = [url, params]; waiting.push(this); return; }
 		var t = nextToken();
 		this.token = t;
 		pending[t] = this;
@@ -68,6 +95,7 @@
 		this.subscribed = N.call(t, String(url), String(params)) === true;
 	};
 	Bridge.prototype.cancel = function () {
+		this.waitingCall = null;
 		if (this.token && pending[this.token]) {
 			delete pending[this.token];
 			if (this.subscribed) { N.cancel(this.token); }

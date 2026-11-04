@@ -84,6 +84,8 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         private var nextPage = 1
         /** Windows a page has opened, waiting for the card that will show them; by identifier. */
         private val pending = HashMap<String, Browser>()
+        /** How long a window a page opened waits for the page's createPage answer. */
+        private const val PENDING_MS = 60_000L
         /**
          * Trust Always: each host with the fingerprint of the certificate the owner trusted,
          * kept across runs. Another certificate on that host is asked about again.
@@ -163,13 +165,14 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
 
     fun destroy(id: Int) { main.post { views.remove(id)?.let { window.removeView(it); it.destroy() } } }
 
-    /** The card's window is going: every view with it. */
     /** A touch the card dispatched (AppWindow.dispatchTouchEvent): a view whose header strip it began on may scroll by it. */
     fun touched(e: MotionEvent) { for (b in views.values) b.headerTouch(e) }
 
+    /** The card's window is going: every view with it, and the windows its views opened that it never took. */
     fun destroyAll() {
         views.values.forEach { window.removeView(it); it.destroy() }
         views.clear()
+        pending.entries.removeAll { (_, b) -> (b.openedBy === this).also { if (it) b.destroy() } }
     }
 
     internal fun send(id: Int, method: String, vararg args: Any?) {
@@ -189,6 +192,8 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
     /** One native view. Not tied to its first owner: a window a page opens moves to the card the app opens for it. */
     @SuppressLint("ViewConstructor")
     class Browser(context: android.content.Context, private var owner: BrowserViews) : WebView(context) {
+        /** The views whose page opened or holds this one. */
+        internal val openedBy get() = owner
         private val main = Handler(Looper.getMainLooper())
         private val window get() = owner.window
         private var id = 0
@@ -853,6 +858,8 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 (resultMsg.obj as WebView.WebViewTransport).webView = child
                 child.transport = resultMsg
                 pending[identifier] = child
+                // A page that never takes the window it opened doesn't keep it.
+                main.postDelayed({ pending.remove(identifier)?.destroy() }, PENDING_MS)
                 owner.send(id, "createPage", identifier)
                 return true
             }

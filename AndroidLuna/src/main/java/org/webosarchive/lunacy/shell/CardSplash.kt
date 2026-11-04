@@ -52,7 +52,12 @@ class CardSplash(context: Context, private val luna: Luna, private val icon: Bit
         }
     }
 
-    init { pulse.start() }
+    // From when the splash is on the screen, and only while it is: one built and never shown
+    // doesn't animate, and one shown again pulses again.
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (!pulse.isStarted) pulse.start()
+    }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()

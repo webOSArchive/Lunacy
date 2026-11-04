@@ -86,7 +86,12 @@ class PdkHost(
     private var bpp = 32
     private var mapped: ByteBuffer? = null
     private var frames = arrayOfNulls<Bitmap>(2)
-    private var frameIndex = 0
+    /**
+     * Which of [frames] the view has, -1 for neither. The reader writes only the other one, and
+     * the view takes a frame under the same lock, so a bitmap is never written while drawn.
+     */
+    private var shownFrame = -1
+    private val frameLock = Any()
 
     /**
      * What a start has worked out, for building its command and environment: the app's
@@ -362,7 +367,10 @@ class PdkHost(
         mapped = channel.map(FileChannel.MapMode.READ_ONLY, 0, size)
         channel.close()
         val config = if (bits == 16) Bitmap.Config.RGB_565 else Bitmap.Config.ARGB_8888
-        frames = arrayOf(Bitmap.createBitmap(w, h, config).also { it.setHasAlpha(false) }, Bitmap.createBitmap(w, h, config).also { it.setHasAlpha(false) })
+        synchronized(frameLock) {
+            frames = arrayOf(Bitmap.createBitmap(w, h, config).also { it.setHasAlpha(false) }, Bitmap.createBitmap(w, h, config).also { it.setHasAlpha(false) })
+            shownFrame = -1
+        }
         Log.i(AppServer.TAG, "pdk [$appId]: video mode $w x $h, $bits bpp")
         main.post { listener.onMode(w, h, false) }
     }
@@ -374,15 +382,25 @@ class PdkHost(
         main.post { listener.onMode(w, h, true) }
     }
 
-    /** Copies the shared file into the bitmap the view isn't showing, then hands it over. */
+    /**
+     * Copies the shared file into the bitmap the view isn't showing, then hands it over. Frames
+     * that come faster than the view draws land in that same bitmap, newest last, so the view
+     * shows the latest and never one half written.
+     */
     private fun frame() {
         val buf = mapped ?: return
-        val bmp = frames[frameIndex] ?: return
-        if (buf.capacity() < bmp.byteCount) return
-        buf.rewind()
-        bmp.copyPixelsFromBuffer(buf)
-        frameIndex = 1 - frameIndex
-        main.post { listener.onFrame(bmp) }
+        val (index, bmp) = synchronized(frameLock) {
+            val index = if (shownFrame == 0) 1 else 0
+            val bmp = frames[index] ?: return
+            if (buf.capacity() < bmp.byteCount) return
+            buf.rewind()
+            bmp.copyPixelsFromBuffer(buf)
+            index to bmp
+        }
+        main.post {
+            synchronized(frameLock) { if (frames[index] !== bmp) return@post; shownFrame = index }
+            listener.onFrame(bmp)
+        }
     }
 
     private fun readAudio(input: DataInputStream) {

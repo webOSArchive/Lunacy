@@ -332,7 +332,9 @@ class LunaSendServer(private val bus: Bus, private val socket: File) {
         var call: Bus.Call? = null
         fun close() { replies.offer(END) }
         try {
-            val line = c.inputStream.bufferedReader().readLine() ?: return close()
+            // One reader for the connection: the request line, then nothing until it closes.
+            val input = c.inputStream.bufferedReader()
+            val line = input.readLine() ?: return close()
             val m = JSONObject(line)
             val caller = tokens[m.optString("token")]
             if (caller == null) {
@@ -348,8 +350,9 @@ class LunaSendServer(private val bus: Bus, private val socket: File) {
                     if (!stays) close()
                 }
             }
-            // The command closing its end (it had its -n replies, or was killed) ends the call.
-            c.inputStream.read()
+            // The command closing its end (it had its -n replies, or was killed) ends the call;
+            // anything else it sends meanwhile is read and ignored, not taken for the close.
+            while (input.read() >= 0) { }
             main.post { call?.cancel() }
             close()
         } catch (e: Exception) {

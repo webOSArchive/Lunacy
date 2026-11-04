@@ -50,13 +50,28 @@ class Luna(private val context: Context,
     fun px(tp: Float) = tp * density
     fun px(tp: Int) = (tp * density).toInt()
 
+    /**
+     * [read], or null with a line in the log saying why: a file that isn't there (some are
+     * looked for on the chance, as Just Type's per-engine icons) or one that wouldn't decode.
+     * The callers memoise, so each path is logged once.
+     */
+    private inline fun <T> quietly(what: String, read: () -> T?): T? = try {
+        read()
+    } catch (e: java.io.FileNotFoundException) {
+        android.util.Log.i(org.webosarchive.lunacy.card.AppServer.TAG, "luna: no $what"); null
+    } catch (e: Exception) {
+        android.util.Log.w(org.webosarchive.lunacy.card.AppServer.TAG, "luna: couldn't read $what", e); null
+    } catch (e: OutOfMemoryError) {
+        android.util.Log.w(org.webosarchive.lunacy.card.AppServer.TAG, "luna: out of memory reading $what"); null
+    }
+
     /** An image from LunaCE's images/ folder, at its TouchPad size. */
     fun image(path: String): Bitmap? = bitmaps.memo(path) {
-        try {
+        quietly("image $path") {
             context.assets.open("luna/images/$path").use {
                 BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inDensity = 160; inTargetDensity = targetDpi; inScaled = true })
             }
-        } catch (e: Exception) { null }
+        }
     }
 
     /**
@@ -64,17 +79,17 @@ class Luna(private val context: Context,
      * 1.5 of its px are one shell px, as a phone's shell px is the Pre3's own (see [density]).
      */
     fun pre3Image(name: String): Bitmap? = bitmaps.memo("pre3/$name") {
-        try {
+        quietly("image pre3/$name") {
             context.assets.open("luna/images/pre3/$name").use {
                 BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inDensity = 240; inTargetDensity = targetDpi; inScaled = true })
             }
-        } catch (e: Exception) { null }
+        }
     }
 
     /** Decodes an image stream drawn in TouchPad px (app icons, dashboard icons) at shell scale. */
-    fun decode(stream: java.io.InputStream?): Bitmap? = try {
+    fun decode(stream: java.io.InputStream?): Bitmap? = quietly("an icon") {
         stream?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inDensity = 160; inTargetDensity = targetDpi; inScaled = true }) }
-    } catch (e: Exception) { null }
+    }
 
     /**
      * An app's icon (bundled or installed), scaled like the Luna images; cached per version.
@@ -84,7 +99,7 @@ class Luna(private val context: Context,
         bitmaps.memo("icon:${app.id}:${app.version}") {
             if (app.launchPoint != null) launchPointIcon(app)
             else if (app.androidComponent == null) decode(app.openIcon())
-            else try { app.openIcon()?.use { BitmapFactory.decodeStream(it) } } catch (e: Exception) { null }
+            else quietly("${app.id}'s icon") { app.openIcon()?.use { BitmapFactory.decodeStream(it) } }
         }
 
     /**
@@ -92,7 +107,7 @@ class Luna(private val context: Context,
      * Installer): squeezed to the launcher's 64 px square as LunaSysMgr's LaunchPoint::icon
      * did (IgnoreAspectRatio), sampled down first so a big one isn't decoded whole.
      */
-    private fun launchPointIcon(app: org.webosarchive.lunacy.card.AppInfo): Bitmap? = try {
+    private fun launchPointIcon(app: org.webosarchive.lunacy.card.AppInfo): Bitmap? = quietly("launch point ${app.id}'s icon") {
         val size = px(64)
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         app.openIcon()?.use { BitmapFactory.decodeStream(it, null, bounds) }
@@ -100,7 +115,7 @@ class Luna(private val context: Context,
         while (minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= size) sample *= 2
         app.openIcon()?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) }
             ?.let { b -> if (b.width == size && b.height == size) b else Bitmap.createScaledBitmap(b, size, size, true).also { if (it !== b) b.recycle() } }
-    } catch (e: Exception) { null } catch (e: OutOfMemoryError) { null }
+    }
 
     /** Drops an app's cached icons, for an app that changed without a new version (an Android package). */
     fun forgetIcons(appId: String) {
@@ -142,7 +157,7 @@ class Luna(private val context: Context,
 
     /** HP's Prelude fonts (assets/luna/fonts, shipped as abandonware); the system sans if one is missing. */
     fun font(name: String, fallbackStyle: Int = Typeface.NORMAL): Typeface = fonts.getOrPut(name) {
-        try { Typeface.createFromAsset(context.assets, "luna/fonts/$name") } catch (e: Exception) { Typeface.create("sans-serif", fallbackStyle) }
+        quietly("font $name") { Typeface.createFromAsset(context.assets, "luna/fonts/$name") } ?: Typeface.create("sans-serif", fallbackStyle)
     }
     val fontMedium get() = font("Prelude-Medium.ttf")
     val fontBold get() = font("Prelude-Bold.ttf", Typeface.BOLD)
@@ -153,18 +168,18 @@ class Luna(private val context: Context,
      * a wallpaper the user picked, which isn't shell art. A photo from a camera is many times
      * the screen, and decoded whole was tens of MB held for the run.
      */
-    fun decodeFull(file: java.io.File, maxPx: Int): Bitmap? = try {
+    fun decodeFull(file: java.io.File, maxPx: Int): Bitmap? = quietly("image ${file.name}") {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.path, bounds)
         var sample = 1
         while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxPx) sample *= 2
         BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })
-    } catch (e: Exception) { null } catch (e: OutOfMemoryError) { null }
+    }
 
     /** A TouchPad wallpaper (assets/luna/wallpapers, shipped as abandonware). */
-    fun wallpaper(name: String = DEFAULT_WALLPAPER): Bitmap? = try {
+    fun wallpaper(name: String = DEFAULT_WALLPAPER): Bitmap? = quietly("wallpaper $name") {
         context.assets.open("luna/wallpapers/$name").use { BitmapFactory.decodeStream(it) }
-    } catch (e: Exception) { null }
+    }
 
     /** Draws a Luna image as a nine-slice, insets given in TouchPad px (the image's own pixels). */
     fun nine(c: Canvas, path: String, dst: RectF, l: Int, t: Int, r: Int, b: Int, p: Paint? = null) {
@@ -199,7 +214,7 @@ class Luna(private val context: Context,
     /** An image's width in its own (TouchPad) pixels. */
     private fun imageTpWidth(path: String): Int = tpWidths.getOrPut(path) {
         val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        try { context.assets.open("luna/images/$path").use { BitmapFactory.decodeStream(it, null, o) } } catch (e: Exception) {}
+        quietly("image $path") { context.assets.open("luna/images/$path").use { BitmapFactory.decodeStream(it, null, o) } }
         if (o.outWidth > 0) o.outWidth else 1
     }
 

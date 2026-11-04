@@ -1494,6 +1494,15 @@ window.__lunacyStyle = function (css) {
 	return l;
 };
 __lunacyStyle("@media (max-width: 540px) { html .box-center { width: auto; margin-left: 12px; margin-right: 12px; } }");
+// On a wider card, a column that names only a max-width (max-width: 500px; margin: 0 auto)
+// is as wide as the card allows, up to that, and centred, as on the TouchPad: its old WebKit
+// stretched a vertical -webkit-box's child to the box's width whatever its margins. Newer
+// Chromium lays -webkit-box out as flexbox, where auto margins cancel the stretch, and the
+// column shrank to its content: an Enyo Scroller has none, so it was 0 px wide and the card
+// stood empty under its header (the BlueBubbles connector's settings, on the Fold3 unfolded,
+// codepoet, 2026-11-04). :where gives the rule no weight, so a width the app sets (Palm's
+// width: 500px) still wins; Chromium 37, which keeps the old layout, doesn't read :where.
+__lunacyStyle(":where(.enyo-vflexbox) > :where(.box-center) { width: -webkit-fill-available; }");
 
 // An Enyo RichText's hint stays on one line on a phone's card.
 //

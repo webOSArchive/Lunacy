@@ -157,7 +157,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         const val ICON_DY = -10f
         const val LABEL_W = 80f
         const val LABEL_PX = 13f          // the TouchPad's 14 px bold read heavy under a 56 px icon (codepoet, 2026-10-03)
-        const val LABEL_GAP = 5f          // the TouchPad's 2 sat too close under full-bleed icons and groups (codepoet, 2026-10-16)
+        const val LABEL_GAP = 4f          // the TouchPad's 2 sat too close under full-bleed icons and groups (codepoet, 2026-10-16); 5 let a two-line label touch the edit frame (2026-11-04)
         const val LEFT_MARGIN = 6f
         const val TOP_MARGIN = 14f          // seven-eighths was 18; the gap over the first row read loose against the Pre3 (codepoet, 2026-10-16)
         const val ROW_GAP = 9f

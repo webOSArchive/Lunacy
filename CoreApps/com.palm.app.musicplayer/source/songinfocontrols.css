@@ -1,0 +1,121 @@
+.songinfoButton
+{
+    margin: 0px 4px 0px 4px;
+    vertical-align: middle;
+
+}
+
+
+.songInfoContainter
+{
+  width:  100%;
+}
+
+.songInfoLabel
+{
+    position: fixed;
+    bottom: 35px;
+    left: 270px;
+    right: 315px;
+    margin-left: 0px;
+    font-weight: normal;
+    font-size: 13px;
+    color: #443935;
+    margin-top: -4px;
+    margin-bottom: 4px;
+    padding-top: 0px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+
+    
+}
+
+.textbold
+{
+   font-weight: bold 
+}
+
+.songInfoLabelGrey 
+{
+    margin-left: 20px;
+    color: #c1c1c1;
+    font-size: 14px;
+    font-weight: bold;
+    margin-top: -4px;
+    padding-top: 0px;
+}
+
+.timeDisplay
+{
+    color: #443935;
+    font-size: 10px;
+    /*margin: 15px 2px 0px 2px;*/
+    font-weight: bold;
+    
+}
+
+.timeDisplayMid
+{
+    color: #c1c1c1;
+  
+}
+/*
+.enyo-progress-bar
+{
+    height: 30px;
+    -webkit-border-image: none !important;
+    background-image: url(../images/progressbar/progress-bar2.png);
+    background-color: #eee;
+    border-right: solid 3px #eee;
+    -webkit-border-top-left-radius: 4px;
+    -webkit-border-bottom-left-radius: 4px;
+
+}
+
+.enyo-progress-bar-inner
+{
+    /*background-color: blue !important;
+    -webkit-border-image: none;
+    background-image: url(../images/progressbar/ProgressBarInner2.png);
+    background-color: #94C1E6;
+    height: 30px;
+    border-right: solid 2px #94C1E6;
+    -webkit-border-top-left-radius: 4px;
+    -webkit-border-bottom-left-radius: 4px;
+}
+*/
+.sliderSongTime
+{
+    
+    width: 100%;
+    
+}
+
+.sliderSongTime .enyo-slider-button
+{
+    
+    background: url(../images/progressbar/btnSlider.png) no-repeat 0% 0%;
+    margin: -10px -25px;
+    opacity: 1.0;
+    
+}
+
+.sliderSongTime .enyo-progressslider-progress
+{
+    
+    margin: 20px 0px 19px;
+    
+}
+
+.sliderContainer
+{
+    width: 100%;
+
+    /*border: solid 1px red;*/
+}
+
+
+
+
+

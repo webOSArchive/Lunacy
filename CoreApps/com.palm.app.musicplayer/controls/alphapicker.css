@@ -1,0 +1,52 @@
+
+.superScrollAlpha
+{	
+	width: 36px;
+	border: solid 1px #000;
+	-webkit-border-top-left-radius: 10px;
+	-webkit-border-top-right-radius: 10px;
+	-webkit-border-bottom-left-radius: 10px;
+	-webkit-border-bottom-right-radius: 10px;
+	margin-top: 6px;
+	margin-bottom: 6px;
+	margin-right: 8px;	
+	padding-top: 4px;
+	text-align: center;
+}
+
+.alphaLetter
+{
+	padding: 0px 8px 0px 8px;
+	font-size: 14px;
+	font-weight: bold;
+	-webkit-transition: font-size 0.1s linear;
+	-webkit-transition: padding-top 0.1s linear;
+	/*background-color: blue;*/
+}
+
+.alphaOn
+{
+	color: #000;
+}
+
+
+.alphaOff
+{
+	color: #999;
+}
+
+
+.alphaGrow
+{
+	border: solid 1px #000;
+	-webkit-border-top-left-radius: 3px;
+	-webkit-border-top-right-radius: 3px;
+	-webkit-border-bottom-left-radius: 3px;
+	-webkit-border-bottom-right-radius: 3px;
+	background-color: #bbb;
+	color: #fff;
+	width: 70px;
+	font-size: 48px;
+	position: fixed;
+	right: 70px;
+}

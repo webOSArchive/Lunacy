@@ -1,0 +1,11 @@
+Palm's Music (com.palm.app.musicplayer 3.0.8000), as installed on the reference TouchPad (webOS
+CE 3.1.0, /media/cryptofs/apps), copied 2026-11-04 and here exactly as packaged.
+
+HP released this app's source as part of its open-source webOS core apps, under the Apache
+License 2.0; the TouchPad's copy matches that release but for line endings, appinfo.json
+(without its requiredPermissions and trustLevel) and index.html (Enyo loaded with
+launch="nobridge"). Copyright Hewlett-Packard Development Company, L.P., Apache License 2.0.
+
+Lunacy answers what it asks for: the music library in db8 (card/MusicLibrary.kt, from
+Android's media library), album art through extractfs. Its dashboard is also what the
+Android Notifications app shows for an Android app that is playing.

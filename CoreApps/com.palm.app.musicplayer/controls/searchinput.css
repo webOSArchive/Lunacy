@@ -1,0 +1,21 @@
+
+.searchInput
+{
+ 	background: white;
+	min-height: 36px;
+	height: 36px;
+	margin:8px 12px 8px 0px;
+
+}
+
+.searchInput .enyo-input
+{
+	min-height: 29px;
+	font-size: 14px;
+}
+
+.searchInput .enyo-fancy-input-inner
+{
+	padding-top: 2px;
+	
+}

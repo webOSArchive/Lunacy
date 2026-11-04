@@ -1,0 +1,164 @@
+@charset "UTF-8";
+/* CSS Document */
+/*
+not related to anything yet... 
+
+.mainContainer {
+	background:rgba(255,255,255,1) url(../images/bg_nav.png) repeat-y fixed 0 0;
+}
+*/
+.playerControl {
+	background:url(../images/bg_controls.png) repeat-x 0 0;
+	height:80px;
+	padding:0 3px 0 13px;
+	color:#1c1c1c;
+	font-size:14px;
+	border-top:1px solid #95948e;
+}
+.playerControl .current {
+	width:100%;
+	max-width:470px;
+	min-width:255px;
+}
+.playerControl .info {
+	margin:0 6px;
+	text-align:center;
+	height:32px;
+	line-height:1em;
+}
+.playerControl .info .title {
+	font-weight:bold;
+	overflow:hidden;
+	text-overflow:ellipsis;
+	width: 100%;
+	white-space:nowrap;
+}
+.playerControl .info .artist {
+	overflow:hidden;
+	text-overflow:ellipsis;
+	width: 100%;
+	white-space:nowrap;
+}
+.playerControl .enyo-button {
+	vertical-align:middle;
+	margin:0 10px 0 0;
+	height:46px;
+	width:46px;
+	min-width: 46px;
+	-webkit-border-image:url(../images/bg_controls_button.png) 0 23 46 23 repeat;
+	border-width:0 23px;
+}
+.playerControl .enyo-button-down {
+	/*-webkit-border-image:url(../images/bg_controls_button.png) 46 23 0 23 repeat;*/
+}
+.playerControl .enyo-button .enyo-button-icon {
+	height:26px;
+	width:26px;
+	margin: 3px -15px;
+	background-position:0 0;
+}
+.playerControl .enyo-button.pause,
+.playerControl .enyo-button.play {
+	-webkit-border-image:none;
+	width:56px;
+	height:56px;
+	background:url(../images/btn_PlayPause.png) no-repeat 0 0;
+	/*-webkit-border-image:0;*/
+}
+
+.playerControl .enyo-button.play.disabled
+{
+	/*background-position:0 -112px;	*/
+}
+
+.playerControl .enyo-button.pause.disabled
+{
+	/*background-position:-56px -112px;*/
+}
+
+.playerControl .enyo-button-down.play {
+	/*background-position:0 -56px;*/
+}
+.playerControl .enyo-button.pause {
+	background-position:-56px 0
+}
+
+.playerControl .enyo-button-down.pause {
+	/*background-position:-56px -56px*/
+}
+.playerControl .progress {
+/*	font-size:12px;
+	line-height:21px;
+	height:21px;*/
+	margin:6px 0 0 0;
+	max-width:470px;
+	min-width:255px;
+	width:100%;
+}
+.playerControl .progress .enyo-slider {
+	margin:0 12px;
+}
+
+.playerControl .volume {
+	padding:0 10px 0 30px;
+	/*line-height:21px;
+	height:21px;
+	background:url(../images/bg_volume.png) no-repeat 0 50%;*/
+}
+
+.playerControl .enyo-progressslider-progress {
+	/*height:18px;*/
+	margin:0;
+}
+.playerControl .enyo-progress-bar {
+/*	-webkit-border-image:url(../images/bg_progress-bar.png) 0 9 repeat;
+	border-width:0 9px;
+	height:18px;*/
+}
+.playerControl .enyo-progress-bar-inner {
+/*	-webkit-border-image:url(../images/bg_progress-bar-inner.png) 0 8 repeat;
+	border-width:0 8px;
+	height:16px;
+	margin: 1px -8px*/
+}
+/*
+.playerControl .enyo-slider-button {
+	background:url(../images/bg_progress-bar-control.png) no-repeat 0 -26px;
+	height:26px;
+	width:26px;
+	margin:-4px -14px;
+}
+.playerControl .enyo-slider-button.enyo-button-down {
+  background-position:0 0;
+  -webkit-border-image:none;
+}
+*/
+.toggleMode {
+	height:23px;
+	width:24px;
+	background:no-repeat 0 0;
+}
+.toggleMode.on,
+.toggleMode.all {  /*Added this for repeat mode. Don't remove.*/
+	background-position:0 -23px
+}
+.toggleMode.one {
+	background-position:0 -46px
+}
+.toggleMode.shuffle {
+	background-image:url(../images/btn_shuffle.png);
+}
+.toggleMode.repeat {
+	background-image:url(../images/btn_repeat.png);
+}
+.toggleMode.fullscreen {
+	background-image:url(../images/btn_fullscreen.png);
+	margin:6px 10px 15px 10px;
+	/*padding: 0 10px 0  10px;*/
+	height:19px;
+	width:19px;
+	left: 10px;
+}
+.toggleMode.fullscreen.on {
+  background-position:0 -19px;
+}

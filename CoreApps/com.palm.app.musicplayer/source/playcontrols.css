@@ -1,0 +1,15 @@
+.playButton
+{
+    margin: 0px 10px 0px 10px;
+    vertical-align: middle;
+
+}
+
+
+.playcontrols
+{
+    width:160px !important;
+    left: 0px;
+    top: 0px;
+    vertical-align: middle;
+}

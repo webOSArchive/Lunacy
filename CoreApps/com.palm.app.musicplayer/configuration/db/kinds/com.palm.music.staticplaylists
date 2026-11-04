@@ -1,0 +1,15 @@
+{
+	"id":"com.palm.music.staticplaylists:1",
+	"owner":"com.palm.app.musicplayer",
+	"indexes":
+	[
+		{
+			"name": "playlistsByName",
+			"props":
+			[
+				{"name": "title", "collate": "primary"}
+			]
+		}
+	],
+	"sync": true
+}

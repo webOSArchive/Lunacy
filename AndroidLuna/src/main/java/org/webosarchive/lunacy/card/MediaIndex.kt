@@ -44,6 +44,9 @@ import java.util.TimeZone
  * apps are refused). Records an account synced (type other than "local") are left alone.
  */
 class MediaIndex(private val webosRoot: File) {
+    /** The music library's songs (MusicLibrary), filed in the audio kind beside the ringtones. */
+    var music: (() -> List<JSONObject>)? = null
+
     /** A file's record as last read, kept while the file is unchanged: EXIF and movie headers are slow. */
     private class Seen(val modified: Long, val size: Long, val record: JSONObject?)
     private val seen = HashMap<String, Seen>()
@@ -60,7 +63,9 @@ class MediaIndex(private val webosRoot: File) {
         db.mirror(videoKind(), permissions(VIDEO), initial = setOf("appCacheComplete", "playbackPosition"), owns = ::local, added = added) {
             files(db, "video")
         }
-        db.mirror(audioKind(), permissions(AUDIO), initial = setOf("bookmark", "serviced", "hasResizedThumbnails", "thumbnails")) { ringtones() }
+        db.mirror(audioKind(), permissions(AUDIO), initial = setOf("bookmark", "serviced", "hasResizedThumbnails")) {
+            ringtones() + (music?.invoke() ?: emptyList())
+        }
     }
 
     /**
@@ -366,6 +371,14 @@ class MediaIndex(private val webosRoot: File) {
         const val IMAGE = "com.palm.media.image.file:1"
         const val VIDEO = "com.palm.media.video.file:1"
         const val AUDIO = "com.palm.media.audio.file:1"
+
+        /** filenotifyd's music consumers' access to one of the music kinds (MusicLibrary's too). */
+        fun musicPermissions(kind: String): JSONArray = JSONArray(MUSIC_CONSUMERS.map { app ->
+            JSONObject().put("type", "db.kind").put("object", kind).put("caller", app).put("operations", JSONObject()
+                .put("create", "allow").put("read", "allow").put("update", "allow").put("delete", "allow"))
+        })
+        private val MUSIC_CONSUMERS = listOf("com.palm.app.musicplayer", "com.palm.service.music", "com.palm.launcher",
+            "com.palm.service.mediacache", "com.palm.systemui", "com.palm.mojo-systemui")
         private const val UNKNOWN_ARTIST = "Unknown Artist"
         private const val UNKNOWN_ALBUM = "Unknown Album"
         private const val UNKNOWN_GENRE = "Unknown Genre"

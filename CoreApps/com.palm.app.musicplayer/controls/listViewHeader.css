@@ -1,0 +1,7 @@
+.truncating-text {
+	max-width:346px;
+}
+.landscape .truncating-text  {
+	max-width:590px;
+}
+

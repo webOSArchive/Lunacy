@@ -1,0 +1,17 @@
+{
+	"_id":1234,
+	"name":"My Playlist",
+	"tracks":
+	[
+		{
+			"title":"Strawberry Fields Forever",
+			"artist":"The Beatles",
+			"path":"/media/internal/music/StrawberryFieldsForever.mp3"
+		},
+		{
+			"title":"White Room",
+			"artist":"Cream",
+			"path":"/media/internal/music/WhiteRoom.mp3"
+		}
+	]
+}

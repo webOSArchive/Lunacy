@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+	<title>Jasmine Test Runner</title>
+	
+	<!-- MODIFY ACCORDINGLY TO *LOCAL* JASMINE SOURCE FILES -->
+	<link rel="stylesheet" type="text/css" href="../../jasmine/jasmine.css">
+	<script type="text/javascript" src="../../jasmine/jasmine.js"></script>
+	<script type="text/javascript" src="../../jasmine/jasmine-html.js"></script>
+
+	<!-- MODIFY ACCORDINGLY TO *LOCAL* ENYO SOURCE FILE -->	
+	<script type="text/javascript" src="/usr/palm/frameworks/enyo/0.10/framework/enyo.js"></script>
+	
+	<script type="text/javascript" src="spec/unit/specHelper.js"></script>
+	
+	<!-- INCLUDE ALL SPEC FILES HERE -->	
+		<!-- All Utility Tests  -->	
+		<script type="text/javascript" src="spec/unit/source/utilityTests/spec_audiomanager.js"></script>
+		<script type="text/javascript" src="spec/unit/source/utilityTests/spec_mediaindex.js"></script>
+		<script type="text/javascript" src="spec/unit/source/utilityTests/spec_playback.js"></script>
+		<script type="text/javascript" src="spec/unit/source/utilityTests/spec_dashboardmanager.js"></script>
+		<script type="text/javascript" src="spec/unit/source/utilityTests/spec_librarytools.js"></script>
+		<script type="text/javascript" src="spec/unit/source/utilityTests/spec_mediawatcher.js"></script>
+		<script type="text/javascript" src="spec/unit/source/utilityTests/spec_playbacklist.js"></script>
+		<!--<script type="text/javascript" src="spec/unit/source/utilityTests/spec_playlistmanager.js"></script> -->
+		<script type="text/javascript" src="spec/unit/source/utilityTests/spec_utilities.js"></script>
+	
+		<!-- All Source code Tests  -->	
+		<script type="text/javascript" src="spec/unit/source/sourceTests/spec_albumartitem.js"></script>
+		<script type="text/javascript" src="spec/unit/source/sourceTests/spec_albumartview.js"></script>
+		<script type="text/javascript" src="spec/unit/source/sourceTests/spec_app.js"></script>
+		<!-- <script type="text/javascript" src="spec/unit/source/sourceTests/spec_exhibitionView.js"></script> -->
+		<script type="text/javascript" src="spec/unit/source/sourceTests/spec_listViewAlbums.js"></script>
+		<script type="text/javascript" src="spec/unit/source/sourceTests/spec_listViewAlbumDetail.js"></script>
+		<script type="text/javascript" src="spec/unit/source/sourceTests/spec_listViewArtists.js"></script>
+		<script type="text/javascript" src="spec/unit/source/sourceTests/spec_listViewArtistDetail.js"></script>
+		<script type="text/javascript" src="spec/unit/source/sourceTests/spec_listViewGenres.js"></script>
+		<script type="text/javascript" src="spec/unit/source/sourceTests/spec_listViewGenreDetail.js"></script>
+		<script type="text/javascript" src="spec/unit/source/sourceTests/spec_listViewPlaylist.js"></script>
+		<script type="text/javascript" src="spec/unit/source/sourceTests/spec_listViewSongs.js"></script>
+		<script type="text/javascript" src="spec/unit/source/sourceTests/spec_navPanel.js"></script>
+		<script type="text/javascript" src="spec/unit/source/sourceTests/spec_navplaylists.js"></script>
+		<script type="text/javascript" src="spec/unit/source/sourceTests/spec_playcontrols.js"></script>
+		<script type="text/javascript" src="spec/unit/source/sourceTests/spec_playerControl.js"></script>
+		<script type="text/javascript" src="spec/unit/source/sourceTests/spec_playmodecontrols.js"></script>
+		<script type="text/javascript" src="spec/unit/source/sourceTests/spec_songinfocontrols.js"></script>
+	
+		<!-- All Contol code tests -->
+		<script type="text/javascript" src="spec/unit/source/controlsTests/spec_listViewDraggable.js"></</script>
+	
+</head>
+
+<body>
+	<script type="text/javascript">
+		jasmine.getEnv().addReporter(new jasmine.TrivialReporter());
+		jasmine.getEnv().execute();
+	</script>
+</body>
+</html>

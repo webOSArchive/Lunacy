@@ -1,0 +1,15 @@
+{
+	"debug": false,
+	"icon": "../../../icon.png",
+	"id": "com.palm.app.musicplayer",
+	"main": "../../../index.html",
+	"miniicon": "../../../images/notification-small.png",
+	"noWindow": true,
+	"removable": false,
+	"splashicon": "../../../icon-256x256.png",
+	"title": "Música",
+	"type": "web",
+	"uiRevision": 2,
+	"vendor": "HP",
+	"version": "3.0.8000"
+}

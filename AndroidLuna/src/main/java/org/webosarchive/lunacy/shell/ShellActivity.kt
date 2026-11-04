@@ -2624,7 +2624,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         closeOnDestroy += db8::close; closeOnDestroy += tempdb::close
         // Documents', photos' and videos' indexes, answered from the folders themselves (FileIndex, MediaIndex).
         org.webosarchive.lunacy.card.FileIndex(jsServices.root).attach(db8)
-        org.webosarchive.lunacy.card.MediaIndex(jsServices.root).attach(db8, bus)
+        // The music library, from Android's media library (MusicLibrary): its songs go in with the ringtones.
+        val musicLibrary = org.webosarchive.lunacy.card.MusicLibrary(this, jsServices.root).also { it.attach(db8) }
+        org.webosarchive.lunacy.card.MediaIndex(jsServices.root).also { it.music = musicLibrary::songs }.attach(db8, bus)
         // After db8: it reads its persisted activities back as it registers.
         power.register()
         activityManager.register(bus)

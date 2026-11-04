@@ -1,0 +1,24 @@
+{
+	"active-directory":"/media/internal/.musicApp",
+	"thumbnails":	{
+		"directory": "/media/internal/.musicApp/thumbs",
+		"commments": "All Kinds must have a serviced property, which holds a boolean value",
+		"kinds":[
+			{
+				"kind": "com.palm.media.audio.album:1",
+				"directory":"/media/internal/.musicApp/thumbs/albums",
+				"dimensions":[{"h":100,"w":100},{"h":400,"w":400}]
+			},
+			{
+				"kind": "com.palm.media.audio.artist:1",
+				"directory":"/media/internal/.musicApp/thumbs/artists",
+				"dimensions":[{"h":100,"w":100},{"h":400,"w":400}]
+			},
+			{
+				"kind":"com.palm.media.audio.genre:1",
+				"directory":"/media/internal/.musicApp/thumbs/genres",
+				"dimensions":[{"h":100,"w":100},{"h":400,"w":400}]
+			}
+		]
+	}
+}

@@ -1,0 +1,23 @@
+{
+	"_id":1234,
+	"name":"My Filter Playlist",
+	"filters":
+	[
+		{
+			"type": "artist",
+			"filterText": "Beatles"
+		},
+		{
+			"type": "artist",
+			"filterText": "The Who"
+		},
+		{
+			"type": "album",
+			"filterText": "Dark Side"
+		},
+		{
+			"type": "genre",
+			"filterText": "Acid Rock"
+		}
+	]
+}

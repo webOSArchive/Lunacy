@@ -1,0 +1,19 @@
+{
+	"id":"com.palm.music.filterplaylists:1",
+	"owner":"com.palm.app.musicplayer",
+	"indexes":
+	[
+		{
+			"name": "playlistsByName",
+			"props":
+			[
+				{"name": "title", "collate": "primary"}
+			]
+		},
+		{
+			"name": "title",
+			"props": [{"name": "title"}]
+		}
+	],
+	"sync": true
+}

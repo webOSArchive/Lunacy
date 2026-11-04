@@ -1,0 +1,152 @@
+.albumartitem
+{
+	-webkit-transform:translateZ(0);
+	/*border: solid 1px #f00;*/
+	width: 500px;
+	/*-webkit-transform-style: preserve-3d;	*/
+}
+
+
+.albumartbg
+{
+	/*background-image: url(../images/albumart/art_shadow_500.png);*/
+	/*border: solid 1px red;*/
+
+}
+
+.albumartimage
+{
+
+	/*-webkit-transition: all 0.25s;*/
+
+	margin-left: 10px;
+	margin-right: 10px;
+	margin-top: 20px;
+	opacity: 1.0;`
+	width: 480px;
+	height: 480px;
+
+	/*-webkit-box-shadow: 0px 0px 30px 0px #f00;*/
+
+}
+
+
+.imageCenter
+{
+	/*-webkit-transition: opacity 1.0s linear;*/
+	/*-webkit-transition: all 0.25s;*/
+	-webkit-transform-style: preserve-3d;	
+
+	margin-left: 10px;
+	margin-top: 10px;
+	
+	opacity: 1.0;
+	width: 480px;
+	height: 480px;
+	
+}
+
+.albumarticon
+{
+	position: absolute;
+	z-index: 101;
+	margin-left: -340px;
+	margin-top: 150px;
+	/*
+	top: 150px;
+	left: 150px;
+	*/
+	}
+
+.infoText
+{
+	/*-webkit-transition: all 0.25s;*/
+
+	
+	/*opacity: 0.5;*/
+	font-size: 20px;
+	text-align: left;
+
+	color: #fff;
+	margin-left: 10px;
+	margin-bottom: 10px;
+	width: 470px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;  
+}
+
+.infoTextSong
+{
+	font-size: 25px !important;
+	
+	
+}
+
+.infoTextArtist
+{
+	font-size: 20px !important;
+	
+}
+
+.infoTextAlbum
+{
+	font-size: 16px !important;
+	
+}
+
+
+.infoTextShow
+{
+	/*-webkit-transition: opacity 0.5s linear;*/
+	/*-webkit-transition: opacity 0.5s linear;*/
+
+	opacity: 1.0;
+}
+
+.infoTextHide
+{
+	/*-webkit-transition: opacity 0.5s linear;*/
+	opacity: 0.0;
+}
+
+
+.infoTextLarge
+{
+	font-size: 30px !important;
+}
+
+
+.infoTextPrev
+{
+	/*
+	font-size: 20px;
+	color: #fff;
+	text-align: right;
+	margin-right: 10px;
+	margin-bottom: 10px;
+	width: 470px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+	*/
+}
+
+.infoTextNext
+{
+	/*
+	font-size: 20px;
+	color: #fff;
+	text-align: left;
+	margin-left: 10px;
+	margin-bottom: 10px;
+	width: 470px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+	*/
+}
+
+
+
+

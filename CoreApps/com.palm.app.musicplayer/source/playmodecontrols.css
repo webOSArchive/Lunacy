@@ -1,0 +1,41 @@
+.playmodeButton
+{
+    margin: 0px 0px 0px 0px;
+
+}
+
+
+.playmodecontrols
+{
+
+}
+
+.volSliderContainer
+{
+    background-image: url(../images/progressbar/ProgressBarInner2.png);
+    height: 30px;
+    -webkit-border-top-right-radius: 4px;
+    -webkit-border-bottom-right-radius: 4px;
+    
+}
+
+.volSlider .enyo-slider-progress
+{
+    margin-top: 11px;
+    
+}
+.volSlider .enyo-slider-button
+{
+    background: url(../images/progressbar/btnVolSlider.png) no-repeat 0% 0%;
+    margin-top: -12px!important;
+    margin-left: -15px;
+    height: 30px;
+    width: 30px;
+
+}
+
+.volSlider .enyo-button-hot
+{
+    background-position-y: -30px;
+
+}

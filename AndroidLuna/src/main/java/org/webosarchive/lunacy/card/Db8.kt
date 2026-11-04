@@ -30,7 +30,7 @@ class Db8(private val service: String, file: File?,
     private val watches = ArrayList<Watch>()
     /** Kinds whose records are kept in line with a source of truth outside db8; see [mirror]. */
     private class Mirror(val source: () -> List<JSONObject>, val initial: Set<String>, val owns: (JSONObject) -> Boolean,
-                         val added: (() -> Unit)?) {
+                         val added: (() -> Unit)?, val key: (JSONObject) -> String) {
         var synced = 0L
         /** Each record's [STAMP] as the last pass saw it, by path. */
         var stamps: Map<String, String> = emptyMap()
@@ -121,7 +121,7 @@ class Db8(private val service: String, file: File?,
     /**
      * A kind whose truth is elsewhere (the files under /media/internal, for FileIndex): db8
      * registers it, and before anything reads or changes it, brings its records into line with
-     * [source], at most every [MIRROR_MS]. Each record is matched to its source by `path`: a new
+     * [source], at most every [MIRROR_MS]. Each record is matched to its source by `path` (or [key]): a new
      * one is created, a changed one takes the source's properties (keeping anything an app
      * added), and one whose source has gone is purged, each firing watches as any write does.
      * While a watch is open on the kind it is checked every [MIRROR_WATCH_MS], so a list that
@@ -135,12 +135,13 @@ class Db8(private val service: String, file: File?,
      * rewritten, and its record is replaced by a new one with a new `_id`.
      */
     fun mirror(spec: JSONObject, permissions: JSONArray, initial: Set<String> = emptySet(), owns: (JSONObject) -> Boolean = { true },
-               added: (() -> Unit)? = null, source: () -> List<JSONObject>) = work {
+               added: (() -> Unit)? = null, key: (JSONObject) -> String = { it.optString("path") },
+               source: () -> List<JSONObject>) = work {
         try {
             putKind(CONFIGURATOR, spec)
             putPermissions(CONFIGURATOR, JSONObject().put("permissions", permissions))
         } catch (e: Exception) { Log.w(AppServer.TAG, "$service: mirror ${spec.optString("id")}: ${e.message}"); return@work }
-        mirrors[spec.getString("id")] = Mirror(source, initial, owns, added)
+        mirrors[spec.getString("id")] = Mirror(source, initial, owns, added, key)
         if (mirrorTicker == null) mirrorTicker = Executors.newSingleThreadScheduledExecutor().also {
             it.scheduleWithFixedDelay({
                 work { for ((k, m) in mirrors) if (watches.any { w -> k in w.kinds }) syncMirror(k, m) }
@@ -204,14 +205,15 @@ class Db8(private val service: String, file: File?,
         val byPath = LinkedHashMap<String, JSONObject>()
         val stamps = HashMap<String, String>()
         for (f in files) {
-            byPath[f.optString("path")] = f
-            (f.remove(STAMP) as? String)?.let { stamps[f.optString("path")] = it }
+            val k = m.key(f)
+            byPath[k] = f
+            (f.remove(STAMP) as? String)?.let { stamps[k] = it }
         }
         val current = objects(kind).values.filter { !it.optBoolean("_del") && m.owns(it) }
         val rewritten = ArrayList<JSONObject>()
         transaction {
             for (o in current) {
-                val path = o.optString("path")
+                val path = m.key(o)
                 val f = byPath.remove(path)
                 if (f == null) { delOne(o, purge = true); continue }
                 val was = m.stamps[path]

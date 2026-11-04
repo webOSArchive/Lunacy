@@ -405,6 +405,24 @@ patch gives each its own square, 32 and 128 px.
 
 Files: `framework/source/palm/themes/Onyx/css/Spinner.css`, `framework/build/enyo-build.css`.
 
+### 0014-scroller-high-refresh.patch
+
+A scroller coasts after a flick and springs back from an overscroll on a screen faster than
+100 Hz, as at 60.
+
+`enyo.ScrollStrategy.animate` runs its physics in fixed 10 ms steps (`frame`), as many as the
+time since the last animation frame holds, and ends the animation on any frame where the
+position didn't change, taking it as stalled. At 60 Hz every frame holds at least one step. At
+120 Hz (the Galaxy Z Fold3) a frame is 8.3 ms, so most hold none, nothing moves, and the
+animation ended on the first of them: a flick stopped dead when the finger lifted, and a list
+dragged past its end stayed there (seen by codepoet in Palm's file picker, 2026-11-04;
+recorded with a touch logger: released 300 px into overscroll, it moved 4 px and stopped). The
+patch ends the animation only on a frame that ran a step and stood still. The steps, and so
+the motion, are unchanged: the TouchPad's physics at any refresh rate. Checked on the Fold3 at
+120 Hz over DevTools: a flick coasts about 320 px over 800 ms, and an overscroll springs back.
+
+Files: `framework/source/base/scroller/ScrollStrategy.js`, `framework/build/enyo-build.js`.
+
 ## Added
 
 Nothing, since the rebase. `lib/networkproxy` (HP's network-proxy settings library, which the

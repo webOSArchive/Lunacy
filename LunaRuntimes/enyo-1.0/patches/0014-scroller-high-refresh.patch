@@ -1,0 +1,36 @@
+--- a/framework/source/base/scroller/ScrollStrategy.js
++++ b/framework/source/base/scroller/ScrollStrategy.js
+@@ -157,13 +157,18 @@
+ 			if (this.fixedTime && !this.isInOverScroll()) {
+ 				t = this.interval;
+ 			}
++			// Lunacy (patch 0014): a frame shorter than one simulation step moves nothing, and
++			// on a screen faster than 100 Hz (the Galaxy Z Fold3's 120) most frames are. That
++			// is not a stall: only a frame that stepped and stood still ends the animation, or
++			// every flick stopped dead and an overscroll stayed where it was let go.
++			var stepped = t >= this.frame;
+ 			// consume some t in simulation
+ 			t = this.simulate(t);
+ 			// scroll if we have moved, otherwise the animation is stalled and we can stop
+ 			if (y0 != this.y || x0 != this.x) {
+ 				//this.log(this.y, y0);
+ 				this.scroll();
+-			} else if (!this.dragging) {
++			} else if (!this.dragging && stepped) {
+ 				this.stop(true);
+ 				this.scroll();
+ 			}
+--- a/framework/build/enyo-build.js
++++ b/framework/build/enyo-build.js
+@@ -2870,7 +2870,10 @@
+ var f = (new Date).getTime();
+ this.job = enyo.requestAnimationFrame(e);
+ var g = f - a;
+-a = f, this.dragging && (this.y0 = this.y = this.uy, this.x0 = this.x = this.ux), b += g, this.fixedTime && !this.isInOverScroll() && (b = this.interval), b = this.simulate(b), d != this.y || c != this.x ? this.scroll() : this.dragging || (this.stop(!0), this.scroll()), d = this.y, c = this.x;
++a = f, this.dragging && (this.y0 = this.y = this.uy, this.x0 = this.x = this.ux), b += g, this.fixedTime && !this.isInOverScroll() && (b = this.interval);
++// Lunacy (patch 0014): a frame shorter than one step (10 ms; most frames above 100 Hz) is no stall.
++var h = b >= this.frame;
++b = this.simulate(b), d != this.y || c != this.x ? this.scroll() : this.dragging || !h || (this.stop(!0), this.scroll()), d = this.y, c = this.x;
+ });
+ this.job = enyo.requestAnimationFrame(e);
+ },

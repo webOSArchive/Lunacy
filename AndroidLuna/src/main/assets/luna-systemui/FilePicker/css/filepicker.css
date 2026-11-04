@@ -73,3 +73,17 @@ html, body {
 	background: #b4b4b4;
 	border-top: 1px solid #999;
 }
+
+/* Palm's ringtone picker (source/RingtonePicker.js): the whole popup, and its list's rounded
+   group, Palm's .custom-rowgroup (the systemui FilePicker's ImageAlbum.css). */
+.lunacy-ringtone-picker {
+	height: 100%;
+	min-height: 420px;
+}
+.custom-rowgroup {
+	background-color: #eee;
+	-webkit-border-radius: 6px;
+	border: 1px solid #919191;
+	margin-top: 15px;
+	margin-bottom: 15px;
+}

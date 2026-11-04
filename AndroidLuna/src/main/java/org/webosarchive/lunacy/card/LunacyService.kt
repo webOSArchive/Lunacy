@@ -574,6 +574,7 @@ class LunacyService(
     private fun listFiles(p: JSONObject): String {
         val path = p.optString("path").ifEmpty { "/media/internal" }
         val types = p.optJSONArray("types")?.let { a -> (0 until a.length()).map { a.getString(it).lowercase() } }
+        if (types != null && "ringtone" in types) return listRingtones()
         val internal = path.removePrefix("/media/internal").trimStart('/')
         val root = if (path.trimEnd('/') == "/media/internal" || path.startsWith("/media/internal/")) {
             UserFiles.resolve(webosRoot, internal)
@@ -608,6 +609,28 @@ class LunacyService(
             }
         }
         return JSONObject().put("returnValue", true).put("path", path).put("albums", albums).toString()
+    }
+
+    /**
+     * webOS's "ringtone" type: the sounds in /media/internal/ringtones (Android's
+     * Notifications/webOS, Ringtones), each with its title, as Palm's ringtone picker listed
+     * them from the media index: its title and artist from its tags, as filenotifyd read them.
+     */
+    private fun listRingtones(): String {
+        val dir = UserFiles.resolve(webosRoot, "ringtones")
+        val files = org.json.JSONArray()
+        dir?.listFiles()?.filter { it.isFile && !it.name.startsWith(".") && typeOf(it.name) == "audio" }
+            ?.sortedBy { it.name.lowercase() }
+            ?.forEach { f ->
+                val path = "${Ringtones.WEBOS_DIR}/${f.name}"
+                val r = MediaIndex.audioRecord(path, f)
+                files.put(JSONObject().put("name", f.name).put("title", r.optString("title")).put("artist", r.optString("artist"))
+                    .put("searchKey", r.optString("searchKey"))
+                    .put("fullPath", path).put("attachmentType", "audio").put("size", f.length()))
+            }
+        val albums = org.json.JSONArray()
+        if (files.length() > 0) albums.put(JSONObject().put("name", "Ringtones").put("path", Ringtones.WEBOS_DIR).put("files", files))
+        return JSONObject().put("returnValue", true).put("path", Ringtones.WEBOS_DIR).put("albums", albums).toString()
     }
 
     private fun rootName(path: String) = path.trimEnd('/').substringAfterLast('/').ifEmpty { "Files" }

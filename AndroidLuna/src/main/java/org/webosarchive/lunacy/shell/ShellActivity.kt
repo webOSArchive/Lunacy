@@ -2578,6 +2578,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         systemService.onPreferenceChanged = { key, value -> onPreferenceChanged(key, value) }
         systemService.hostPreference = { key -> hostPreference(key) }
         systemService.register(bus)
+        // webOS's ringtones, in Android's notification sounds and webOS's pickers alike (Ringtones).
+        org.webosarchive.lunacy.card.Ringtones(this, jsServices.root).also { it.register(bus); it.install() }
         registerReceiver(systemReceiver, android.content.IntentFilter().apply {
             addAction(android.content.Intent.ACTION_TIME_CHANGED); addAction(android.content.Intent.ACTION_TIMEZONE_CHANGED)
             addAction(android.content.Intent.ACTION_DATE_CHANGED)

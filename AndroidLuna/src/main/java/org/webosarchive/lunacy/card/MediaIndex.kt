@@ -60,7 +60,32 @@ class MediaIndex(private val webosRoot: File) {
         db.mirror(videoKind(), permissions(VIDEO), initial = setOf("appCacheComplete", "playbackPosition"), owns = ::local, added = added) {
             files(db, "video")
         }
+        db.mirror(audioKind(), permissions(AUDIO), initial = setOf("bookmark", "serviced", "hasResizedThumbnails", "thumbnails")) { ringtones() }
     }
+
+    /**
+     * The ringtones, as filenotifyd's audio module filed them (measured on the reference
+     * TouchPad): isRingtone for a file under /media/internal/ringtones, the title from its tags
+     * or else its name, "Unknown Artist", "Unknown Album" and "Unknown Genre" for tags it hasn't
+     * got, duration 0, and the sort keys AudioObject made. Other audio isn't indexed yet: the
+     * file picker's ringtone list is what reads this kind today.
+     */
+    private fun ringtones(): List<JSONObject> {
+        val dir = UserFiles.resolve(webosRoot, "ringtones")?.takeIf { it.isDirectory } ?: return emptyList()
+        val files = dir.listFiles()?.filter { it.isFile && !it.name.startsWith(".") &&
+            it.name.substringAfterLast('.', "").lowercase(Locale.US) in AUDIO_FILES }.orEmpty()
+        val paths = files.map { "/media/internal/ringtones/${it.name}" }.toSet()
+        synchronized(seenAudio) { seenAudio.keys.retainAll(paths) }
+        return files.sortedBy { it.name }.map { f ->
+            val p = "/media/internal/ringtones/${f.name}"
+            val old = synchronized(seenAudio) { seenAudio[p] }
+            if (old != null && old.modified == f.lastModified() && old.size == f.length() && old.record != null) old.record
+            else audioRecord(p, f).put(Db8.STAMP, "${f.lastModified()}:${f.length()}")
+                .also { synchronized(seenAudio) { seenAudio[p] = Seen(f.lastModified(), f.length(), it) } }
+        }
+    }
+    private val seenAudio = HashMap<String, Seen>()
+
 
     /**
      * New pictures are indexed: the photos service makes their thumbnails, as filenotifyd had it
@@ -260,16 +285,91 @@ class MediaIndex(private val webosRoot: File) {
         named("sideloadedListIndex", prop("capturedOnDevice"), prop("title", "primary")),
         listOf("capturedOnDevice", "modifiedTime"), listOf("capturedOnDevice", "createdTime"), listOf("_rev")), extends = true)
 
+    // filenotifyd_module_audio.js's registration of com.palm.media.audio.file.
+    private fun audioKind() = spec(AUDIO, listOf(
+        listOf("path"), listOf("hasResizedThumbnails", "_del"),
+        named("searchAllSongs", prop("isRingtone"), prop("searchKey", "primary", "default")),
+        named("songsByAlbumWithGenre", prop("isRingtone"), prop("genre"), prop("album", "primary")),
+        named("songsByArtistWithGenre", prop("isRingtone"), prop("genre"), prop("artist", "primary")),
+        named("songsByGenre", prop("isRingtone"), prop("genre"), prop("title", "primary")),
+        named("songsByArtist", prop("isRingtone"), prop("artist"), prop("sortKey.trackAndDisc"), prop("title", "primary")),
+        named("songsByArtistAlbums", prop("isRingtone"), prop("artist"), prop("sortKey.albumDiscAndTrack"), prop("title", "primary")),
+        named("AllSongsByArtistAlbumTrackAndDisc", prop("isRingtone"), prop("sortKey.artistAlbumDiscAndTrack", "primary")),
+        named("songsByAlbum", prop("isRingtone"), prop("album"), prop("sortKey.trackAndDisc"), prop("title", "primary")),
+        named("songsByAlbumArist", prop("isRingtone"), prop("album"), prop("albumArtist"), prop("sortKey.trackAndDisc"), prop("title", "primary")),
+        named("songsByArtistAlbum", prop("isRingtone"), prop("artist"), prop("album"), prop("sortKey.trackAndDisc"), prop("title", "primary")),
+        listOf("isRingtone", "album", "albumArtist"),
+        named("songsByTitle", prop("isRingtone"), prop("title", "primary")),
+        named("AllSongsByArtist", prop("isRingtone"), prop("artist", "primary")),
+        listOf("isRingtone", "title", "artist"),
+        named("AllSongsByAlbum", prop("isRingtone"), prop("album", "primary")),
+        named("AllSongsByAlbumTrackAndDisc", prop("isRingtone"), prop("sortKey.albumDiscAndTrack", "primary")),
+        named("serviced", prop("serviced")), named("hasResizedThumbnails", prop("hasResizedThumbnails")),
+        listOf("_rev")), extends = false)
+
     private fun permissions(kind: String): JSONArray = JSONArray(CONSUMERS.getValue(kind).map { app ->
         JSONObject().put("type", "db.kind").put("object", kind).put("caller", app).put("operations", JSONObject()
             .put("create", "allow").put("read", "allow").put("update", "allow").put("delete", "allow"))
     })
 
     companion object {
+            /**
+             * A sound file's record as filenotifyd's audio module made it (see [ringtones]); the file
+             * picker's ringtone list shows the same title and artist (LunacyService).
+             */
+            fun audioRecord(path: String, f: File): JSONObject {
+            var title: String? = null; var artist: String? = null; var album: String? = null
+            var albumArtist: String? = null; var genre: String? = null; var track = 0; var disc = 1
+            val r = MediaMetadataRetriever()
+            try {
+                r.setDataSource(f.path)
+                fun tag(k: Int) = r.extractMetadata(k)?.trim()?.takeIf { it.isNotEmpty() }
+                title = tag(MediaMetadataRetriever.METADATA_KEY_TITLE)
+                artist = tag(MediaMetadataRetriever.METADATA_KEY_ARTIST)
+                album = tag(MediaMetadataRetriever.METADATA_KEY_ALBUM)
+                albumArtist = tag(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
+                genre = tag(MediaMetadataRetriever.METADATA_KEY_GENRE)
+                track = tag(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER)?.substringBefore('/')?.toIntOrNull() ?: 0
+                disc = tag(MediaMetadataRetriever.METADATA_KEY_DISC_NUMBER)?.substringBefore('/')?.toIntOrNull() ?: 1
+            } catch (e: Exception) {
+            } finally {
+                runCatching { r.release() }
+            }
+            val name = f.name.substringBeforeLast('.').ifEmpty { f.name }
+            val t = title ?: name
+            val alb = album ?: UNKNOWN_ALBUM
+            val albArtist = albumArtist ?: UNKNOWN_ARTIST
+            val art = artist ?: albumArtist ?: UNKNOWN_ARTIST
+            // AudioObject's defaults for a file without tags; refreshSortKeys's, tab-joined, once any is set.
+            val tagged = artist != null || album != null || albumArtist != null || track != 0 || disc != 1
+            val trackAndDisc = "${disc * 100000 + track}"
+            val sortKey = if (!tagged) JSONObject().put("trackAndDisc", "100000")
+                .put("albumDiscAndTrack", UNKNOWN_ALBUM + "100000")
+                .put("albumArtistDiscAndTrack", UNKNOWN_ALBUM + UNKNOWN_ARTIST + "100000")
+                .put("artistAlbumDiscAndTrack", UNKNOWN_ARTIST + UNKNOWN_ALBUM + "100000")
+            else JSONObject().put("trackAndDisc", trackAndDisc)
+                .put("albumDiscAndTrack", "$alb\t\t$trackAndDisc")
+                .put("albumArtistDiscAndTrack", "$alb\t\t$art\t\t$trackAndDisc")
+                .put("artistAlbumDiscAndTrack", "$art\t\t$alb\t\t$trackAndDisc")
+            return JSONObject().put("path", path).put("title", t).put("artist", art).put("album", alb)
+                .put("albumArtist", albArtist).put("genre", genre ?: UNKNOWN_GENRE)
+                .put("disc", JSONObject().put("position", disc).put("total", 1))
+                .put("track", JSONObject().put("position", track).put("total", 0))
+                .put("searchKey", "$art\t\t$alb\t\t$t").put("sortKey", sortKey)
+                .put("isRingtone", true).put("duration", 0).put("bookmark", 0).put("createdTime", 0)
+                .put("modifiedTime", f.lastModified() / 1000).put("size", f.length())
+                .put("thumbnails", JSONArray()).put("serviced", false).put("hasResizedThumbnails", false)
+        }
+
         const val TYPES = "com.palm.media.types:1"
         const val ALBUM = "com.palm.media.image.album:1"
         const val IMAGE = "com.palm.media.image.file:1"
         const val VIDEO = "com.palm.media.video.file:1"
+        const val AUDIO = "com.palm.media.audio.file:1"
+        private const val UNKNOWN_ARTIST = "Unknown Artist"
+        private const val UNKNOWN_ALBUM = "Unknown Album"
+        private const val UNKNOWN_GENRE = "Unknown Genre"
+        private val AUDIO_FILES = setOf("mp3", "m4a", "m4r", "aac", "wav", "ogg", "oga", "amr", "wma", "flac")
         private const val OWNER = "com.palm.filenotifyd.js"
         /** filenotifyd's bus name, which called the photos service. */
         private const val INDEXER = "com.palm.filenotifyd"
@@ -280,6 +380,8 @@ class MediaIndex(private val webosRoot: File) {
                 "com.palm.systemui", "com.palm.mojo-systemui"),
             IMAGE to listOf("com.palm.app.photos", "com.palm.app.camera", "com.palm.systemui", "com.palm.mojo-systemui",
                 "com.palm.service.mediacache", "com.palm.service.photos"),
+            AUDIO to listOf("com.palm.app.musicplayer", "com.palm.service.music", "com.palm.launcher", "com.palm.service.mediacache",
+                "com.palm.systemui", "com.palm.mojo-systemui"),
             VIDEO to listOf("com.palm.app.camera", "com.palm.app.videoplayer", "com.palm.service.mediacache", "com.palm.systemui",
                 "com.palm.mojo-systemui"),
         )

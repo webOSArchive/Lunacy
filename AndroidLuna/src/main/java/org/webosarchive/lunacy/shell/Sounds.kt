@@ -18,8 +18,9 @@ import org.webosarchive.lunacy.card.AppServer
  *   URL names one too), a relative one is looked up in the app's resources/<locale>/ and then
  *   its own folder.
  * - Otherwise the class's default: webOS's notification sound for "notifications" (and for
- *   any class it doesn't know), its alert sound for "alerts", "alarm" and "calendar", its
- *   ringtone for "ringtones". Measured on the reference TouchPad: "notifications" played
+ *   any class it doesn't know), its alert sound for "alerts", "alarm" and "calendar", and
+ *   Android's notification sound for "ringtones" (see [androidSound]; webOS's ringtone if
+ *   Android's can't be read). Measured on the reference TouchPad: "notifications" played
  *   `sysmgr_notification` and "alerts" `sysmgr_alert`, the preloaded copies of
  *   /usr/palm/sounds/notification.wav and alert.wav, which Lunacy ships (assets/luna/sounds).
  * - A notification with no duration of its own is cut off at notificationSoundDuration, 5 s.
@@ -65,7 +66,13 @@ class Sounds(private val context: Context, private val server: AppServer, privat
         val player = MediaPlayer()
         try {
             @Suppress("DEPRECATION") player.setAudioStreamType(stream)
+            val fromAndroid = if (file == null && cls == "ringtones") androidSound() else null
             if (file != null) player.setDataSource(file.path)
+            else if (fromAndroid != null) {
+                // Android's own sound is "None": a ringtone sound plays nothing, as Android's would.
+                if (fromAndroid == android.net.Uri.EMPTY) { player.release(); return }
+                player.setDataSource(context, fromAndroid)
+            }
             else context.assets.openFd("luna/sounds/" + when (cls) {
                 "alerts", "alarm", "calendar" -> "alert.wav"
                 "ringtones" -> "ringtone.mp3"
@@ -82,6 +89,17 @@ class Sounds(private val context: Context, private val server: AppServer, privat
             player.release()
         }
     }
+
+    /**
+     * The sound Android plays for a notification, which the "ringtones" class plays when the app
+     * names no file (Messaging's default "system" sound): the system ringtone stays Android's
+     * setting, and webOS's tones are in Android's list (card/Ringtones; codepoet, 2026-11-04).
+     * Uri.EMPTY when it is set to none; null if it can't be read, and webOS's ringtone plays.
+     */
+    private fun androidSound(): android.net.Uri? = try {
+        android.media.RingtoneManager.getActualDefaultRingtoneUri(context, android.media.RingtoneManager.TYPE_NOTIFICATION)
+            ?: android.net.Uri.EMPTY
+    } catch (e: Exception) { null }
 
     /**
      * webOS's battery-charged sound: LunaSysMgr's StatusBarBattery played

@@ -7,7 +7,12 @@
 </head>
 <body>
 <script type="text/javascript">
-	new FilePickerApp().renderInto(document.body);
+	// Only ringtones asked for: Palm's ringtone picker (source/RingtonePicker.js).
+	(function () {
+		var p = enyo.windowParams || {}, t = p.fileTypes || (p.fileType ? [p.fileType] : []);
+		var ringtones = t && t.length === 1 && t[0] === "ringtone";
+		(ringtones ? new RingtonePickerApp() : new FilePickerApp()).renderInto(document.body);
+	})();
 </script>
 </body>
 </html>

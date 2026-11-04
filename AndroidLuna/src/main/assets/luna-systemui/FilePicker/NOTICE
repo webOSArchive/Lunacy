@@ -11,3 +11,17 @@ one reads the same folders directly, through Lunacy's own service. The code is L
 contract it keeps (parameters, result shape, path) is webOS's, read from Enyo 1.0's
 FilePicker.js and CrossAppUI.js, and its crop step follows Palm's ImagePicker and
 ImageCropView (the reference TouchPad's systemui).
+
+The "ringtone" type is Palm's own ringtone picker (source/RingtonePicker.js follows Palm's
+FilePickerApp, RingtonePicker and AudioPicker, with its list fed by Lunacy's service rather
+than db8). These are the TouchPad's files, copied unchanged from
+/usr/lib/luna/system/luna-systemui/app/FilePicker on 2026-11-04:
+
+- palm/AudioItem.js; palm/FPAudioPlayer.js (the FPAudioPlayer kind from AudioPicker.js);
+- css/AudioPicker.css, css/RingtoneItem.css;
+- images/: highlighticon.png, icn-play.png, icn-pause.png, icn-music.png, checkmark.png,
+  empty-folder-audio.png, progress-item.png, progress-item-inner.png, multi-select-9tile.png,
+  menu-icon-add-ringtone.png.
+
+Copyright Palm, Inc. / Hewlett-Packard; never released under an open licence; distributed by
+Lunacy as abandonware, like Mojo and the Prelude fonts.

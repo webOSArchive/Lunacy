@@ -28,6 +28,8 @@ object UserFiles {
         "documents" to "Documents",
         "camera" to Environment.DIRECTORY_DCIM,
         "video" to Environment.DIRECTORY_MOVIES,
+        // webOS's ringtones are Android notification sounds, in a folder of their own (Ringtones).
+        "ringtones" to Ringtones.ANDROID_DIR,
     )
 
     /** Lunacy's own /media/internal. */

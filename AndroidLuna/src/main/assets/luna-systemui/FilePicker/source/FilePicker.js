@@ -69,6 +69,7 @@ enyo.kind({
 		case "audio": return this.multi ? $L("Select Music") : $L("Select Music");
 		case "video": return this.multi ? $L("Select Videos") : $L("Select A Video");
 		case "document": return this.multi ? $L("Select Documents") : $L("Select A Document");
+		case "ringtone": return $L("Select A Ringtone");
 		}
 		return this.multi ? $L("Select Files") : $L("Select A File");
 	},
@@ -116,7 +117,8 @@ enyo.kind({
 			} else {
 				body.createComponent({
 					kind: "Item", className: "fp-file", file: f, onclick: "tapped", layoutKind: "HFlexLayout",
-					components: [{flex: 1, content: f.name}, {content: this.size(f.size), className: "fp-size"}]
+					// A ringtone by its title, as Palm's ringtone list showed it.
+					components: [{flex: 1, content: f.title || f.name}, {content: this.size(f.size), className: "fp-size"}]
 				}, {owner: this});
 			}
 		}
@@ -219,13 +221,16 @@ enyo.kind({
 		var files = [];
 		for (var i = 0; i < this.selected.length; i++) {
 			var f = this.selected[i].file;
-			files.push({
+			var picked = {
 				fullPath: f.fullPath,
 				// webOS handed back a path the caller could show; here they are the same file.
 				iconPath: f.fullPath,
 				attachmentType: f.attachmentType,
 				size: f.size
-			});
+			};
+			// Palm's ringtone list gave the tone's title as name (Messaging shows it).
+			if (f.title) { picked.name = f.title; }
+			files.push(picked);
 		}
 		this.$.result.sendResult({result: files});
 	},

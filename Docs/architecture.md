@@ -904,11 +904,23 @@ it, so the control works in every app without any app being changed.
   folder the way Palm's showed albums.
 - **`/media/internal` is the user's own storage**, as it was on a device, so Android's shared
   folders are mapped into it under the names webOS used: `downloads`, `music`, `photos`,
-  `documents`, `camera`, `video` (`UserFiles.kt`). The card host, the media server and the
+  `documents`, `camera`, `video`, and `ringtones`, which is Android's `Notifications/webOS`
+  (`UserFiles.kt`). The card host, the media server and the
   picker all resolve paths through it, and nothing outside those folders is reachable.
   Reading them needs `READ_EXTERNAL_STORAGE`, which Android 5 grants at install. From
   Android 6 the shell asks for it once at startup (`ShellActivity.askForStorage`). If it's
   refused, the mapped folders just aren't there.
+- **Ringtones** (codepoet, 2026-11-04). webOS's ten short ringtones ship in
+  `assets/luna/ringtones` and are copied once into Android's `Notifications/webOS`, so they are
+  in Android's own notification sounds as well as in webOS's pickers; a tone the user deletes
+  stays deleted (`Ringtones.kt`). The picker's `ringtone` type is Palm's own ringtone picker
+  (its AudioItem rows, search, preview with progress, swipe to delete, and the add button that
+  makes one from music), fed from that folder with each tone's title and artist from its tags;
+  a tap returns the title as `name`, as Palm's did; systemservice's
+  `ringtone/addRingtone` and `deleteRingtone` copy into it and delete from it, and the media
+  index carries its files as filenotifyd's `com.palm.media.audio.file:1` records
+  (`isRingtone`). Which tone the system plays stays Android's setting: the `ringtones` sound
+  class with no file plays Android's notification sound (`Sounds.kt`).
 - **Cropping.** A caller that asks for a single photo with `cropWidth` or `cropHeight`
   (Contacts) gets Palm's ImagePicker flow: tapping a photo opens Enyo's `CroppableImage`
   titled "Preview" (or the caller's `previewLabel`), Cancel becomes Back, and OK returns the

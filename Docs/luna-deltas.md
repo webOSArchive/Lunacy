@@ -146,7 +146,7 @@ rest. Do them in this order:
 
 ### A5. Banner sounds and the rest of `addBannerMessage`'s arguments
 
-**Done 2026-09-22.** The device's `notification.wav`, `alert.wav` and `ringtone.mp3` are byte-identical to LunaCE's Apache-2.0 `sounds/`, so those are what ship. Open choice for codepoet: with no file named, the default is webOS's sound rather than the tone chosen in Android's settings (which Sounds & Alerts opens). Step 5 is moot: `suppressBannerMessages` does nothing on the device.
+**Done 2026-09-22.** The device's `notification.wav`, `alert.wav` and `ringtone.mp3` are byte-identical to LunaCE's Apache-2.0 `sounds/`, so those are what ship. With no file named, "notifications" and "alerts" play webOS's sounds. **Decided 2026-11-04 (codepoet):** the system ringtone stays Android's setting, so "ringtones" with no file plays Android's notification sound (silent if that is set to none, webOS's `ringtone.mp3` only if it can't be read); webOS's short ringtones are in Android's list to choose from (architecture.md, "Ringtones"). Measured on the reference TouchPad, it played the `ringtone` preference, there Lights. Step 5 is moot: `suppressBannerMessages` does nothing on the device.
 
 - **LunaCE:** `addBannerMessage(message, launchParams, icon, soundClass, soundFile, duration,
   doNotSuppress)`. A sound class of `notifications` plays `soundFile`, or

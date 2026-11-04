@@ -1,0 +1,11 @@
+webOS's short ringtones, which Lunacy copies into Android's shared storage
+(Notifications/webOS) so that Android and its apps can use them, and which webOS apps see as
+/media/internal/ringtones (card/Ringtones.kt).
+
+The ten "(short)" tones from /media/internal/ringtones on the reference TouchPad (webOS CE
+3.1.0), copied 2026-11-04, byte for byte: Anticipation, Cymbells, Dulcimer, Flurry, Rain Dance,
+Shimmer, Subtle, Treo New, Triangle and Vibes. The TouchPad's 31 full-length ringtones are left
+out to keep Lunacy small (codepoet, 2026-11-04).
+
+Copyright Palm, Inc. / Hewlett-Packard; never released under an open licence; distributed by
+Lunacy as abandonware, like Mojo, the Prelude fonts and the TouchPad wallpapers.

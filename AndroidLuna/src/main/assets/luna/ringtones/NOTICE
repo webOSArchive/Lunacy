@@ -4,7 +4,9 @@ webOS's short ringtones, which Lunacy copies into Android's shared storage
 
 The ten "(short)" tones from /media/internal/ringtones on the reference TouchPad (webOS CE
 3.1.0), copied 2026-11-04, byte for byte: Anticipation, Cymbells, Dulcimer, Flurry, Rain Dance,
-Shimmer, Subtle, Treo New, Triangle and Vibes. The TouchPad's 31 full-length ringtones are left
+Shimmer, Subtle, Treo New, Triangle and Vibes. Treo New alone came with no tags, so pickers
+called its artist "Unknown Artist"; it has since been given the others' (ID3v2.4: its title,
+artist "webOS", album "webOS Ringtones"), its audio frames unchanged (2026-11-04). The TouchPad's 31 full-length ringtones are left
 out to keep Lunacy small (codepoet, 2026-11-04).
 
 Copyright Palm, Inc. / Hewlett-Packard; never released under an open licence; distributed by

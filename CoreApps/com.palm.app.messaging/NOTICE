@@ -19,3 +19,8 @@ phone's card, where enyo.SlidingPane shows one panel at a time, a picked convers
 Conversation slides the chat panel over the list, and back slides it away. The hooks are marked
 [Lunacy] in app/MessagingApp.js and app/threads/ThreadList.js; they change nothing on a
 TouchPad or a tablet, and have to be carried over when CE's Messaging is taken again.
+
+A second change, codepoet's, 2026-11-04, for CE to take too (docs/messaging.md, "For webOS CE
+to take"): app/buddies/BuddyService.js, marked [Lunacy], finds the conversation of a buddy
+that has no contacts person by its address, rather than matching it to every conversation
+that has no person and showing one of their unread counts.

@@ -169,3 +169,30 @@ screen name and chat key from the server's `accounts.json`.
   isn't registered, for one), as Lunacy has no phone.
 - Herrie's other connectors (Discord, Telegram, WhatsApp, Signal, Teams) need their own plugins,
   which Lunacy doesn't carry.
+
+## For webOS CE to take
+
+**A buddy with no person shows another conversation's unread count** (found 2026-11-04 on the
+Fold3, with the BlueBubbles connector installed). Two parts, one Messaging's and one the
+transport's:
+
+- **Messaging, `app/buddies/BuddyService.js` (fixed here).** `assembleIds` pushes every buddy's
+  `personId` into the list the threads query matches on, `undefined` for a buddy without one.
+  `com.palm.chatthread:1` where `personId = [..., undefined]` then returns every thread that has
+  no person, which is every Synergy connector's thread (BlueBubbles' have none), and
+  `joinData` gives the buddy whichever of them comes last. The AIM buddy alanmorford showed 7
+  unread although his own thread's `unreadCount` was 0. The fix, marked `[Lunacy]` in
+  Lunacy's copy: only real `personId`s go in that list; a buddy without one gets its thread
+  from a second query on `normalizedAddress` (`enyo.messaging.utils.normalizeAddress(username,
+  serviceName)`, as `Messaging.js` finds a buddy's thread when it is tapped), keeping only
+  threads that have no person themselves; with no `personId`s at all the person and thread
+  queries are skipped. CE's Messaging can take the change as it is.
+- **The transport (not changed here; codepoet's fork, built by CE).** The buddy has no person
+  because the transport wrote no `com.palm.contact.libpurple:1` record for it, so the contacts
+  linker had nothing to link: on the Fold3 the AIM account had contacts for colie, Gold,
+  Grabber5.0, MAGQ and mretn_, and none for alanmorford, while `com.palm.imbuddystatus` had
+  all four buddies. In that session's log alanmorford arrived through `buddy_signed_on_off_cb`
+  while `getFullBuddyList` listed the others, so `BuddyListConsolidator` apparently never saw
+  him in a full roster. Unchecked against the TouchPad: whether the same account there has a
+  contact for him.
+

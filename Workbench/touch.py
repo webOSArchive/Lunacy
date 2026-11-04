@@ -6,7 +6,9 @@
 # Moves are interpolated in STEP-px steps (10 by default). Each sendevent is its own process,
 # so a stepped move is slower than a finger: STEP=1000 jumps straight to the next point.
 import sys, subprocess
-DEV = "/dev/input/event3"
+# The HP 10 G2's touchscreen by default; TOUCH_DEV names another device's (adb shell getevent -p).
+import os
+DEV = os.environ.get("TOUCH_DEV", "/dev/input/event3")
 cmds = []
 def ev(t, c, v): cmds.append(f"sendevent {DEV} {t} {c} {v}")
 def point(x, y, down=True):

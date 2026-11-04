@@ -22,6 +22,7 @@ name=${2:-seams}
                bw: [n(s.borderTopWidth), n(s.borderRightWidth), n(s.borderBottomWidth), n(s.borderLeftWidth)],
                img: bi.substring(bi.lastIndexOf("/") + 1, bi.indexOf("\")")) });
   }
-  return JSON.stringify(out);
-})()' "$app" | sed -e 's/^"//' -e 's/"$//' -e 's/\\"/"/g' -e 's/\\\\/\\/g' > "results/$name.json"
-python3 seams.py "results/$name.png" "results/$name.json" --status-bar 28
+  return out;
+})()' "$app" > "results/$name.json"
+# The status bar's height in the screenshot's px: the TouchPad's 28 at 1:1 by default.
+python3 seams.py "results/$name.png" "results/$name.json" --status-bar ${STATUS_BAR:-28}

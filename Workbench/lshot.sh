@@ -1,5 +1,6 @@
 #!/bin/sh
 # Screenshot the Android tablet into results/<name>.png, upright.
+cd "$(dirname "$0")"
 adb exec-out screencap -p > results/$1.png
 python3 -c "
 from PIL import Image; im=Image.open('results/$1.png')

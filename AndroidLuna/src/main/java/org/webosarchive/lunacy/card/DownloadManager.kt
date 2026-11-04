@@ -97,7 +97,8 @@ class DownloadManager(private val webosRoot: File) {
             reply(JSONObject(mapOf("returnValue" to true, "count" to pending())).toString())
         }
         bus.register(SERVICE, "downloadStatusQuery", Bus.CallHandler { statusQuery(it) })
-        bus.register(SERVICE, "resumeDownload", Bus.CallHandler { statusQuery(it) })
+        bus.register(SERVICE, "resumeDownload") { _, p, reply -> reply(resume(p)) }
+        bus.register(SERVICE, "pauseDownload") { _, p, reply -> reply(pause(p)) }
         bus.register(SERVICE, "cancelDownload") { _, p, reply -> reply(cancel(p)) }
         bus.register(SERVICE, "deleteDownloadedFile") { _, p, reply -> reply(deleteFile(p)) }
         // The 1x radio, which a WiFi tablet has no business refusing; the device answers the
@@ -242,6 +243,29 @@ class DownloadManager(private val webosRoot: File) {
         if (rec.finished) call.reply(completion(rec)) else report(rec)
         if (call.subscribe && !call.cancelled && !rec.finished) watch(rec, call)
     }
+
+    /**
+     * resumeDownload. Measured on the reference TouchPad (2026-11-03): a finished, cancelled or
+     * unknown ticket alike is refused as not interrupted. Lunacy's records live only with the
+     * process, so it never holds an interrupted transfer to resume.
+     */
+    private fun resume(p: JSONObject): String =
+        if (!p.has("ticket")) refused("Missing ticket parameter")
+        else refused("Ticket provided does not correspond to an interrupted transfer in history")
+
+    /**
+     * pauseDownload. The device can't pause (canHandlePause false): measured 7.4 MB into an
+     * 11.6 MB download, the transfer stopped and its state became "cancelled", and the answer
+     * was the same refusal a finished or unknown ticket gets.
+     */
+    private fun pause(p: JSONObject): String {
+        if (!p.has("ticket")) return refused("Missing ticket parameter")
+        records[p.optInt("ticket", -1)]?.takeIf { !it.finished }?.aborted = true
+        return refused("Ticket provided does not correspond to a downloading transfer")
+    }
+
+    private fun refused(text: String) =
+        JSONObject(mapOf("subscribed" to false, "returnValue" to false, "errorCode" to text)).toString()
 
     private fun cancel(p: JSONObject): String {
         val ticket = p.optInt("ticket", -1)

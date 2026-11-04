@@ -892,8 +892,9 @@ decides the change; "Fidelity first" above has the reasoning.
 ### Measured on the TouchPad (2026-11-03)
 
 Measured with `luna-send` on the reference TouchPad (webOS CE 3.1.0), except S14, which needed
-a probe app, and B4, read from LunaCE's source. Code for the three changes is written and
-not yet tested; it goes into a 0.9.x point release.
+a probe app, and B4, read from LunaCE's source. The three changes were tested on the Galaxy
+Z Fold3 on 2026-11-04 over the novacom relay's `luna-send` (private, and `-P` for public), each
+answer the device's word for word; they go into the release after 0.9.1.
 
 | Item | What the device does | So |
 |---|---|---|

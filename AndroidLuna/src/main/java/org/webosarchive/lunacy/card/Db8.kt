@@ -335,7 +335,7 @@ class Db8(private val service: String, file: File?,
     // ---- kinds ----
 
     private fun putKind(caller: String, p: JSONObject): String {
-        val id = required(caller, p, "id") as String
+        val id = typed<String>(caller, p, "id")
         val owner = p.optString("owner", caller)
         val old = kinds[id]
         if (caller != CONFIGURATOR && (!related(caller, owner) || (old != null && !related(caller, old.owner)))) throw DbError(-3963, "db: permission denied")
@@ -346,7 +346,7 @@ class Db8(private val service: String, file: File?,
     }
 
     private fun delKind(caller: String, p: JSONObject): String {
-        val id = required(caller, p, "id") as String
+        val id = typed<String>(caller, p, "id")
         val k = kind(id)
         if (!related(caller, k.owner)) throw DbError(-3963, "db: permission denied")
         db.delete("objects", "kind = ?", arrayOf(id))
@@ -448,7 +448,7 @@ class Db8(private val service: String, file: File?,
     }
 
     private fun putPermissions(caller: String, p: JSONObject): String {
-        val perms = required(caller, p, "permissions") as JSONArray
+        val perms = typed<JSONArray>(caller, p, "permissions")
         for (i in 0 until perms.length()) {
             val pm = perms.getJSONObject(i)
             val k = kind(pm.optString("object"))
@@ -528,7 +528,7 @@ class Db8(private val service: String, file: File?,
     }
 
     private fun put(caller: String, p: JSONObject): String {
-        val objs = required(caller, p, "objects") as JSONArray
+        val objs = objectsParam(caller, p)
         val prepared = ArrayList<Pair<JSONObject?, JSONObject>>()
         for (i in 0 until objs.length()) {
             val o = JSONObject(objs.getJSONObject(i).toString())
@@ -563,7 +563,7 @@ class Db8(private val service: String, file: File?,
     }
 
     private fun get(caller: String, p: JSONObject): String {
-        val ids = required(caller, p, "ids") as JSONArray
+        val ids = typed<JSONArray>(caller, p, "ids")
         val results = JSONArray()
         for (i in 0 until ids.length()) byId(ids.getString(i))?.let { o -> checkAccess(caller, o.getString("_kind")); results.put(o) }
         return JSONObject().put("returnValue", true).put("results", results).toString()
@@ -571,13 +571,14 @@ class Db8(private val service: String, file: File?,
 
     private fun merge(caller: String, p: JSONObject): String {
         if (p.has("query")) {
-            val props = required(caller, p, "props") as JSONObject
-            checkAccess(caller, p.getJSONObject("query").optString("from"), "update")
-            val matches = run(caller, p.getJSONObject("query"), search = false, validate = true).first
+            val props = typed<JSONObject>(caller, p, "props")
+            val q = queryParam(caller, p)
+            checkAccess(caller, q.optString("from"), "update")
+            val matches = run(caller, q, search = false, validate = true).first
             transaction { for (o in matches) mergeOne(o, props) }
             return JSONObject().put("returnValue", true).put("count", matches.size).toString()
         }
-        val objs = required(caller, p, "objects") as JSONArray
+        val objs = objectsParam(caller, p)
         val results = JSONArray()
         transaction {
             for (i in 0 until objs.length()) {
@@ -635,12 +636,13 @@ class Db8(private val service: String, file: File?,
     private fun del(caller: String, p: JSONObject): String {
         val purge = p.optBoolean("purge")
         if (p.has("query")) {
-            checkAccess(caller, p.getJSONObject("query").optString("from"), "delete")
-            val matches = run(caller, p.getJSONObject("query"), search = false, validate = true).first
+            val q = queryParam(caller, p)
+            checkAccess(caller, q.optString("from"), "delete")
+            val matches = run(caller, q, search = false, validate = true).first
             transaction { for (o in matches) delOne(o, purge) }
             return JSONObject().put("returnValue", true).put("count", matches.size).toString()
         }
-        val ids = required(caller, p, "ids") as JSONArray
+        val ids = typed<JSONArray>(caller, p, "ids")
         val results = JSONArray()
         transaction {
             for (i in 0 until ids.length()) {
@@ -666,7 +668,7 @@ class Db8(private val service: String, file: File?,
     // ---- queries ----
 
     private fun find(caller: String, p: JSONObject, call: Bus.Call?, search: Boolean): String {
-        val q = required(caller, p, "query") as JSONObject
+        val q = queryParam(caller, p)
         if (!search && q.has("filter")) throw DbError(-3978, "db: filter not allowed in find")
         val (all, kindsQueried) = run(caller, q, search, validate = true)
         val limit = q.optInt("limit", MAX_LIMIT).coerceIn(1, MAX_LIMIT)
@@ -690,7 +692,7 @@ class Db8(private val service: String, file: File?,
      * with records already past the revision it last saw.
      */
     private fun watch(caller: String, p: JSONObject, call: Bus.Call?): String {
-        val q = required(caller, p, "query") as JSONObject
+        val q = queryParam(caller, p)
         val (results, kindsQueried) = run(caller, q, search = false, validate = true)
         if (results.isNotEmpty()) return FIRED
         if (call != null) addWatch(call, kindsQueried, clauses(q.optJSONArray("where")))
@@ -980,7 +982,7 @@ class Db8(private val service: String, file: File?,
     // ---- batch ----
 
     private fun batch(caller: String, p: JSONObject): String {
-        val ops = required(caller, p, "operations") as JSONArray
+        val ops = typed<JSONArray>(caller, p, "operations")
         val responses = JSONArray()
         for (i in 0 until ops.length()) {
             val op = ops.getJSONObject(i)
@@ -1025,6 +1027,35 @@ class Db8(private val service: String, file: File?,
 
     private fun required(caller: String, p: JSONObject, name: String): Any =
         p.opt(name) ?: throw DbError(22, "invalid parameters: caller='$caller' error='required property not found - '$name''")
+
+    /**
+     * A parameter of the wrong type, as db8 answers it (measured on the reference TouchPad:
+     * `put {"objects":"x"}`, `get {"ids":"x"}`, `del {"ids":5}`, `merge {"objects":{}}`).
+     */
+    private fun invalidType(caller: String, name: String) =
+        DbError(22, "invalid parameters: caller='$caller' error='invalid type for property '$name''")
+
+    private inline fun <reified T> typed(caller: String, p: JSONObject, name: String): T =
+        required(caller, p, name) as? T ?: throw invalidType(caller, name)
+
+    /** An array of objects: `put {"objects":[5]}` is the same "invalid type" on the device. */
+    private fun objectsParam(caller: String, p: JSONObject, name: String = "objects"): JSONArray {
+        val a = typed<JSONArray>(caller, p, name)
+        for (i in 0 until a.length()) if (a.opt(i) !is JSONObject) throw invalidType(caller, name)
+        return a
+    }
+
+    /**
+     * A query. One that isn't an object is reported by its missing `from` (measured: `find` and
+     * `del` with `{"query":"x"}`), and a `from` that isn't a string as the wrong type.
+     */
+    private fun queryParam(caller: String, p: JSONObject): JSONObject {
+        val q = required(caller, p, "query") as? JSONObject
+            ?: throw DbError(22, "invalid parameters: caller='$caller' error='required property not found - 'from' for property 'query''")
+        if (q.has("from") && q.opt("from") !is String)
+            throw DbError(22, "invalid parameters: caller='$caller' error='invalid type for property 'from' for property 'query''")
+        return q
+    }
 
     private fun ok() = JSONObject().put("returnValue", true).toString()
     private fun error(code: Int, text: String) = JSONObject().put("errorCode", code).put("errorText", text).put("returnValue", false).toString()

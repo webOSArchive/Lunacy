@@ -513,3 +513,4 @@ WebView 153.0.8010.57. Colour e-ink screen, 1264 x 1680 at 300 dpi. No Lunacy be
 | Change | How | Note |
 |---|---|---|
 | Lunacy 0.7.2 (build 266) installed | `adb install` of the signed arm32 release, then `adb install -r` of the signed arm64 release over it, at codepoet's request | Boox disables a package installed over adb (`enabled=3`, `pm list packages -d`): `am start` says the activity "does not exist". `pm enable org.webosarchive.lunacy` turned it on, and it opens on First Use. |
+| 0.9.1 on the Pixel Tablet (2026-11-04) | codepoet's ask: the signed arm64 **release** of Lunacy and LunaKeyboard, build 430 (0.9.1, 137fabc), over the 0.9.0 releases (Lunacy 392, keyboard 388) with `adb install -r` over Wi-Fi (`192.168.10.153:5555`); data kept, nothing else changed. |

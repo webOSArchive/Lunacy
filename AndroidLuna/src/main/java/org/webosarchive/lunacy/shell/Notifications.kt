@@ -259,7 +259,7 @@ class DashboardMenu(context: Context, private val luna: Luna, private val onDism
     }
 
     override fun add(w: AppWindow) {
-        val row = Row(w)
+        val row = DashboardRow(context, w, luna.px(BADGE_W).toFloat(), DISMISS_MS, rightOnly = true, onMoved = { rows.invalidate() }, onDismiss = onDismiss)
         // Newest first: the row that was on top gets the divider above it.
         if (rows.childCount > 0) (rows.getChildAt(0).layoutParams as LinearLayout.LayoutParams).topMargin = divider()
         rows.addView(row, 0, LinearLayout.LayoutParams(luna.px(CONTENT_W), luna.px(ROW_H)))
@@ -269,14 +269,14 @@ class DashboardMenu(context: Context, private val luna: Luna, private val onDism
 
     /** DashboardWindowContainer::focusAllWindows, as the drop-down opens or closes. */
     private fun focusAll(focus: Boolean) {
-        for (i in 0 until rows.childCount) (rows.getChildAt(i) as? Row)?.window?.sendFocus(focus)
+        for (i in 0 until rows.childCount) (rows.getChildAt(i) as? DashboardRow)?.window?.sendFocus(focus)
     }
 
     private fun divider() = luna.image("menu-divider.png")?.height ?: luna.px(2)
 
     override fun remove(w: AppWindow) {
         for (i in 0 until rows.childCount) {
-            val r = rows.getChildAt(i) as Row
+            val r = rows.getChildAt(i) as DashboardRow
             if (r.window == w) { r.removeView(w); rows.removeViewAt(i); break }
         }
         if (rows.childCount > 0) (rows.getChildAt(0).layoutParams as LinearLayout.LayoutParams).topMargin = 0
@@ -353,76 +353,6 @@ class DashboardMenu(context: Context, private val luna: Luna, private val onDism
             val y = scroller.height - luna.px(28f)
             luna.nine(c, "menu-dropdown-scrollfade-bottom.png", RectF(x0, y, x1, y + luna.px(30f)), 20, 0, 20, 0, p)
             luna.image("menu-arrow-down.png")?.let { c.drawBitmap(it, (width - it.width) / 2f, y + luna.px(10f), p) }
-        }
-    }
-
-    /**
-     * One dashboard: its window, draggable to the right to dismiss (threshold width/4). A
-     * dashboard opened with `webosDragMode: "manual"` - every Enyo dashboard - handles its own
-     * swipes: only its 50 px badge at the left drags the row, and every other touch is the
-     * app's (DashboardWindowContainer::mousePressEvent).
-     *
-     * Otherwise the row owns the touch, and the page hears of it only once it has ended as a
-     * tap: a press and a release at the point it went down (DashboardWindowContainer::handleTap).
-     * Given the touch from the start, the page took a swipe's cancel as a lift that never left
-     * the tap radius, and Mojo opened the app mid-swipe.
-     */
-    @SuppressLint("ViewConstructor")
-    inner class Row(val window: AppWindow) : FrameLayout(context) {
-        private var downX = 0f
-        private var downY = 0f
-        private var tapX = 0f
-        private var tapY = 0f
-        private var mine = true
-        /** Past the slop sideways: the row follows the finger. */
-        private var dragging = false
-        /** Past the slop at all: whatever happens next, it isn't a tap. */
-        private var moved = false
-        private val slop = ViewConfiguration.get(context).scaledTouchSlop
-        private val manual get() = window.attributes.optString("webosDragMode") == "manual"
-
-        init { addView(window, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)) }
-
-        override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
-            if (e.actionMasked == MotionEvent.ACTION_DOWN) {
-                downX = e.rawX; downY = e.rawY; tapX = e.x; tapY = e.y
-                dragging = false; moved = false
-                mine = !manual || e.x <= luna.px(BADGE_W)
-            }
-            return mine
-        }
-
-        @SuppressLint("ClickableViewAccessibility")
-        override fun onTouchEvent(e: MotionEvent): Boolean {
-            when (e.actionMasked) {
-                MotionEvent.ACTION_MOVE -> {
-                    val dx = e.rawX - downX; val dy = e.rawY - downY
-                    if (!moved && (abs(dx) > slop || abs(dy) > slop)) {
-                        moved = true
-                        // Sideways is the row's; up and down is the list's, which takes it.
-                        if (abs(dx) > abs(dy)) { dragging = true; parent.requestDisallowInterceptTouchEvent(true) }
-                    }
-                    if (dragging) { translationX = dx.coerceAtLeast(0f); rows.invalidate() }  // right only
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (e.actionMasked == MotionEvent.ACTION_UP && !moved) { tap(e); return true }
-                    if (translationX > width / 4f) {
-                        // Off to the right by one and a half widths (removeWindow's animation).
-                        animate().translationX(width * 1.5f).setDuration(DISMISS_MS).setInterpolator(Easing.Linear)
-                            .setUpdateListener { rows.invalidate() }
-                            .withEndAction { onDismiss(window) }.start()
-                    } else animate().translationX(0f).setDuration(DISMISS_MS).setUpdateListener { rows.invalidate() }.start()
-                }
-            }
-            return true
-        }
-
-        /** The tap, given to the page as a press and a release where the finger went down. */
-        private fun tap(up: MotionEvent) {
-            for (action in intArrayOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
-                MotionEvent.obtain(up).apply { this.action = action; setLocation(tapX, tapY) }
-                    .also { window.dispatchTouchEvent(it); it.recycle() }
-            }
         }
     }
 }

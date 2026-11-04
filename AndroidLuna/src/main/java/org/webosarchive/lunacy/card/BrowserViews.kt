@@ -174,7 +174,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
 
     internal fun send(id: Int, method: String, vararg args: Any?) {
         val a = JSONArray(); args.forEach { a.put(it ?: JSONObject.NULL) }
-        window.evaluateJavascript(jsSafe("window.__lunacyWebView&&__lunacyWebView($id,${JSONObject.quote(method)},$a)"), null)
+        window.evaluateJavascript(jsSafe(PageHooks.call(PageHooks.WEB_VIEW, "$id", JSONObject.quote(method), a.toString())), null)
     }
 
     /** A webOS path, in the webOS root; /media/internal through UserFiles, as apps see it. */

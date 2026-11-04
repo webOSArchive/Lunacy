@@ -222,10 +222,10 @@ open class AppWindow(
         settings.userAgentString = profile.userAgent
         LocalNet.init(context)
         net = NetShim(appId, settings.userAgentString, profile.carrierCode, { page }) { id ->
-            main.post { if (!destroyed) evaluateJavascript("window.__lunacyNetDone&&__lunacyNetDone($id)", null) }
+            main.post { if (!destroyed) evaluateJavascript(PageHooks.call(PageHooks.NET_DONE, "$id"), null) }
         }
         sql = WebSql(context, appId, { page }) { id ->
-            main.post { if (!destroyed) evaluateJavascript("window.__lunacySqlDone&&__lunacySqlDone($id)", null) }
+            main.post { if (!destroyed) evaluateJavascript(PageHooks.call(PageHooks.SQL_DONE, "$id"), null) }
         }
         // 1 CSS px = 1 TouchPad px, as the shell uses; the layout width follows from it. On a
         // phone that may be scaled down ([fit]); the display's own size stands in for the
@@ -346,7 +346,7 @@ open class AppWindow(
         if (destroyed) return
         var done = false
         val finish = { if (!done) { done = true; destroy() } }
-        evaluateJavascript("try{window.__lunacyUnload&&__lunacyUnload()}catch(e){}") { finish() }
+        evaluateJavascript("try{${PageHooks.call(PageHooks.UNLOAD)}}catch(e){}") { finish() }
         main.postDelayed(finish, UNLOAD_MS)
     }
 
@@ -383,7 +383,7 @@ open class AppWindow(
      * has to do this part itself.
      */
     fun removeInputFocus() = evaluateJavascript(
-        "(function(){try{if(window.__lunacyRemoveInputFocus){__lunacyRemoveInputFocus();}}catch(e){console.error('removeInputFocus: '+e);}})()", null)
+        "(function(){try{${PageHooks.call(PageHooks.REMOVE_INPUT_FOCUS)};}catch(e){console.error('removeInputFocus: '+e);}})()", null)
 
     /**
      * Relaunches the app as LunaSysMgr did: launchParams become params (JSON, or "" for none),
@@ -391,7 +391,7 @@ open class AppWindow(
      * brings the app's first card forward.
      */
     open fun relaunch(params: String, done: (Boolean) -> Unit) = evaluateJavascript(
-        "(function(){try{return window.__lunacyRelaunch?__lunacyRelaunch(${jsString(params)}):false}catch(e){console.error('relaunch: '+e);return false}})()"
+        "(function(){try{return window.${PageHooks.RELAUNCH}?${PageHooks.RELAUNCH}(${jsString(params)}):false}catch(e){console.error('relaunch: '+e);return false}})()"
     ) { done(it == "true") }
 
     /**
@@ -473,7 +473,7 @@ open class AppWindow(
     fun rescale() {
         val target = pageScale
         setInitialScale(Math.round(target * 100))
-        evaluateJavascript("try{window.__lunacyViewport&&window.__lunacyViewport()}catch(e){}") {
+        evaluateJavascript("try{${PageHooks.call(PageHooks.VIEWPORT)}}catch(e){}") {
             if (destroyed) return@evaluateJavascript
             @Suppress("DEPRECATION") val now = scale
             if (now > 0f && Math.abs(target / now - 1f) > 0.005f) zoomBy((target / now).coerceIn(0.02f, 50f))
@@ -533,7 +533,7 @@ open class AppWindow(
                 // arrives after the page changed is the old page's, and stays with it.
                 val from = page
                 val call = host.bus.call(appId, url, params) { reply ->
-                    main.post { if (!destroyed && from == page) evaluateJavascript("PalmServiceBridge.__reply($token, ${jsString(reply)})", null) }
+                    main.post { if (!destroyed && from == page) evaluateJavascript("${PageHooks.REPLY}($token, ${jsString(reply)})", null) }
                 }
                 if (call.subscribe && !call.cancelled) calls[token] = call
             }

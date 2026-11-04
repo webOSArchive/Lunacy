@@ -66,6 +66,7 @@ import org.webosarchive.lunacy.card.NetTools
 import org.webosarchive.lunacy.card.NotificationIcons
 import org.webosarchive.lunacy.card.Novacom
 import org.webosarchive.lunacy.card.PdkRuntime
+import org.webosarchive.lunacy.card.PageHooks
 import org.webosarchive.lunacy.card.PdkWindow
 import org.webosarchive.lunacy.card.Placement
 import org.webosarchive.lunacy.card.Power
@@ -1143,7 +1144,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val target = cards.maximized?.window ?: return
         val clip = (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).primaryClip
         val text = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString() ?: return
-        target.evaluateJavascript("window.__lunacyPaste&&__lunacyPaste(${jsString(text)})", null)
+        target.evaluateJavascript(PageHooks.call(PageHooks.PASTE, jsString(text)), null)
     }
 
     override fun playSound(window: AppWindow, soundClass: String, soundFile: String, duration: Int) =

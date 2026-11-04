@@ -68,6 +68,45 @@ class SetupActivity : Activity() {
         }
         refresh()
         root.addView(sizes)
+        // webOS's Text Assist, as its settings app had it (com.palm.app.textassist).
+        root.addView(TextView(this).apply {
+            text = "Text Assist"
+            setTextColor(Color.rgb(0xb4, 0xb4, 0xb4))
+            gravity = Gravity.CENTER
+            setPadding(0, pad * 2, 0, 0)
+        })
+        for ((key, label) in listOf("autoCapitalization" to "Auto-Capitalization", "autoCorrection" to "Auto-Correction",
+                "doubleSpaceForPeriod" to "Double Space For Period")) {
+            root.addView(android.widget.CheckBox(this).apply {
+                text = label
+                setTextColor(Color.WHITE)
+                isChecked = when (key) {
+                    "autoCapitalization" -> TextAssist.autoCap(this@SetupActivity)
+                    "autoCorrection" -> TextAssist.autoCorrect(this@SetupActivity)
+                    else -> TextAssist.doubleSpace(this@SetupActivity)
+                }
+                setOnCheckedChangeListener { _, on -> TextAssist.set(this@SetupActivity, key, on) }
+            })
+        }
+        // What a correction does to say so: Text Assist's Sound, Vibrate or Mute.
+        val alerts = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        val alertChoices = listOf(TextAssist.Alert.SOUND to "Sound", TextAssist.Alert.VIBRATE to "Vibrate", TextAssist.Alert.MUTE to "Mute")
+        val alertButtons = ArrayList<Button>()
+        fun refreshAlert() { val cur = TextAssist.alert(this); alertButtons.forEachIndexed { i, b -> b.alpha = if (alertChoices[i].first == cur) 1f else 0.5f } }
+        for ((v, label) in alertChoices) {
+            val b = Button(this).apply {
+                text = label
+                setOnClickListener { TextAssist.setAlert(this@SetupActivity, v); refreshAlert() }
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            alertButtons += b; alerts.addView(b)
+        }
+        refreshAlert()
+        root.addView(alerts)
+        // Shortcuts and learned words are Android's personal dictionary (Shortcuts.kt).
+        root.addView(button("Edit User Dictionary") {
+            runCatching { startActivity(Intent(Settings.ACTION_USER_DICTIONARY_SETTINGS)) }
+        })
         // Somewhere to try it, so the two steps above can be checked without leaving the app.
         root.addView(EditText(this).apply {
             hint = "Try it here"
@@ -77,7 +116,11 @@ class SetupActivity : Activity() {
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { topMargin = pad * 2 }
         })
-        setContentView(root)
+        // Android 15 lays an app out under its status and navigation bars; this screen keeps
+        // clear of them, as it did on every earlier Android.
+        setContentView(android.widget.ScrollView(this).apply {
+            setBackgroundColor(Color.rgb(0x28, 0x28, 0x28)); fitsSystemWindows = true; addView(root)
+        })
     }
 
     private fun button(label: String, onClick: () -> Unit) = Button(this).apply {

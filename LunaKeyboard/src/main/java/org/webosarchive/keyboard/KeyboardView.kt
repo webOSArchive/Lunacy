@@ -112,6 +112,12 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
     private enum class Shift { OFF, ONCE, LOCK }
     private var shift = Shift.OFF
     private var symbols = false
+    /**
+     * The field asks for a capital here (the start of a sentence), and Auto-Capitalization is
+     * on: the letters show and type as capitals and the shift key wears its "on" arrow on its
+     * plain plate, as LunaCE drew `isAutoCapActive` - until a letter is typed.
+     */
+    private var autoCap = false
     private var lastShiftTap = 0L
 
     /**
@@ -242,7 +248,7 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
         Fn.SHIFT -> when (shift) {
             Shift.LOCK -> "icon-shift-lock.png"
             Shift.ONCE -> "icon-shift-on.png"
-            Shift.OFF -> "icon-shift.png"
+            Shift.OFF -> if (autoCap) "icon-shift-on.png" else "icon-shift.png"
         }
         else -> null
     }
@@ -265,7 +271,7 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
         val size = 24f
         var nudge = 1f
         if (stacked && box.height().toInt() / 3 < size - 2) { stacked = false; across = true; nudge = 2f }
-        val capitalised = shift != Shift.OFF
+        val capitalised = shift != Shift.OFF || (autoCap && main.isLetter())
         val face = if (capitalised) main.uppercaseChar().toString() else main.toString()
         // Which of the two the key would type right now - shift for the number row and the
         // punctuation, the symbol key for the letters. See usesAlt.
@@ -281,6 +287,21 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
         // when the mapped key isn't the plain one).
         val mainColor = if (live) disabledColor else activeColor
         val altColor = if (live) activeColor else disabledColor
+        // Too narrow for the two side by side at a readable size (a phone's keys are half a
+        // TouchPad's): the key's own character full size in the middle, its alternate small in
+        // the top right corner, as a superscript (codepoet, 2026-11-04, on the Kyocera).
+        if (across && superscriptRow(z.row)) {
+            // The character a little left of centre, leaving the corner to the superscript.
+            label(c, face, RectF(box.left, box.top, box.right - box.width() * SUPERSCRIPT_ROOM, box.bottom), mainColor, size, false)
+            val sup = size * SUPERSCRIPT
+            text.textSize = sup
+            val m = text.fontMetrics
+            text.color = altColor
+            text.textAlign = Paint.Align.RIGHT
+            c.drawText(alt!!, box.right - SUPERSCRIPT_INSET, box.top + SUPERSCRIPT_INSET - m.ascent, text)
+            text.textAlign = Paint.Align.CENTER
+            return
+        }
         if (across) {
             val lead = if (live) 5f else 4f
             val r = RectF(box.left + lead, box.top + 1, box.right - (9 - lead), box.bottom + 1)
@@ -295,6 +316,21 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
             val upper = RectF(box.left, box.top + 10, box.right, box.top + 10 + third)
             label(c, face, lower, mainColor, sized(size, mainColor), false)
             label(c, alt!!, upper, altColor, sized(size, altColor), false)
+        }
+    }
+
+    /**
+     * Whether a row's pairs are too narrow to stand side by side at a readable size. Decided
+     * for the whole row, so that it is all one style: one key short of room (2, 5 and 7, whose
+     * @, % and & are wide) puts every key in it into superscripts.
+     */
+    private fun superscriptRow(row: Int): Boolean {
+        text.typeface = prelude; text.textSize = 24f
+        return zones.any { z ->
+            if (z.row != row || z.key.weight <= 0 || z.key.alt == z.key.main) return@any false
+            val main = z.key.main.toChar().toString()
+            val alt = z.key.altText ?: z.key.alt.toChar().toString()
+            z.rect.width() / 2 - 16 < Math.max(text.measureText(main), text.measureText(alt))
         }
     }
 
@@ -454,6 +490,9 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
         if (e.actionMasked == MotionEvent.ACTION_DOWN) { lastX = x; lastY = y }
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                // The transparent room above the keys isn't the keyboard's: a touch there (the
+                // correction bubble's) goes on to the view beneath.
+                if (e.y < keyboardTop()) return false
                 val z = zoneAt(x, y) ?: return true
                 if (z.key.main == Fn.TRACKBALL) {
                     trackball = true; trackDeltaX = 0f; trackDeltaY = 0f
@@ -507,7 +546,8 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
     private fun commit() {
         val chars = extended
         if (chars != null) {
-            host.onText(chars[extendedIndex].toString())
+            val ch = chars[extendedIndex].toString()
+            host.onText(if (autoCap && shift == Shift.OFF) ch.uppercase() else ch)
             if (shift == Shift.ONCE) shift = Shift.OFF
             return
         }
@@ -521,6 +561,7 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
                     else -> Shift.OFF
                 }
                 lastShiftTap = now
+                autoCap = false
                 return
             }
             Fn.SYMBOL -> { symbols = !symbols; return }
@@ -535,14 +576,15 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
         val mapped =
             if (usesAlt(key)) key.altText ?: key.alt.toChar().toString()
             else key.main.toChar().toString()
-        host.onText(if (shift != Shift.OFF) mapped.uppercase() else mapped)
+        val caps = shift != Shift.OFF || (autoCap && mapped.firstOrNull()?.isLetter() == true)
+        host.onText(if (caps) mapped.uppercase() else mapped)
         // One shift, one character; a lock is only ended by the shift key itself.
         if (shift == Shift.ONCE) shift = Shift.OFF
     }
 
     /** Called when the field being edited changes, so the keyboard starts from a clean state. */
     fun reset() {
-        shift = Shift.OFF; symbols = false
+        shift = Shift.OFF; symbols = false; autoCap = false
         hideExtended()
         pressed = null; pressedZone = null
         trackball = false; trackVX = 0f; trackVY = 0f
@@ -550,7 +592,16 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
         invalidate()
     }
 
+    /** Whether the field wants a capital next (worked out by the service from Android's caps mode). */
+    fun setAutoCap(on: Boolean) {
+        if (autoCap != on) { autoCap = on; invalidate() }
+    }
+
     companion object {
+        /** The corner alternate on a key too narrow for webOS's side-by-side pair. */
+        private const val SUPERSCRIPT = 0.6f
+        private const val SUPERSCRIPT_INSET = 7f
+        private const val SUPERSCRIPT_ROOM = 0.22f
         // webOS's own timings (LunaCE's TabletKeyboard.cpp).
         private const val FIRST_REPEAT = 350L
         private const val LETTER_REPEAT = 120L

@@ -1,0 +1,16 @@
+Text Assist's art and sound: what webOS showed and played when it corrected a word.
+
+These are the reference TouchPad's (webOS CE 3.1.0), copied unchanged on 2026-11-04:
+
+- ate-*.png: /usr/palm/webkit/images ("ate", auto text entry): the dotted underlines a
+  corrected word (gray) and its original (orange) wore, and the bubble of alternates - its
+  ends, middle, pointer up and down, dividers, scroll fades and plus.
+- text_entry_correction.wav: /usr/share/systemsounds/text_entry_correction.pcm, the "plop"
+  of a correction, given a WAV header and otherwise unchanged (16-bit mono at 44.1 kHz,
+  measured against the panel sound the device has as both PCM and MP3).
+
+Copyright Palm, Inc. / Hewlett-Packard; never released under an open licence; distributed by
+Lunacy as abandonware, like Mojo and the Prelude fonts.
+
+dictionary.txt is not the TouchPad's: it is Pre Keyboard's word list (SCOWL and FrequencyWords,
+CC BY-SA 4.0). See LunaKeyboard/NOTICE.

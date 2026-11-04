@@ -23,8 +23,77 @@ webOS's tablet keyboard, rebuilt as an `InputMethodService`:
   the letters come out capital, the number row goes on typing numbers, and only the shift key
   ends the lock. Typed on the tablet: a single shift then `1 q` gives `!q`, and locked,
   `q w 1 q e` gives `QW1QE`.
+- **Return** says "Enter", as webOS's did, and "Done" in a single-line field, unless the field
+  names its own action (Go, Search, Send, Next).
+- On a screen too narrow for webOS's side-by-side pairs (a phone's number row, where each half
+  of a key had room for a 6 px glyph), the keys show their own character full size and the
+  alternate small in the top right corner, as a superscript - the whole row, so that it is
+  all one style.
 - The **scroll ball**: the little ball in the top right corner that drags the insertion
   point around. Hold shift while you drag it and it selects instead.
+- **Text Assist**: webOS's auto-correction with its plop, dotted line and bubble of
+  alternates, auto-capitalization, double space for period and shortcuts (below).
+
+## Text Assist
+
+webOS corrected as you typed, and so does this keyboard - the TouchPad's Text Assist, measured
+on the reference TouchPad (2026-11-04):
+
+- **Auto-Correction.** A space or punctuation ends a word, and a misspelling becomes the word
+  you most likely meant, as webOS's SmartKey made it its `auto-accept` guess: "teh" becomes
+  "the", "tomorow" "tomorrow", "dont" "don't", "im" "I'm". The case you typed is kept. A
+  correction makes the TouchPad's little plop (`text_entry_correction`), or vibrates, or says
+  nothing - Text Assist's Sound, Vibrate and Mute.
+- **The dotted line and the bubble.** A corrected word is underlined with WebKit's gray dots.
+  Put the cursor in it - tap it - and webOS's bubble opens over it: the word as you typed it,
+  with its orange dots, and the other likely spellings beside it. Tap one to use it. Backspace
+  straight after a correction puts the word back as typed. Either way the word you meant is
+  left alone after that.
+- **Auto-Capitalization**, where the field asks for capitals (a sentence's start): the letters
+  show and type as capitals and the shift key wears its "on" arrow.
+- **Double Space For Period**: two spaces after a word make ". ".
+- **Shortcuts and learned words** are Android's personal dictionary (Settings, or Edit User
+  Dictionary in the setup screen): an entry's shortcut expands as you type it, as webOS's
+  Shortcuts did, and its words are never corrected.
+
+What you type goes in as plain text, as on webOS, with nothing drawn under the word being
+typed, and there is no suggestion bar: webOS had none.
+
+**The words** are the keyboard's own, so corrections are the same on every device: Alan
+Morford's matcher and English word list from [Pre Keyboard](https://github.com/alan-morford/prekeyboard)
+(see NOTICE), with the TouchPad's key layout for which keys are neighbours. A typo is matched
+to the nearest common word, where hitting the key next door, swapping two letters or doubling
+one costs less than other slips. Android's own spell checker was tried first and dropped:
+Samsung's answers every word as correct to any keyboard but Samsung's (measured on the Galaxy
+Z Fold3 - with LunaKeyboard active even an app's red underlines stop), and Gboard's accepts
+"teh", "helo" and "adn".
+
+**How it draws on the app's text.** On webOS the text field drew the dots and the bubble. An
+Android keyboard can't draw inside another app, so its window reaches up over the screen,
+transparent, and draws them where Android says the word is (`CursorAnchorInfo`, which native
+fields, Chrome and the WebView report; asked for again once the field has its first
+selection, because the first request is often lost). Only the keys and an open bubble take
+touches; the rest of the screen stays the app's. A field that doesn't say where its text is
+still gets its corrections, without the dots. Where the field moves without saying so (a web
+page scrolled by the finger), the dots can be left behind until the next edit. The dots last
+while the field has the keyboard.
+
+## Built for the newest Android
+
+The keyboard targets Android 15 (API 35) and still runs on Android 5 (minSdk 21), which
+ignores a target newer than itself. It used to target API 24, the oldest newer Android would
+install, but an old target counts against a sideloaded keyboard with Play Protect (codepoet,
+2026-11-04). What the newer target changes here, and what was done:
+
+- Android 15 draws an app under its status and navigation bars: the setup screen keeps clear
+  of them (`fitsSystemWindows`).
+- Android 15 lays the keyboard's own window under the navigation bar too, and draws the bar's
+  buttons (back, the keyboard switcher) over whatever is there: the keyboard stands on the
+  bar, over a strip in its background's bottom colour, as the system painted it before.
+- Android 11 lets an app see only the content providers it names: the manifest names the
+  personal dictionary's (`<queries>`), for shortcuts and learned words.
+- Nothing else applies: the keyboard posts no notifications, registers no receivers and makes
+  no PendingIntents, and its service and setup screen were already marked exported.
 
 ## The scroll ball
 

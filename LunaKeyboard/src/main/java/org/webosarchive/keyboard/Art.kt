@@ -30,6 +30,15 @@ class Art(private val context: Context) {
         } catch (e: Exception) { null }
     }
 
+    /** Text Assist's art (WebKit's `ate-*` from the TouchPad), at its own pixel size. */
+    fun assist(name: String): Bitmap? = bitmaps.getOrPut("assist/$name") {
+        try {
+            context.assets.open("assist/$name").use {
+                BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inScaled = false })
+            }
+        } catch (e: Exception) { null }
+    }
+
     /** Prelude, the face webOS set the keyboard in; the system sans if it isn't here. */
     fun font(name: String): Typeface = fonts.getOrPut(name) {
         try { Typeface.createFromAsset(context.assets, "fonts/$name") } catch (e: Exception) {

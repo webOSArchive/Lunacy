@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Text Assist: shortcuts and learned words are Android's personal dictionary, which
+         Android 6 and later lets only the current keyboard read; and the correction alert
+         can be a buzz instead of the plop. -->
+    <uses-permission android:name="android.permission.READ_USER_DICTIONARY" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Android 11 and later only let an app see the providers it names: the personal
+         dictionary's. Earlier Android ignores this. -->
+    <queries>
+        <provider android:authorities="user_dictionary" />
+    </queries>
     <application
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"

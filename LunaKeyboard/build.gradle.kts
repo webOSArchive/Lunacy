@@ -20,10 +20,11 @@ android {
     defaultConfig {
         applicationId = "org.webosarchive.keyboard"
         minSdk = 21
-        // The oldest target newer Android will install: Android 14 refuses below 23 and
-        // Android 15 below 24. minSdk keeps Android 5, which ignores a target above its
-        // own level. What 23 and 24 change on newer devices is in Docs/architecture.md.
-        targetSdk = 24
+        // The newest Android it is built for (codepoet, 2026-11-04: an old target counts against
+        // a sideloaded keyboard with Play Protect). minSdk keeps Android 5, which ignores a
+        // target above its own level. What a new target changes for a keyboard, and what was
+        // done about it, is in README.md ("Built for the newest Android").
+        targetSdk = 35
         versionCode = buildNumber
         versionName = "0.9.1"
     }

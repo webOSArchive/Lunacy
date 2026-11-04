@@ -321,11 +321,7 @@ class ExhibitionLayer(context: Context, private val luna: Luna) : View(context) 
 
     private fun settle(target: Int) {
         anim?.cancel()
-        anim = android.animation.ValueAnimator.ofFloat(position, target.toFloat()).apply {
-            duration = 250; interpolator = Easing.OutCubic
-            addUpdateListener { position = it.animatedValue as Float; invalidate() }
-            start()
-        }
+        anim = animateValue(position, target.toFloat(), 250, Easing.OutCubic) { position = it; invalidate() }
     }
 
     /** Dock mode always opens on the first face, as it does on a device. */

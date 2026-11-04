@@ -13,3 +13,18 @@ object Easing {
     val InCubic = TimeInterpolator { it * it * it }            // QEasingCurve 5
     val InOutQuad = TimeInterpolator { if (it < 0.5f) 2 * it * it else 1 - (-2 * it + 2).pow(2) / 2 }  // QEasingCurve 3
 }
+
+/**
+ * A float animated from [from] to [to] over [ms] with [easing], handed to [set] at each frame,
+ * and started: the cancel-then-animate every view wrote out for itself. [onEnd] runs when it
+ * ends, after a cancel too (as ValueAnimator's onAnimationEnd does).
+ */
+fun animateValue(from: Float, to: Float, ms: Long, easing: TimeInterpolator, onEnd: (() -> Unit)? = null, set: (Float) -> Unit): android.animation.ValueAnimator =
+    android.animation.ValueAnimator.ofFloat(from, to).apply {
+        duration = ms; interpolator = easing
+        addUpdateListener { set(it.animatedValue as Float) }
+        if (onEnd != null) addListener(object : android.animation.AnimatorListenerAdapter() {
+            override fun onAnimationEnd(a: android.animation.Animator) = onEnd()
+        })
+        start()
+    }

@@ -538,11 +538,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             else -> return
         }.coerceIn(0f, maxTabScroll())
         tabAnim?.cancel()
-        tabAnim = ValueAnimator.ofFloat(tabScroll, target).apply {
-            duration = Phone.TAB_SCROLL_MS; interpolator = Easing.InQuad
-            addUpdateListener { tabScroll = it.animatedValue as Float; invalidate() }
-            start()
-        }
+        tabAnim = animateValue(tabScroll, target, Phone.TAB_SCROLL_MS, Easing.InQuad) { tabScroll = it; invalidate() }
     }
     private fun currentPage() = pages[pagePos.roundToInt().coerceIn(0, pages.size - 1)]
     private fun deleteCentre(c: PointF) = PointF(c.x + luna.px(deleteDx), c.y + luna.px(deleteDy))
@@ -575,11 +571,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         movedFrom.clear(); movedFrom.putAll(now)
         moveAnim?.cancel()
         moveT = 0f
-        moveAnim = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = Params.MOVE_MS; interpolator = Easing.InQuad
-            addUpdateListener { moveT = it.animatedValue as Float; invalidate() }
-            start()
-        }
+        moveAnim = animateValue(0f, 1f, Params.MOVE_MS, Easing.InQuad) { moveT = it; invalidate() }
     }
 
     // ---- drawing ----
@@ -912,11 +904,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val to = (page.scrollY + vSide * luna.px(Params.VSCROLL)).coerceIn(0f, maxScroll(page))
         if (to != page.scrollY) {
             anim?.cancel()
-            anim = ValueAnimator.ofFloat(page.scrollY, to).apply {
-                duration = Params.VSCROLL_MS; interpolator = Easing.OutCubic
-                addUpdateListener { page.scrollY = it.animatedValue as Float; dragTo(dragX, dragY) }
-                start()
-            }
+            anim = animateValue(page.scrollY, to, Params.VSCROLL_MS, Easing.OutCubic) { page.scrollY = it; dragTo(dragX, dragY) }
         }
         postDelayed(vScroll, Params.VSCROLL_EVERY_MS)
     }
@@ -1187,11 +1175,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private fun animatePage(target: Int, ms: Long, easing: android.animation.TimeInterpolator) {
         revealTab(target)
         anim?.cancel()
-        anim = ValueAnimator.ofFloat(pagePos, target.toFloat()).apply {
-            duration = ms; interpolator = easing
-            addUpdateListener { pagePos = it.animatedValue as Float; invalidate() }
-            start()
-        }
+        anim = animateValue(pagePos, target.toFloat(), ms, easing) { pagePos = it; invalidate() }
     }
 
     /** The velocity of the flick still running, for LunaCE's "keep increasing velocity". */
@@ -1286,10 +1270,6 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
 
     private fun settle(page: Page, ms: Long) {
         val m = maxScroll(page)
-        anim = ValueAnimator.ofFloat(page.scrollY, page.scrollY.coerceIn(0f, m)).apply {
-            duration = ms; interpolator = Easing.OutCubic
-            addUpdateListener { page.scrollY = it.animatedValue as Float; invalidate() }
-            start()
-        }
+        anim = animateValue(page.scrollY, page.scrollY.coerceIn(0f, m), ms, Easing.OutCubic) { page.scrollY = it; invalidate() }
     }
 }

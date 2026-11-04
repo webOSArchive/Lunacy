@@ -252,11 +252,7 @@ class Card(
         val to = if (dim) CardLayer.Params.DIMMED else 1f
         dimAnim?.cancel()
         if (dimming == to) return
-        dimAnim = ValueAnimator.ofFloat(dimming, to).apply {
-            duration = CardLayer.Params.DIM_MS; interpolator = Easing.OutCubic
-            addUpdateListener { dimming = it.animatedValue as Float }
-            start()
-        }
+        dimAnim = animateValue(dimming, to, CardLayer.Params.DIM_MS, Easing.OutCubic) { dimming = it }
     }
     /**
      * Card-view transform, animated by CardLayer, as LunaSysMgr kept it: [gx] is the card's

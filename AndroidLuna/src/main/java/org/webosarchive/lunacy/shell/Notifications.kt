@@ -163,16 +163,10 @@ class Notifications(
     private fun animate(from: Float, to: Float, alphaTo: Float, ms: Long, easing: android.animation.TimeInterpolator, done: () -> Unit) {
         anim?.removeAllListeners(); anim?.cancel()
         val alphaFrom = statusBar.bannerAlpha
-        anim = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = ms; interpolator = easing
-            addUpdateListener {
-                val f = it.animatedValue as Float
-                statusBar.bannerProgress = from + (to - from) * f
-                statusBar.bannerAlpha = alphaFrom + (alphaTo - alphaFrom) * f
-                statusBar.redrawBanner()
-            }
-            addListener(object : AnimatorListenerAdapter() { override fun onAnimationEnd(a: Animator) { done() } })
-            start()
+        anim = animateValue(0f, 1f, ms, easing, onEnd = { done() }) { f ->
+            statusBar.bannerProgress = from + (to - from) * f
+            statusBar.bannerAlpha = alphaFrom + (alphaTo - alphaFrom) * f
+            statusBar.redrawBanner()
         }
     }
 
@@ -336,16 +330,12 @@ class DashboardMenu(context: Context, private val luna: Luna, private val onDism
         if (wantTop != topTarget) {
             topTarget = wantTop
             topAnim?.cancel()
-            topAnim = android.animation.ValueAnimator.ofFloat(topMask, wantTop).apply {
-                duration = MASK_MS; addUpdateListener { topMask = it.animatedValue as Float; invalidate() }; start()
-            }
+            topAnim = animateValue(topMask, wantTop, MASK_MS, android.view.animation.AccelerateDecelerateInterpolator()) { topMask = it; invalidate() }
         }
         if (wantBottom != bottomTarget) {
             bottomTarget = wantBottom
             bottomAnim?.cancel()
-            bottomAnim = android.animation.ValueAnimator.ofFloat(bottomMask, wantBottom).apply {
-                duration = MASK_MS; addUpdateListener { bottomMask = it.animatedValue as Float; invalidate() }; start()
-            }
+            bottomAnim = animateValue(bottomMask, wantBottom, MASK_MS, android.view.animation.AccelerateDecelerateInterpolator()) { bottomMask = it; invalidate() }
         }
     }
 

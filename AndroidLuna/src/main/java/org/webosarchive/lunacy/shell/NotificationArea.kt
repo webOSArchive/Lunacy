@@ -300,18 +300,11 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
         if (t < from) onSpace(spaceFor(t))  // shrinking: the shell grows into the space first, behind the area
         if (immediate || !isLaidOut) { place(t.toFloat(), t); onSpace(spaceFor(t)); return }
         val h = maxOf(from, t.toFloat()).toInt()
-        anim = ValueAnimator.ofFloat(from, t.toFloat()).apply {
-            duration = SPACE_MS; interpolator = Easing.OutCubic
-            addUpdateListener { place(it.animatedValue as Float, h) }
-            addListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationEnd(a: Animator) {
-                    anim = null
-                    place(t.toFloat(), t)
-                    if (t >= from) onSpace(spaceFor(t))  // grown: the shell gives up the space now the area covers it
-                }
-            })
-            start()
-        }
+        anim = animateValue(from, t.toFloat(), SPACE_MS, Easing.OutCubic, onEnd = {
+            anim = null
+            place(t.toFloat(), t)
+            if (t >= from) onSpace(spaceFor(t))  // grown: the shell gives up the space now the area covers it
+        }) { place(it, h) }
     }
 
     /** Shows [visible] px of the area, laid out [h] high: its top edge carries everything in it. */

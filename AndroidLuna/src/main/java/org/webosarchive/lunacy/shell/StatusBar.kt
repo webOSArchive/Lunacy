@@ -57,11 +57,7 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
             oldTitle = field; field = v
             titleAnim?.cancel()
             titleProgress = 0f
-            titleAnim = ValueAnimator.ofFloat(0f, 1f).apply {
-                duration = TITLE_CHANGE_MS; interpolator = Easing.Linear
-                addUpdateListener { titleProgress = it.animatedValue as Float; invalidate() }
-                start()
-            }
+            titleAnim = animateValue(0f, 1f, TITLE_CHANGE_MS, Easing.Linear) { titleProgress = it; invalidate() }
         }
     private var oldTitle: String? = null
     private var titleProgress = 1f
@@ -78,12 +74,7 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
             if (v == field) return
             field = v
             arrowAnim?.cancel()
-            arrowAnim = ValueAnimator.ofFloat(arrowProgress, if (v) 1f else 0f).apply {
-                duration = (ARROW_MS * Math.abs((if (v) 1f else 0f) - arrowProgress)).toLong()
-                interpolator = Easing.InOutQuad
-                addUpdateListener { arrowProgress = it.animatedValue as Float; invalidate() }
-                start()
-            }
+            arrowAnim = animateValue(arrowProgress, if (v) 1f else 0f, (ARROW_MS * Math.abs((if (v) 1f else 0f) - arrowProgress)).toLong(), Easing.InOutQuad) { arrowProgress = it; invalidate() }
         }
     private var arrowProgress = 0f
     private var arrowAnim: ValueAnimator? = null
@@ -105,15 +96,8 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
             if (on == shown) return
             shown = on
             anim?.cancel()
-            anim = ValueAnimator.ofFloat(progress, if (on) 1f else 0f).apply {
-                duration = (ITEM_SLIDE_MS * Math.abs((if (on) 1f else 0f) - progress)).toLong()
-                interpolator = Easing.Linear
-                addUpdateListener { progress = it.animatedValue as Float; invalidate() }
-                addListener(object : android.animation.AnimatorListenerAdapter() {
-                    override fun onAnimationEnd(a: android.animation.Animator) { if (!shown) done() }
-                })
-                start()
-            }
+            anim = animateValue(progress, if (on) 1f else 0f, (ITEM_SLIDE_MS * Math.abs((if (on) 1f else 0f) - progress)).toLong(),
+                Easing.Linear, onEnd = { if (!shown) done() }) { progress = it; invalidate() }
         }
     }
 
@@ -157,11 +141,7 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
     private var notifGroupAnim: ValueAnimator? = null
     private fun fadeNotificationGroup(show: Boolean) {
         notifGroupAnim?.cancel()
-        notifGroupAnim = ValueAnimator.ofFloat(notifGroupOpacity, if (show) 1f else 0f).apply {
-            duration = GROUP_FADE_MS; interpolator = Easing.Linear
-            addUpdateListener { notifGroupOpacity = it.animatedValue as Float; invalidate() }
-            start()
-        }
+        notifGroupAnim = animateValue(notifGroupOpacity, if (show) 1f else 0f, GROUP_FADE_MS, Easing.Linear) { notifGroupOpacity = it; invalidate() }
     }
 
     /** The banner scrolling in the notification area, and its animation state. */
@@ -186,11 +166,7 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
         notifIconsAnim?.cancel()
         val to = if (show) 1f else 0f
         if (notif.isEmpty()) { if (!show) notifIconsOpacity = 0f; return }
-        notifIconsAnim = ValueAnimator.ofFloat(notifIconsOpacity, to).apply {
-            duration = GROUP_FADE_MS; interpolator = Easing.Linear
-            addUpdateListener { notifIconsOpacity = it.animatedValue as Float; invalidate() }
-            start()
-        }
+        notifIconsAnim = animateValue(notifIconsOpacity, to, GROUP_FADE_MS, Easing.Linear) { notifIconsOpacity = it; invalidate() }
     }
     override var bannerProgress = 0f
     override var bannerAlpha = 1f
@@ -219,11 +195,7 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
         private var anim: android.animation.ValueAnimator? = null
         fun to(target: Float) {
             anim?.cancel()
-            anim = android.animation.ValueAnimator.ofFloat(value, target).apply {
-                duration = SystemMenu.FADE_MS; interpolator = Easing.Linear
-                addUpdateListener { value = it.animatedValue as Float; invalidate() }
-                start()
-            }
+            anim = animateValue(value, target, SystemMenu.FADE_MS, Easing.Linear) { value = it; invalidate() }
         }
         val tabPaint get() = Paint().apply { alpha = (value * 255).toInt() }
     }
@@ -338,16 +310,12 @@ class StatusBar(context: Context, private val luna: Luna) : View(context), Banne
         val startOpacity = fillOpacity
         val argb = android.animation.ArgbEvaluator()
         fillAnim?.cancel()
-        fillAnim = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 300; interpolator = Easing.Linear
-            addUpdateListener {
-                val f = it.animatedValue as Float
+        fillAnim = animateValue(0f, 1f, 300, Easing.Linear) {
+                val f = it
                 fillOpacity = startOpacity + (target - startOpacity) * f
                 fill.color = argb.evaluate(f, startColor, toColor) as Int
                 invalidate()
             }
-            start()
-        }
     }
 
     /** Told as the bar goes for a full-screen card or comes back: a phone's notification area goes with it. */

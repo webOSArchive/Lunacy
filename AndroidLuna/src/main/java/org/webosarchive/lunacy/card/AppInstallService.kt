@@ -62,9 +62,8 @@ class AppInstallService(private val installer: Installer, private val icons: (St
 
     fun register(bus: Bus) {
         for (m in listOf("install", "installLocal", "status", "cancel", "remove", "pause", "resume")) {
-            bus.register(SERVICE, m, Bus.CallHandler { c ->
-                if (!c.privateBus) c.reply(Bus.error("Service does not exist: $SERVICE."))
-                else when (m) {
+            bus.registerPrivate(SERVICE, m, wholeService = true, Bus.CallHandler { c ->
+                when (m) {
                     "install" -> install(c, local = false)
                     "installLocal" -> install(c, local = true)
                     "status" -> status(c)
@@ -196,15 +195,10 @@ class AppInstallService(private val installer: Installer, private val icons: (St
 
         fun register(bus: Bus) {
             if (packages != null) {
-                bus.register(INSTALLER, "installNoVerify", Bus.CallHandler { c ->
-                    if (!c.privateBus) c.reply(Bus.error("Service does not exist: $INSTALLER.")) else installNoVerify(c, packages)
-                })
-                bus.register(INSTALLER, "remove", Bus.CallHandler { c ->
-                    if (!c.privateBus) c.reply(Bus.error("Service does not exist: $INSTALLER.")) else remove(c, packages)
-                })
+                bus.registerPrivate(INSTALLER, "installNoVerify", wholeService = true, Bus.CallHandler { c -> installNoVerify(c, packages) })
+                bus.registerPrivate(INSTALLER, "remove", wholeService = true, Bus.CallHandler { c -> remove(c, packages) })
             }
-            bus.register(INSTALLER, "queryInstallCapacity", Bus.CallHandler { c ->
-                if (!c.privateBus) return@CallHandler c.reply(Bus.error("Service does not exist: $INSTALLER."))
+            bus.registerPrivate(INSTALLER, "queryInstallCapacity", wholeService = true, Bus.CallHandler { c ->
                 val p = c.params
                 if (!p.has("size")) return@CallHandler c.reply(JSONObject().put("returnValue", false)
                     .put("errorCode", "appinstaller_error").put("errorText", "missing size parameter").toString())

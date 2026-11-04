@@ -61,14 +61,11 @@
 	function Bridge() { this.token = 0; }
 	Bridge.prototype.call = function (url, params) {
 		this.cancel();
-		var t = nextToken(), sub = false;
-		// Open calls: subscriptions, and db8 watches (Enyo's DbService sends "watch": true alone).
-		try { var p = JSON.parse(params); sub = p.subscribe === true || p.watch === true; } catch (e) {}
-		if (/\/watch$/.test(String(url))) { sub = true; }
+		var t = nextToken();
 		this.token = t;
-		this.subscribed = sub;
 		pending[t] = this;
-		N.call(t, String(url), String(params));
+		// Open calls (subscriptions, db8 watches) by the bus's own rule (Bus.staysOpen).
+		this.subscribed = N.call(t, String(url), String(params)) === true;
 	};
 	Bridge.prototype.cancel = function () {
 		if (this.token && pending[this.token]) {

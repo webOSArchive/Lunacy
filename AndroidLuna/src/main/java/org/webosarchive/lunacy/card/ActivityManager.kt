@@ -133,7 +133,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
 
     /** The caller as webOS's BusId: a service by its name, an app by its id (taken from the bus, not the payload). */
     private fun busId(call: Bus.Call): JSONObject =
-        if (bus.has(call.appId)) JSONObject().put("serviceId", call.appId) else JSONObject().put("appId", call.appId.substringBefore(' '))
+        if (bus.has(call.appId)) JSONObject().put("serviceId", call.appId) else JSONObject().put("appId", call.app)
 
     private fun creatorKey(o: JSONObject) = o.optString("serviceId").ifEmpty { o.optString("appId").ifEmpty { o.optString("anonId") } }
 

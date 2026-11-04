@@ -1311,7 +1311,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * launch point that comes or goes with `"change":"added"` or `"removed"`.
      */
     private fun launchPointChanges(call: Bus.Call) {
-        if (!call.privateBus) return call.reply(Bus.error("Unknown method \"launchPointChanges\" for category \"/\""))
         if (!call.subscribe) return call.reply(JSONObject().put("returnValue", false).put("subscribed", false)
             .put("errorText", "Only supports subscriptions").toString())
         call.reply(JSONObject().put("returnValue", true).put("subscribed", true).toString())
@@ -2651,7 +2650,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             appsChanged()
             reply(Bus.ok())
         }
-        bus.register("com.palm.applicationManager", "launchPointChanges", Bus.CallHandler { launchPointChanges(it) })
+        bus.registerPrivate("com.palm.applicationManager", "launchPointChanges", wholeService = false, Bus.CallHandler { launchPointChanges(it) })
         // Launch points an app adds: the Web app's Add to Launcher, the PWA Installer's shortcuts.
         bus.register("com.palm.applicationManager", "addLaunchPoint") { _, p, reply -> reply(addLaunchPoint(p)) }
         bus.register("com.palm.applicationManager", "removeLaunchPoint") { _, p, reply ->
@@ -2679,9 +2678,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             // of Lunacy, so clearing the browser's would sign every app out as well.
             reply(Bus.error("Lunacy's browser shares its cookies with every app, so they can't be cleared on their own"))
         }
-        bus.register("com.palm.applicationManager", "listPackages", Bus.CallHandler { c ->
-            c.reply(if (!c.privateBus) Bus.error("Unknown method \"listPackages\" for category \"/\"") else listPackages())
-        })
+        bus.registerPrivate("com.palm.applicationManager", "listPackages", wholeService = false, Bus.CallHandler { c -> c.reply(listPackages()) })
         // App Catalog's installer, over the same install path as Preware's (AppInstallService.kt).
         org.webosarchive.lunacy.card.AppInstallService(object : org.webosarchive.lunacy.card.AppInstallService.Installer {
             override fun install(url: String, requester: String, progress: (Int) -> Unit, done: (Packages.Result) -> Unit) =
@@ -2711,14 +2708,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // (LunaSysMgr's own system UI windows among them, which Lunacy draws natively and so
         // has none of); close {"processId"} answers {"returnValue":true}, an unknown id too, and
         // with none {"returnValue":false,"errorText":"Must provide a valid processId to close"}.
-        bus.register("com.palm.applicationManager", "running", Bus.CallHandler { c ->
-            if (!c.privateBus) return@CallHandler c.reply(Bus.error("Unknown method \"running\" for category \"/\""))
+        bus.registerPrivate("com.palm.applicationManager", "running", wholeService = false, Bus.CallHandler { c ->
             val list = org.json.JSONArray()
             for ((id, windows) in running) for (w in windows) list.put(JSONObject().put("id", id).put("processid", w.pid.toString()))
             c.reply(JSONObject().put("running", list).put("returnValue", true).toString())
         })
-        bus.register("com.palm.applicationManager", "close", Bus.CallHandler { c ->
-            if (!c.privateBus) return@CallHandler c.reply(Bus.error("Unknown method \"close\" for category \"/\""))
+        bus.registerPrivate("com.palm.applicationManager", "close", wholeService = false, Bus.CallHandler { c ->
             val pid = c.params.optString("processId")
             if (pid.isEmpty()) return@CallHandler c.reply(JSONObject().put("returnValue", false)
                 .put("errorText", "Must provide a valid processId to close").toString())

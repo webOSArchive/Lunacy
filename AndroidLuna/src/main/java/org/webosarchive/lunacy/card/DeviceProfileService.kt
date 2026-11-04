@@ -19,15 +19,13 @@ import org.json.JSONObject
 class DeviceProfileService(private val context: Context, private val profileOf: () -> DeviceProfile) {
     private val profile get() = profileOf()
     fun register(bus: Bus) {
-        bus.register(SERVICE, "getDeviceProfile", Bus.CallHandler { c ->
-            c.reply(if (!c.privateBus) absent() else Bus.ok(mapOf("deviceInfo" to deviceInfo())))
+        bus.registerPrivate(SERVICE, "getDeviceProfile", wholeService = true, Bus.CallHandler { c ->
+            c.reply(Bus.ok(mapOf("deviceInfo" to deviceInfo())))
         })
-        bus.register(SERVICE, "getDeviceId", Bus.CallHandler { c ->
-            c.reply(if (!c.privateBus) absent() else Bus.ok(mapOf("deviceId" to DeviceProfile.nduid(context))))
+        bus.registerPrivate(SERVICE, "getDeviceId", wholeService = true, Bus.CallHandler { c ->
+            c.reply(Bus.ok(mapOf("deviceId" to DeviceProfile.nduid(context))))
         })
     }
-
-    private fun absent() = Bus.error("Service does not exist: $SERVICE.")
 
     private fun deviceInfo(): JSONObject {
         val build = "${profile.buildName}-${profile.buildNumber}"

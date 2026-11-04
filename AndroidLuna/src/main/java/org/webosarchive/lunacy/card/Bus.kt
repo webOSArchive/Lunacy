@@ -31,8 +31,10 @@ class Bus {
                val privateBus: Boolean = false,
                /** The payload as sent: params is {} when it isn't an object (systemservice's getTimeZoneRules takes an array). */
                val raw: String = params.toString()) {
-        /** Stays open: "subscribe": true, or a db8 watch ("watch": true on find, or the watch method). */
-        val subscribe get() = params.optBoolean("subscribe", false) || params.optBoolean("watch", false) || method == "watch"
+        /** Stays open ([staysOpen]). */
+        val subscribe get() = staysOpen(method, params)
+        /** The calling app's id, without the " <pid>" LS2 adds to a service process's name. */
+        val app get() = appId.substringBefore(' ')
         @Volatile var cancelled = false
             private set
         private val onCancel = ArrayList<() -> Unit>()
@@ -105,6 +107,18 @@ class Bus {
 
     fun register(service: String, method: String, h: CallHandler) { mainOnly("register"); handlers["$service/$method"] = h }
 
+    /**
+     * A method only the private bus reaches. A public caller gets what the TouchPad gave: for a
+     * service with no public side at all ([wholeService]), "Service does not exist" (the
+     * systemmanager, the device profile, the installers); for a private method on a public
+     * service, the router's own "Unknown method" (applicationManager's).
+     */
+    fun registerPrivate(service: String, method: String, wholeService: Boolean, h: CallHandler) =
+        register(service, method, CallHandler { c ->
+            if (c.privateBus) h.handle(c)
+            else c.reply(if (wholeService) noService(service) else unknownMethod(method))
+        })
+
     fun registerService(service: String, h: CallHandler) { mainOnly("registerService"); services[service] = h; serverStatusChanged(service) }
     fun unregisterService(service: String) { mainOnly("unregisterService"); services.remove(service); serverStatusChanged(service) }
 
@@ -143,9 +157,7 @@ class Bus {
      */
     fun call(appId: String, url: String, params: String, privateBus: Boolean = false, reply: (String) -> Unit): Call {
         mainOnly("call $url")
-        val m = Regex("^(?:palm|luna)://([^/]+)/(.*?)/?$").find(url)
-        val service = m?.groupValues?.get(1) ?: ""
-        val method = m?.groupValues?.get(2) ?: ""
+        val (service, method) = serviceAndMethod(url)
         val h = handlers["$service/$method"] ?: services[service]
         Log.i(AppServer.TAG, "bus [$appId] $service/$method ${if (h == null) "UNHANDLED" else ""} ${if (personal(appId, service, params)) "(${params.length} characters)" else redact(params)}")
         val p = try { JSONObject(params.ifEmpty { "{}" }) } catch (e: Exception) { JSONObject() }
@@ -157,14 +169,35 @@ class Bus {
             // webOS names the category the method sits in: a call to
             // com.palm.systemservice/wallpaper/listWallpapers is unknown "for category
             // \"/wallpaper\"" (measured on the reference TouchPad).
-            val category = "/" + method.substringBeforeLast('/', "")
-            val leaf = method.substringAfterLast('/')
-            call.reply(error(if (has(service)) "Unknown method \"$leaf\" for category \"$category\"" else "Service does not exist: $service."))
+            call.reply(if (has(service)) unknownMethod(method) else noService(service))
         } else h.handle(call)
         return call
     }
 
     companion object {
+        /**
+         * Whether a call stays open: "subscribe": true, or a db8 watch ("watch": true on find,
+         * or the watch method). One rule for the bus, luna-send's relay and the pages' bridge.
+         */
+        fun staysOpen(method: String, params: JSONObject) =
+            params.optBoolean("subscribe", false) || params.optBoolean("watch", false) || method == "watch"
+
+        private val URL = Regex("^(?:palm|luna)://([^/]+)/(.*?)/?$")
+
+        /** A bus URL's service and method ("time/getSystemTime", its category included). */
+        fun serviceAndMethod(url: String): Pair<String, String> =
+            URL.find(url).let { (it?.groupValues?.get(1) ?: "") to (it?.groupValues?.get(2) ?: "") }
+
+        /** [staysOpen] for a call by its URL and payload, before it is made (luna-send's relay, the pages' bridge). */
+        fun staysOpen(url: String, payload: String): Boolean =
+            staysOpen(serviceAndMethod(url).second, runCatching { JSONObject(payload.ifEmpty { "{}" }) }.getOrDefault(JSONObject()))
+
+        fun noService(service: String) = error("Service does not exist: $service.")
+
+        /** webOS names the category the method sits in ("/wallpaper" for wallpaper/listWallpapers; measured). */
+        fun unknownMethod(method: String) =
+            error("Unknown method \"${method.substringAfterLast('/')}\" for category \"/${method.substringBeforeLast('/', "")}\"")
+
         /** A debug build stops at a break of [mainOnly]'s rule; set by the shell as it starts. */
         @Volatile var strict = false
 

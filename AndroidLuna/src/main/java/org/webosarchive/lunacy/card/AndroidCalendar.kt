@@ -82,11 +82,11 @@ class AndroidCalendar(context: Context, private val db: Db8) {
     private fun excluded(): Set<String> = prefs.getStringSet("excluded", emptySet()) ?: emptySet()
     private fun remindersReply() = Bus.ok(mapOf("on" to remindersOn(), "active" to (accountId() != null)))
 
-    private fun fromAccounts(call: Bus.Call) = call.appId.substringBefore(' ') == "com.palm.service.accounts"
+    private fun fromAccounts(call: Bus.Call) = call.app == "com.palm.service.accounts"
 
     /** Calendar's page, the account's page, and the apps that host it. */
     private fun ifCalendar(call: Bus.Call, then: () -> Unit) {
-        val app = call.appId.substringBefore(' ')
+        val app = call.app
         if (app in PAGES) then() else call.reply(Bus.error("Not for $app"))
     }
 

@@ -332,9 +332,7 @@ class LunaSendServer(private val bus: Bus, private val socket: File) {
             }
             val url = m.optString("url")
             val payload = m.optString("payload")
-            val params = runCatching { JSONObject(payload.ifEmpty { "{}" }) }.getOrDefault(JSONObject())
-            // Bus.Call's own rule for a call that stays open.
-            val stays = params.optBoolean("subscribe") || params.optBoolean("watch") || url.trimEnd('/').endsWith("/watch")
+            val stays = Bus.staysOpen(url, payload)
             main.post {
                 // luna-send sends on the private bus unless told -P, as webOS's did.
                 call = bus.call(caller, url, payload, privateBus = !m.optBoolean("public")) { reply ->

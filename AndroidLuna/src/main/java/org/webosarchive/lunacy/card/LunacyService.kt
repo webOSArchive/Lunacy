@@ -70,29 +70,35 @@ class LunacyService(
     fun register(bus: Bus) {
         bus.register(SERVICE, "system/getEnvironment") { _, _, reply -> worker.execute { val r = environment(); main.post { reply(r) } } }
         bus.register(SERVICE, "files/list") { _, p, reply -> worker.execute { val r = runCatching { listFiles(p) }.getOrElse { Bus.error("files/list: $it") }; main.post { reply(r) } } }
-        bus.register(SERVICE, "system/setDeviceId") { caller, p, reply -> reply(setDeviceId(caller, p)) }
-        bus.register(SERVICE, "system/setLayout") { caller, p, reply -> reply(setLayout(caller, p)) }
-        bus.register(SERVICE, "system/setFixedViewport") { caller, p, reply -> reply(setFixedViewport(caller, p)) }
-        bus.register(SERVICE, "system/setHostWallpaper") { caller, p, reply -> setHostWallpaper(caller, p, reply) }
-        bus.register(SERVICE, "system/setNotificationIcons") { caller, p, reply -> reply(setNotificationIcons(caller, p)) }
+        bus.own("system/setDeviceId", "set the device id") { c -> c.reply(setDeviceId(c.params)) }
+        bus.own("system/setLayout", "set the layout") { c -> c.reply(setLayout(c.params)) }
+        bus.own("system/setFixedViewport", "set an app's viewport") { c -> c.reply(setFixedViewport(c.params)) }
+        bus.own("system/setHostWallpaper", "set Android's wallpaper") { c -> setHostWallpaper(c.params, c::reply) }
+        bus.own("system/setNotificationIcons", "set the notification icons") { c -> c.reply(setNotificationIcons(c.params)) }
         bus.register(SERVICE, "android/openSettings") { _, p, reply -> reply(openSettings(p.optString("panel"))) }
         bus.register(SERVICE, "android/settingsPanels") { _, _, reply ->
             reply(Bus.ok(mapOf("panels" to org.json.JSONArray(PANELS.keys.sorted()))))
         }
         bus.register(SERVICE, "permissions/status") { _, _, reply -> reply(permissionsStatus()) }
         bus.register(SERVICE, "permissions/request") { caller, p, reply -> requestPermission(caller, p, reply) }
-        bus.register(SERVICE, "firstUse/done") { caller, _, reply -> reply(firstUseDone(caller)) }
-        bus.register(SERVICE, "launcher/listApps", Bus.CallHandler { call -> listLauncherApps(call) })
-        bus.register(SERVICE, "launcher/setHidden") { caller, p, reply -> reply(setHidden(caller, p)) }
-        bus.register(SERVICE, "launcher/pinStatus") { caller, _, reply ->
-            reply(if (ownApp(caller)) pinStatus().toString() else Bus.error("Only Lunacy's own apps can pin apps (asked by $caller)", -1))
-        }
-        bus.register(SERVICE, "launcher/pin") { caller, p, reply -> reply(pin(caller, p)) }
-        bus.register(SERVICE, "android/notifications", Bus.CallHandler { call -> watchNotifications(call) })
-        bus.register(SERVICE, "android/openNotification") { caller, p, reply -> reply(openNotification(caller, p)) }
-        bus.register(SERVICE, "android/dismissNotifications") { caller, p, reply -> reply(dismissNotifications(caller, p)) }
-        bus.register(SERVICE, "android/mediaControl") { caller, p, reply -> reply(mediaControl(caller, p)) }
+        bus.own("firstUse/done", "finish First Use") { c -> c.reply(firstUseDone()) }
+        bus.own("launcher/listApps", "list the launcher's apps") { c -> listLauncherApps(c) }
+        bus.own("launcher/setHidden", "hide an app") { c -> c.reply(setHidden(c.params)) }
+        bus.own("launcher/pinStatus", "pin apps") { c -> c.reply(pinStatus().toString()) }
+        bus.own("launcher/pin", "pin apps") { c -> c.reply(pin(c.params)) }
+        bus.own("android/notifications", "read Android's notifications") { c -> watchNotifications(c) }
+        bus.own("android/openNotification", "open Android's notifications") { c -> c.reply(openNotification(c.params)) }
+        bus.own("android/dismissNotifications", "dismiss Android's notifications") { c -> c.reply(dismissNotifications(c.params)) }
+        bus.own("android/mediaControl", "control Android's players") { c -> c.reply(mediaControl(c.params)) }
     }
+
+    /**
+     * A method only Lunacy's own apps may call ([ownApp]); anyone else is told so, with what
+     * they asked to do.
+     */
+    private fun Bus.own(method: String, what: String, h: Bus.CallHandler) = register(SERVICE, method, Bus.CallHandler { c ->
+        if (ownApp(c.appId)) h.handle(c) else c.reply(Bus.error("Only Lunacy's own apps can $what (asked by ${c.appId})", -1))
+    })
 
     // ---- Android's notifications, for the Android Notifications app ----
 
@@ -104,7 +110,6 @@ class LunacyService(
      * them. A subscription hears it again whenever they change. Lunacy's own apps only.
      */
     private fun watchNotifications(call: Bus.Call) {
-        if (!ownApp(call.appId)) return call.reply(Bus.error("Only Lunacy's own apps can read Android's notifications (asked by ${call.appId})", -1))
         call.reply(AndroidNotifications.snapshot(context, consume = true).toString())
         if (call.subscribe && !call.cancelled) {
             notificationWatchers += call
@@ -123,23 +128,20 @@ class LunacyService(
     val notificationsWatched get() = notificationWatchers.isNotEmpty()
 
     /** A notification tapped: `key`. Its own intent is sent, as Android's shade does. */
-    private fun openNotification(caller: String, p: JSONObject): String {
-        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can open Android's notifications (asked by $caller)", -1)
+    private fun openNotification(p: JSONObject): String {
         val key = p.optString("key").ifEmpty { return Bus.error("key is required") }
         return AndroidNotifications.open(context, key)?.let { Bus.error(it) } ?: Bus.ok()
     }
 
     /** A media dashboard's button: `package`, `command` (previous, playpause, next, open). AndroidMedia. */
-    private fun mediaControl(caller: String, p: JSONObject): String {
-        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can control Android's players (asked by $caller)", -1)
+    private fun mediaControl(p: JSONObject): String {
         val pkg = p.optString("package").ifEmpty { return Bus.error("package is required") }
         val command = p.optString("command").ifEmpty { return Bus.error("command is required") }
         return AndroidMedia.control(context, pkg, command)?.let { Bus.error(it) } ?: Bus.ok()
     }
 
     /** Notifications swiped away: `keys`. They go from Android too. */
-    private fun dismissNotifications(caller: String, p: JSONObject): String {
-        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can dismiss Android's notifications (asked by $caller)", -1)
+    private fun dismissNotifications(p: JSONObject): String {
         val a = p.optJSONArray("keys") ?: return Bus.error("keys is required")
         AndroidNotifications.dismiss((0 until a.length()).map { a.optString(it) }.filter { it.isNotEmpty() })
         return Bus.ok()
@@ -157,7 +159,6 @@ class LunacyService(
      * or removed, or one hidden or shown.
      */
     private fun listLauncherApps(call: Bus.Call) {
-        if (!ownApp(call.appId)) return call.reply(Bus.error("Only Lunacy's own apps can list the launcher's apps (asked by ${call.appId})", -1))
         sendLauncherApps(listOf(call))
         if (call.subscribe && !call.cancelled) {
             launcherWatchers += call
@@ -206,16 +207,14 @@ class LunacyService(
     }
 
     /** A webOS app on Android's home screen: its icon there opens it straight away. */
-    private fun pin(caller: String, p: JSONObject): String {
-        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can pin apps (asked by $caller)", -1)
+    private fun pin(p: JSONObject): String {
         val id = p.optString("id")
         val app = launcherApps().firstOrNull { it.id == id } ?: return Bus.error("No launcher app $id", -1)
         if (app.androidComponent != null) return Bus.error("${app.title} is Android's own: it is on Android's launcher already", -1)
         return pinToHome(app, appIcon(app))?.let { Bus.error(it, -1) } ?: Bus.ok()
     }
 
-    private fun setHidden(caller: String, p: JSONObject): String {
-        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can hide an app (asked by $caller)", -1)
+    private fun setHidden(p: JSONObject): String {
         val id = p.optString("id")
         if (id.isEmpty() || !p.has("hidden")) return Bus.error("setHidden needs an id and hidden", -1)
         if (id == SOFTWARE_MANAGER) return Bus.error("Software Manager can't be hidden: it is how hidden apps come back", -1)
@@ -259,7 +258,7 @@ class LunacyService(
      * as that app: the Android account's page asks through bundled Contacts, Calendar or Accounts.
      */
     private fun hostsAccountPages(appId: String) =
-        appId in setOf("com.palm.app.contacts", "com.palm.app.calendar", "com.palm.app.accounts") && registry.get(appId)?.userInstalled == false
+        appId in ACCOUNT_PAGE_HOSTS && registry.get(appId)?.userInstalled == false
 
     private fun storageGranted(): Boolean = granted(STORAGE)
 
@@ -336,8 +335,7 @@ class LunacyService(
     }
 
     /** First Use has run. The shell won't launch it again, and asks for storage itself from then on if it is missing. */
-    private fun firstUseDone(caller: String): String {
-        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can finish First Use (asked by $caller)", -1)
+    private fun firstUseDone(): String {
         setFirstUseDone(context)
         onFirstUseDone()
         return Bus.ok()
@@ -491,8 +489,7 @@ class LunacyService(
      * (ShellActivity.reshell); the width is taken
      * up when an app next loads a page.
      */
-    private fun setLayout(caller: String, p: JSONObject): String {
-        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can set the layout (asked by $caller)", -1)
+    private fun setLayout(p: JSONObject): String {
         val before = FormFactor.of(context)
         if (p.has("layout") && !FormFactor.setSetting(context, p.optString("layout"))) {
             return Bus.error("layout is auto, phone or tablet")
@@ -508,8 +505,7 @@ class LunacyService(
      * or absent to put the app back on its default. Lunacy's own apps only. Takes effect
      * when the app's window next loads a page.
      */
-    private fun setFixedViewport(caller: String, p: JSONObject): String {
-        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can set an app's viewport (asked by $caller)", -1)
+    private fun setFixedViewport(p: JSONObject): String {
         val id = p.optString("id")
         val app = registry.get(id) ?: return Bus.error("No app $id")
         FixedViewport.set(context, id, if (p.has("on")) p.optBoolean("on") else null)
@@ -520,8 +516,7 @@ class LunacyService(
      * Whether apps' icons in the notifications show in colour or grey ([NotificationIcons]):
      * `colour` true or false. Lunacy's own apps only (Screen & Lock). The icons showing change at once.
      */
-    private fun setNotificationIcons(caller: String, p: JSONObject): String {
-        if (!ownApp(caller)) return Bus.error("Only Lunacy's own apps can set the notification icons (asked by $caller)", -1)
+    private fun setNotificationIcons(p: JSONObject): String {
         if (!p.has("colour")) return Bus.error("colour is true or false")
         NotificationIcons.setColour(context, p.optBoolean("colour"))
         return Bus.ok(mapOf("colour" to NotificationIcons.colour(context)))
@@ -532,8 +527,7 @@ class LunacyService(
      * Lunacy's own apps only. Turning it on sets Android's wallpaper straight away, and the
      * reply waits for that, so a device that refuses says so.
      */
-    private fun setHostWallpaper(caller: String, p: JSONObject, reply: (String) -> Unit) {
-        if (!ownApp(caller)) return reply(Bus.error("Only Lunacy's own apps can set Android's wallpaper (asked by $caller)", -1))
+    private fun setHostWallpaper(p: JSONObject, reply: (String) -> Unit) {
         if (!p.has("on")) return reply(Bus.error("on is required"))
         val on = p.optBoolean("on")
         if (!on) {
@@ -548,10 +542,7 @@ class LunacyService(
         }
     }
 
-    private fun setDeviceId(caller: String, p: JSONObject): String {
-        if (!ownApp(caller)) {
-            return Bus.error("Only Lunacy's own apps can set the device id (asked by $caller)", -1)
-        }
+    private fun setDeviceId(p: JSONObject): String {
         // Back to the id derived from this device's hardware. Never a new random one: a
         // service counting devices shouldn't see a new one every time somebody taps a button.
         if (p.optBoolean("reset")) {
@@ -569,8 +560,7 @@ class LunacyService(
      * with the same id replaces the bundled app, so the registry has the last word.
      */
     private fun ownApp(appId: String): Boolean {
-        val known = appId == "com.palm.app.deviceinfo" || appId == "com.palm.app.screenlock" || appId == SOFTWARE_MANAGER ||
-            appId.startsWith("org.webosarchive.lunacy")
+        val known = appId in OWN_APPS || appId.startsWith("org.webosarchive.lunacy")
         return known && registry.get(appId)?.userInstalled == false
     }
 
@@ -689,6 +679,10 @@ class LunacyService(
         const val FIRST_USE_APP = "org.webosarchive.lunacy.firstuse"
         /** Software Manager, which hides and shows the launcher's apps. */
         const val SOFTWARE_MANAGER = "com.palm.app.swmanager"
+        /** Bundled settings apps that are Lunacy's own beside its org.webosarchive.lunacy ones ([ownApp]). */
+        private val OWN_APPS = setOf("com.palm.app.deviceinfo", "com.palm.app.screenlock", SOFTWARE_MANAGER)
+        /** Bundled apps that host an account's setup page ([hostsAccountPages]). */
+        private val ACCOUNT_PAGE_HOSTS = setOf("com.palm.app.contacts", "com.palm.app.calendar", "com.palm.app.accounts")
         private val STORAGE = listOf(android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
         private val CONTACTS = listOf(android.Manifest.permission.READ_CONTACTS)
         private val CALENDAR = listOf(android.Manifest.permission.READ_CALENDAR)

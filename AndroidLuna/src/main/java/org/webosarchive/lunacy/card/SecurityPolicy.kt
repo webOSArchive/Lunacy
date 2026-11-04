@@ -123,9 +123,7 @@ class SecurityPolicy(private val bus: Bus, private val android: Host, private va
         // The service has no public side: on the reference TouchPad an app outside com.palm
         // got "Service does not exist: com.palm.systemmanager." from every one of these, the
         // read-only getDeviceLockMode too (a probe app, 2026-11-03).
-        fun privateOnly(method: String, h: (Bus.Call) -> Unit) = bus.register(SERVICE, method, Bus.CallHandler { c ->
-            if (c.privateBus) h(c) else c.reply(Bus.error("Service does not exist: $SERVICE."))
-        })
+        fun privateOnly(method: String, h: (Bus.Call) -> Unit) = bus.registerPrivate(SERVICE, method, wholeService = true, Bus.CallHandler(h))
         privateOnly("getSecurityPolicy") { it.reply(policyReply()) }
         privateOnly("getDeviceLockMode") { getDeviceLockMode(it) }
         privateOnly("setDevicePasscode") { setDevicePasscode(it) }

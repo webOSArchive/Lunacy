@@ -520,7 +520,8 @@ open class AppWindow(
 
         /** Async bus call: queue it, answer later through evaluateJavascript. */
         @JavascriptInterface
-        fun call(token: Int, url: String, params: String) {
+        /** Whether the call stays open, so the page's bridge keeps its token ([Bus.staysOpen]). */
+        fun call(token: Int, url: String, params: String): Boolean {
             main.post {
                 // The page numbers its calls from 1, and a new page starts over: a reply that
                 // arrives after the page changed is the old page's, and stays with it.
@@ -530,6 +531,7 @@ open class AppWindow(
                 }
                 if (call.subscribe && !call.cancelled) calls[token] = call
             }
+            return Bus.staysOpen(url, params)
         }
 
         /** PalmServiceBridge.cancel: ends a subscription. */

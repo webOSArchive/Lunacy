@@ -69,7 +69,7 @@ class AndroidContacts(context: Context, webosRoot: File, private val db: Db8) {
      * the copy could be made shows in Contacts, not in this reply.
      */
     private fun onEnabled(call: Bus.Call) {
-        if (call.appId.substringBefore(' ') != ACCOUNTS_SERVICE) { call.reply(Bus.error("Only the accounts service calls this")); return }
+        if (call.app != ACCOUNTS_SERVICE) { call.reply(Bus.error("Only the accounts service calls this")); return }
         val id = call.params.optString("accountId")
         if (id.isEmpty()) { call.reply(Bus.error("accountId is required")); return }
         if (call.params.optBoolean("enabled")) {
@@ -80,7 +80,7 @@ class AndroidContacts(context: Context, webosRoot: File, private val db: Db8) {
     }
 
     private fun onDelete(call: Bus.Call) {
-        if (call.appId.substringBefore(' ') != ACCOUNTS_SERVICE) { call.reply(Bus.error("Only the accounts service calls this")); return }
+        if (call.app != ACCOUNTS_SERVICE) { call.reply(Bus.error("Only the accounts service calls this")); return }
         val id = call.params.optString("accountId")
         val keep = call.params.optBoolean("keepData")
         handler.post {

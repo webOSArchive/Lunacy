@@ -25,7 +25,7 @@ android {
         // own level. What 23 and 24 change on newer devices is in Docs/architecture.md.
         targetSdk = 24
         versionCode = buildNumber
-        versionName = "0.9.0"
+        versionName = "0.9.1"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

@@ -3,7 +3,29 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-11-03)
+## Where things stand (2026-11-04)
+
+**0.9.1** (2026-11-04, build 422), a point release. Everything since 0.9.0:
+
+- **Music:** Palm's Music app (HP's Apache 2.0 core app), its library from Android's media
+  library with albums, artists, genres and covers as the TouchPad filed them, playing on with
+  the screen off behind Android's media notification, its volume Android's media volume, and
+  a phone layout. An Android app that is playing (Plexamp, say) gets Music's dashboard, with
+  previous, play-pause and next.
+- **Ringtones:** the TouchPad's ten short ringtones, shared with Android as notification
+  sounds, and Palm's ringtone picker with preview for webOS apps (Messaging's). The system
+  ringtone stays Android's setting.
+- **Notifications:** an Android notification dismissed in Lunacy goes from Android too (it
+  came back at every start); Blink Notifications pulses a phone's notification light; Show
+  When Locked is gone; the open menu's tab meets the drop-down.
+- **Messaging:** the chat slides over the list on a phone; a buddy no longer shows another
+  conversation's unread count; the message hint stays on one line.
+- **Synergy connectors:** the BlueBubbles connector works: services using `require.paths`
+  run, a column with only a max-width fills the card, year-month-day dates read as the
+  TouchPad read them, and an interval schedule waits for its first tick (it synced 102 times
+  a minute).
+- **Look:** Just Type's tabs fit a phone, launcher labels clear the edit frame, Just Type
+  settings' App Catalog icon, and the device's own camera and phone wear webOS's icons.
 
 **0.9.0, a preview release** (2026-11-03, build 394), the last before the OAuth work for
 Exchange and Google mail. Everything since 0.8.4:
@@ -197,6 +219,8 @@ One line per milestone; the detail is in [fix-log.md](fix-log.md), the topic doc
 - **2026-11-03, 0.9.0** (build 394): a preview release: the system menu, settings shortcuts,
   Just Type's app integration, the Android account, Contacts' and Calendar's imports and phone
   layouts, four more PDK games, and the code review's fixes before release.
+- **2026-11-04, 0.9.1** (build 422): a point release: Music, ringtones, Android notifications
+  that stay dismissed, Blink Notifications, Messaging on a phone, the BlueBubbles connector.
 
 ## Open, carried forward
 

@@ -390,6 +390,21 @@ lays it out again only for a new size, so following a slide costs no layout.
 
 Files: `framework/source/palm/controls/BasicWebView.js`, `framework/build/enyo-build.js`.
 
+### 0013-spinner-hidpi-size.patch
+
+The spinner turns as a ring at a pixel ratio of 1.5 or more, as it does at 1.
+
+Onyx's `Spinner.css` swaps in `images-1.5/spinner.png` and `spinner-large.png` at 1.5x with
+`background-size: 32px 384px` and `128px 1536px`, sizes for a strip of twelve frames. The
+device's images are single frames, 48 and 192 px square, so the image was stretched to eight
+times its height and the 32 px box showed a sliver of it, which `enyo.RotatingImage` turned: a
+sweeping hand rather than the spinning ring. A TouchPad has a pixel ratio of 1 and uses
+`images/spinner.png`, so it never showed there; every modern Android screen is past 1.5 (seen by
+codepoet on the Kyocera A101BM, ratio 2.81, and checked there over DevTools, 2026-11-04). The
+patch gives each its own square, 32 and 128 px.
+
+Files: `framework/source/palm/themes/Onyx/css/Spinner.css`, `framework/build/enyo-build.css`.
+
 ## Added
 
 Nothing, since the rebase. `lib/networkproxy` (HP's network-proxy settings library, which the

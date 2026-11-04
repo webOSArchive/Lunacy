@@ -1,0 +1,39 @@
+--- a/framework/source/palm/themes/Onyx/css/Spinner.css
++++ b/framework/source/palm/themes/Onyx/css/Spinner.css
+@@ -15,11 +15,14 @@
+ @media (-webkit-min-device-pixel-ratio:1.5) {
+ 	.enyo-spinner {
+ 		background-image: url(../images-1.5/spinner.png);
+-		background-size: 32px 384px;
++		/* Lunacy (patch 0013): images-1.5/spinner*.png are single 48 and 192 px frames, not
++		   twelve-frame strips; at 32 x 384 the image stretched eight times its height and only a
++		   sliver of it turned (a sweeping hand, not the ring). Its own square, as images/ is. */
++		background-size: 32px 32px;
+ 	}
+ 
+ 	.enyo-spinner-large {
+ 		background-image: url(../images-1.5/spinner-large.png);
+-		background-size: 128px 1536px;
++		background-size: 128px 128px;
+ 	}
+ }
+--- a/framework/build/enyo-build.css
++++ b/framework/build/enyo-build.css
+@@ -2282,12 +2282,15 @@
+ @media (-webkit-min-device-pixel-ratio:1.5) {
+ 	.enyo-spinner {
+ 		background-image: url(palm/themes/Onyx/images-1.5/spinner.png);
+-		background-size: 32px 384px;
++		/* Lunacy (patch 0013): images-1.5/spinner*.png are single 48 and 192 px frames, not
++		   twelve-frame strips; at 32 x 384 the image stretched eight times its height and only a
++		   sliver of it turned (a sweeping hand, not the ring). Its own square, as images/ is. */
++		background-size: 32px 32px;
+ 	}
+ 
+ 	.enyo-spinner-large {
+ 		background-image: url(palm/themes/Onyx/images-1.5/spinner-large.png);
+-		background-size: 128px 1536px;
++		background-size: 128px 128px;
+ 	}
+ }
+ 

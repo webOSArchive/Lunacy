@@ -106,12 +106,7 @@ class AndroidApps(private val context: Context, private val files: AppFiles, pri
      * camera app of its own, so the device's wears webOS's camera icon (codepoet, 2026-11-04);
      * a camera the user installed keeps its own.
      */
-    private fun systemCameras(): Set<String> = runCatching {
-        @Suppress("DEPRECATION")
-        context.packageManager.queryIntentActivities(Intent(android.provider.MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA), 0)
-            .filter { (it.activityInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 }
-            .map { it.activityInfo.packageName }.toSet()
-    }.getOrDefault(emptySet())
+    private fun systemCameras(): Set<String> = cameraPackages(context)
 
     /**
      * The device's own phone: the launcher activity of a system app that dials (ACTION_DIAL),
@@ -119,17 +114,8 @@ class AndroidApps(private val context: Context, private val files: AppFiles, pri
      * holds the dialer and other apps (older Android's contacts package had Phone and People),
      * only the launcher activity that dials does; a package with one launcher activity, that one.
      */
-    private fun systemDialers(launchers: List<android.content.pm.ResolveInfo>): Set<ComponentName> = runCatching {
-        @Suppress("DEPRECATION")
-        val dial = context.packageManager.queryIntentActivities(Intent(Intent.ACTION_DIAL, android.net.Uri.parse("tel:")), 0)
-            .filter { (it.activityInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 }
-        val dialComponents = dial.map { ComponentName(it.activityInfo.packageName, it.activityInfo.name) }.toSet()
-        val dialPackages = dial.map { it.activityInfo.packageName }.toSet()
-        val byPackage = launchers.groupBy { it.activityInfo.packageName }
-        launchers.map { ComponentName(it.activityInfo.packageName, it.activityInfo.name) }.filter { cn ->
-            cn in dialComponents || (cn.packageName in dialPackages && byPackage[cn.packageName]?.size == 1)
-        }.toSet()
-    }.getOrDefault(emptySet())
+    private fun systemDialers(launchers: List<android.content.pm.ResolveInfo>): Set<ComponentName> =
+        dialers(context, launchers.map { ComponentName(it.activityInfo.packageName, it.activityInfo.name) })
 
     /** A package was added, changed or removed: its icons are drawn again next time. */
     fun forget(packageName: String) { icons.keys.removeAll { it.startsWith("$PREFIX$packageName/") } }
@@ -156,5 +142,24 @@ class AndroidApps(private val context: Context, private val files: AppFiles, pri
         const val PREFIX = "android:"
         const val CAMERA_ICON = "luna/images/android/camera.png"
         const val PHONE_ICON = "luna/images/android/phone.png"
+
+        /** The packages of the device's own camera (see [systemCameras]); the launcher's default layout names it too. */
+        fun cameraPackages(context: Context): Set<String> = runCatching {
+            @Suppress("DEPRECATION")
+            context.packageManager.queryIntentActivities(Intent(android.provider.MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA), 0)
+                .filter { (it.activityInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 }
+                .map { it.activityInfo.packageName }.toSet()
+        }.getOrDefault(emptySet())
+
+        /** Of these launcher activities, the device's own phone's (see [systemDialers]); the launcher's default layout names it too. */
+        fun dialers(context: Context, launchers: List<ComponentName>): Set<ComponentName> = runCatching {
+            @Suppress("DEPRECATION")
+            val dial = context.packageManager.queryIntentActivities(Intent(Intent.ACTION_DIAL, android.net.Uri.parse("tel:")), 0)
+                .filter { (it.activityInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0 }
+            val dialComponents = dial.map { ComponentName(it.activityInfo.packageName, it.activityInfo.name) }.toSet()
+            val dialPackages = dial.map { it.activityInfo.packageName }.toSet()
+            val byPackage = launchers.groupBy { it.packageName }
+            launchers.filter { cn -> cn in dialComponents || (cn.packageName in dialPackages && byPackage[cn.packageName]?.size == 1) }.toSet()
+        }.getOrDefault(emptySet())
     }
 }

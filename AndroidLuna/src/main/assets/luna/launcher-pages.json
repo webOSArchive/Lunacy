@@ -14,7 +14,7 @@
 		"empty here too. Anything not named falls back to the keyword map, then to the first page.",
 		"Once the user moves an icon, their arrangement wins: this is only the starting point.",
 		"Proof of concept (2026-09-23): favorites is named android and holds Android's own apps,",
-		"for when Lunacy is the home screen (shell/AndroidApps.kt).", "The prefs page starts in title order, as webOS's Settings tab did (codepoet, 2026-11-03):", "a new settings app goes in its alphabetical place."
+		"for when Lunacy is the home screen (shell/AndroidApps.kt).", "The prefs page starts in title order, as webOS's Settings tab did (codepoet, 2026-11-03):", "a new settings app goes in its alphabetical place.", "The apps page starts as webOS's did (codepoet, 2026-11-04): Web, Email, Calendar, Messaging,", "Memos, Contacts, Phone, Music, Camera, Photos & Videos, Clock, Calculator. 'android:phone' and", "'android:camera' are the device's own phone and camera, Android apps (shell/AndroidApps); a", "device without one skips it."
 	],
 	"pages": [
 		{"designator": "apps", "name": "apps"},
@@ -25,10 +25,17 @@
 	"layout": [
 		{"title": "apps", "items": [
 			"com.palm.app.browser_default",
+			"com.palm.app.email_default",
+			"com.palm.app.calendar_default",
+			"com.palm.app.messaging_default",
 			"com.palm.app.notes_default",
+			"com.palm.app.contacts_default",
+			"android:phone",
+			"com.palm.app.musicplayer_default",
+			"android:camera",
 			"com.palm.app.photos_default",
-			"com.palm.calculator_default",
-			"com.palm.app.clock_default"
+			"com.palm.app.clock_default",
+			"com.palm.calculator_default"
 		]},
 		{"title": "downloads", "items": [
 			"com.palm.app.enyo-findapps_default"

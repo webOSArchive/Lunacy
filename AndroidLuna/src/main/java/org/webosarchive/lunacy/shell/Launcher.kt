@@ -36,6 +36,13 @@ import kotlin.math.roundToInt
  */
 @SuppressLint("ViewConstructor")
 class Launcher(context: Context, private val luna: Luna, private val onLaunch: (AppInfo) -> Unit) : View(context) {
+    private companion object {
+        /** The default layout's name for the device's own phone (an Android app). */
+        const val ANDROID_PHONE = "android:phone"
+        /** ...and for its own camera. */
+        const val ANDROID_CAMERA = "android:camera"
+    }
+
     object Params {
         const val TAB_BAR = 50f
         const val TAB_MAX_W = 150f
@@ -389,9 +396,20 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             }
         }
         // Then the apps Lunacy ships with, where and in the order the default layout puts them.
+        // "android:phone" there is the device's own phone, whatever its package (AndroidApps.dialers).
+        val phone by lazy {
+            val launchers = apps.mapNotNull { it.androidComponent }
+            val dialers = AndroidApps.dialers(context, launchers)
+            apps.firstOrNull { it.androidComponent in dialers }?.id
+        }
+        // "android:camera" the device's own camera (AndroidApps.cameraPackages).
+        val camera by lazy {
+            val cams = AndroidApps.cameraPackages(context)
+            apps.firstOrNull { it.androidComponent?.packageName in cams }?.id
+        }
         for ((designator, ids) in defaultLayout) {
             val page = pages.indexOfFirst { it.designator == designator }.takeIf { it >= 0 } ?: continue
-            for (id in ids) app(id)?.let { pages[page].tiles += it }
+            for (id in ids) (when (id) { ANDROID_PHONE -> phone; ANDROID_CAMERA -> camera; else -> id })?.let { app(it) }?.let { pages[page].tiles += it }
         }
         // Everything else by its keywords, alphabetically.
         for (app in apps.filter { it.id !in placed }.sortedBy { it.title.lowercase() }) {

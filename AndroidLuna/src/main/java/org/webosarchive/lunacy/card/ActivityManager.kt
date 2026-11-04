@@ -676,9 +676,16 @@ class ActivityManager(private val context: Context, private val power: Power) {
             val now = System.currentTimeMillis()
             val iv = interval
             if (iv == null) { nextStart = start; return }
+            // A precise interval with no start ticks from DAY_ONE (2 January 1970), in local time
+            // since nothing named UTC, as MojoJsonConverter and PreciseIntervalSchedule had it
+            // (RelativeIntervalSchedule too, until it has finished once): the first run is the
+            // next tick, never at once. Taken from now, an activity that recreates its own
+            // schedule from its callback (the BlueBubbles connector's 2m periodic sync) ran
+            // again a few milliseconds later, over and over.
+            val dayOne = DAY_ONE - TimeZone.getDefault().getOffset(now)
             val base = when {
-                relative -> lastFinished ?: start ?: now
-                precise -> start ?: now
+                relative -> lastFinished ?: start ?: dayOne
+                precise -> start ?: dayOne
                 else -> SMART_BASE
             }
             var next = if (now <= base) base else base + ((now - base) / iv + 1) * iv
@@ -704,6 +711,8 @@ class ActivityManager(private val context: Context, private val power: Power) {
         }
 
         companion object {
+            /** webOS's Schedule::DAY_ONE: a schedule's start when it names none. */
+            const val DAY_ONE = 86_400_000L
             /** Smart intervals tick on a base drawn once, between 23:00 and 05:00 after the epoch. */
             val SMART_BASE = (23 * 3600 + (Math.random() * 6 * 3600).toLong()) * 1000L
             private val SMART = setOf(5, 10, 15, 20, 30, 60, 180, 360, 720).map { it * 60_000L }.toSet()

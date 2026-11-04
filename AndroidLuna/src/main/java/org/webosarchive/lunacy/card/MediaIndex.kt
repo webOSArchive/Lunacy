@@ -252,29 +252,21 @@ class MediaIndex(private val webosRoot: File) {
         return (mtime - TimeZone.getDefault().getOffset(mtime)) / 1000
     }
 
-    private fun spec(id: String, indexes: List<Any>, extends: Boolean) = JSONObject().put("id", id).put("owner", OWNER)
-        .put("indexes", JSONArray(indexes.map { i ->
-            if (i is JSONObject) i
-            else (i as List<*>).let { props -> JSONObject().put("name", props.joinToString("_"))
-                .put("props", JSONArray(props.map { JSONObject().put("name", it) })) }
-        })).apply { if (extends) put("extends", JSONArray().put(TYPES)) }
-
-    private fun named(name: String, vararg props: JSONObject) = JSONObject().put("name", name).put("props", JSONArray(props.toList()))
-    private fun prop(name: String, collate: String? = null, tokenize: String? = null) =
-        JSONObject().put("name", name).apply { collate?.let { put("collate", it) }; tokenize?.let { put("tokenize", it) } }
+    private fun spec(id: String, indexes: List<Any>, extends: Boolean) =
+        KindSpec.kind(id, OWNER, KindSpec.indexes(indexes), if (extends) TYPES else null)
 
     // filenotifyd's registrations (filenotifyd_module_mediaParent.js, _image.js, _video.js).
     private fun typesKind() = spec(TYPES, listOf(
         listOf("path"), listOf("albumPath"), listOf("albumId"), listOf("appCacheComplete", "albumId"),
         listOf("appCacheComplete", "type", "albumId"), listOf("mediaType"), listOf("appCacheComplete", "albumId", "createdTime"),
-        named("albumCountChangedWatch", prop("appCacheComplete"), prop("albumId"), prop("_rev")).put("incDel", true),
+        KindSpec.index("albumCountChangedWatch", KindSpec.prop("appCacheComplete"), KindSpec.prop("albumId"), KindSpec.prop("_rev")).put("incDel", true),
         listOf("albumPath", "createdTime"), listOf("_del")), extends = false)
 
     private fun albumKind() = spec(ALBUM, listOf(
         listOf("path"), listOf("type"), listOf("type", "modifiedTime"), listOf("accountId"), listOf("modifiedTime"),
         listOf("toBeDeleted"), listOf("accountId", "modifiedTime"), listOf("name"), listOf("name", "type"), listOf("showAlbum"),
         listOf("showAlbum", "modifiedTime"), listOf("showAlbum", "type", "modifiedTime"), listOf("showAlbum", "accountId", "modifiedTime"),
-        named("sortKeyIndex", prop("sortKey", "primary")), named("searchKeyIndex", prop("searchKey", "primary", "default")),
+        KindSpec.index("sortKeyIndex", KindSpec.prop("sortKey", "primary")), KindSpec.index("searchKeyIndex", KindSpec.prop("searchKey", "primary", "default")),
         listOf("_rev")), extends = false)
 
     private fun imageKind() = spec(IMAGE, listOf(
@@ -284,38 +276,35 @@ class MediaIndex(private val webosRoot: File) {
     private fun videoKind() = spec(VIDEO, listOf(
         listOf("path"), listOf("albumPath"), listOf("mediaType"), listOf("albumPath", "createdTime"), listOf("albumId"),
         listOf("capturedOnDevice", "albumId"), listOf("appCacheComplete", "albumId"),
-        named("loadedVidsIndex", prop("capturedOnDevice"), prop("searchKey", "primary", "default")),
-        named("customCameraIndex", prop("capturedOnDevice"), prop("albumId"), prop("createdTime", "primary", "default")),
-        named("capturedVidsIndex", prop("capturedOnDevice"), prop("createdTime"), prop("searchKey", "primary", "default")),
-        named("sideloadedListIndex", prop("capturedOnDevice"), prop("title", "primary")),
+        KindSpec.index("loadedVidsIndex", KindSpec.prop("capturedOnDevice"), KindSpec.prop("searchKey", "primary", "default")),
+        KindSpec.index("customCameraIndex", KindSpec.prop("capturedOnDevice"), KindSpec.prop("albumId"), KindSpec.prop("createdTime", "primary", "default")),
+        KindSpec.index("capturedVidsIndex", KindSpec.prop("capturedOnDevice"), KindSpec.prop("createdTime"), KindSpec.prop("searchKey", "primary", "default")),
+        KindSpec.index("sideloadedListIndex", KindSpec.prop("capturedOnDevice"), KindSpec.prop("title", "primary")),
         listOf("capturedOnDevice", "modifiedTime"), listOf("capturedOnDevice", "createdTime"), listOf("_rev")), extends = true)
 
     // filenotifyd_module_audio.js's registration of com.palm.media.audio.file.
     private fun audioKind() = spec(AUDIO, listOf(
         listOf("path"), listOf("hasResizedThumbnails", "_del"),
-        named("searchAllSongs", prop("isRingtone"), prop("searchKey", "primary", "default")),
-        named("songsByAlbumWithGenre", prop("isRingtone"), prop("genre"), prop("album", "primary")),
-        named("songsByArtistWithGenre", prop("isRingtone"), prop("genre"), prop("artist", "primary")),
-        named("songsByGenre", prop("isRingtone"), prop("genre"), prop("title", "primary")),
-        named("songsByArtist", prop("isRingtone"), prop("artist"), prop("sortKey.trackAndDisc"), prop("title", "primary")),
-        named("songsByArtistAlbums", prop("isRingtone"), prop("artist"), prop("sortKey.albumDiscAndTrack"), prop("title", "primary")),
-        named("AllSongsByArtistAlbumTrackAndDisc", prop("isRingtone"), prop("sortKey.artistAlbumDiscAndTrack", "primary")),
-        named("songsByAlbum", prop("isRingtone"), prop("album"), prop("sortKey.trackAndDisc"), prop("title", "primary")),
-        named("songsByAlbumArist", prop("isRingtone"), prop("album"), prop("albumArtist"), prop("sortKey.trackAndDisc"), prop("title", "primary")),
-        named("songsByArtistAlbum", prop("isRingtone"), prop("artist"), prop("album"), prop("sortKey.trackAndDisc"), prop("title", "primary")),
+        KindSpec.index("searchAllSongs", KindSpec.prop("isRingtone"), KindSpec.prop("searchKey", "primary", "default")),
+        KindSpec.index("songsByAlbumWithGenre", KindSpec.prop("isRingtone"), KindSpec.prop("genre"), KindSpec.prop("album", "primary")),
+        KindSpec.index("songsByArtistWithGenre", KindSpec.prop("isRingtone"), KindSpec.prop("genre"), KindSpec.prop("artist", "primary")),
+        KindSpec.index("songsByGenre", KindSpec.prop("isRingtone"), KindSpec.prop("genre"), KindSpec.prop("title", "primary")),
+        KindSpec.index("songsByArtist", KindSpec.prop("isRingtone"), KindSpec.prop("artist"), KindSpec.prop("sortKey.trackAndDisc"), KindSpec.prop("title", "primary")),
+        KindSpec.index("songsByArtistAlbums", KindSpec.prop("isRingtone"), KindSpec.prop("artist"), KindSpec.prop("sortKey.albumDiscAndTrack"), KindSpec.prop("title", "primary")),
+        KindSpec.index("AllSongsByArtistAlbumTrackAndDisc", KindSpec.prop("isRingtone"), KindSpec.prop("sortKey.artistAlbumDiscAndTrack", "primary")),
+        KindSpec.index("songsByAlbum", KindSpec.prop("isRingtone"), KindSpec.prop("album"), KindSpec.prop("sortKey.trackAndDisc"), KindSpec.prop("title", "primary")),
+        KindSpec.index("songsByAlbumArist", KindSpec.prop("isRingtone"), KindSpec.prop("album"), KindSpec.prop("albumArtist"), KindSpec.prop("sortKey.trackAndDisc"), KindSpec.prop("title", "primary")),
+        KindSpec.index("songsByArtistAlbum", KindSpec.prop("isRingtone"), KindSpec.prop("artist"), KindSpec.prop("album"), KindSpec.prop("sortKey.trackAndDisc"), KindSpec.prop("title", "primary")),
         listOf("isRingtone", "album", "albumArtist"),
-        named("songsByTitle", prop("isRingtone"), prop("title", "primary")),
-        named("AllSongsByArtist", prop("isRingtone"), prop("artist", "primary")),
+        KindSpec.index("songsByTitle", KindSpec.prop("isRingtone"), KindSpec.prop("title", "primary")),
+        KindSpec.index("AllSongsByArtist", KindSpec.prop("isRingtone"), KindSpec.prop("artist", "primary")),
         listOf("isRingtone", "title", "artist"),
-        named("AllSongsByAlbum", prop("isRingtone"), prop("album", "primary")),
-        named("AllSongsByAlbumTrackAndDisc", prop("isRingtone"), prop("sortKey.albumDiscAndTrack", "primary")),
-        named("serviced", prop("serviced")), named("hasResizedThumbnails", prop("hasResizedThumbnails")),
+        KindSpec.index("AllSongsByAlbum", KindSpec.prop("isRingtone"), KindSpec.prop("album", "primary")),
+        KindSpec.index("AllSongsByAlbumTrackAndDisc", KindSpec.prop("isRingtone"), KindSpec.prop("sortKey.albumDiscAndTrack", "primary")),
+        KindSpec.index("serviced", KindSpec.prop("serviced")), KindSpec.index("hasResizedThumbnails", KindSpec.prop("hasResizedThumbnails")),
         listOf("_rev")), extends = false)
 
-    private fun permissions(kind: String): JSONArray = JSONArray(CONSUMERS.getValue(kind).map { app ->
-        JSONObject().put("type", "db.kind").put("object", kind).put("caller", app).put("operations", JSONObject()
-            .put("create", "allow").put("read", "allow").put("update", "allow").put("delete", "allow"))
-    })
+    private fun permissions(kind: String): JSONArray = KindSpec.permissions(kind, CONSUMERS.getValue(kind), *ALL_OPERATIONS)
 
     companion object {
             /**
@@ -373,10 +362,8 @@ class MediaIndex(private val webosRoot: File) {
         const val AUDIO = "com.palm.media.audio.file:1"
 
         /** filenotifyd's music consumers' access to one of the music kinds (MusicLibrary's too). */
-        fun musicPermissions(kind: String): JSONArray = JSONArray(MUSIC_CONSUMERS.map { app ->
-            JSONObject().put("type", "db.kind").put("object", kind).put("caller", app).put("operations", JSONObject()
-                .put("create", "allow").put("read", "allow").put("update", "allow").put("delete", "allow"))
-        })
+        fun musicPermissions(kind: String): JSONArray = KindSpec.permissions(kind, MUSIC_CONSUMERS, *ALL_OPERATIONS)
+        private val ALL_OPERATIONS = arrayOf("create", "read", "update", "delete")
         private val MUSIC_CONSUMERS = listOf("com.palm.app.musicplayer", "com.palm.service.music", "com.palm.launcher",
             "com.palm.service.mediacache", "com.palm.systemui", "com.palm.mojo-systemui")
         private const val UNKNOWN_ARTIST = "Unknown Artist"

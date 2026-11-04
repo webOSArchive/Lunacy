@@ -77,27 +77,20 @@ class FileIndex(private val webosRoot: File) {
     }
 
     /** filenotifyd_module_unknown.js's registration: the kind and its indexes. */
-    private fun kindSpec(): JSONObject {
-        fun props(vararg p: JSONObject) = JSONArray(p.toList())
-        fun prop(name: String, collate: String? = null, tokenize: String? = null) =
-            JSONObject().put("name", name).apply { collate?.let { put("collate", it) }; tokenize?.let { put("tokenize", it) } }
-        fun index(name: String, p: JSONArray) = JSONObject().put("name", name).put("props", p)
-        return JSONObject().put("id", KIND).put("owner", OWNER).put("indexes", JSONArray(listOf(
-            index("path", props(prop("path"))),
-            index("rev", props(prop("_rev"))),
-            index("revPath", props(prop("_rev"), prop("path"))),
-            index("searchKeyIndex", props(prop("searchKey", "primary", "default"))),
-            index("searchKeyIndexOnExtension", props(prop("extension"), prop("searchKey", "primary", "default"))),
-            index("listIndexOnExtension", props(prop("extension"), prop("name", "primary"))),
-            index("listIndex", props(prop("name", "primary"))),
+    private fun kindSpec(): JSONObject = with(KindSpec) {
+        kind(KIND, OWNER, JSONArray(listOf(
+            index("path", prop("path")),
+            index("rev", prop("_rev")),
+            index("revPath", prop("_rev"), prop("path")),
+            index("searchKeyIndex", prop("searchKey", "primary", "default")),
+            index("searchKeyIndexOnExtension", prop("extension"), prop("searchKey", "primary", "default")),
+            index("listIndexOnExtension", prop("extension"), prop("name", "primary")),
+            index("listIndex", prop("name", "primary")),
         )))
     }
 
     /** Its consumers, which may read the records and add to them (measured with Quick Office's id). */
-    private fun permissions(): JSONArray = JSONArray(CONSUMERS.map { app ->
-        JSONObject().put("type", "db.kind").put("object", KIND).put("caller", app)
-            .put("operations", JSONObject().put("read", "allow").put("update", "allow"))
-    })
+    private fun permissions(): JSONArray = KindSpec.permissions(KIND, CONSUMERS, "read", "update")
 
     companion object {
         const val KIND = "com.palm.media.misc.file:1"

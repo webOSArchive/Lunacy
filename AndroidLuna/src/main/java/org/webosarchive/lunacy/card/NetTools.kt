@@ -61,13 +61,9 @@ class NetTools(private val context: Context) {
         throw last ?: IllegalStateException("no resolver")
     }
 
-    @Suppress("DEPRECATION")
     private fun resolvers(): List<InetAddress> {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val net = if (android.os.Build.VERSION.SDK_INT >= 23) cm.activeNetwork else {
-            val type = cm.activeNetworkInfo?.takeIf { it.isConnected }?.type
-            cm.allNetworks.firstOrNull { cm.getNetworkInfo(it)?.let { i -> i.isConnected && i.type == type } == true }
-        }
+        val net = HostNetwork.activeNetwork(cm)
         return net?.let { cm.getLinkProperties(it)?.dnsServers }.orEmpty().ifEmpty { listOf(InetAddress.getByName("8.8.8.8")) }
     }
 

@@ -192,17 +192,17 @@ class AppServer(
             // The system UI's shared scripts, beside its app/ folder (the file picker loads ../../utils).
             path.startsWith(SYSTEM_UI_UTILS) -> asset("luna-systemui/utils/" + path.removePrefix(SYSTEM_UI_UTILS), path, resource)
             path.startsWith(SEARCH_ICONS) -> asset("luna-applauncher/images/" + path.removePrefix(SEARCH_ICONS), path, resource)
-            path.startsWith(BROWSER_DATA) -> java.io.File(webosRoot, path).takeIf { it.isFile && it.canonicalPath.startsWith(java.io.File(webosRoot, BROWSER_DATA).canonicalPath + java.io.File.separator) }
+            path.startsWith(BROWSER_DATA) -> java.io.File(webosRoot, path).takeIf { it.isFile && UserFiles.inside(it, java.io.File(webosRoot, BROWSER_DATA)) }
                 ?.let { respond(it.inputStream(), path, resource, app) }
             // The webOS root's list of the packages its ROM ships (WebosRoot), which App Catalog
             // reads as the apps it can revert to their shipped version.
-            path.startsWith(IPKGS) -> java.io.File(webosRoot, path).takeIf { it.isFile && it.canonicalPath.startsWith(java.io.File(webosRoot, IPKGS).canonicalPath + java.io.File.separator) }
+            path.startsWith(IPKGS) -> java.io.File(webosRoot, path).takeIf { it.isFile && UserFiles.inside(it, java.io.File(webosRoot, IPKGS)) }
                 ?.let { respond(it.inputStream(), path, resource, app) }
             // The rest of the webOS root that pages read by path on a device: the system's
             // files under /usr/palm (command-resource-handlers.json, account templates' icons)
             // and the file cache (Email's bodies and attachments, which mojomail writes there).
             ROOT_READABLE.any { path.startsWith(it) } -> java.io.File(webosRoot, path).takeIf { f ->
-                f.isFile && ROOT_READABLE.any { f.canonicalPath.startsWith(java.io.File(webosRoot, it).canonicalPath + java.io.File.separator) }
+                f.isFile && ROOT_READABLE.any { UserFiles.inside(f, java.io.File(webosRoot, it)) }
             }?.let { respond(it.inputStream(), path, resource, app) }
             encodedPath.startsWith(EXTRACTFS) ->
                 extractfs(Uri.decode(encodedPath.removePrefix(EXTRACTFS)))

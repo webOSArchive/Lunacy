@@ -124,10 +124,11 @@ class JsServices(private val bus: Bus, private val installed: File, private val 
     /** An absolute webOS path as services see it: user storage (with Android's folders), installed packages, the rest of the tree. */
     private fun openWebos(path: String): (() -> java.io.InputStream?)? {
         val p = "/" + path.trimStart('/')
+        // Each stays inside the tree it names (code review §3.2: this one had no check).
         val f = when {
             p.startsWith("/media/internal/") -> UserFiles.resolve(root, p.removePrefix("/media/internal/"))
-            p.startsWith("/media/cryptofs/apps/") -> File(installed, p.removePrefix("/media/cryptofs/apps/"))
-            else -> File(root, p.trimStart('/'))
+            p.startsWith("/media/cryptofs/apps/") -> File(installed, p.removePrefix("/media/cryptofs/apps/")).takeIf { UserFiles.inside(it, installed) }
+            else -> File(root, p.trimStart('/')).takeIf { UserFiles.inside(it, root) }
         }?.takeIf { it.isFile } ?: return null
         return { runCatching { f.inputStream() as java.io.InputStream }.getOrNull() }
     }

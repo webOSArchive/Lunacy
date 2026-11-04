@@ -65,7 +65,7 @@ class Ringtones(private val context: Context, private val webosRoot: File) {
         if (!p.startsWith("/")) return null
         val f = if (p.startsWith("/media/internal")) UserFiles.resolve(webosRoot, p.removePrefix("/media/internal"))
             else File(webosRoot, p.trimStart('/'))
-        return f?.takeIf { it.canonicalPath.startsWith(webosRoot.canonicalPath + File.separator) || UserFiles.webosPath(webosRoot, it) != null }
+        return f?.takeIf { UserFiles.inside(it, webosRoot) || UserFiles.webosPath(webosRoot, it) != null }
     }
 
     private fun add(p: JSONObject): String {

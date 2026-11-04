@@ -183,7 +183,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         if (rel.startsWith(AppServer.MEDIA_INTERNAL)) return UserFiles.resolve(webosRoot, rel.removePrefix(AppServer.MEDIA_INTERNAL))
         if (rel == "media/internal") return UserFiles.own(webosRoot)
         val f = File(webosRoot, rel)
-        return f.takeIf { it.canonicalPath.startsWith(webosRoot.canonicalPath + File.separator) }
+        return f.takeIf { UserFiles.inside(it, webosRoot) }
     }
 
     /** One native view. Not tied to its first owner: a window a page opens moves to the card the app opens for it. */

@@ -49,20 +49,20 @@ class MusicLibrary(private val context: Context, private val webosRoot: File) {
         db.mirror(spec(PLAYLIST_FILE, listOf(listOf("path"), listOf("_rev"))),
             MediaIndex.musicPermissions(PLAYLIST_FILE)) { playlists() }
         db.configure(listOf(spec(PLAYLIST_OBJECT, listOf(listOf("title"), listOf("_rev")))), listOf(MediaIndex.musicPermissions(PLAYLIST_OBJECT)))
-        db.mirror(spec(ALBUM, listOf(named("albumname", prop("name", "primary")), named("serviced", prop("serviced")),
-                named("hasResizedThumbnails", prop("hasResizedThumbnails")), listOf("genre"), listOf("artist"),
+        db.mirror(spec(ALBUM, listOf(KindSpec.index("albumname", KindSpec.prop("name", "primary")), KindSpec.index("serviced", KindSpec.prop("serviced")),
+                KindSpec.index("hasResizedThumbnails", KindSpec.prop("hasResizedThumbnails")), listOf("genre"), listOf("artist"),
                 listOf("hasResizedThumbnails", "_del"), listOf("_rev"))),
             MediaIndex.musicPermissions(ALBUM), initial = keepers, key = ::albumKey) { albums(songs(), true) }
-        db.mirror(spec(ARTIST_ALBUM, listOf(named("albumname", prop("name", "primary")),
-                named("artistalbumname", prop("artist"), prop("name", "primary")), named("serviced", prop("serviced")),
-                named("hasResizedThumbnails", prop("hasResizedThumbnails")), listOf("artist"),
+        db.mirror(spec(ARTIST_ALBUM, listOf(KindSpec.index("albumname", KindSpec.prop("name", "primary")),
+                KindSpec.index("artistalbumname", KindSpec.prop("artist"), KindSpec.prop("name", "primary")), KindSpec.index("serviced", KindSpec.prop("serviced")),
+                KindSpec.index("hasResizedThumbnails", KindSpec.prop("hasResizedThumbnails")), listOf("artist"),
                 listOf("hasResizedThumbnails", "_del"), listOf("_rev"))),
             MediaIndex.musicPermissions(ARTIST_ALBUM), initial = keepers, key = ::albumKey) { albums(songs(), false) }
-        db.mirror(spec(ARTIST, listOf(named("artistname", prop("name", "primary")), named("serviced", prop("serviced")),
-                named("hasResizedThumbnails", prop("hasResizedThumbnails")), listOf("hasResizedThumbnails", "_del"), listOf("_rev"))),
+        db.mirror(spec(ARTIST, listOf(KindSpec.index("artistname", KindSpec.prop("name", "primary")), KindSpec.index("serviced", KindSpec.prop("serviced")),
+                KindSpec.index("hasResizedThumbnails", KindSpec.prop("hasResizedThumbnails")), listOf("hasResizedThumbnails", "_del"), listOf("_rev"))),
             MediaIndex.musicPermissions(ARTIST), initial = keepers, key = { it.optString("name") }) { artists(songs()) }
-        db.mirror(spec(GENRE, listOf(named("genrename", prop("name", "primary")), named("serviced", prop("serviced")),
-                named("hasResizedThumbnails", prop("hasResizedThumbnails")), listOf("hasResizedThumbnails", "_del"), listOf("_rev"))),
+        db.mirror(spec(GENRE, listOf(KindSpec.index("genrename", KindSpec.prop("name", "primary")), KindSpec.index("serviced", KindSpec.prop("serviced")),
+                KindSpec.index("hasResizedThumbnails", KindSpec.prop("hasResizedThumbnails")), listOf("hasResizedThumbnails", "_del"), listOf("_rev"))),
             MediaIndex.musicPermissions(GENRE), initial = keepers, key = { it.optString("name") }) { genres(songs()) }
     }
 
@@ -273,15 +273,7 @@ class MusicLibrary(private val context: Context, private val webosRoot: File) {
 
     // ---- kinds ----
 
-    private fun spec(id: String, indexes: List<Any>) = JSONObject().put("id", id).put("owner", "com.palm.filenotifyd.js")
-        .put("indexes", JSONArray(indexes.map { i ->
-            if (i is JSONObject) i
-            else (i as List<*>).let { props -> JSONObject().put("name", props.joinToString("_"))
-                .put("props", JSONArray(props.map { JSONObject().put("name", it) })) }
-        }))
-
-    private fun named(name: String, vararg props: JSONObject) = JSONObject().put("name", name).put("props", JSONArray(props.toList()))
-    private fun prop(name: String, collate: String? = null) = JSONObject().put("name", name).apply { collate?.let { put("collate", it) } }
+    private fun spec(id: String, indexes: List<Any>) = KindSpec.kind(id, "com.palm.filenotifyd.js", KindSpec.indexes(indexes))
 
     companion object {
         const val ALBUM = "com.palm.media.audio.album:1"

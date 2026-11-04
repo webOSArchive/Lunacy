@@ -40,13 +40,7 @@ class HostNetwork(private val context: Context, private val root: File) {
         Thread({ writeTrustStore() }, "ca-bundle").start()
     }
 
-    /** The network Android routes through: activeNetwork from API 23, the connected one of the active type before. */
-    @Suppress("DEPRECATION")
-    private fun active(): Network? {
-        if (android.os.Build.VERSION.SDK_INT >= 23) return cm.activeNetwork
-        val type = cm.activeNetworkInfo?.takeIf { it.isConnected }?.type ?: return null
-        return cm.allNetworks.firstOrNull { cm.getNetworkInfo(it)?.let { i -> i.isConnected && i.type == type } == true }
-    }
+    private fun active(): Network? = activeNetwork(cm)
 
     @Synchronized private fun writeResolvConf(lp: LinkProperties?) {
         val servers = lp?.dnsServers.orEmpty().mapNotNull { it.hostAddress?.substringBefore('%') }
@@ -86,5 +80,15 @@ class HostNetwork(private val context: Context, private val root: File) {
         val tmp = File(f.parentFile, ".${f.name}.new")
         tmp.writeText(text)
         return tmp.renameTo(f)
+    }
+
+    companion object {
+        /** The network Android routes through: activeNetwork from API 23, the connected one of the active type before. */
+        @Suppress("DEPRECATION")
+        fun activeNetwork(cm: ConnectivityManager): Network? {
+            if (android.os.Build.VERSION.SDK_INT >= 23) return cm.activeNetwork
+            val type = cm.activeNetworkInfo?.takeIf { it.isConnected }?.type ?: return null
+            return cm.allNetworks.firstOrNull { cm.getNetworkInfo(it)?.let { i -> i.isConnected && i.type == type } == true }
+        }
     }
 }

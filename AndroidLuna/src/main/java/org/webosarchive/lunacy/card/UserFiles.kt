@@ -89,7 +89,12 @@ object UserFiles {
         return c in roots && roots.any { it != c && c.startsWith(it + File.separator) }
     }
 
-    private fun inside(f: File, root: File): Boolean = try {
+    /**
+     * Whether [f] is [root] or inside it, by their canonical paths: a link or a ".." can't take
+     * it out, and a sibling whose name starts the same ("apps2" beside "apps") isn't inside.
+     * The one check every webOS path from a page or a service goes through.
+     */
+    fun inside(f: File, root: File): Boolean = try {
         val c = f.canonicalPath
         val r = root.canonicalPath
         c == r || c.startsWith(r + File.separator)

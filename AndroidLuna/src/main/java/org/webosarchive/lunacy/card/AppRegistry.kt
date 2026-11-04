@@ -144,8 +144,6 @@ internal fun isNewerVersion(a: String, b: String): Boolean {
  * bundled in the APK's assets/apps/. Every app is served at its /media/cryptofs/apps path.
  */
 class AppFiles(private val assets: AssetManager, val root: File, private val system: File? = null, private val apk: File? = null) {
-    private val rootPath = root.canonicalPath + File.separator
-    private val systemPath = system?.let { it.canonicalPath + File.separator }
 
     /**
      * The bundled apps' folders, from one read of the APK's index. AssetManager.list reads the
@@ -191,11 +189,11 @@ class AppFiles(private val assets: AssetManager, val root: File, private val sys
     /** rel is relative to /media/cryptofs/apps, e.g. "usr/palm/applications/<id>/index.html". */
     fun open(rel: String): InputStream? {
         val f = File(root, rel)
-        if (f.isFile && f.canonicalPath.startsWith(rootPath)) return f.inputStream()
+        if (f.isFile && UserFiles.inside(f, root)) return f.inputStream()
         if (!rel.startsWith("${Packages.APPS}/")) return null
         if (system != null) {
             val s = File(system, rel)
-            if (s.isFile && s.canonicalPath.startsWith(systemPath!!)) return s.inputStream()
+            if (s.isFile && UserFiles.inside(s, system)) return s.inputStream()
         }
         return try { assets.open("apps/" + rel.removePrefix("${Packages.APPS}/")) } catch (e: IOException) { null }
     }

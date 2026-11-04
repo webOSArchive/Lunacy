@@ -123,7 +123,7 @@ class LaunchPoints(private val webosRoot: File, private val files: AppFiles) {
             rel.startsWith(AppServer.MEDIA_INTERNAL) ->
                 UserFiles.resolve(webosRoot, rel.removePrefix(AppServer.MEDIA_INTERNAL))?.takeIf { it.isFile }?.inputStream()
             rel.startsWith(CRYPTOFS) -> files.open(rel.removePrefix(CRYPTOFS))
-            else -> File(webosRoot, rel).takeIf { it.isFile && it.canonicalPath.startsWith(webosRoot.canonicalPath + File.separator) }?.inputStream()
+            else -> File(webosRoot, rel).takeIf { it.isFile && UserFiles.inside(it, webosRoot) }?.inputStream()
         }
     } catch (e: Exception) { null }
 

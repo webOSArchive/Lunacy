@@ -45,44 +45,32 @@ import java.util.TimeZone
  * days in that zone, and a date matches whatever the clocks do, where its longer forms are
  * compared at the first occurrence's time of day. An all-day event's noon is the device's, so a change of zone runs a pass.
  */
-class AndroidCalendar(context: Context, private val db: Db8) {
-    private val context = context.applicationContext
-    private val prefs = this.context.getSharedPreferences("androidcalendar", Context.MODE_PRIVATE)
-    private val thread = HandlerThread("AndroidCalendar").apply { start() }
-    private val handler = Handler(thread.looper)
+class AndroidCalendar(context: Context, private val db: Db8) : AndroidAccountSide(
+    context, "androidcalendar", Manifest.permission.READ_CALENDAR, CalendarContract.CONTENT_URI, START_DELAY_MS,
+) {
     private val mainHandler = Handler(android.os.Looper.getMainLooper())
-    private val syncNow = Runnable { sync() }
-    private val observer = object : ContentObserver(handler) {
-        override fun onChange(selfChange: Boolean) = schedule(CHANGE_DELAY_MS)
-    }
     private val zoneChanged = object : BroadcastReceiver() {
         override fun onReceive(c: Context, intent: Intent) = schedule(0)
     }
-    private var watching = false
+
+    /** A change of zone moves an all-day event's noon: a pass. */
+    override fun onWatching(on: Boolean) {
+        if (on) context.registerReceiver(zoneChanged, IntentFilter(Intent.ACTION_TIMEZONE_CHANGED))
+        else context.unregisterReceiver(zoneChanged)
+    }
 
     fun attach(bus: Bus) {
         db.configure(listOf(calendarKind(), eventKind()), emptyList())
-        bus.register(AndroidContacts.SERVICE, "onCalendarEnabled", Bus.CallHandler(::onEnabled))
-        bus.register(AndroidContacts.SERVICE, "onCalendarDelete", Bus.CallHandler(::onDelete))
         bus.register(AndroidContacts.SERVICE, "getReminders", Bus.CallHandler { c -> ifCalendar(c) { c.reply(remindersReply()) } })
         bus.register(AndroidContacts.SERVICE, "setReminders", Bus.CallHandler(::setReminders))
         bus.register(AndroidContacts.SERVICE, "listCalendars", Bus.CallHandler(::listCalendars))
         bus.register(AndroidContacts.SERVICE, "chooseCalendar", Bus.CallHandler(::chooseCalendar))
-        if (accountId() != null) handler.post { startWatching(); schedule(START_DELAY_MS) }
+        registerAccount(bus, AndroidContacts.SERVICE, "onCalendarEnabled", "onCalendarDelete")
     }
 
-    fun close() {
-        handler.removeCallbacksAndMessages(null)
-        if (watching) { context.contentResolver.unregisterContentObserver(observer); context.unregisterReceiver(zoneChanged) }
-        thread.quitSafely()
-    }
-
-    private fun accountId(): String? = prefs.getString("accountId", null)
     private fun remindersOn() = prefs.getBoolean("reminders", true)
     private fun excluded(): Set<String> = prefs.getStringSet("excluded", emptySet()) ?: emptySet()
     private fun remindersReply() = Bus.ok(mapOf("on" to remindersOn(), "active" to (accountId() != null)))
-
-    private fun fromAccounts(call: Bus.Call) = call.app == "com.palm.service.accounts"
 
     /** Calendar's page, the account's page, and the apps that host it. */
     private fun ifCalendar(call: Bus.Call, then: () -> Unit) {
@@ -90,40 +78,7 @@ class AndroidCalendar(context: Context, private val db: Db8) {
         if (app in PAGES) then() else call.reply(Bus.error("Not for $app"))
     }
 
-    /** Always true to the accounts service: a failed answer leaves the account stuck. */
-    private fun onEnabled(call: Bus.Call) {
-        if (!fromAccounts(call)) { call.reply(Bus.error("Only the accounts service calls this")); return }
-        val id = call.params.optString("accountId")
-        if (id.isEmpty()) { call.reply(Bus.error("accountId is required")); return }
-        if (call.params.optBoolean("enabled")) {
-            prefs.edit().putString("accountId", id).apply()
-            handler.post { handler.removeCallbacksAndMessages(REMOVAL); startWatching(); schedule(0) }
-        } else stop(id)
-        call.reply(Bus.ok())
-    }
-
-    private fun onDelete(call: Bus.Call) {
-        if (!fromAccounts(call)) { call.reply(Bus.error("Only the accounts service calls this")); return }
-        val id = call.params.optString("accountId")
-        val keep = call.params.optBoolean("keepData")
-        handler.post {
-            handler.removeCallbacksAndMessages(REMOVAL)
-            if (id.isNotEmpty() && !keep) remove(id)
-        }
-        call.reply(Bus.ok())
-    }
-
-    /** As [AndroidContacts.stop]: only onDelete says whether to keep the data, so this waits for it. */
-    private fun stop(id: String) {
-        prefs.edit().remove("accountId").apply()
-        handler.post {
-            handler.removeCallbacks(syncNow)
-            stopWatching()
-            handler.postAtTime({ remove(id) }, REMOVAL, android.os.SystemClock.uptimeMillis() + REMOVAL_DELAY_MS)
-        }
-    }
-
-    private fun remove(id: String) {
+    override fun remove(id: String) {
         db.syncAccount(EVENT_KIND, id, emptyList())
         db.syncAccount(CALENDAR_KIND, id, emptyList()) { _, _, removed -> Log.i(AppServer.TAG, "androidcalendar: removed $removed calendars") }
     }
@@ -155,29 +110,8 @@ class AndroidCalendar(context: Context, private val db: Db8) {
         call.reply(Bus.ok())
     }
 
-    private fun granted() = context.checkPermission(Manifest.permission.READ_CALENDAR, Process.myPid(), Process.myUid()) == PackageManager.PERMISSION_GRANTED
-
-    private fun startWatching() {
-        if (watching || !granted()) return
-        context.contentResolver.registerContentObserver(CalendarContract.CONTENT_URI, true, observer)
-        context.registerReceiver(zoneChanged, IntentFilter(Intent.ACTION_TIMEZONE_CHANGED))
-        watching = true
-    }
-
-    private fun stopWatching() {
-        if (!watching) return
-        context.contentResolver.unregisterContentObserver(observer)
-        context.unregisterReceiver(zoneChanged)
-        watching = false
-    }
-
-    private fun schedule(delay: Long) {
-        handler.removeCallbacks(syncNow)
-        handler.postDelayed(syncNow, delay)
-    }
-
     /** Counts only in the log: these are people's plans. */
-    private fun sync() {
+    override fun sync() {
         val id = accountId() ?: return
         if (!granted()) { Log.w(AppServer.TAG, "androidcalendar: no permission; the copy stays as it was"); return }
         startWatching()
@@ -482,13 +416,10 @@ class AndroidCalendar(context: Context, private val db: Db8) {
     }
 
     /** Extends first, as db8's permissions fall back to it; Calendar and the reminder service read through the base kind. */
-    private fun calendarKind() = JSONObject().put("id", CALENDAR_KIND).put("owner", AndroidContacts.SERVICE).put("extends", JSONArray().put("com.palm.calendar:1"))
-        .put("indexes", JSONArray().put(index("accountId")))
+    private fun calendarKind() = KindSpec.kind(CALENDAR_KIND, AndroidContacts.SERVICE, JSONArray().put(KindSpec.plain("accountId")), "com.palm.calendar:1")
 
-    private fun eventKind() = JSONObject().put("id", EVENT_KIND).put("owner", AndroidContacts.SERVICE).put("extends", JSONArray().put("com.palm.calendarevent:1"))
-        .put("indexes", JSONArray().put(index("accountId")).put(index("calendarId")))
-
-    private fun index(prop: String) = JSONObject().put("name", prop).put("props", JSONArray().put(JSONObject().put("name", prop)))
+    private fun eventKind() = KindSpec.kind(EVENT_KIND, AndroidContacts.SERVICE,
+        JSONArray().put(KindSpec.plain("accountId")).put(KindSpec.plain("calendarId")), "com.palm.calendarevent:1")
 
     companion object {
         const val CALENDAR_KIND = "org.webosarchive.calendar.android:1"
@@ -499,10 +430,7 @@ class AndroidCalendar(context: Context, private val db: Db8) {
         private const val WINDOW_BACK_MS = 366 * DAY_MS
         private const val WINDOW_AHEAD_MS = 731 * DAY_MS
         private const val DEFAULT_REMINDER = 10
-        private const val CHANGE_DELAY_MS = 3000L
         private const val START_DELAY_MS = 6000L
-        private const val REMOVAL_DELAY_MS = 8000L
-        private val REMOVAL = Any()
         private val ZONES by lazy { TimeZone.getAvailableIDs().toHashSet() }
         private val FREQUENCIES = setOf("DAILY", "WEEKLY", "MONTHLY", "YEARLY")
         private val DAYS = listOf("SU", "MO", "TU", "WE", "TH", "FR", "SA")

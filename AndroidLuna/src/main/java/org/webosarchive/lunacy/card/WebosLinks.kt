@@ -121,7 +121,7 @@ object WebosLinks {
         if (!path.lowercase(java.util.Locale.US).endsWith(".apk")) return null
         val uri = if (android.os.Build.VERSION.SDK_INT >= 24) MediaFiles.uriFor(path) ?: return null
             else UserFiles.resolve(webosRoot, path.removePrefix("/media/internal/").takeIf { path.startsWith("/media/internal/") } ?: return null)
-                ?.takeIf { it.isFile && !it.canonicalPath.startsWith(webosRoot.canonicalPath) }?.let { Uri.fromFile(it) } ?: return null
+                ?.takeIf { it.isFile && !UserFiles.inside(it, webosRoot) }?.let { Uri.fromFile(it) } ?: return null
         return Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }

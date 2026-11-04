@@ -114,22 +114,19 @@ class DownloadManager(private val webosRoot: File) {
     private fun download(call: Bus.Call) {
         val target = call.params.optString("target")
         if (target.isEmpty()) {
-            return call.reply(JSONObject(mapOf("returnValue" to false, "errorCode" to "-1",
-                "errorText" to "Failed to find param target in message", "subscribed" to false)).toString())
+            return call.reply(badRequest("Failed to find param target in message"))
         }
         val dir = call.params.optString("targetDir").ifEmpty { DEFAULT_DIR }
         val name = call.params.optString("targetFilename").ifEmpty { target.substringAfterLast('/').substringBefore('?') }
         // A URL that ends in a slash names no file; without this the download's target was the
         // folder itself, which it then deleted to put the file in its place.
         if (name.isEmpty() || name == "." || name == ".." || '/' in name) {
-            return call.reply(JSONObject(mapOf("returnValue" to false, "errorCode" to "-1",
-                "errorText" to "Invalid target filename", "subscribed" to false)).toString())
+            return call.reply(badRequest("Invalid target filename"))
         }
         val destPath = if (dir.endsWith("/")) dir else "$dir/"
         val file = resolve(destPath + name)
         if (file == null || file.isDirectory) {
-            return call.reply(JSONObject(mapOf("returnValue" to false, "errorCode" to "-1",
-                "errorText" to "Invalid target directory", "subscribed" to false)).toString())
+            return call.reply(badRequest("Invalid target directory"))
         }
         val ticket = synchronized(this) { nextTicket++ }
         val rec = Record(ticket, target, destPath, name, destPath + name, file)
@@ -263,6 +260,10 @@ class DownloadManager(private val webosRoot: File) {
         records[p.optInt("ticket", -1)]?.takeIf { !it.finished }?.aborted = true
         return refused("Ticket provided does not correspond to a downloading transfer")
     }
+
+    /** download's refusal of a request it can't use, as the TouchPad answered it. */
+    private fun badRequest(text: String) =
+        JSONObject(mapOf("returnValue" to false, "errorCode" to "-1", "errorText" to text, "subscribed" to false)).toString()
 
     private fun refused(text: String) =
         JSONObject(mapOf("subscribed" to false, "returnValue" to false, "errorCode" to text)).toString()

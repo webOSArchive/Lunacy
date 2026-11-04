@@ -36,96 +36,23 @@ import java.security.MessageDigest
  * read every few seconds. If Android can't be read (the permission taken away, say), the last
  * copy stays as it is rather than being taken for an empty list.
  */
-class AndroidContacts(context: Context, webosRoot: File, private val db: Db8) {
-    private val context = context.applicationContext
-    private val prefs = this.context.getSharedPreferences("androidcontacts", Context.MODE_PRIVATE)
-    private val thread = HandlerThread("AndroidContacts").apply { start() }
-    private val handler = Handler(thread.looper)
+class AndroidContacts(context: Context, webosRoot: File, private val db: Db8) : AndroidAccountSide(
+    context, "androidcontacts", Manifest.permission.READ_CONTACTS, ContactsContract.Contacts.CONTENT_URI, START_DELAY_MS,
+) {
     private val photos = File(UserFiles.own(webosRoot), ".contactphotos")
-    private val syncNow = Runnable { sync() }
-    private val observer = object : ContentObserver(handler) {
-        override fun onChange(selfChange: Boolean) = schedule(CHANGE_DELAY_MS)
-    }
-    private var watching = false
 
     fun attach(bus: Bus) {
         db.configure(listOf(kindSpec()), emptyList())
-        bus.register(SERVICE, "onEnabled", Bus.CallHandler(::onEnabled))
-        bus.register(SERVICE, "onDelete", Bus.CallHandler(::onDelete))
-        if (accountId() != null) handler.post { startWatching(); schedule(START_DELAY_MS) }
+        registerAccount(bus, SERVICE, "onEnabled", "onDelete")
     }
 
-    fun close() {
-        handler.removeCallbacksAndMessages(null)
-        if (watching) context.contentResolver.unregisterContentObserver(observer)
-        thread.quitSafely()
-    }
-
-    private fun accountId(): String? = prefs.getString("accountId", null)
-
-    /**
-     * The accounts service, as the account's capability is turned on or off. It always gets
-     * true: a failed answer leaves its chain of calls waiting, with the account stuck. Whether
-     * the copy could be made shows in Contacts, not in this reply.
-     */
-    private fun onEnabled(call: Bus.Call) {
-        if (call.app != ACCOUNTS_SERVICE) { call.reply(Bus.error("Only the accounts service calls this")); return }
-        val id = call.params.optString("accountId")
-        if (id.isEmpty()) { call.reply(Bus.error("accountId is required")); return }
-        if (call.params.optBoolean("enabled")) {
-            prefs.edit().putString("accountId", id).apply()
-            handler.post { handler.removeCallbacksAndMessages(REMOVAL); startWatching(); schedule(0) }
-        } else stop(id)
-        call.reply(Bus.ok())
-    }
-
-    private fun onDelete(call: Bus.Call) {
-        if (call.app != ACCOUNTS_SERVICE) { call.reply(Bus.error("Only the accounts service calls this")); return }
-        val id = call.params.optString("accountId")
-        val keep = call.params.optBoolean("keepData")
-        handler.post {
-            handler.removeCallbacksAndMessages(REMOVAL)
-            // Remove Account's "keep data" box: the contacts stay, as they are, with no account.
-            if (id.isNotEmpty() && !keep) remove(id)
-        }
-        call.reply(Bus.ok())
-    }
-
-    /**
-     * Off: no more copying, and the copy goes, a moment later. The accounts service turns a
-     * capability off before it deletes the account too, and only onDelete says whether to keep
-     * the data, so this waits for that. Turning the capability off alone just takes the wait.
-     */
-    private fun stop(id: String) {
-        prefs.edit().remove("accountId").apply()
-        handler.post {
-            handler.removeCallbacks(syncNow)
-            if (watching) { context.contentResolver.unregisterContentObserver(observer); watching = false }
-            handler.postAtTime({ remove(id) }, REMOVAL, android.os.SystemClock.uptimeMillis() + REMOVAL_DELAY_MS)
-        }
-    }
-
-    private fun remove(id: String) {
+    override fun remove(id: String) {
         db.syncAccount(KIND, id, emptyList()) { _, _, removed -> Log.i(AppServer.TAG, "androidcontacts: removed $removed") }
         cleanPhotos(emptySet())
     }
 
-    private fun granted() = context.checkPermission(Manifest.permission.READ_CONTACTS, Process.myPid(), Process.myUid()) == PackageManager.PERMISSION_GRANTED
-
-    private fun startWatching() {
-        if (watching || !granted()) return
-        context.contentResolver.registerContentObserver(ContactsContract.Contacts.CONTENT_URI, true, observer)
-        watching = true
-    }
-
-    /** Android signals a burst of changes while an account syncs: one pass, once it settles. */
-    private fun schedule(delay: Long) {
-        handler.removeCallbacks(syncNow)
-        handler.postDelayed(syncNow, delay)
-    }
-
     /** Counts only in the log, here and everywhere in this class: these are real people's details. */
-    private fun sync() {
+    override fun sync() {
         val id = accountId() ?: return
         if (!granted()) { Log.w(AppServer.TAG, "androidcontacts: no permission; the copy stays as it was"); return }
         startWatching()
@@ -296,20 +223,15 @@ class AndroidContacts(context: Context, webosRoot: File, private val db: Db8) {
     private fun hash(text: String) = MessageDigest.getInstance("SHA-1").digest(text.toByteArray()).take(8).joinToString("") { "%02x".format(it) }
 
     /** Its indexes are its own: db8 serves a query from the queried kind's. */
-    private fun kindSpec() = JSONObject().put("id", KIND).put("owner", SERVICE).put("extends", JSONArray().put("com.palm.contact:1"))
-        .put("indexes", JSONArray().put(JSONObject().put("name", "accountId").put("props", JSONArray().put(JSONObject().put("name", "accountId")))))
+    private fun kindSpec() = KindSpec.kind(KIND, SERVICE, JSONArray().put(KindSpec.plain("accountId")), "com.palm.contact:1")
 
     companion object {
         const val SERVICE = "org.webosarchive.lunacy.androidaccount"
         const val KIND = "org.webosarchive.contact.android:1"
-        private const val ACCOUNTS_SERVICE = "com.palm.service.accounts"
         private const val PHOTO_PREFIX = "android-"
         private const val BIG = 196
         private const val SQUARE = 50
-        private const val CHANGE_DELAY_MS = 3000L
         private const val START_DELAY_MS = 5000L
-        private const val REMOVAL_DELAY_MS = 8000L
-        private val REMOVAL = Any()
         private val PROJECTION = arrayOf(Data.LOOKUP_KEY, Data.DISPLAY_NAME, Data.MIMETYPE, Data.IS_PRIMARY, Data.IS_SUPER_PRIMARY, Data.PHOTO_URI, Data.PHOTO_ID,
             Data.DATA1, Data.DATA2, Data.DATA3, Data.DATA4, Data.DATA5, Data.DATA6, Data.DATA7, Data.DATA8, Data.DATA9, Data.DATA10)
         private val PHONE_TYPES = mapOf(Kinds.Phone.TYPE_MOBILE to "type_mobile", Kinds.Phone.TYPE_HOME to "type_home", Kinds.Phone.TYPE_WORK to "type_work",

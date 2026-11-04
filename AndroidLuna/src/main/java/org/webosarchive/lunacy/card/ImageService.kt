@@ -61,7 +61,7 @@ class ImageService(private val webosRoot: File) {
         val prefix = "/media/internal"
         if (path == prefix || path.startsWith("$prefix/")) return UserFiles.resolve(webosRoot, path.removePrefix(prefix))
         val f = File(webosRoot, path.trimStart('/'))
-        return f.takeIf { it.canonicalPath.startsWith(webosRoot.canonicalPath + File.separator) }
+        return f.takeIf { UserFiles.inside(it, webosRoot) }
     }
 
     private fun source(p: JSONObject): File {
@@ -99,15 +99,20 @@ class ImageService(private val webosRoot: File) {
         return out to Canvas(out)
     }
 
+    /** The source image written out whole as [type] (a convert with no crop, or a crop at full scale). */
+    private fun copy(src: File, dest: String, type: String) {
+        val (bmp, _) = decode(src)
+        save(bmp, dest, type)
+        bmp.recycle()
+    }
+
     private fun convert(p: JSONObject): JSONObject {
         val src = source(p)
         val dest = string(p, "dest")
         val type = string(p, "destType")
         val crop = listOf("focusX", "focusY", "scale", "cropW", "cropH").any { p.has(it) }
         if (!crop) {
-            val (bmp, _) = decode(src)
-            save(bmp, dest, type)
-            bmp.recycle()
+            copy(src, dest, type)
             return ok()
         }
         val focusX = p.optDouble("focusX", 0.5)
@@ -123,9 +128,7 @@ class ImageService(private val webosRoot: File) {
         BitmapFactory.decodeFile(src.path, bounds)
         if (bounds.outWidth <= 0) throw ImageError("Unable to read image")
         if (scale == 1.0) {
-            val (bmp, _) = decode(src)
-            save(bmp, dest, type)
-            bmp.recycle()
+            copy(src, dest, type)
             return ok()
         }
         // The scaled image, and the window cut from it: clamped to its size, then kept inside it.

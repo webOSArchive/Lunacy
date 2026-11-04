@@ -109,7 +109,6 @@ class SystemService(private val webosRoot: File, private val store: File) {
      * fields are unchanged for anything else that reads them.
      */
     private fun timeZoneRules(raw: String): String {
-        val fail = { text: String -> JSONObject().put("returnValue", false).put("errorText", text).toString() }
         val asked = try { org.json.JSONArray(raw) } catch (e: Exception) { return fail("json root needs to be an array") }
         if (asked.length() == 0) return fail(NO_RULES)
         val known = zoneIds
@@ -152,7 +151,6 @@ class SystemService(private val webosRoot: File, private val store: File) {
      * and without whole dates the months they name choose the zone (byChangeMonths).
      */
     private fun timeZoneFromEasData(p: JSONObject): String {
-        val fail = { text: String -> JSONObject().put("returnValue", false).put("errorText", text).toString() }
         val bias = p.opt("bias")
         if (bias !is Int && bias !is Long) return fail("bias value missing")
         val offset = -(bias as Number).toInt()
@@ -414,7 +412,7 @@ class SystemService(private val webosRoot: File, private val store: File) {
         return "$base-$n$ext"
     }
 
-    private fun inside(f: File) = f.canonicalPath.startsWith(webosRoot.canonicalPath + File.separator)
+    private fun inside(f: File) = UserFiles.inside(f, webosRoot)
 
     /** A wallpaper is named by its file name in the store; anything with a path in it names none. */
     private fun wallpaperFile(name: String): File? =
@@ -457,4 +455,7 @@ class SystemService(private val webosRoot: File, private val store: File) {
             return if (day > last) day - 7 else day
         }
     }
+
+    /** A refusal as these systemservice methods gave it: no errorCode. */
+    private fun fail(text: String) = JSONObject().put("returnValue", false).put("errorText", text).toString()
 }

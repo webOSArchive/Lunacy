@@ -176,19 +176,13 @@ class Db8(private val service: String, file: File?,
                     if (old == null) {
                         val o = JSONObject(r.toString()).put("_kind", kind).put("_rev", nextRev())
                         if (!o.has("_id")) o.put("_id", newId())
-                        assignIds(o)
-                        applyRevSets(null, o)
-                        store(o)
-                        changed(null, o)
+                        write(null, o)
                         added++
                     } else if (!r.keys().asSequence().all { same(old.opt(it), r.opt(it)) }) {
                         val o = JSONObject(old.toString())
                         for (k in r.keys()) o.put(k, r.get(k))
                         o.put("_rev", nextRev())
-                        assignIds(o)
-                        applyRevSets(old, o)
-                        store(o)
-                        changed(old, o)
+                        write(old, o)
                         updated++
                     }
                 }
@@ -223,10 +217,7 @@ class Db8(private val service: String, file: File?,
             }
             for (f in byPath.values + rewritten) {
                 val o = JSONObject(f.toString()).put("_kind", kind).put("_id", newId()).put("_rev", nextRev())
-                assignIds(o)
-                applyRevSets(null, o)
-                store(o)
-                changed(null, o)
+                write(null, o)
             }
         }
         m.stamps = stamps
@@ -485,6 +476,21 @@ class Db8(private val service: String, file: File?,
      * _rev; otherwise the prop keeps whatever the object carries. The mail services watch
      * these (ImapConfigRev, UpsyncRev, _revSmtp) to hear of changes they must act on.
      */
+    /**
+     * Stores an object as db8 writes one: arrays' objects given their ids ([assignIds]), the
+     * kind's revision sets moved on ([applyRevSets]), the row written, and watchers told.
+     * [o] carries its `_id`, `_kind` and new `_rev` already; [old] is what it replaces, if anything.
+     */
+    private fun write(old: JSONObject?, o: JSONObject) {
+        assignIds(o)
+        applyRevSets(old, o)
+        store(o)
+        changed(old, o)
+    }
+
+    /** A put's or merge's result for one object: `{"id","rev"}`. */
+    private fun idRev(o: JSONObject): JSONObject = JSONObject().put("id", o.getString("_id")).put("rev", o.getLong("_rev"))
+
     private fun applyRevSets(old: JSONObject?, o: JSONObject) {
         val seen = HashSet<String>()
         val todo = ArrayDeque<String>().apply { add(o.optString("_kind")) }
@@ -546,12 +552,9 @@ class Db8(private val service: String, file: File?,
             for ((old, o) in prepared) {
                 if (!o.has("_id")) o.put("_id", newId())
                 o.put("_rev", nextRev())
-                assignIds(o)
-                applyRevSets(old, o)
                 if (old != null && old.optString("_kind") != o.optString("_kind")) purge(old)
-                store(o)
-                results.put(JSONObject().put("id", o.getString("_id")).put("rev", o.getLong("_rev")))
-                changed(old, o)
+                write(old, o)
+                results.put(idRev(o))
             }
         }
         return JSONObject().put("returnValue", true).put("results", results).toString()
@@ -596,17 +599,14 @@ class Db8(private val service: String, file: File?,
                     checkAccess(caller, kindId, "create")
                     val o = JSONObject(patch.toString()).put("_rev", nextRev())
                     if (!o.has("_id")) o.put("_id", newId())
-                    assignIds(o)
-                    applyRevSets(null, o)
-                    store(o)
-                    changed(null, o)
-                    results.put(JSONObject().put("id", o.getString("_id")).put("rev", o.getLong("_rev")))
+                    write(null, o)
+                    results.put(idRev(o))
                     continue
                 }
                 checkAccess(caller, old.getString("_kind"), "update")
                 if (patch.has("_rev")) checkRev(old, patch.optLong("_rev"))
                 val o = mergeOne(old, patch)
-                results.put(JSONObject().put("id", o.getString("_id")).put("rev", o.getLong("_rev")))
+                results.put(idRev(o))
             }
         }
         return JSONObject().put("returnValue", true).put("results", results).toString()
@@ -617,10 +617,7 @@ class Db8(private val service: String, file: File?,
         val o = JSONObject(old.toString())
         deepMerge(o, props)
         o.put("_id", old.getString("_id")).put("_kind", old.getString("_kind")).put("_rev", nextRev())
-        assignIds(o)
-        applyRevSets(old, o)
-        store(o)
-        changed(old, o)
+        write(old, o)
         return o
     }
 
@@ -659,9 +656,7 @@ class Db8(private val service: String, file: File?,
     private fun delOne(old: JSONObject, purge: Boolean): JSONObject? {
         if (purge) { purge(old); changed(old, null); return null }
         val o = JSONObject(old.toString()).put("_del", true).put("_rev", nextRev())
-        applyRevSets(old, o)
-        store(o)
-        changed(old, o)
+        write(old, o)
         return o
     }
 

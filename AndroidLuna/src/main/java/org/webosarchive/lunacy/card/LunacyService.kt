@@ -579,7 +579,7 @@ class LunacyService(
         val internal = path.removePrefix("/media/internal").trimStart('/')
         val root = if (path.trimEnd('/') == "/media/internal" || path.startsWith("/media/internal/")) {
             UserFiles.resolve(webosRoot, internal)
-        } else File(webosRoot, path.trimStart('/')).takeIf { it.canonicalPath.startsWith(webosRoot.canonicalPath + File.separator) || it.canonicalPath == webosRoot.canonicalPath }
+        } else File(webosRoot, path.trimStart('/')).takeIf { UserFiles.inside(it, webosRoot) }
         if (root == null || !root.isDirectory) return Bus.error("No such folder: $path")
         // Lunacy's own folders, then the Android ones mapped in beside them (UserFiles), which
         // is where the files a person actually has live.

@@ -2,8 +2,13 @@ Just Type (com.palm.app.searchpreferences 1.0.0), the Settings app that chooses 
 Type offers, as it is on the reference TouchPad (webOS CE 3.1.0), copied from its
 /usr/palm/applications on 2026-11-03.
 
-The app is here exactly as it was packaged, and Lunacy does not change it (rule 5 in
-CLAUDE.md). Everything it shows and sets is com.palm.universalsearch's, which Lunacy answers
+The app is here as it was packaged, and Lunacy does not change it (rule 5 in CLAUDE.md), but
+for one image, as in Exhibition's settings app: images/appcatalog.png, the "Find More..."
+button's HP shopping bag, is the webOS App Catalog's icon, the same file as the CE project's
+system/usr/palm/applications/com.palm.app.searchpreferences/images/appcatalog.png
+(webos-doctor-ce 67ad3d8) and as Exhibition's (codepoet, 2026-11-04).
+
+Everything it shows and sets is com.palm.universalsearch's, which Lunacy answers
 (card/UniversalSearch.kt); the shell's Just Type reads the same settings.
 
 Copyright Palm, Inc. / Hewlett-Packard; never released under an open licence; distributed by

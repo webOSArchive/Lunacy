@@ -63,9 +63,11 @@ class ApplicationManager(
             reply(Bus.ok(mapOf("processId" to "success")))
             return@Handler
         }
-        // A bare target an installed app claims in the system's command-resource-handlers
-        // (mailto: is Email's), opened in that app, as webOS's application manager did.
-        handlers.redirectFor(p.optString("target"))?.takeIf { id.isEmpty() && registry.get(it) != null }?.let { app ->
+        // A bare target an installed app claims in the system's command-resource-handlers - by
+        // its redirects, or by its scheme's command (mailto: is Email's) - opened in that app,
+        // as webOS's application manager did.
+        (handlers.redirectFor(p.optString("target"))?.takeIf { registry.get(it) != null } ?: handlers.commandFor(p.optString("target")))
+            ?.takeIf { id.isEmpty() }?.let { app ->
             shell.launch(app, JSONObject().put("target", p.optString("target")), launchedBy = caller)
             reply(Bus.ok(mapOf("processId" to "success")))
             return@Handler
@@ -144,8 +146,11 @@ class ApplicationManager(
         bus.register(Bus.APPLICATION_MANAGER, "addLaunchPoint") { _, p, reply -> reply(addLaunchPoint(p)) }
         bus.register(Bus.APPLICATION_MANAGER, "removeLaunchPoint") { _, p, reply ->
             val id = p.optString("launchPointId")
-            reply(if (id.isEmpty()) Bus.error("Must provide a launchPointId")
-                  else removeLaunchPoint(id)?.let { Bus.error(it) } ?: Bus.ok())
+            // The TouchPad's errors here carry no errorCode, and a default launch point's id (not a
+            // number) gets an empty errorText (measured 2026-11-04).
+            fun fail(text: String) = JSONObject().put("returnValue", false).put("errorText", text).toString()
+            reply(if (id.isEmpty()) fail("Must provide a launchPointId")
+                  else removeLaunchPoint(id)?.let { fail(it) } ?: Bus.ok())
         }
         bus.register(Bus.APPLICATION_MANAGER, "updateLaunchPointIcon") { caller, p, reply -> reply(updateLaunchPointIcon(caller, p)) }
         bus.register(Bus.APPLICATION_MANAGER, "listAllHandlersForMime") { _, p, reply -> reply(handlersForMime(p)) }
@@ -247,6 +252,8 @@ class ApplicationManager(
                 j.put("canStream", e.streamable)
             }
             isWebUrl(uri) -> j.put("appIdByExtension", BROWSER).put("canStream", false)
+            // A scheme's app from the system's table (mailto: to Email), as the TouchPad answers.
+            handlers.commandFor(uri) != null -> j.put("appIdByExtension", handlers.commandFor(uri)).put("canStream", false)
             else -> return JSONObject().put("returnValue", false).put("errorText", "can't find a handler for the given uri").toString()
         }
         return j.toString()

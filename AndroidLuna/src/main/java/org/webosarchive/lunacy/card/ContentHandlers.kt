@@ -23,8 +23,8 @@ import java.io.File
 class ContentHandlers(private val registry: AppRegistry, private val webosRoot: File) {
     class Entry(val mime: String, val extension: String, val appId: String, val streamable: Boolean, val system: Boolean, val index: Int)
 
-    /** The system's table, /usr/palm/command-resource-handlers.json, parsed: its redirects' patterns compiled. */
-    private class SystemTable(val resources: org.json.JSONArray?, val redirects: List<Pair<Regex, String>>)
+    /** The system's table, /usr/palm/command-resource-handlers.json, parsed: its redirects' and commands' patterns compiled. */
+    private class SystemTable(val resources: org.json.JSONArray?, val redirects: List<Pair<Regex, String>>, val commands: List<Pair<Regex, String>>)
     private val tableFile = File(webosRoot, "usr/palm/command-resource-handlers.json")
     private var table: SystemTable? = null
     private var tableModified = 0L
@@ -34,13 +34,15 @@ class ContentHandlers(private val registry: AppRegistry, private val webosRoot: 
         val modified = tableFile.lastModified()
         table?.takeIf { modified == tableModified }?.let { return it }
         val json = runCatching { JSONObject(tableFile.readText()) }.getOrNull()
-        val list = json?.optJSONArray("redirects")
-        val redirects = (0 until (list?.length() ?: 0)).mapNotNull { i ->
-            val r = list!!.optJSONObject(i) ?: return@mapNotNull null
-            val re = runCatching { Regex(r.optString("url"), RegexOption.IGNORE_CASE) }.getOrNull() ?: return@mapNotNull null
-            re to r.optString("appId")
+        fun patterns(key: String): List<Pair<Regex, String>> {
+            val list = json?.optJSONArray(key) ?: return emptyList()
+            return (0 until list.length()).mapNotNull { i ->
+                val r = list.optJSONObject(i) ?: return@mapNotNull null
+                val re = runCatching { Regex(r.optString("url"), RegexOption.IGNORE_CASE) }.getOrNull() ?: return@mapNotNull null
+                re to r.optString("appId")
+            }
         }
-        return SystemTable(json?.optJSONArray("resources"), redirects).also { table = it; tableModified = modified }
+        return SystemTable(json?.optJSONArray("resources"), patterns("redirects"), patterns("commands")).also { table = it; tableModified = modified }
     }
 
     /**
@@ -50,6 +52,19 @@ class ContentHandlers(private val registry: AppRegistry, private val webosRoot: 
     fun redirectFor(target: String): String? {
         if (target.isEmpty()) return null
         return systemTable().redirects.firstOrNull { it.first.containsMatchIn(target) }?.second?.ifEmpty { null }
+    }
+
+    /**
+     * The installed app the system's table gives a URL's scheme to, by its "commands"
+     * patterns: mailto: is Email's, sms: and im: Messaging's, contact: Contacts'. Measured on
+     * the reference TouchPad (2026-11-04): getHandlerForUrl and getResourceInfo answer
+     * mailto: with com.palm.app.email from this list. Null when none matches or its app
+     * isn't installed.
+     */
+    fun commandFor(target: String): String? {
+        if (target.isEmpty()) return null
+        return systemTable().commands.firstOrNull { it.first.containsMatchIn(target) }?.second
+            ?.takeIf { it.isNotEmpty() && registry.get(it) != null }
     }
 
     fun entries(): List<Entry> {
@@ -96,9 +111,13 @@ class ContentHandlers(private val registry: AppRegistry, private val webosRoot: 
     /** applicationManager/getHandlerForUrl: by the URL's extension, a web one's too. */
     fun handlerForUrl(p: JSONObject): String {
         val url = p.optString("url")
-        val e = forTarget(url) ?: return JSONObject().put("subscribed", false).put("returnValue", false)
+        forTarget(url)?.let { return answer(it) }
+        // A scheme's app, which the TouchPad answers with no mimeType.
+        commandFor(url)?.let { app ->
+            return JSONObject().put("subscribed", false).put("returnValue", true).put("appId", app).put("download", false).toString()
+        }
+        return JSONObject().put("subscribed", false).put("returnValue", false)
             .put("errorCode", "No handler found for url [$url]").toString()
-        return answer(e)
     }
 
     private fun answer(e: Entry) = JSONObject().put("subscribed", false).put("returnValue", true)

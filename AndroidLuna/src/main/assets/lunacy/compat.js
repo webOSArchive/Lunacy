@@ -1494,3 +1494,13 @@ window.__lunacyStyle = function (css) {
 	return l;
 };
 __lunacyStyle("@media (max-width: 540px) { html .box-center { width: auto; margin-left: 12px; margin-right: 12px; } }");
+
+// An Enyo RichText's hint stays on one line on a phone's card.
+//
+// Enyo 1's RichText shows its hint as the field's own text (class enyo-richtext-hint) until it
+// is focused, so a hint wider than the field wraps and the field grows to hold it: Messaging's
+// "Enter message here..." stood three lines tall beside its buttons on a phone, and dropped to
+// one the moment the field was focused (codepoet, 2026-11-04). Under 540 px the hint keeps to
+// one line and ends in "..." where it doesn't fit. On a tablet, as on the TouchPad, it is as
+// Enyo drew it.
+__lunacyStyle("@media (max-width: 540px) { html .enyo-richtext-hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } }");

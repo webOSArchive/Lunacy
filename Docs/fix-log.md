@@ -359,6 +359,8 @@ fixed-viewport fallback is allowed).
 | 2026-11-03 | A page could `ATTACH` any file Lunacy can open, its cookie database among them, to its WebSQL database | any app (found in review) | The WebSQL polyfill passed every statement to SQLite; WebKit's authorizer refused ATTACH and DETACH | compat (`WebSql.kt`: refused with WebKit's SYNTAX_ERR "not authorized") |
 | 2026-11-03 | A page's own Authorization or Cookie header went on to another host after a redirect | any app's XHR (found in review) | `Http.connect` resent the request's headers on every hop; WebKit cleared them when the protocol, host or port changed | compat (`Http.kt`, which net.js's requests go through) |
 | 2026-11-03 | A db8 watch that fires at once stays open | IM transport, activities triggered by a watch (found in review) | The immediate `fired` reply left the call open; a watch that fired later was closed. Both now end | bus (`Db8.kt`) |
+| 2026-11-04 | A field's hint wrapped and stood three lines tall on a phone, until focused | Messaging ("Enter message here...") | Enyo 1's RichText shows its hint as the field's own text, so a hint wider than the field wrapped. Under 540 px it keeps to one line and ends in "..." | compat (`compat.js`, `.enyo-richtext-hint`) |
+| 2026-11-04 | On a phone, a picked conversation didn't bring its chat over the list | Messaging | Palm's code to slide the chat panel in on a single-panel `SlidingPane` was left commented out, against an older Enyo API | nowhere general: in the app, codepoet's exception to rule 5 (its NOTICE; [phone.md](phone.md) §6) |
 
 ## Known gaps, by the layer they belong to
 

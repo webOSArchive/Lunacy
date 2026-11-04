@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -6,8 +8,8 @@ plugins {
 /**
  * The keyboard ships with Lunacy, so it carries the shell's version: the same build number
  * (the repository's commit count, as AndroidLuna/build.gradle.kts counts it, kept here so the
- * keyboard still depends on nothing in Lunacy) and the same version name, changed by hand
- * alongside the shell's.
+ * keyboard still depends on nothing in Lunacy) and the same version name, the one in
+ * gradle.properties at the top of the repository.
  */
 val buildNumber: Int = runCatching {
     val git = ProcessBuilder("git", "rev-list", "--count", "HEAD").directory(rootDir).start()
@@ -26,13 +28,12 @@ android {
         // done about it, is in README.md ("Built for the newest Android").
         targetSdk = 35
         versionCode = buildNumber
-        versionName = "0.9.1"
+        versionName = property("versionName") as String
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     // One lint policy for both modules (../lint.xml): NewApi is fatal because minSdk 21 has
     // to hold, and the expired-targetSdk warning is deliberate - Lunacy is sideloaded.
     lint { lintConfig = rootProject.file("lint.xml") }
@@ -40,3 +41,5 @@ android {
     // keyboard itself, so they must not go through Android's density folders.
     androidResources { noCompress += listOf("png", "ttf") }
 }
+
+kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }

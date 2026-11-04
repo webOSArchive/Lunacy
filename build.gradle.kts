@@ -24,7 +24,8 @@ subprojects {
                     from(variant.artifacts.get(SingleArtifact.APK)) { include("*.apk") }
                     into(outDir)
                 }
-                afterEvaluate { tasks.named("assemble$name") { finalizedBy(copy) } }
+                // Whenever the variant's assemble task is made, not by evaluation order.
+                tasks.matching { it.name == "assemble$name" }.configureEach { finalizedBy(copy) }
             }
         }
     }

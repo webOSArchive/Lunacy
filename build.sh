@@ -92,7 +92,7 @@ fi
 # Checksums of every APK in out/, so a debug and a release build can sit side by side.
 (cd out && sha256sum -- *.apk > SHA256SUMS)
 
-version=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' AndroidLuna/build.gradle.kts)
+version=$(sed -n 's/^versionName=//p' gradle.properties)
 build=$(git rev-list --count HEAD 2>/dev/null || echo 1)
 dirty=""; [ -n "$(git status --porcelain 2>/dev/null)" ] && dirty=" (uncommitted changes)"
 echo

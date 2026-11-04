@@ -150,7 +150,7 @@ data with it.
 
 ## Version and build number
 
-The version name (`versionName` in `AndroidLuna/build.gradle.kts`) is changed by hand, when
+The version name (`versionName` in `gradle.properties`, which both APKs read) is changed by hand, when
 codepoet decides. The build number (`versionCode`) counts itself: it is the number of commits
 behind the build, so every commit is a new build. Device Info shows both. A build from a tree with uncommitted changes carries the last
 commit's number.

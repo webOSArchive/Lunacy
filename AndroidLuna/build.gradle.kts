@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -6,7 +8,8 @@ plugins {
 /**
  * The build number counts itself: it is the number of commits behind this build. Every
  * commit is a new build number, and any checkout of the same commit gets the same one.
- * Without git (a source drop) it is 1. The version name is codepoet's to change, by hand, below.
+ * Without git (a source drop) it is 1. The version name is codepoet's to change, by hand, in
+ * gradle.properties at the top of the repository, which the keyboard reads too.
  */
 val buildNumber: Int = runCatching {
     val git = ProcessBuilder("git", "rev-list", "--count", "HEAD").directory(rootDir).start()
@@ -19,19 +22,15 @@ android {
     defaultConfig {
         applicationId = "org.webosarchive.lunacy"
         minSdk = 21
-        // The oldest target newer Android will install: Android 14 refuses below 23 and
-        // Android 15 below 24. minSdk keeps Android 5, which ignores a target above its
-        // own level. What 23 and 24 change on newer devices is in Docs/architecture.md.
-        // The 64-bit flavour targets 28 (below): Android 17 warns at launch under that.
-        targetSdk = 24
+        // targetSdk is the flavours' (below), one per ABI.
         versionCode = buildNumber
-        versionName = "0.9.1"
+        versionName = property("versionName") as String
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
+
     // One lint policy for both modules (../lint.xml): NewApi is fatal because minSdk 21 has
     // to hold, and the expired-targetSdk warning is deliberate - Lunacy is sideloaded.
     lint { lintConfig = rootProject.file("lint.xml") }
@@ -72,6 +71,8 @@ android {
     // run 32-bit code takes either; one that can't refuses the 32-bit APK.
     flavorDimensions += "abi"
     productFlavors {
+        // 24: the oldest target newer Android installs (Android 14 refuses below 23, Android 15
+        // below 24); Android 5 ignores a target above its own level.
         create("arm32") { dimension = "abi"; ndk { abiFilters += "armeabi-v7a" }; targetSdk = 24 }
         create("arm64") { dimension = "abi"; ndk { abiFilters += "arm64-v8a" }; targetSdk = 28 }
     }
@@ -96,6 +97,8 @@ val bundleCoreApps = tasks.register<BundleCoreApps>("bundleCoreApps") {
 androidComponents.onVariants { variant ->
     variant.sources.assets?.addGeneratedSourceDirectory(bundleCoreApps, BundleCoreApps::output)
 }
+
+kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 
 // Plain-JVM tests of the pure functions (src/test): ./gradlew :AndroidLuna:testArm32DebugUnitTest.
 // android.jar's org.json is a stub off the device, so the tests get the real one.

@@ -7,7 +7,7 @@ approach is failing.
 
 Layers: **framework** (the Enyo fork: the TouchPad's Enyo plus the patches in
 `LunaRuntimes/enyo-1.0/`, whose [CHANGES.md](../LunaRuntimes/enyo-1.0/CHANGES.md) is
-its change log against the device's), **compat** (compat.js, bridge.js, serve-time transforms),
+its change log against the device's), **compat** (the compat layer - `compat.js` until 2026-11-04, then `input.js`, `engine.js`, `media.js` and `layout.js` - bridge.js, serve-time transforms),
 **bus** (a service answering as webOS did), **nowhere general** (a per-app setting; only the
 fixed-viewport fallback is allowed).
 

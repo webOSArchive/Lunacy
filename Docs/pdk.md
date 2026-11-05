@@ -691,7 +691,7 @@ suffix).
   did for native services.
 
 The page needed one thing of the engine too: Quick Office's spreadsheet grid calls
-`table.children(i)` and `row.cells(i)`, which the TouchPad's WebKit allowed (compat.js,
+`table.children(i)` and `row.cells(i)`, which the TouchPad's WebKit allowed (engine.js,
 "Collections are callable"; Docs/luna-deltas.md A17).
 
 **Seen on the A7 Lite (2026-10-07), natively and under qemu:** Adobe Reader opens PDFs from

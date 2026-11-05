@@ -360,12 +360,12 @@ product; being "close enough" is not the goal.
     WebView allows mixed content, and a global XHR shim sends cross-origin requests over the
     bridge to a native HTTP client. (`shouldInterceptRequest` alone isn't enough, because it
     can't see request bodies.)
-    - **Local network** (`LocalNet.kt`, compat.js). Images and players don't go through
+    - **Local network** (`LocalNet.kt`, media.js). Images and players don't go through
       XHR. A current WebView (149, Pixel Tablet, 2026-10-08) blocks an https page's plain-http
       image to a private address as mixed content, allowed or not, and holds a request to the
       loopback interface for good, with no permission request to the app - Chromium's Local
       Network Access; a public http image still loads. On such an engine (Chromium 141 and
-      later, an assumed cut-off: only 149 is measured) compat.js points `http://` images and
+      later, an assumed cut-off: only 149 is measured) media.js points `http://` images and
       media - `src` properties, `setAttribute`, `new Audio`, and markup as it is inserted -
       at `/__lunacy/net?u=` on the page's own origin, which the card fetches with `Http.kt`
       and streams back, byte ranges included. The WebView applies a request's Range to the

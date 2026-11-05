@@ -337,7 +337,7 @@ open class AppWindow(
     }
 
     /**
-     * Closes the window as webOS did: the page's unload handlers run first (compat.js keeps
+     * Closes the window as webOS did: the page's unload handlers run first (layout.js keeps
      * them, since newer engines won't run them as a WebView is destroyed), then it goes. A
      * dashboard tells its app it was swiped away from there (Enyo's onUserClose). A page that
      * doesn't answer within [UNLOAD_MS] is destroyed anyway.
@@ -608,7 +608,7 @@ open class AppWindow(
         @JavascriptInterface fun mediaBase(): String = host.mediaBase()
         /** Whether http:// images and media go through LocalNet (compat.js, "Local network"). */
         @JavascriptInterface fun localNetworkBlocked(): Boolean = LocalNet.blocked
-        /** The WebView's Chromium major version, for compat.js's engine-bound fixes; -1 if unknown. */
+        /** The WebView's Chromium major version, for the compat layer's engine-bound fixes; -1 if unknown. */
         @JavascriptInterface fun engineMajor(): Int = Engine.major
         @JavascriptInterface fun activate() { main.post { host.activate(this@AppWindow) } }
         @JavascriptInterface fun keyboard(show: Boolean) { main.post { host.keyboard(this@AppWindow, show) } }
@@ -619,7 +619,7 @@ open class AppWindow(
         fun fullScreen(on: Boolean) { main.post { if (fullScreen != on) { fullScreen = on; host.fullScreen(this@AppWindow) } } }
         @JavascriptInterface fun statusBarColor(rgb: Int) { statusBarColor = rgb and 0xFFFFFF }
 
-        /** The page set a cookie (compat.js): it goes to disk shortly, as a device's did at once. */
+        /** The page set a cookie (layout.js): it goes to disk shortly, as a device's did at once. */
         @JavascriptInterface fun cookieWritten() { main.post { CookieFlush.soon() } }
 
         // enyo.WebView's native views (BrowserViews).

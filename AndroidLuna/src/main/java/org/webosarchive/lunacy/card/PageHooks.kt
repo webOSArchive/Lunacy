@@ -11,13 +11,13 @@ object PageHooks {
     const val NET_DONE = "__lunacyNetDone"
     /** A WebSQL statement finished (websql.js). */
     const val SQL_DONE = "__lunacySqlDone"
-    /** The page is closing: its unload handlers run (compat.js). */
+    /** The page is closing: its unload handlers run (layout.js). */
     const val UNLOAD = "__lunacyUnload"
-    /** PalmSystem's removeInputFocus done in the page (compat.js). */
+    /** PalmSystem's removeInputFocus done in the page (input.js). */
     const val REMOVE_INPUT_FOCUS = "__lunacyRemoveInputFocus"
     /** A relaunch, which answers whether the app handled it (bridge.js). */
     const val RELAUNCH = "__lunacyRelaunch"
-    /** The viewport meta written again for the card's size (compat.js). */
+    /** The viewport meta written again for the card's size (layout.js). */
     const val VIEWPORT = "__lunacyViewport"
     /** The clipboard pasted into the focused field (bridge.js). */
     const val PASTE = "__lunacyPaste"

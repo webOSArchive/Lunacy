@@ -156,7 +156,7 @@ page gives up its TouchPad height of 1024 px, which otherwise let focus scroll t
 row; `system/setFixedViewport {"id", "on"}` on Lunacy's own service, and `system/getEnvironment`
 reports `software`. A change takes effect when the app's window next loads a page.
 
-**How.** The viewport, as the compat layer already writes it (compat.js, "The viewport"):
+**How.** The viewport, as the compat layer already writes it (layout.js, "The viewport"):
 `AppWindow.cardSize` reports the card in layout px at the scaled density, and the meta
 that follows (`width=640, height=1088, minimum-scale=maximum-scale=0.5625` on the Nexus 5)
 does the rest. The keyboard's `positiveSpaceChanged` is sent in the same px
@@ -197,7 +197,7 @@ Two general fixes, nothing per app; neither changes a tablet.
 - **The centred column.** Palm's settings and Welcome screens sit in one `.box-center` column
   500 px wide (the accounts library's first-launch view, the Accounts app, Exhibition, Email's
   settings). Under 540 px it takes the card's width less 12 px each side, Lunacy-wide, from
-  `compat.js` (codepoet, 2026-10-08) - the rule Lunacy's own Screen & Lock and Sounds & Alerts
+  `layout.js` (codepoet, 2026-10-08) - the rule Lunacy's own Screen & Lock and Sounds & Alerts
   carried in their stylesheets.
 - **Enyo's phone layout.** A `SlidingPane` under its `multiViewMinWidth` stacks its views at the
   card's width and slides the selected one over the rest; Enyo patch 0010 makes that layout

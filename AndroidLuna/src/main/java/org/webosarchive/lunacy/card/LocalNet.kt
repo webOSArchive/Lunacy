@@ -20,7 +20,7 @@ import java.net.URLEncoder
  * interface pending for good, with no permission request to the app to answer - Chromium's
  * Local Network Access. A public http image still loads.
  *
- * On such an engine compat.js points the page's http:// images and media at [PATH] on its own
+ * On such an engine media.js points the page's http:// images and media at [PATH] on its own
  * origin, and this fetches them with Lunacy's own HTTP (the network shim's, with the page's
  * cookies and the device's user agent) and streams the answer back, byte ranges and all, as
  * players seek. The loopback MediaServer is out of reach there too, so /media/internal media

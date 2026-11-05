@@ -135,13 +135,15 @@ Left by judgment, each for a reason found in the code:
   (each site picks its half its own way), `ScrollMasks` (a shared class would change how one
   of the two is driven, against its measured fade) and the drawer's animator (its height is
   worked out per frame so a resize can retarget it mid-way; the timing is Drawer.qml's).
-- The two-line labels, codepoet's call: the launcher elides each word on a phone and a
-  group's panel doesn't.
-- §9's db8 query translation needs SQLite off the device (Robolectric), a new test
-  dependency, codepoet's call.
-- Seen while checking, not caused by this work: an activity's persistence can meet a db8
-  revision mismatch at start ("not persisted", the webOS Chat activities), timing-dependent;
-  Memos' stageDeactivated throws on null displayText.
+- The two-line labels stay apart (codepoet, 2026-11-04): the launcher elides each word on a
+  phone and a group's panel doesn't, and the panel keeps drawing as it does.
+
+codepoet's calls on 2026-11-04: Robolectric as a test-only dependency, so db8's query
+translation is tested (Db8Test; 32 tests in all). The activity persistence race seen while
+checking is fixed: the configurator's two runs at start created each activity twice, and the
+replacement's save raced the first's ("not persisted", a revision mismatch, five or six
+activities at every start); saves to one record now go one at a time. Memos' stageDeactivated
+throwing on a null displayText is the app's own, the same on every build.
 
 ---
 

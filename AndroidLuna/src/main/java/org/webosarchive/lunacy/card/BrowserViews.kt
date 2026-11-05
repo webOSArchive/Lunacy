@@ -63,9 +63,6 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         /** An email's document is as wide as its view (setHtml). */
         private const val VIEWPORT = "<meta name=\"viewport\" content=\"width=device-width\">"
         private const val FONTS_LINK = "<link rel=\"stylesheet\" href=\"https://lunacy-fonts${AppServer.HOST_SUFFIX}/__lunacy/fonts.css\">"
-        /** Fonts the reference TouchPad had besides Prelude (/usr/share/fonts), by the names pages use. */
-        private val DEVICE_FONTS = setOf("arial", "verdana", "georgia", "times new roman", "times", "courier new", "courier",
-            "lucida console", "monospace")
         /**
          * A link with a `download` attribute is followed like any other, as the TouchPad's
          * WebKit (534, before the attribute) followed it: the file it leads to isn't a page,
@@ -86,15 +83,6 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         private val pending = HashMap<String, Browser>()
         /** How long a window a page opened waits for the page's createPage answer. */
         private const val PENDING_MS = 60_000L
-        /**
-         * Trust Always: each host with the fingerprint of the certificate the owner trusted,
-         * kept across runs. Another certificate on that host is asked about again.
-         */
-        private const val TRUSTED_CERTIFICATES = "trustedcertificates"
-        private fun trustKey(host: String, certificate: ByteArray) = host + "/" +
-            java.security.MessageDigest.getInstance("SHA-256").digest(certificate).joinToString("") { "%02x".format(it) }
-        /** Host and certificate pairs that held up under Lunacy's own trust store. */
-        private val verified = HashSet<String>()
         private val worker = Executors.newSingleThreadExecutor()
         /** The plugin's calls that write an image the page reads straight after. */
         private val IMAGE_COMMANDS = setOf("saveViewToFile", "generateIconFromFile", "resizeImage")
@@ -204,7 +192,6 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         private var dialogHost = ""
         /** What Trust Always would remember of the certificate being asked about. */
         private var dialogTrust: String? = null
-        private val trustedCertificates get() = context.getSharedPreferences(TRUSTED_CERTIFICATES, Context.MODE_PRIVATE)
         /** The open window's transport, held until the card that shows it is ready. */
         private var transport: Message? = null
         private var lastTouch = floatArrayOf(0f, 0f)
@@ -381,7 +368,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 is JsPromptResult -> if (r == "1") d.confirm(a.optString(1)) else d.cancel()
                 is JsResult -> if (r == "1") d.confirm() else d.cancel()
                 is SslErrorHandler -> {
-                    if (r == "1") dialogTrust?.let { trustedCertificates.edit().putBoolean(it, true).apply() }
+                    if (r == "1") dialogTrust?.let { SiteTrust.trustAlways(context, it) }
                     if (r == "1" || r == "2") d.proceed() else d.cancel()
                 }
                 is HttpAuthHandler -> if (r == "1") d.proceed(a.optString(1), a.optString(2)) else d.cancel()
@@ -560,7 +547,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         }
 
         private fun loadDoc(doc: String) =
-            loadDataWithBaseURL(lastBase, insertAfter(doc, "<head[^>]*>", roomStyle()) ?: (roomStyle() + doc), "text/html", "utf-8", null)
+            loadDataWithBaseURL(lastBase, EmailDocument.insertAfter(doc, "<head[^>]*>", roomStyle()) ?: (roomStyle() + doc), "text/html", "utf-8", null)
 
         override fun onScrollChanged(l: Int, t: Int, oldl: Int, oldt: Int) {
             super.onScrollChanged(l, t, oldl, oldt)
@@ -644,7 +631,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
             val obj = Regex("<object\\s[^>]*type=\"application/x-palm-email\"[^>]*>", RegexOption.IGNORE_CASE).find(html)
             lastBase = base
             if (obj == null) { lastDoc = html; loadDoc(html); return }
-            fun attr(name: String) = Regex("\\s$name=\"([^\"]*)\"", RegexOption.IGNORE_CASE).find(obj.value)?.groupValues?.get(1)?.let { unescape(it) }.orEmpty()
+            fun attr(name: String) = Regex("\\s$name=\"([^\"]*)\"", RegexOption.IGNORE_CASE).find(obj.value)?.groupValues?.get(1)?.let { EmailDocument.unescape(it) }.orEmpty()
             val path = attr("path"); val type = attr("contentmimetype").lowercase()
             val head = attr("headprefix"); val top = attr("bodyprefix")
             val cids = runCatching { JSONObject(attr("cids").ifEmpty { "{}" }) }.getOrDefault(JSONObject())
@@ -652,54 +639,20 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
             worker.execute {
                 val text = runCatching { file?.readText() }.getOrNull().orEmpty()
                 var doc = if (type == "text/plain") "<html><head></head><body><div style=\"white-space:pre-wrap;word-wrap:break-word\">" +
-                    linkify(escape(text)) + "</div></body></html>" else text.ifEmpty { "<html><head></head><body></body></html>" }
+                    EmailDocument.linkify(EmailDocument.escape(text)) + "</div></body></html>" else text.ifEmpty { "<html><head></head><body></body></html>" }
                 for (k in cids.keys()) if (k.isNotEmpty()) doc = doc.replace(k, "file://" + cids.optString(k))
-                doc = touchpadFonts(doc)
-                doc = insertAfter(doc, "<head[^>]*>", FONTS_LINK + head) ?: "<head>$FONTS_LINK$head</head>$doc"
+                doc = EmailDocument.touchpadFonts(doc)
+                doc = EmailDocument.insertAfter(doc, "<head[^>]*>", FONTS_LINK + head) ?: "<head>$FONTS_LINK$head</head>$doc"
                 // The message is laid out at the view's own width, as webOS's message view did
                 // and a current WebView does by itself. Without a viewport an older engine (the
                 // Nexus 5's WebView 44) lays the document out 980 px wide and shrinks it to the
                 // pane, text and all; an email wider than the pane is still zoomed out to fit.
                 if (!Regex("<meta[^>]+name=[\"']?viewport", RegexOption.IGNORE_CASE).containsMatchIn(doc))
-                    doc = insertAfter(doc, "<head[^>]*>", VIEWPORT) ?: doc
-                doc = insertAfter(doc, "<body[^>]*>", top) ?: "$top$doc"
+                    doc = EmailDocument.insertAfter(doc, "<head[^>]*>", VIEWPORT) ?: doc
+                doc = EmailDocument.insertAfter(doc, "<body[^>]*>", top) ?: "$top$doc"
                 main.post { lastDoc = doc; pageScale = 0f; loadDoc(doc) }
             }
         }
-
-        /**
-         * The fonts an email names, as the TouchPad's QtWebKit drew them: only the first family
-         * of a list counts, and a name the device hasn't got - or a generic one, or a system-ui
-         * that WebKit 534 didn't know - draws Prelude (tools/gen-fonts-css.py, rule 3). Fastmail's
-         * "'Proxima Nova', system-ui, ..., Arial, sans-serif" is Prelude on the reference
-         * TouchPad, and was Android's Roboto here. Fonts the device had (Arial, Verdana,
-         * Georgia, Times, Courier, Lucida Console) keep their names, drawn by Android's own
-         * stand-ins for them. Prelude itself comes from fonts.css, which the document links.
-         */
-        private fun touchpadFonts(doc: String): String {
-            fun resolve(list: String): String {
-                val important = Regex("\\s*!important\\s*$", RegexOption.IGNORE_CASE).find(list)?.value.orEmpty()
-                val first = list.removeSuffix(important).split(',').firstOrNull()?.trim()?.trim('\'', '"').orEmpty()
-                val keep = first.lowercase().let { f -> f.startsWith("prelude") || f in DEVICE_FONTS }
-                return (if (keep) "'$first'" else "Prelude") + important
-            }
-            var out = Regex("(font-family\\s*:\\s*)([^;}\"<>]+)", RegexOption.IGNORE_CASE).replace(doc) { m ->
-                m.groupValues[1] + resolve(m.groupValues[2])
-            }
-            // The shorthand: the families follow the size (and line height).
-            out = Regex("(font\\s*:\\s*[^;}\"<>]*?\\d[\\w.%]*(?:\\s*/\\s*[\\d.]+[\\w%]*)?\\s+)([^;}\"<>]+)", RegexOption.IGNORE_CASE).replace(out) { m ->
-                m.groupValues[1] + resolve(m.groupValues[2])
-            }
-            return out
-        }
-
-        private fun insertAfter(doc: String, tag: String, what: String): String? =
-            Regex(tag, RegexOption.IGNORE_CASE).find(doc)?.let { m -> doc.substring(0, m.range.last + 1) + what + doc.substring(m.range.last + 1) }
-
-        private fun escape(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        private fun unescape(s: String) = s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
-            .replace(Regex("&#(\\d+);")) { m -> m.groupValues[1].toIntOrNull()?.takeIf { Character.isValidCodePoint(it) }?.let { String(Character.toChars(it)) } ?: m.value }.replace("&amp;", "&")
-        private fun linkify(s: String) = s.replace(Regex("\\b(https?://[^\\s<>\"]+)")) { "<a href=\"${it.value}\">${it.value}</a>" }
 
         // ---- callbacks ----
 
@@ -803,26 +756,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 owner.send(id, "mainDocumentLoadFailed", "", webosError(errorCode), failingUrl, description)
             }
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
-                val uri = Uri.parse(error.url)
-                val host = uri.host.orEmpty()
-                val seen = android.net.http.SslCertificate.saveState(error.certificate)?.getByteArray("x509-certificate")
-                val always = seen?.let { trustKey(host, it) }
-                if (always != null && trustedCertificates.contains(always)) { handler.proceed(); return }
-                // An older Android's store lacks today's roots (Android 5 refuses Wikipedia's).
-                // Lunacy's own requests trust the bundled roots as well (Http); if the site's
-                // certificate holds up there and is the one this view was shown, it is good.
-                // (Expiry and the host name are checked there too.)
-                if (error.primaryError == SslError.SSL_UNTRUSTED) {
-                    val key = host + "/" + seen?.contentHashCode()
-                    if (key in verified) { handler.proceed(); return }
-                    val port = if (uri.port > 0) uri.port else 443
-                    worker.execute {
-                        val good = seen != null && Http.verifiedLeaf(host, port)?.contentEquals(seen) == true
-                        main.post { if (good) { verified.add(key); handler.proceed() } else askSsl(handler, host, always, error) }
-                    }
-                    return
-                }
-                askSsl(handler, host, always, error)
+                SiteTrust.check(context, error, worker, { handler.proceed() }) { host, always -> askSsl(handler, host, always, error) }
             }
             private fun askSsl(handler: SslErrorHandler, host: String, always: String?, error: SslError) {
                 dialog?.let { (it as? SslErrorHandler)?.cancel() }

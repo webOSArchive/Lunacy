@@ -1,0 +1,27 @@
+package org.webosarchive.lunacy.card
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+/** An email's text as a browser view shows it (EmailDocument). */
+class EmailDocumentTest {
+    @Test fun onlyTheFirstFamilyCountsAndAnUnknownOneIsPrelude() {
+        assertEquals("<p style=\"font-family:Prelude\">", EmailDocument.touchpadFonts("<p style=\"font-family:'Proxima Nova', system-ui, Arial, sans-serif\">"))
+        assertEquals("<p style=\"font-family:'Arial'\">", EmailDocument.touchpadFonts("<p style=\"font-family:Arial, sans-serif\">"))
+        assertEquals("b{font-family:'Prelude Medium' !important}", EmailDocument.touchpadFonts("b{font-family:Prelude Medium, Arial !important}"))
+        // The shorthand: the families follow the size.
+        assertEquals("p{font:12px/1.4 'Georgia'}", EmailDocument.touchpadFonts("p{font:12px/1.4 Georgia, serif}"))
+    }
+
+    @Test fun escapingAndLinks() {
+        assertEquals("a &lt;b&gt; &amp; c", EmailDocument.escape("a <b> & c"))
+        assertEquals("<\"&é", EmailDocument.unescape("&lt;&quot;&amp;&#233;"))
+        assertEquals("see <a href=\"https://x.org/a?b=1\">https://x.org/a?b=1</a> now", EmailDocument.linkify("see https://x.org/a?b=1 now"))
+    }
+
+    @Test fun insertingAfterATag() {
+        assertEquals("<head x><meta></head>", EmailDocument.insertAfter("<head x></head>", "<head[^>]*>", "<meta>"))
+        assertNull(EmailDocument.insertAfter("<body></body>", "<head[^>]*>", "<meta>"))
+    }
+}

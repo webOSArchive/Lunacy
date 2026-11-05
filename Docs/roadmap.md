@@ -3,7 +3,31 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-11-04)
+## Where things stand (2026-11-05)
+
+**0.9.2** (2026-11-05), a point release for testers: the code review's clean-up and webOS CE's
+emoji key. Everything since 0.9.1:
+
+- **LunaKeyboard:** webOS CE 3.2's emoji key, beside the symbol key: four pages of emoji over
+  the top four rows, in CE's order and OpenMoji's art, shift to turn the page, ABC to go back.
+- **Links:** a `mailto:` in a webOS app opens webOS Email, as the TouchPad's handler table
+  says (and `sms:`/`im:` Messaging, `contact:` Contacts), when the app is installed.
+- **The bus answers as the TouchPad does** (measured there): db8's errors for a parameter of
+  the wrong type, `pauseDownload` and `resumeDownload`, `com.palm.systemmanager` private,
+  `removeLaunchPoint`'s errors, the activity manager's `enable`/`disable`.
+- **Security:** a JS service calls the bus as itself, never as an app it names; the Web app
+  opens only webOS paths for `file:` URLs, not Lunacy's own files; an app's origin is served
+  to the app, not to a website; WebSQL's migration takes the app from its origin.
+- **Fixes:** every activity is saved at start (five or six weren't: a revision race); a fold
+  or unfold no longer leaves the system menu's radio watchers and the shortcut watch running
+  twice; `curl`'s headers in any case and a connect timeout that times the connection; PDK
+  2D frames never drawn half written; a launcher group's panel shows current titles; Treo New
+  has the other ringtones' tags.
+- **Under the hood:** the code review's clean-up (its §2 to §10): `ShellActivity` is five
+  classes (the card layer's owner, the apps' lifecycle, the shell's chrome, notifications,
+  Exhibition), the Launcher, the activity manager, the browser views and `compat.js` split by
+  what they do, one way for services to answer, check callers and keep subscribers, the bus on
+  one thread, and 32 unit tests, db8's queries on a real SQLite among them.
 
 **0.9.1** (2026-11-04, build 437), a point release. Everything since 0.9.0:
 
@@ -86,8 +110,10 @@ Exchange and Google mail. Everything since 0.8.4:
   Video Player's volume keys don't switch to media volume; NesEm HD quits on the Fold3's
   cover screen.
 
-**Next (codepoet, 2026-11-03):** 0.9.x point releases until 0.9 is stable, then OAuth for
-Exchange and Google mail, then preparing an F-Droid launch. First up: the TouchPad
+**Next (codepoet, 2026-11-05):** 0.9.2 for others to bang on, then OAuth for Exchange and
+Google mail as 0.9.5, then preparing an F-Droid launch. Earlier plan (2026-11-03): 0.9.x point
+releases until 0.9 is stable, then OAuth for Exchange and Google mail, then preparing an
+F-Droid launch. First up: the TouchPad
 measurements from the code review are done
 ([code-review-2026-11-03.md](code-review-2026-11-03.md), "Measured on the TouchPad"), and
 three changes they decided (db8's typed-parameter errors, `pauseDownload` and

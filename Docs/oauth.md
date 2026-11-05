@@ -83,8 +83,27 @@ provider (the test setup below).
 | On the device | Android's browser and a loopback redirect (`http://127.0.0.1:<port>/`): Google refuses sign-in in a WebView (`disallowed_useragent`). Offered only where a browser is installed | The sign-in page's WebView; redirect `https://login.microsoftonline.com/common/oauth2/nativeclient` |
 | Client | A "Desktop app" OAuth client (its secret ships with it, as Google intends for desktop clients) | A public client ("Mobile and desktop applications"), no secret |
 
-**Waiting on codepoet: the client registrations.** Nothing real can be signed in until they
-exist (decision 1 of the 2026-10-10 plan):
+**The clients (2026-11-05).** Google: a Desktop app client, its id in `providers.json`. Its
+secret is not in the repository: Google watches public repositories for its client secrets
+and may revoke one found there. It lives in `oauth.properties` at the top of the repo
+(`google.clientSecret=…`, git-ignored like `keystore.properties`), which the build turns into
+`assets/oauth/clients.json` (`OAuthClients` in `AndroidLuna/build.gradle.kts`); a machine that
+builds releases needs that file. Microsoft: an Entra app registration "webOS Email"
+(`95d7ba4d-1ae2-44d2-a8ef-3b06a31345f6`), multitenant plus personal accounts, public client, no
+secret.
+
+First real tests, on the A7 Lite (2026-11-05): Microsoft's own sign-in page works in the
+sign-in page's WebView (the Samsung keyboard types into it; adb's `input text` and key events
+don't reach a native browser view, see Open), and its redirect, the code exchange and the
+address from the id_token all work. Then:
+- **Outlook.com** (`wosatester@outlook.com`): the token was taken, but IMAP answered "User is
+  authenticated but not connected." Microsoft had asked to verify the account by a code sent to
+  its recovery address before the password was offered; the account's own setting "Let devices
+  and apps use POP/IMAP" is also off by default on many accounts. To check in Outlook on the web.
+- **Microsoft 365** (`wosatester@jonandnic.onmicrosoft.com`): "Need admin approval" for the
+  unverified app; declining came back to the page as `access_denied`, shown there.
+
+**The registrations, as set up (decision 1 of the 2026-10-10 plan):**
 
 - **Google Cloud:** an OAuth client of type Desktop app; the OAuth consent screen with the
   scopes above; the test accounts added as test users while the app is unverified (at most 100
@@ -94,8 +113,10 @@ exist (decision 1 of the 2026-10-10 plan):
 - **Microsoft Entra (Azure):** an app registration for "Accounts in any organizational directory
   and personal Microsoft accounts"; platform Mobile and desktop applications with the
   nativeclient redirect above; public client flows on; delegated permissions IMAP.AccessAsUser.All
-  and SMTP.Send (Office 365 Exchange Online) and offline_access, openid, email. Work tenants may
-  need an admin's consent. For the broker, a Web redirect `https://oauth.wosa.link/callback.php`
+  and SMTP.Send, which Lunacy asks for on the `https://outlook.office.com/` resource (Office 365
+  Exchange Online: under API permissions, "APIs my organization uses"), and offline_access,
+  openid, email. A tenant that doesn't let users consent to an unverified app needs its admin to
+  grant consent for exactly those. For the broker, a Web redirect `https://oauth.wosa.link/callback.php`
   and a client secret kept on the broker.
 - **The broker:** `apps/google/` and `apps/microsoft/` configs on oauth.wosa.link (the secrets
   stay on the server), and their names in `brokerApp`.
@@ -137,6 +158,10 @@ machine) brought the account back at once. The A7 has no web browser, so the And
 path (Google's) is not yet tried on a device: it needs one with a browser.
 
 ## Open
+
+- **Typing from adb or a hardware keyboard into a native browser view** (the sign-in page's
+  WebView, and probably the Web app's pages): `input text` and key events don't arrive; the
+  on-screen keyboard's own keys do. A Bluetooth keyboard user would be stuck. To look into.
 
 - Client registrations (above), then the real providers: Gmail, Outlook.com, Microsoft 365.
 - **Email's own "Change login settings"** opens Palm's password form for these accounts too,

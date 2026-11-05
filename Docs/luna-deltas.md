@@ -24,7 +24,7 @@ function to look in. The three places Lunacy's side lives:
 
 | Layer | Where |
 |---|---|
-| Shell (what LunaSysMgr drew) | [AndroidLuna/…/shell/](../AndroidLuna/src/main/java/org/webosarchive/lunacy/shell/): `ShellActivity.kt`, `CardLayer.kt`, `StatusBar.kt`, `Notifications.kt`, `Launcher.kt`, `QuickLaunch.kt`, `JustType.kt` |
+| Shell (what LunaSysMgr drew) | [AndroidLuna/…/shell/](../AndroidLuna/src/main/java/org/webosarchive/lunacy/shell/): `ShellActivity.kt`, `ShellChrome.kt`, `CardHost.kt`, `AppLifecycle.kt`, `CardLayer.kt`, `StatusBar.kt`, `Notifications.kt`, `Launcher.kt`, `QuickLaunch.kt`, `JustType.kt` |
 | App-facing contract (`PalmSystem`, window properties, lifecycle) | [bridge.js](../AndroidLuna/src/main/assets/lunacy/bridge.js) (page side), [AppWindow.kt](../AndroidLuna/src/main/java/org/webosarchive/lunacy/card/AppWindow.kt) (`WindowHost` interface and `Native`), `ShellActivity.kt` (implements `WindowHost`) |
 | Bus services LunaSysMgr itself provided (`com.palm.applicationManager`, `com.palm.systemmanager`) | `ShellActivity.registerServices()`, [Bus.kt](../AndroidLuna/src/main/java/org/webosarchive/lunacy/card/Bus.kt), [DockMode.kt](../AndroidLuna/src/main/java/org/webosarchive/lunacy/card/DockMode.kt) |
 
@@ -657,7 +657,7 @@ the `{ "name", cb… }` table near the top) and which are worth having:
 | Method | What | Lunacy step |
 |---|---|---|
 | `getForegroundApplication` (subscription) | the maximized card's app id, updated as it changes | from `CardLayer.maximized`; fire from `onMaximized`/`onCardView` |
-| `getDockModeStatus` (subscription) | whether the device is in Exhibition | from `ShellActivity.exhibitionOn`; Exhibition apps ask |
+| `getDockModeStatus` (subscription) | whether the device is in Exhibition | from `ExhibitionController.exhibitionOn`; Exhibition apps ask |
 | `getLockStatus`, `getBootStatus`, `getSystemStatus` | locked/unlocked, boot finished, a summary | constants: never locked, boot `finished` |
 | `systemUi` | the launcher and system-UI verbs (`launchertitlechange`, `launcheraction`, `showAppMenu`, `quicklaunch`, `virtualkeyboard`, `addcard`, `deletecard`…); the key list is in the file | only `launchertitlechange` (with B5's tab rename) is worth doing; the rest served luna-systemui |
 | `subscribeToSystemUI` / `publishToSystemUI` | the channel luna-systemui listened on | not needed: Lunacy's own picker replaces luna-systemui |
@@ -691,10 +691,10 @@ the media indexer's db8 kinds. All in [fix-log.md](fix-log.md) "Known gaps".
   about 2 s and 3 s from the tap to anything at all). Now the loading card goes straight into
   the card view, pulses there and maximizes when the app is ready, as a slow app's did on a
   device - only without the 900 ms off-screen first - and the page loads once the card is in
-  the card view (`CardLayer.openLaunching`, `ShellActivity.loadWhenShown`; Clock's card shows
+  the card view (`CardLayer.openLaunching`, `AppLifecycle.loadWhenShown`; Clock's card shows
   0.4 s after the launch). A headless app gets a placeholder card at launch
   too, which its first card window fills, and which goes if the app is up and running without
-  one (`ShellActivity.withdrawPlaceholder`, 1 s after it is ready). Exhibition's launches put
+  one (`CardHost.withdrawPlaceholder`, 1 s after it is ready). Exhibition's launches put
   no startup card up at all, as on a device (codepoet): only the window the app opens for the
   dock is shown.
 - **`PalmSystem.deactivate`** (was A4). Measured 2026-09-22: a maximized card that calls it

@@ -104,7 +104,7 @@ Lunacy (Android app)
 inches and its shape, or the owner's setting), and both the shell's layout and the device
 apps are told about follow it. It is decided at startup and again whenever the screen
 changes size or the setting changes: a foldable folded onto its outer screen or opened out.
-When the answer changes, `ShellActivity.reshell` rebuilds the shell's own views at the new
+When the answer changes, `ShellChrome.reshell` rebuilds the shell's own views at the new
 scale and moves every card into them, its page still running, in its group and its state;
 dashboards, alerts and banners move too. A window keeps the device it was told about when it
 opened, and windows opened after the switch are told the new one. On a phone the shell draws the TouchPad's parts tightened for
@@ -456,7 +456,7 @@ product; being "close enough" is not the goal.
     than it sounds. The card goes into the card view *before* the page loads, and maximizes
     when the app is ready: the page's scripts run on the shell's thread (the WebView is
     single-process), so the load starts once the card has slid into the card view
-    (`ShellActivity.loadWhenShown`), and a headless app gets a placeholder card its first
+    (`AppLifecycle.loadWhenShown`), and a headless app gets a placeholder card its first
     card window fills. Not a launch from Exhibition, which shows only what the app opens for
     the dock. [luna-deltas.md](luna-deltas.md) D, "The startup card", has the measurements.
   - **An app that was written for a phone gets one.** `appinfo.json`'s `uiRevision` is how an
@@ -967,7 +967,7 @@ apps depend on it as much as Mojo apps do.
   (`[KeepAlive]`); an explicit `applicationManager/close` of the headless page still ends the
   app (measured). This is where notifications come from: Email's headless page watches db8 for
   new mail and puts up its dashboard, while the mail services only sync. Lunacy does the
-  same once First Use is done and the webOS root is ready (`ShellActivity.launchBootTimeApps`,
+  same once First Use is done and the webOS root is ready (`AppLifecycle.launchBootTimeApps`,
   `LAUNCH_AT_BOOT`, `KEEP_ALIVE`), in phone mode too. Not done: LunaSysMgr also restarted a
   boot-time app after it was updated. Their cost, measured 2026-10-19 by closing them in a
   running Lunacy and starting them again (`dumpsys meminfo`, total PSS): 16.5 MB on the

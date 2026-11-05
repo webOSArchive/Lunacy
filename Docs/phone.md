@@ -68,7 +68,7 @@ tablets on all three.
 outer screen (840 × 2289 at 420 dpi, as set) reads short side 320 dp, a phone, and its inner
 one (1768 × 2208) about 673 dp, a tablet. The shell decides again whenever the screen changes
 size, and when the answer changes it rebuilds itself in the other layout
-(`ShellActivity.reshell`, 2026-10-14; until then the layout was fixed at startup, and a
+(`ShellChrome.reshell`, 2026-10-14; until then the layout was fixed at startup, and a
 Fold3 started open kept a tablet's launcher squeezed onto its outer screen when folded).
 Only the shell's views are made again. Every card keeps its running page, its group and its
 state, and is drawn at the new scale; each page is told the new scale (its viewport written
@@ -184,8 +184,8 @@ Done 2026-10-03 (codepoet: "it's too wide"); nothing changes on a tablet (the la
 its edit mode, the dock and Just Type checked unchanged on the Pixel Tablet the same day).
 
 **Typing opens it.** A keyboard's printable key in the card view or the launcher opens Just
-Type with that character, as on a TouchPad with a keyboard paired: `ShellActivity`'s
-`dispatchKeyEvent`, not while a card is up, a text field (a tab's or a group's name) has the
+Type with that character, as on a TouchPad with a keyboard paired: `ShellChrome.typed`,
+from the activity's `dispatchKeyEvent`, not while a card is up, a text field (a tab's or a group's name) has the
 focus, or Ctrl, Alt or Meta is held. Both form factors; checked on the Nexus 5 with
 `adb shell input keyevent KEYCODE_T` from the launcher (codepoet, 2026-10-02; done
 2026-10-03).
@@ -270,7 +270,7 @@ the area steps aside while Android's keyboard is up and comes back after it.
 **On its side.** A phone turned to landscape is short and wide, more like a tablet, so its
 notifications go to the status bar and the TouchPad's drop-down, and come back down when it is
 turned upright again (codepoet, 2026-10-16; a delta, [luna-deltas.md](luna-deltas.md) B12).
-The dashboards, alerts and banners move with it (`ShellActivity.placeNotifications`), and
+The dashboards, alerts and banners move with it (`NotificationHost.placeNotifications`), and
 Mojo's dashboard boxes follow where the dashboards are, not the layout. The Pre3 kept them at
 the bottom.
 

@@ -94,12 +94,8 @@ Type's `cellOf`/`filterAt`, `Engine`, `ActivityFile`, `FormFactor.prefs`); §4.4
 (`PageHooks`, with a test that finds each hook's definition in the page's scripts).
 
 Left by judgment:
-- `AppLifecycle` and `ShellChrome`. Measured: the lifecycle's 38 members use 43 of the
-  shell's others - the card layer, launcher, status bar, Just Type, the dock, keyboard,
-  orientation, menus, notifications - so as a class it needs a host as wide as the shell,
-  and this plan has it owning `cards` while `ShellChrome` builds them. They want one owner
-  for the card layer first (a design step, not a move), and belong with the rest of §2
-  before 1.0.
+- `AppLifecycle` and `ShellChrome`, until the card layer had one owner: the lifecycle's 38
+  members used 43 of the shell's others. Done 2026-11-05, see below.
 - `registerServices` stays whole: 99 lines of construction in dependency order.
 - Raw `Thread`s to an executor (DownloadManager, `Packages.shell`, `AndroidApps.list`) and
   DownloadManager's and UniversalSearch's locks, which are touched off the main thread.
@@ -125,9 +121,18 @@ and §2: `Launcher` (`LauncherStore`, `RemoveDialog`, `KineticScroll`; 1,268 lin
 and constants; 1,101 to 885), `BrowserViews` (`EmailDocument`, `SiteTrust`) and `compat.js`
 (four files by position: `input.js`, `engine.js`, `media.js`, `layout.js`).
 
+**Done 2026-11-05: the rest of §2.1.** `CardHost` is the card layer's one owner (the cards
+and the headless windows, a window put in a card, placeholders, readiness, full screen, the
+card opened from Android's home screen, the hand-over on reshell); `AppLifecycle` (running
+apps, launches, windows opened and closed, app activities, boot apps, the memory state) and
+`ShellChrome` (`Luna`, the views over the cards, menus, brightness, dock, keyboard,
+orientation, wallpaper, reshell, home, `CardLayer.Listener`) talk to it. `ShellActivity`
+keeps Android's lifecycle, intents, permissions, the lock, the services, the launch-point
+catalog and the `WindowHost` answers: 2,530 lines to 1,356. Two leaks fell out: every reshell
+started a second set of the system menu's radio watchers and registered the shortcut watch
+again, and neither was ever stopped.
+
 Left by judgment, each for a reason found in the code:
-- §2.1's `AppLifecycle` and `ShellChrome`: the lifecycle's members use 43 of the shell's
-  others and share the card layer with the chrome; one owner for the card layer first.
 - §2.2's 13 phone-or-tablet metrics: each pair is one line, the 13 in one block.
 - §2.5's `HeaderStrip`: its functions run on the browser's own scroll, scale, clip and holes.
 - §3.1's `Hold` (each long press is one post and one remove around its own runnable), the

@@ -2,15 +2,10 @@ package org.webosarchive.lunacy.shell
 
 import android.app.Activity
 import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.util.Log
-import android.view.View
-import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.WindowManager
 import android.webkit.WebView
-import android.widget.FrameLayout
-import android.widget.ImageView
 import org.json.JSONObject
 import org.webosarchive.lunacy.card.AppFiles
 import org.webosarchive.lunacy.card.AppInfo
@@ -23,12 +18,10 @@ import org.webosarchive.lunacy.card.Bus
 import org.webosarchive.lunacy.card.Packages
 import org.webosarchive.lunacy.card.SystemProperties
 import org.webosarchive.lunacy.card.WindowHost
-import org.webosarchive.lunacy.card.WindowType
 import org.webosarchive.lunacy.card.ActivityManager
 import org.webosarchive.lunacy.card.AndroidCalendar
 import org.webosarchive.lunacy.card.AndroidContacts
 import org.webosarchive.lunacy.card.AndroidNotifications
-import org.webosarchive.lunacy.card.AppInstallService
 import org.webosarchive.lunacy.card.AudioService
 import org.webosarchive.lunacy.card.Configurator
 import org.webosarchive.lunacy.card.ConnectionManager
@@ -53,7 +46,6 @@ import org.webosarchive.lunacy.card.ImageService
 import org.webosarchive.lunacy.card.JsServices
 import org.webosarchive.lunacy.card.KeyManager
 import org.webosarchive.lunacy.card.Keys
-import org.webosarchive.lunacy.card.LaunchPoint
 import org.webosarchive.lunacy.card.LaunchPoints
 import org.webosarchive.lunacy.card.LunacyService
 import org.webosarchive.lunacy.card.ShellHooks
@@ -67,7 +59,6 @@ import org.webosarchive.lunacy.card.NotificationIcons
 import org.webosarchive.lunacy.card.Novacom
 import org.webosarchive.lunacy.card.PdkRuntime
 import org.webosarchive.lunacy.card.PageHooks
-import org.webosarchive.lunacy.card.PdkWindow
 import org.webosarchive.lunacy.card.Placement
 import org.webosarchive.lunacy.card.Power
 import org.webosarchive.lunacy.card.PowerService
@@ -78,17 +69,18 @@ import org.webosarchive.lunacy.card.SleepWake
 import org.webosarchive.lunacy.card.SysLog
 import org.webosarchive.lunacy.card.SystemService
 import org.webosarchive.lunacy.card.UniversalSearch
-import org.webosarchive.lunacy.card.WebosLinks
 import org.webosarchive.lunacy.card.WebosRoot
 
 /**
  * The simulated Luna shell: wallpaper, cards, status bar, "Just type", quick launch.
  * Starts as a normal full-screen activity; nothing here assumes it isn't the home launcher.
  */
-class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
+class ShellActivity : Activity(), WindowHost {
     override lateinit var server: AppServer
     override val bus = Bus()
-    private lateinit var luna: Luna
+    /** The shell's face: launcher, Just Type, dock, status bar and menus, wallpaper (ShellChrome). */
+    private lateinit var chrome: ShellChrome
+    private val luna: Luna get() = chrome.luna
     private lateinit var registry: AppRegistry
     /** Which app opens which type of file: installed apps' mimeTypes and the system's (ContentHandlers). */
     private lateinit var handlers: ContentHandlers
@@ -121,8 +113,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private var confirmReturn: ((Boolean) -> Unit)? = null
     private lateinit var audio: AudioService
     private lateinit var displayService: DisplayService
-    /** The wallpaper view, reloaded when the preference changes. */
-    private lateinit var wallpaperView: ImageView
     /** /media/cryptofs/apps: installed packages first, then the apps bundled in the APK. */
     private lateinit var files: AppFiles
     /**
@@ -174,14 +164,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // already out of sight, so the screen saver's end doesn't send it there again.
         if (interactive) exhibitions.cardArrivedInExhibition()
         if (interactive && cardHost.built) cards.maximized?.window?.let { it.setStageActive(false); coveredCard = it }
-        // A launch that Android answers (a settings shortcut, an Android app) covers the shell
-        // while the launcher is still sliding away, and a stopped window's animation doesn't
-        // finish: the launcher came back on screen but closed, deaf to taps. Finish it now.
-        if (::launcher.isInitialized && !launcherOpen && launcher.visibility == View.VISIBLE) {
-            launcher.animate().cancel()
-            launcher.translationY = launcher.height.toFloat()
-            launcher.visibility = View.INVISIBLE; launcher.cancelLaunchFeedback(); exitEditMode()
-        }
+        if (::chrome.isInitialized) chrome.covered()
         started = false; super.onStop()
     }
     /** The maximized card that another Android app covered, to be activated again ([onStop]). */
@@ -203,11 +186,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun launchPoints(): List<AppInfo> = allLaunchPoints().filter { it.id !in hiddenApps }
 
     /** The launcher's apps, again, and Software Manager hears it. */
-    private fun setLauncherApps() {
-        launcher.hidden = hiddenApps.all()
-        launcher.setApps(launchPoints())
-        lunacyService?.launcherAppsChanged()
-    }
+    private fun setLauncherApps() = chrome.setLauncherApps()
+    private fun showDock() = chrome.showDock()
     private var lunacyService: LunacyService? = null
     private lateinit var applicationManager: ApplicationManager
     /** What the notifications ask of the shell. */
@@ -215,50 +195,47 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         override val luna get() = this@ShellActivity.luna
         override val registry get() = this@ShellActivity.registry
         override val server get() = this@ShellActivity.server
-        override val statusBar get() = this@ShellActivity.statusBar
+        override val statusBar get() = chrome.statusBar
         override val sounds get() = this@ShellActivity.sounds
         override val blinkNotifications get() = ::systemService.isInitialized && systemService.get("BlinkNotifications") == true
-        override fun launch(appId: String, params: JSONObject?) = this@ShellActivity.launch(appId, params)
-        override fun closeWindow(window: AppWindow) = this@ShellActivity.closeWindow(window)
-        override fun closeMenu() = this@ShellActivity.closeMenu()
-        override fun toggleMenu() = this@ShellActivity.toggleMenu()
+        override fun launch(appId: String, params: JSONObject?) = lifecycle.launch(appId, params)
+        override fun closeWindow(window: AppWindow) = lifecycle.closeWindow(window)
+        override fun closeMenu() = chrome.closeMenu()
+        override fun toggleMenu() = chrome.toggleMenu()
     }
     /** What Exhibition asks of the shell: its chrome, read afresh, since a reshell rebuilds it. */
     private val exhibitionHost = object : ExhibitionController.Host {
         override val luna get() = this@ShellActivity.luna
         override val registry get() = this@ShellActivity.registry
         override val dockMode get() = this@ShellActivity.dockMode
-        override val statusBar get() = this@ShellActivity.statusBar
+        override val statusBar get() = chrome.statusBar
         override val cards get() = this@ShellActivity.cards
-        override val menuScrim get() = this@ShellActivity.menuScrim
+        override val menuScrim get() = chrome.menuScrim
         override val inFront get() = this@ShellActivity.inFront
-        override val launcherOpen get() = this@ShellActivity.launcherOpen
+        override val launcherOpen get() = chrome.launcherOpen
         override val notificationsMenuOpen get() = notifications.menu.isOpen
         override fun launchForDock(appId: String, params: JSONObject) = launch(appId, params, Placement.DOCK)
-        override fun closeWindow(window: AppWindow) = onWindowClosed(window)
-        override fun closeMenu() = this@ShellActivity.closeMenu()
-        override fun closeLauncher() = this@ShellActivity.closeLauncher()
-        override fun hideKeyboard() = this@ShellActivity.hideKeyboard()
-        override fun releaseOrientation() = applyOrientation(null)
+        override fun closeWindow(window: AppWindow) = lifecycle.windowClosed(window)
+        override fun closeMenu() = chrome.closeMenu()
+        override fun closeLauncher() = chrome.closeLauncher()
+        override fun hideKeyboard() = chrome.hideKeyboard()
+        override fun releaseOrientation() = chrome.applyOrientation(null)
         override fun holdScreen() = this@ShellActivity.holdScreen()
-        override fun showCardsAgain() { if (cards.maximized != null) onMaximized(cards.maximized!!) else onCardView() }
-        override fun showChrome(exhibiting: Boolean) {
-            fade(justType, !exhibiting && cards.maximized == null && !launcherOpen)
-            showDock(!exhibiting && cards.maximized == null)
-        }
+        override fun showCardsAgain() { if (cards.maximized != null) chrome.onMaximized(cards.maximized!!) else chrome.onCardView() }
+        override fun showChrome(exhibiting: Boolean) = chrome.showChrome(exhibiting)
     }
     /** What the application manager asks of the shell. */
     private val appManagerShell = object : ApplicationManager.Shell {
         override fun launch(appId: String, params: JSONObject?, placement: Placement, launchedBy: String?) =
-            this@ShellActivity.launch(appId, params, placement, launchedBy)
+            lifecycle.launch(appId, params, placement, launchedBy)
         override fun install(source: String, requester: String, onProgress: (Int) -> Unit, banners: Boolean, onDone: (Packages.Result) -> Unit) =
             this@ShellActivity.install(source, requester, onProgress, banners, onDone)
         override val pdkAvailable get() = pdkRuntime.available
-        override val running: Map<String, List<AppWindow>> get() = this@ShellActivity.running
-        override fun closeWindow(window: AppWindow) = onWindowClosed(window)
+        override val running: Map<String, List<AppWindow>> get() = lifecycle.apps
+        override fun closeWindow(window: AppWindow) = lifecycle.windowClosed(window)
         override fun appsChanged() = this@ShellActivity.appsChanged()
         override fun launchPointsChanged() { setLauncherApps(); showDock() }
-        override fun showDock() = this@ShellActivity.showDock()
+        override fun showDock() = chrome.showDock()
         override fun forgetIcons(key: String) = luna.forgetIcons(key)
         override fun removeInstalled(app: AppInfo, done: (String?) -> Unit) = this@ShellActivity.removeInstalled(app, done)
     }
@@ -325,47 +302,73 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         override val luna get() = this@ShellActivity.luna
         override val registry get() = this@ShellActivity.registry
         override val sounds get() = this@ShellActivity.sounds
-        override val listener get() = this@ShellActivity
+        override val listener get() = chrome
         override fun screenOrientation() = this@ShellActivity.screenOrientation()
         override fun cardArriving() { exhibitions.cardArrivedInExhibition() }
-        override fun noCardUp() { statusBar.slide(false); applyOrientation(null) }
-        override fun toggleAppMenu() = this@ShellActivity.toggleAppMenu()
-        override fun showKeyboard(window: AppWindow) { window.requestFocus(); imm.showSoftInput(window, android.view.inputmethod.InputMethodManager.SHOW_FORCED) }
+        override fun noCardUp() = chrome.noCardUp()
+        override fun toggleAppMenu() = chrome.toggleAppMenu()
+        override fun showKeyboard(window: AppWindow) = chrome.showKeyboardForced(window)
     }
     /** The cards and the headless windows (CardHost). After [shellHandler], which it posts to. */
-    private val cardHost by lazy { CardHost(this, cardShell, shellHandler) }
+    private val cardHost: CardHost by lazy { CardHost(this, cardShell, shellHandler) }
     private val cards: CardLayer get() = cardHost.cards
 
-    private lateinit var statusBar: StatusBar
-    private lateinit var justType: JustType
-    private lateinit var justTypePanel: JustTypePanel
     /** com.palm.universalsearch: what Just Type offers besides apps, and its settings. */
     private lateinit var universalSearch: UniversalSearch
-    private lateinit var quickLaunch: QuickLaunch
-    private lateinit var launcher: Launcher
-    private lateinit var tabDialog: TabDialog
-    private lateinit var groupOverlay: GroupOverlay
-    private var launcherOpen = false
     /** Banners, dashboards and alerts (NotificationHost). */
-    private val notificationHost = NotificationHost(this, notificationShell)
+    private val notificationHost: NotificationHost = NotificationHost(this, notificationShell)
     private val notifications: Notifications get() = notificationHost.notifications
     private val notificationsAtBottom: Boolean get() = notificationHost.notificationsAtBottom
     private val area: NotificationArea? get() = notificationHost.area
-    private lateinit var systemMenu: SystemMenu
-    private lateinit var systemControls: SystemControls
     private lateinit var dockMode: DockMode
     /** Exhibition and its dock (ExhibitionController). */
-    private val exhibitions = ExhibitionController(this, exhibitionHost)
+    private val exhibitions: ExhibitionController = ExhibitionController(this, exhibitionHost)
     /** Whether the shell is the activity in front, which decides where a screen saver's Exhibition goes back to. */
     private var inFront = false
-    /** Catches taps outside the dashboard drop-down, which close it. */
-    private lateinit var menuScrim: View
 
     /** A debuggable build (the debug build type), which keeps the adb development extras. */
     private val devBuild by lazy { applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0 }
 
-    /** Running apps: app id to all its windows, root first. */
-    private val running = LinkedHashMap<String, MutableList<AppWindow>>()
+    /** What the shell's face asks of the rest of the shell. */
+    private val chromeShell = object : ShellChrome.Host {
+        override val registry get() = this@ShellActivity.registry
+        override val sounds get() = this@ShellActivity.sounds
+        override val systemService get() = this@ShellActivity.systemService
+        override val displayService get() = this@ShellActivity.displayService
+        override val universalSearch: UniversalSearch? get() = if (this@ShellActivity::universalSearch.isInitialized) this@ShellActivity.universalSearch else null
+        override val hiddenApps get() = this@ShellActivity.hiddenApps
+        override fun launchPoints() = this@ShellActivity.launchPoints()
+        override fun justTypeApps() = (registry.launchPoints + addedById.values + androidById.values).filter { it.id !in hiddenApps }
+        override fun appById(id: String) = this@ShellActivity.appById(id)
+        override fun remove(app: AppInfo) = this@ShellActivity.remove(app)
+        override fun launcherAppsChanged() { lunacyService?.launcherAppsChanged() }
+        override fun askPermissions(permissions: List<String>, done: (granted: Boolean, askAgain: Boolean) -> Unit) =
+            this@ShellActivity.askPermissions(permissions, done)
+        override fun systemBanner(appId: String, message: String) = this@ShellActivity.systemBanner(appId, message)
+        override fun screenOrientation() = this@ShellActivity.screenOrientation()
+        // Android's apps' icons are drawn at the shell's scale.
+        override fun scaleChanged() { androidAppsAt = null }
+    }
+    /** What the apps' lifecycle asks of the shell. */
+    private val lifecycleShell = object : AppLifecycle.Host {
+        override val registry get() = this@ShellActivity.registry
+        override val profile get() = this@ShellActivity.profile
+        override val pdkRuntime get() = this@ShellActivity.pdkRuntime
+        override val exhibitions get() = this@ShellActivity.exhibitions
+        override val notificationHost get() = this@ShellActivity.notificationHost
+        override fun addedLaunchPoint(id: String) = addedById[id]?.launchPoint
+        override fun androidTile(id: String) = androidById[id]
+        override fun openAndroid(app: AppInfo) = launchAndroid(app)
+        override fun systemBanner(appId: String, message: String) = this@ShellActivity.systemBanner(appId, message)
+        override fun lunacyIsHome() = homeScreenPins.lunacyIsHome()
+        override fun closeMenu() = chrome.closeMenu()
+        override fun onCardView() = chrome.onCardView()
+        override fun windowGone(window: AppWindow) { if (screenAwake.remove(window)) holdScreen() }
+    }
+    /** The running apps and their windows (AppLifecycle). After [shellHandler], which it posts to. */
+    private val lifecycle: AppLifecycle by lazy { AppLifecycle(this, this, bus, cardHost, lifecycleShell, shellHandler) }
+    private fun launch(appId: String, params: JSONObject? = null, placement: Placement = Placement.CARD, launchedBy: String? = null) =
+        lifecycle.launch(appId, params, placement, launchedBy)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -387,7 +390,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         WebView.setWebContentsDebuggingEnabled(devBuild)
         Bus.strict = devBuild
         FormFactor.shown = FormFactor.decide(this)
-        luna = Luna(this, FormFactor.shown == FormFactor.Kind.PHONE)
+        chrome = ShellChrome(this, chromeShell, bus, cardHost, lifecycle, exhibitions, notificationHost, shellHandler)
         val installed = java.io.File(filesDir, "cryptofs/apps")
         // The webOS root filesystem services and package scripts see as /. Its ROM is laid down
         // (again after an update) off the main thread, below; a service's first call and a
@@ -434,17 +437,21 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             addDataScheme("package")
         })
         watchingPackages = true
-        buildShell()
+        PinnedShortcuts.onChanged = ::shortcutsChanged
+        NotificationIcons.onChanged = ::notificationIconsChanged
+        AndroidNotifications.onChanged = ::androidNotificationsChanged
+        if (android.os.Build.VERSION.SDK_INT >= 26) watchShortcuts()
+        chrome.buildShell()
         // The splash was the window's background (Theme.Lunacy.Splash), which is what Android
         // painted while this was all being set up. The shell covers it now, so let the logo go
         // rather than hold the bitmap behind an opaque wallpaper for the rest of the session.
-        shellRoot?.post { window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK)) }
+        cards.post { window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK)) }
         reportedOrientation = screenOrientation()
         (getSystemService(DISPLAY_SERVICE) as android.hardware.display.DisplayManager)
             .registerDisplayListener(displayListener, android.os.Handler(android.os.Looper.getMainLooper()))
         seedMediaInternal()
-        onCardView()
-        goImmersive()
+        chrome.onCardView()
+        chrome.goImmersive()
 
         // First Use, as a webOS device put it in front of a new owner: once, on the first
         // start, it asks for Android's permissions (LunacyService). After it has run, the
@@ -458,184 +465,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         handleIntent(intent)
     }
 
-    /** The shell's own root view, under the wallpaper: what [buildShell] lays out and [reshell] replaces. */
-    private var shellRoot: FrameLayout? = null
-
-    /**
-     * The shell's views, at [luna]'s scale and in its layout: wallpaper, cards, launcher, pill,
-     * dock, notifications, menus, status bar. Built once at startup, and again by [reshell]
-     * when the layout changes; everything else - the services, the bus, the apps' windows -
-     * is the activity's own and outlives it.
-     */
-    private fun buildShell() {
-        // The dock draws an icon being dragged out of it above its own bounds.
-        val root = FrameLayout(this).apply { clipChildren = false }
-        wallpaperView = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
-        showWallpaper()
-        val screen = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        screen.addView(wallpaperView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-        screen.addView(root, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-
-        cardHost.build(root)
-        buildLauncher(root)
-        buildJustType(root)
-        buildQuickLaunch(root)
-        buildBarAndMenus(screen, root)
-
-        fitCutout(screen, root)
-        setContentView(screen)
-        screen.requestApplyInsets()
-        watchKeyboard(root)
-        statusBar.onTitleTap = { if (exhibitions.exhibitionOn) exhibitions.toggleExhibitionMenu() else toggleAppMenu() }
-        shellRoot = root
-    }
-
-    /** The launcher, with its groups' panel and its tab dialog. */
-    private fun buildLauncher(root: FrameLayout) {
-        // Overlays, bottom to top as in LunaCE's OverlayWindowManager: launcher, pill, dock.
-        // The icon glows first; the launch follows a frame later, so the glow is seen.
-        launcher = Launcher(this, luna) { app -> launcher.postDelayed({ launch(app.id); closeLauncher() }, LAUNCH_DELAY_MS) }
-        PinnedShortcuts.onChanged = ::shortcutsChanged
-        NotificationIcons.onChanged = ::notificationIconsChanged
-        AndroidNotifications.onChanged = ::androidNotificationsChanged
-        if (android.os.Build.VERSION.SDK_INT >= 26) watchShortcuts()
-        launcher.onRemove = { app -> remove(app) }
-        launcher.appTitle = { id -> registry.get(id)?.title }
-        setLauncherApps()
-        launcher.dockHeight = luna.px(QuickLaunch.barHeight(luna.phone)).toFloat()
-        launcher.visibility = View.INVISIBLE
-        root.addView(launcher, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
-        // [LunaCE] Launcher groups: the panel a group opens into.
-        groupOverlay = GroupOverlay(this, luna)
-        root.addView(groupOverlay, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
-        launcher.onOpenGroup = { g, from -> groupOverlay.show(g, from) }
-        groupOverlay.onLaunch = { app -> launcher.postDelayed({ launch(app.id); closeLauncher() }, LAUNCH_DELAY_MS) }
-        // [LunaCE] The group's glow stays while one of its members launches, and goes when
-        // the panel is simply dismissed.
-        groupOverlay.onDismissed = { g, launched -> if (launched) launcher.showLaunchFeedback(g.id) else launcher.cancelLaunchFeedback() }
-        groupOverlay.onPopOut = { g, app -> launcher.popOut(g, app) }
-        groupOverlay.onRenamed = { g -> launcher.groupChanged(g) }
-        // [LunaCE] Renaming, adding and deleting launcher tabs.
-        tabDialog = TabDialog(this, luna)
-        root.addView(tabDialog, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
-        launcher.onRenameTab = { i, name, deletable ->
-            tabDialog.show("Rename Tab", name, deletable, commitOnTapAway = true) { newName, delete ->
-                if (newName != null) launcher.renameTab(i, newName)
-                if (delete) launcher.deleteTab(i)
-            }
-        }
-        launcher.onAddTab = {
-            tabDialog.show("New Tab", "New Tab", deletable = false, commitOnTapAway = false) { newName, _ ->
-                if (newName != null) launcher.addTab(newName)
-            }
-        }
-    }
-
-    /** The Just Type pill and its panel. */
-    private fun buildJustType(root: FrameLayout) {
-        justType = JustType(this, luna)
-        // The pill takes text now, so something else has to hold focus first, or the shell
-        // opens with a cursor blinking in it.
-        root.isFocusableInTouchMode = true
-        // The pill is 3/4 of the short side: a TouchPad's 768 px on a tablet, whatever the
-        // screen (the shell keeps the TouchPad's proportions there); on a phone, the screen's
-        // own, as the Pre3's shell laid it out on its 480 px (Docs/pre3.md).
-        val shortSide = if (luna.phone) {
-            realMetrics().let { minOf(it.widthPixels, it.heightPixels) }
-        } else (luna.density * 768).toInt()
-        root.addView(justType, FrameLayout.LayoutParams((shortSide * JustType.WIDTH_OF_SHORT_SIDE).toInt(), luna.px(JustType.HEIGHT)).apply {
-            topMargin = luna.px(StatusBar.HEIGHT + JustType.TOP_GAP); gravity = android.view.Gravity.CENTER_HORIZONTAL
-        })
-
-        // Just Type, under the status bar, over the cards, launcher, pill and dock.
-        justTypePanel = JustTypePanel(this, luna)
-        root.addView(justTypePanel, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
-        justType.setOnClickListener { openJustType() }
-        justTypePanel.onLaunch = { app -> closeJustType(); launch(app.id) }
-        // Just Type's other choices go over the bus as its own calls did, as com.palm.launcher.
-        justTypePanel.onLaunchApp = { id, params ->
-            closeJustType()
-            bus.call(JUST_TYPE, "palm://com.palm.applicationManager/launch", JSONObject().put("id", id).put("params", params).toString()) { r ->
-                Log.i(AppServer.TAG, "just type: launch $id: $r")
-            }
-        }
-        justTypePanel.onOpenTarget = { target ->
-            closeJustType()
-            bus.call(JUST_TYPE, "palm://com.palm.applicationManager/open", JSONObject().put("target", target).toString()) { r ->
-                Log.i(AppServer.TAG, "just type: open: $r")
-            }
-        }
-        justTypePanel.db = { method, params, reply ->
-            bus.call(JUST_TYPE, "palm://com.palm.db/$method", params.toString()) { r ->
-                reply(runCatching { JSONObject(r) }.getOrDefault(JSONObject().put("returnValue", false)))
-            }
-        }
-        justTypePanel.appFor = { id -> registry.get(id) }
-        if (::universalSearch.isInitialized) justTypePanel.search = universalSearch
-        justTypePanel.onSearch = { url ->
-            closeJustType()
-            if (registry.get(ApplicationManager.BROWSER) != null) launch(ApplicationManager.BROWSER, JSONObject().put("target", url))
-            else WebosLinks.intentFor("", null, url)?.let { WebosLinks.open(this, it) }
-        }
-    }
-
-    /** The quick-launch dock along the bottom. */
-    private fun buildQuickLaunch(root: FrameLayout) {
-        quickLaunch = QuickLaunch(this, luna, onLaunch = { app -> quickLaunch.postDelayed({ launch(app.id) }, LAUNCH_DELAY_MS) }, onLauncher = { toggleLauncher() })
-        // By position in the dock as drawn, which leaves out apps since removed.
-        quickLaunch.onRemoveItem = { i -> setDock(shownDock().toMutableList().apply { removeAt(i) }) }
-        quickLaunch.onMoveItem = { from, to -> setDock(shownDock().toMutableList().apply { add(to, removeAt(from)) }) }
-        launcher.onDropOnDock = { app, x -> dropOnDock(app, x) }
-        launcher.onEditModeChanged = { on -> quickLaunch.editing = on }
-        showDock()
-        root.addView(quickLaunch, FrameLayout.LayoutParams(MATCH_PARENT, luna.px(QuickLaunch.barHeight(luna.phone))).apply { gravity = android.view.Gravity.BOTTOM })
-    }
-
-    /**
-     * Everything over the cards and overlays, bottom to top: Exhibition's dock, the alerts,
-     * the menus' scrim, the notifications, the system menu, the status bar, Exhibition's menu.
-     */
-    private fun buildBarAndMenus(screen: FrameLayout, root: FrameLayout) {
-        // Notifications layer (reference §1.1): popup alerts, then the dashboard drop-down, under the status bar.
-        statusBar = StatusBar(this, luna)
-        statusBar.onBatteryFull = { sounds.batteryFull() }
-        val popups = PopupLayer(this, luna)
-        root.addView(exhibitions.buildDock(), FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-
-        root.addView(popups, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
-        menuScrim = View(this).apply {
-            visibility = View.GONE
-            setOnClickListener { closeMenu(); exhibitions.closeExhibitionMenu() }
-        }
-        root.addView(menuScrim, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-        notificationHost.build(screen, root, popups)
-        // The system menu, right-aligned under the bar, its edge 11 px past the screen's.
-        systemControls = SystemControls(this, ::askPermissions, ::openAndroidPanel) { key, value -> displayService.write(key, value) }
-        systemMenu = SystemMenu(this, luna, systemControls)
-        systemControls.onChange = { systemMenu.refresh() }
-        // WiFiElement: a network the menu turned on or joined came up; the menu goes a second later.
-        systemControls.onConnected = { closeSystemMenuIn(1000) }
-        systemMenu.onCloseRequest = { closeSystemMenuIn(it) }
-        systemControls.start()
-        root.addView(systemMenu, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = luna.px(StatusBar.HEIGHT); gravity = android.view.Gravity.TOP or android.view.Gravity.END
-        })
-        systemMenu.translationX = luna.px(SystemMenu.EDGE_OFFSET).toFloat()
-        // SystemMenu::slotMenuBrightnessChanged: 0…1 along the slider is 1…100 %.
-        systemMenu.onBrightness = { v, done -> setMenuBrightness(Math.round(v * 99) + 1, done) }
-        statusBar.onSystemTap = { toggleSystemMenu() }
-        statusBar.onSystemInfoChanged = { systemMenu.batteryPercent = statusBar.batteryPercent }
-        root.addView(statusBar, FrameLayout.LayoutParams(MATCH_PARENT, luna.px(StatusBar.HEIGHT)))
-
-        root.addView(exhibitions.buildMenu(), FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = luna.px(StatusBar.HEIGHT); gravity = android.view.Gravity.TOP or android.view.Gravity.START
-        })
-    }
-
     override fun onDestroy() {
         if (handedOff) { super.onDestroy(); return }
-        if (::systemControls.isInitialized) systemControls.stop()
+        if (::chrome.isInitialized) chrome.stop()
         if (live?.get() === this) live = null
         (getSystemService(DISPLAY_SERVICE) as android.hardware.display.DisplayManager)
             .unregisterDisplayListener(displayListener)
@@ -650,9 +482,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // process), the services' Node processes, the luna-send socket and the players. Android
         // re-creates the activity for a font-size or language change, and without this the old
         // one's cards ran on, unreachable, beside the new one's.
-        pendingLoads.clear()
-        for (w in running.values.flatten()) { (w.parent as? android.view.ViewGroup)?.removeView(w); w.destroy() }
-        running.clear()
+        lifecycle.destroyAll()
         if (::jsServices.isInitialized) jsServices.stopAll()
         if (::nativeServices.isInitialized) nativeServices.stopAll()
         if (::webos.isInitialized) webos.lunaSend.stop()
@@ -707,7 +537,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         super.onNewIntent(intent)
         // As the home screen: Home while the shell is up is Lunacy's own Home button. From
         // an Android app it only brings the shell back, as it was.
-        if (intent.action == android.content.Intent.ACTION_MAIN && intent.hasCategory(android.content.Intent.CATEGORY_HOME) && started) homePressed()
+        if (intent.action == android.content.Intent.ACTION_MAIN && intent.hasCategory(android.content.Intent.CATEGORY_HOME) && started) chrome.homePressed()
         handleIntent(intent)
     }
 
@@ -721,10 +551,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun handleIntent(intent: android.content.Intent) {
         if (devBuild) intent.takeString("install")?.let { install(it) }
         intent.getStringExtra("layout")?.let { v ->
-            if (FormFactor.setSetting(this, v)) { intent.removeExtra("layout"); if (cardHost.built) reshell() }
+            if (FormFactor.setSetting(this, v)) { intent.removeExtra("layout"); if (cardHost.built) chrome.reshell() }
             else Log.w(AppServer.TAG, "layout: $v is not auto, phone or tablet")
         }
-        if (intent.hasExtra("launcher")) { intent.removeExtra("launcher"); if (started && !launcherOpen) openLauncher() }
+        if (intent.hasExtra("launcher")) { intent.removeExtra("launcher"); if (started && !chrome.launcherOpen) chrome.openLauncher() }
         // `--es sh '<command>'`: runs it in the webOS root from this process, with its output
         // in the log, for seeing what a package's script sees under the app's own sandbox.
         if (devBuild) intent.getStringExtra("sh")?.let { cmd -> intent.removeExtra("sh"); packages.shell(cmd) }
@@ -746,7 +576,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // A webOS app's icon on Android's home screen. Taken once: the activity is singleTask
         // and a re-created one would otherwise open it again.
         if (intent.action == HomeScreenPins.ACTION_OPEN_APP) {
-            intent.getStringExtra(HomeScreenPins.EXTRA_APP)?.let { openDirect(it) }
+            intent.getStringExtra(HomeScreenPins.EXTRA_APP)?.let { lifecycle.openDirect(it) }
             intent.action = null
         }
         intent.takeString("launch")?.let { id ->
@@ -769,59 +599,16 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      */
     private fun android.content.Intent.takeString(key: String): String? = getStringExtra(key)?.also { removeExtra(key) }
 
-    // ---- memory ----
-
-    /** The memory state the apps were last told: LunaSysMgr's "normal", "low" or "critical". */
-    private var memoryState = "normal"
-    private var lastTrim = 0L
-
-    /**
-     * Android saying memory is short, passed on as LunaSysMgr's MemoryWatcher did: every app's
-     * root page gets `Mojo.lowMemoryNotification({state})` when the state changes, which Enyo
-     * turns into its `lowMemory` event (WebAppManager::slotMemoryStateChanged). The shell
-     * still makes room itself, as before; this only lets an app help.
-     */
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        val state = when (level) {
-            TRIM_MEMORY_RUNNING_CRITICAL, TRIM_MEMORY_COMPLETE -> "critical"
-            TRIM_MEMORY_RUNNING_LOW, TRIM_MEMORY_MODERATE -> "low"
-            else -> return
-        }
-        lastTrim = android.os.SystemClock.uptimeMillis()
-        setMemoryState(state)
+        lifecycle.trimMemory(level)
     }
 
-    /**
-     * Android never says memory has eased, so the shell looks: "normal" once no warning has
-     * come for half a minute and the system no longer calls itself low on memory.
-     */
     /**
      * Delayed shell actions. Not a view's queue: reshell replaces the shell's views, and what
      * was posted to one that has gone never runs (memory stayed "low", brightness held).
      */
     private val shellHandler = android.os.Handler(android.os.Looper.getMainLooper())
-
-    private val memoryCheck = object : Runnable {
-        override fun run() {
-            if (memoryState == "normal") return
-            val mi = android.app.ActivityManager.MemoryInfo()
-            (getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
-            if (android.os.SystemClock.uptimeMillis() - lastTrim >= MEMORY_CALM_MS && !mi.lowMemory) setMemoryState("normal")
-            else shellHandler.postDelayed(this, MEMORY_CHECK_MS)
-        }
-    }
-
-    private fun setMemoryState(state: String) {
-        if (state == memoryState) return
-        memoryState = state
-        Log.i(AppServer.TAG, "memory $state")
-        // Root pages only, as LunaSysMgr sent it: a child window is the same app.
-        val arg = JSONObject().put("state", state).toString()
-        running.values.mapNotNull { it.firstOrNull() }.forEach { it.callMojo("lowMemoryNotification", arg) }
-        shellHandler.removeCallbacks(memoryCheck)
-        if (state != "normal") shellHandler.postDelayed(memoryCheck, MEMORY_CHECK_MS)
-    }
 
     override fun onResume() {
         super.onResume(); inFront = true
@@ -861,185 +648,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     // ---- apps ----
 
-    /**
-     * Starts an app, or brings it forward if it is running. [placement] is where its first
-     * window goes ([Placement]); [launchedBy] is who asked, for the card this launch brings
-     * (showAsCard): LunaSysMgr's launchingAppId.
-     */
-    fun launch(appId: String, params: JSONObject? = null, placement: Placement = Placement.CARD, launchedBy: String? = null) {
-        cardHost.launchedBy(appId, launchedBy)
-        // An added launch point launches its app with its own params, never into the dock.
-        addedById[appId]?.launchPoint?.let { lp ->
-            launch(lp.appId, lp.paramsObject(), if (placement == Placement.DOCK) Placement.NO_CARD else placement); return
-        }
-        androidById[appId]?.let { launchAndroid(it); return }
-        val app = registry.get(appId) ?: run { Log.w(AppServer.TAG, "launch: no app $appId"); return }
-        if (app.androidSettings.isNotEmpty()) { openAndroidSettings(app); return }
-        val windows = running[appId]
-        // The dock takes web apps' windows only; a native app has no Exhibition view.
-        if (placement == Placement.DOCK && !app.isWeb) { Log.w(AppServer.TAG, "exhibition: $appId is a native app"); return }
-        when {
-            !app.isWeb -> launchNative(app, windows)
-            windows != null -> relaunch(app, windows, params, placement)
-            else -> launchWeb(app, params, placement)
-        }
-    }
-
     /** An Android app or a pinned shortcut, which Android opens. */
     private fun launchAndroid(a: AppInfo) {
         val opened = if (a.androidShortcut != null) pinned.launch(a) else androidApps.launch(a)
         if (!opened) systemBanner("", "Couldn't open ${a.title}")
     }
 
-    /**
-     * A shortcut to one of Android's settings screens: no window, no pretending that Lunacy
-     * owns the setting. Only apps Lunacy ships declare this.
-     */
-    private fun openAndroidSettings(app: AppInfo) {
-        bus.call(app.id, "palm://${LunacyService.SERVICE}/android/openSettings",
-            JSONObject().put("panel", app.androidSettings).toString()) { reply ->
-            val r = runCatching { JSONObject(reply) }.getOrNull()
-            if (r?.optBoolean("returnValue") != true) {
-                systemBanner(app.id, r?.optString("errorText").orEmpty().ifEmpty { "Couldn't open ${app.title}" })
-            }
-        }
-    }
-
-    /** A PDK app: its own process, in a card of its own kind (Docs/pdk.md); brought forward if running. */
-    private fun launchNative(app: AppInfo, windows: List<AppWindow>?) {
-        val appId = app.id
-        if (windows != null) { cardHost.bringForward(appId); return }
-        if (!pdkRuntime.available) {
-            systemBanner(appId, "${app.title} is a native app; it needs Lunacy's 32-bit build on a 32-bit ARM device")
-            return
-        }
-        val w = PdkWindow(this, appId, this, app, pdkRuntime)
-        running[appId] = mutableListOf(w)
-        cardHost.showAsCard(w)
-        if (!w.start()) { systemBanner(appId, "Couldn't start ${app.title}"); onWindowClosed(w) }
-    }
-
-    /**
-     * Relaunch: webOS doesn't reload a running app. Unless the app handles the relaunch
-     * itself, LunaSysMgr brings its first card forward.
-     */
-    private fun relaunch(app: AppInfo, windows: List<AppWindow>, params: JSONObject?, placement: Placement) {
-        val appId = app.id
-        windows.first().relaunch(params?.toString() ?: "") { handled ->
-            Log.i(AppServer.TAG, "relaunch $appId ${if (Bus.handlesPeople(appId)) "" else params} handled=$handled")
-            // A relaunch for the dock leaves the card view alone: the app answers it with
-            // a dockMode window, or the dock shows nothing of it, as on a device.
-            if (!handled && placement != Placement.DOCK) cardHost.bringForward(appId)
-        }
-    }
-
-    /** A web app that isn't running: its root window, placed as [placement] says, and its page. */
-    private fun launchWeb(app: AppInfo, params: JSONObject?, placement: Placement) {
-        val appId = app.id
-        // The emulated card is a tablet's answer to a phone app. A Pre3 ran the same app at
-        // its own size, so on a phone - where apps are told they are on a Pre3 - there is
-        // nothing to emulate.
-        val emulate = placement != Placement.DOCK && profile == DeviceProfile.TOUCHPAD && app.emulated
-        val t0 = android.os.SystemClock.uptimeMillis()
-        val rootWindow = AppWindow(this, appId, this, emulate)
-        rootWindow.fixedOrientation = fixedOrientationOf(app)
-        running[appId] = mutableListOf(rootWindow)
-        createAppActivity(rootWindow)
-        val url = if (params != null) app.url + "?launchParams=" + android.net.Uri.encode(params.toString()) else app.url
-        // The startup card first, the page behind it: everything the launch can put off until
-        // the card is on the screen waits for it (loadWhenShown). A headless app (Clock) opens
-        // its card itself once its page has run, so for it the card is a placeholder with the
-        // app's splash, which its first card window fills (onWindowOpened); an app that never
-        // opens one loses the placeholder once it is up and running (withdrawPlaceholder).
-        when (placement) {
-            // ProcessManager::launch: an app that wasn't running, launched with windowType
-            // dockModeWindow, gets its first window as a dock window, not a card. A headless
-            // app opens its dock window itself (onWindowOpened).
-            Placement.DOCK -> {
-                if (app.noWindow) cardHost.hide(rootWindow) else exhibitions.addDockWindow(rootWindow)
-                rootWindow.loadUrl(url)
-            }
-            Placement.NO_CARD -> {
-                if (app.noWindow) cardHost.hide(rootWindow) else cardHost.showAsCard(rootWindow, splash = false)
-                rootWindow.loadUrl(url)
-            }
-            Placement.CARD -> {
-                cardHost.showAsCard(rootWindow, placeholder = app.noWindow)
-                Log.i(AppServer.TAG, "launch $appId: window and card in ${android.os.SystemClock.uptimeMillis() - t0} ms")
-                loadWhenShown(rootWindow, url, t0)
-            }
-        }
-    }
-
-    /** Page loads waiting for their startup card to be up; see [loadWhenShown]. */
-    private val pendingLoads = HashMap<AppWindow, Runnable>()
-
-    /**
-     * Starts the page once its card has slid into the card view (or up, should it maximize
-     * first). The page's scripts run on this thread - the WebView is single-process on these
-     * Androids - so a load started any earlier froze the card's slide, and the launcher with
-     * it, for as long as the app took to load. This is the point of the startup card
-     * (codepoet): the work happens while it is on the screen.
-     */
-    private fun loadWhenShown(w: AppWindow, url: String, launchedAt: Long) {
-        val load = Runnable {
-            if (pendingLoads.remove(w) == null) return@Runnable
-            Log.i(AppServer.TAG, "launch ${w.appId}: page load started ${android.os.SystemClock.uptimeMillis() - launchedAt} ms in")
-            w.loadUrl(url)
-        }
-        pendingLoads[w] = load
-        // On the activity's window rather than the card layer, which a rebuild replaces (reshell).
-        window.decorView.postDelayed(load, CardLayer.Params.SLIDE_MS + 50)
-    }
-
-    /** Card view, while a launching card waits in it: the dock and the pill stay away, as on a device. */
-    override fun onPreparing(card: Card) {
-        if (launcherOpen) closeLauncher()
-        onCardView()
-        fade(justType, false)
-        showDock(false)
-    }
-
-    /** Opens [appId] for its icon on Android's home screen. With Lunacy as the home app it is an ordinary launch. */
-    private fun openDirect(appId: String) {
-        if (homeScreenPins.lunacyIsHome()) { launch(appId); return }
-        cardHost.openDirect(appId)
-        launch(appId)
-    }
-
-    /** appinfo.json's requestedWindowOrientation, which every card of the app starts with. */
-    private fun fixedOrientationOf(app: AppInfo?): String? =
-        app?.appinfo?.optString("requestedWindowOrientation")?.lowercase()
-            ?.takeIf { it in ORIENTATIONS }
-
-    override fun onWindowOpened(parent: AppWindow, child: AppWindow) {
-        running.getOrPut(child.appId) { mutableListOf() } += child
-        child.fixedOrientation = fixedOrientationOf(registry.get(child.appId))
-        when (child.type) {
-            WindowType.DASHBOARD -> notifications.addDashboard(child, notificationHost.icon(child.attributes.optString("icon"), child.appId))
-            WindowType.POPUP_ALERT -> {
-                // A phone's list gives way to the alert in the same area: closed by the shell,
-                // so the scrim over the rest goes with it, or it would eat the next tap.
-                if (notificationsAtBottom) closeMenu()
-                notifications.popups.show(child, notificationHost.alertHeight(child))
-            }
-            // The headless app's first card: it fills the card its launch put up, and the root
-            // goes on where a headless root lives.
-            WindowType.CARD -> cardHost.cardOpened(parent, child)
-            // An app's own Exhibition view: the dock's, never a card.
-            WindowType.DOCK_MODE -> exhibitions.addDockWindow(child)
-            // A name the shell doesn't know.
-            null -> cardHost.showAsCard(child, parent)
-        }
-    }
-
-    override fun onWindowClosed(window: AppWindow) {
-        exhibitions.windowClosed(window)
-        cardHost.windowClosed(window)
-        notifications.removeDashboard(window)
-        notifications.popups.remove(window)
-        closeWindow(window)
-    }
+    override fun onWindowOpened(parent: AppWindow, child: AppWindow) = lifecycle.windowOpened(parent, child)
+    override fun onWindowClosed(window: AppWindow) = lifecycle.windowClosed(window)
 
     private val sounds by lazy {
         Sounds(this, server) { id -> registry.get(id)?.dir ?: id }.apply {
@@ -1071,12 +687,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val name = android.net.Uri.decode(source.substringAfterLast('/'))
         if (banners) systemBanner(requester, "Installing $name")
         // LunaSysMgr showed the package on the launcher while it installed, with its progress.
-        launcher.startInstall(source, name.removeSuffix(".ipk").substringBefore('_'))
-        packages.install(source, progress = { p -> launcher.installProgress(source, p); onProgress(p) },
+        chrome.launcher.startInstall(source, name.removeSuffix(".ipk").substringBefore('_'))
+        packages.install(source, progress = { p -> chrome.launcher.installProgress(source, p); onProgress(p) },
             // Named after the file at first, as the package is all there is; its app's own
             // title once the package is on the device and its appinfo.json can be read.
-            title = { t -> launcher.installTitle(source, t) }) { r ->
-            launcher.endInstall(source)
+            title = { t -> chrome.launcher.installTitle(source, t) }) { r ->
+            chrome.launcher.endInstall(source)
             val before = registry.apps.map { it.id }.toSet()
             appsChanged()
             jsServices.reload()
@@ -1104,28 +720,13 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      */
     private fun afterFirstUse() {
         if (!LunacyService.firstUseDone(this) || !::webos.isInitialized) return
-        launchBootTimeApps()
+        lifecycle.launchBootTimeApps()
         val prefs = java.io.File(webos.root, "var/luna/preferences")
         runCatching { prefs.mkdirs(); java.io.File(prefs, "ran-first-use").createNewFile() }
         if (java.io.File(prefs, "first-use-profile-created").exists()) return
         bus.call("", "palm://com.palm.accountservices/createNovaAccount", "{\"createDefaultAccount\":true}", privateBus = true) { r ->
             Log.i(AppServer.TAG, "firstuse-createDefaultAccount: $r")
         }
-    }
-
-    private var bootTimeAppsLaunched = false
-
-    /**
-     * ApplicationManager::launchBootTimeApps: once the launcher is up (here, once First Use
-     * is done and the webOS root is ready), the apps in [LAUNCH_AT_BOOT] start headless with
-     * {"launchedAtBoot": true}, which each of them answers by opening nothing. Email's headless
-     * page is what tells of new mail (its DashboardManager), Messaging's of new messages.
-     */
-    private fun launchBootTimeApps() {
-        if (bootTimeAppsLaunched) return
-        bootTimeAppsLaunched = true
-        for (id in LAUNCH_AT_BOOT) if (registry.get(id) != null && running[id] == null)
-            launch(id, JSONObject().put("launchedAtBoot", true), Placement.NO_CARD)
     }
 
     /** The installed apps changed (an install, a removal, a script's rescan): the launcher hears it. */
@@ -1176,38 +777,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun systemBanner(appId: String, message: String, params: String = "") = notificationHost.systemBanner(appId, message, params)
     private fun notificationIconsChanged() = notificationHost.iconsChanged()
 
-    private fun toggleMenu() = if (notifications.menu.isOpen) closeMenu() else openMenu()
-
-    /** Opening one status-bar menu closes the other (StatusBar::slotMenuGroupActivated). */
-    private fun toggleSystemMenu() {
-        if (systemMenu.isOpen) { closeMenu(); return }
-        closeMenu()
-        // SystemMenu::slotPositiveSpaceChangeFinished: as tall as the room under the bar, plus 10.
-        shellRoot?.let { if (it.height > 0) systemMenu.maxHeightPx = it.height - luna.px(StatusBar.HEIGHT) + luna.px(10) }
-        systemMenu.batteryPercent = statusBar.batteryPercent
-        systemMenu.brightness = (displayService.brightnessPercent() - 1) / 99f
-        menuScrim.visibility = View.VISIBLE
-        statusBar.systemMenuOpen = true
-        systemMenu.open()
-    }
-
-    /** The drop-down's right edge lines up with the notification group's right edge. */
-    private fun openMenu() {
-        if (!notifications.hasDashboards || notifications.popups.showing) return
-        statusBar.systemMenuOpen = false; systemMenu.close()
-        // A phone's open over the bottom; a tap above them closes them (the soft dismiss).
-        if (notificationsAtBottom) { menuScrim.visibility = View.VISIBLE; notifications.menu.open(); return }
-        val menu = notifications.menu as DashboardMenu
-        menu.measure(0, 0)
-        (menu.layoutParams as FrameLayout.LayoutParams).leftMargin =
-            // 15 px past the group's right edge, measured against the reference TouchPad.
-            (statusBar.notificationRight + luna.px(15f) - menu.measuredWidth).toInt().coerceAtLeast(0)
-        menu.requestLayout()
-        menuScrim.visibility = View.VISIBLE
-        statusBar.menuOpen = true
-        menu.open()
-    }
-
     /**
      * Android's notifications changed (AndroidNotifications): the Android Notifications app
      * hears it, or, not running, is started to show them, headless, as a service starts an app
@@ -1217,93 +786,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun androidNotificationsChanged() {
         val service = lunacyService ?: return
         service.notificationsChanged()
-        if (service.notificationsWatched || running.containsKey(ANDROID_NOTIFICATIONS_APP)) return
+        if (service.notificationsWatched || lifecycle.isRunning(ANDROID_NOTIFICATIONS_APP)) return
         if (!AndroidNotifications.any()) return
         if (!::webos.isInitialized || !LunacyService.firstUseDone(this)) return
         if (registry.get(ANDROID_NOTIFICATIONS_APP) == null) return
         launch(ANDROID_NOTIFICATIONS_APP, null, Placement.NO_CARD)
     }
 
-    /**
-     * The system menu's slider, which on the TouchPad set the backlight at once. Android's
-     * setting alone can't: with adaptive brightness on, Android ramps a lower value in at its
-     * slow rate, about 0.02 a second (measured on the Fold3, the Pixel Tablet too by codepoet),
-     * so the screen took most of a minute to follow a drag down. Android's own slider avoids
-     * that with a call only the system may make. A window's brightness override is ramped at
-     * the fast rate, so the shell's window holds the slider's value while it moves, the setting
-     * takes the same value (Android's slider agrees, and it lasts outside Lunacy), and the
-     * override goes a moment after the finger lifts, when adaptive brightness's target is that
-     * value already.
-     */
-    private val releaseBrightness = Runnable {
-        window.attributes = window.attributes.apply { screenBrightness = android.view.WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE }
-    }
-    private fun setMenuBrightness(percent: Int, done: Boolean) {
-        displayService.setBrightnessPercent(percent)
-        shellHandler.removeCallbacks(releaseBrightness)
-        window.attributes = window.attributes.apply { screenBrightness = displayService.overrideFromPercent(percent) }
-        if (done) shellHandler.postDelayed(releaseBrightness, BRIGHTNESS_HOLD_MS)
-    }
-
-    /** SystemMenu.qml's closeMenuTimer. A menu closed and opened again meanwhile stays. */
-    private var systemMenuCloser: Runnable? = null
-    private fun closeSystemMenuIn(delayMs: Long) {
-        systemMenuCloser?.let { shellHandler.removeCallbacks(it) }
-        if (!systemMenu.isOpen) return
-        val r = Runnable { systemMenuCloser = null; if (systemMenu.isOpen) closeMenu() }
-        systemMenuCloser = r
-        shellHandler.postDelayed(r, delayMs)
-    }
-
-    /** One of Android's settings screens, by LunacyService's panel name: where the system menu hands over. */
-    private fun openAndroidPanel(panel: String) {
-        val action = LunacyService.PANELS[panel] ?: return
-        try {
-            startActivity(android.content.Intent(action).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (e: Exception) {
-            Log.w(AppServer.TAG, "systemMenu: can't open Android's $panel settings", e)
-            systemBanner("", "Couldn't open Android's settings")
-        }
-    }
-
-    private fun closeMenu() {
-        systemMenuCloser?.let { shellHandler.removeCallbacks(it) }; systemMenuCloser = null
-        menuScrim.visibility = View.GONE
-        statusBar.menuOpen = false
-        notifications.menu.close()
-        statusBar.systemMenuOpen = false
-        systemMenu.close()
-    }
-
-    /** Each running web app's own activity: its id once created, and the call that holds it. */
-    private val appActivities = java.util.concurrent.ConcurrentHashMap<String, Int>()
-    private val appActivityCalls = HashMap<String, Bus.Call>()
-
-    /**
-     * The app's activity, as WebAppManager made one for every app it started
-     * (WebAppBase::createActivity): foreground, named for the app, its process id as the
-     * description, created in the app's name and held by a subscription. Its id is
-     * PalmSystem.activityId for all the app's windows, and Mojo sends it with each service
-     * call as "$activity", which a JS service adopts.
-     */
-    private fun createAppActivity(root: AppWindow) {
-        val appId = root.appId
-        val params = JSONObject().put("activity", JSONObject().put("name", appId)
-            .put("description", root.pid.toString()).put("type", JSONObject().put("foreground", true)))
-            .put("subscribe", true).put("start", true).put("replace", true)
-        appActivityCalls[appId] = bus.call(appId, "palm://com.palm.activitymanager/create", params.toString(), privateBus = true) { reply ->
-            val r = runCatching { JSONObject(reply) }.getOrNull() ?: return@call
-            if (r.optBoolean("returnValue") && r.has("activityId") && !r.has("event")) appActivities[appId] = r.optInt("activityId")
-        }
-    }
-
-    /** The app has ended: WebAppBase::destroyActivity cancels the subscription, and the activity goes with it. */
-    private fun endAppActivity(appId: String) {
-        appActivities.remove(appId)
-        appActivityCalls.remove(appId)?.cancel()
-    }
-
-    override fun activityId(window: AppWindow): Int = appActivities[window.appId] ?: -1
+    override fun activityId(window: AppWindow): Int = lifecycle.activityId(window)
 
     /** Called on the bridge's thread, the first time the page embeds a plugin. */
     override fun hybridPlugins(window: AppWindow): HybridPlugins? {
@@ -1311,41 +801,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         return HybridPlugins(window, app, pdkRuntime) { webos.prepare() }
     }
 
-    /** WebAppBase::focusActivity and blurActivity, as the app's card gains and loses the focus. */
-    override fun stageFocused(window: AppWindow, focused: Boolean) {
-        val id = appActivities[window.appId] ?: return
-        bus.call(window.appId, "palm://com.palm.activitymanager/${if (focused) "focus" else "unfocus"}",
-            JSONObject().put("activityId", id).toString(), privateBus = true) {}
-    }
-
-    private fun closeWindow(w: AppWindow) {
-        pendingLoads.remove(w)
-        // A window that closes while holding the screen on lets it go.
-        if (screenAwake.remove(w)) holdScreen()
-        val list = running[w.appId] ?: return
-        list.remove(w)
-        (w.parent as? android.view.ViewGroup)?.removeView(w)
-        // Its unload handlers first, as webOS ran them (a dashboard's onUserClose comes from there).
-        w.close()
-        // An app ends when its last visible window closes; its headless root goes with it, a
-        // moment later: a dashboard swiped away tells the root as it unloads (Enyo's
-        // onUserClose), and the root acts on it, so it must still be there to hear it. A window
-        // it opens meanwhile keeps it. An app in [KEEP_ALIVE] keeps its headless root.
-        val app = registry.get(w.appId)
-        if (list.isEmpty()) endApp(w.appId, list)
-        else if (app?.noWindow == true && w.appId !in KEEP_ALIVE && list.all { cardHost.isHidden(it) }) {
-            window.decorView.postDelayed({
-                if (running[w.appId] === list && list.all { cardHost.isHidden(it) }) endApp(w.appId, list)
-            }, HEADLESS_LINGER_MS)
-        }
-        if (cards.cards.isEmpty() && !exhibitions.exhibitionOn) onCardView()
-    }
-
-    private fun endApp(appId: String, list: MutableList<AppWindow>) {
-        list.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.close() }
-        running.remove(appId)
-        endAppActivity(appId)
-    }
+    override fun stageFocused(window: AppWindow, focused: Boolean) = lifecycle.stageFocused(window, focused)
 
     /**
      * /media/internal maps Android's shared folders (UserFiles), which Android 5 granted at
@@ -1390,32 +846,16 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     override fun mediaBase() = mediaServer.base()
 
     override fun orientationRequested(window: AppWindow) {
-        if (cards.maximized?.window == window) applyOrientation(window)
+        if (cards.maximized?.window == window) chrome.applyOrientation(window)
     }
 
-    /**
-     * A card that fixes its orientation turns the whole screen while it is maximized - status
-     * bar, card and all - which is what the reference TouchPad does (its luna.conf has
-     * displayUiRotates, and LunaSysMgr then rotated the UI rather than the card). webOS's
-     * window "up" is portrait on both the TouchPad and a phone. The screen is let go again in
-     * card view or when another card comes up; Android then follows the sensor at once, where
-     * a TouchPad waited for the next time it was turned.
-     */
-    private fun applyOrientation(window: AppWindow?) {
-        val o = window?.takeUnless { it.emulated }?.fixedOrientation
-        val want = ORIENTATIONS[o] ?: android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        if (requestedOrientation != want) requestedOrientation = want
-    }
-
-    override fun fullScreen(window: AppWindow) = cardHost.fullScreen(window, statusBar)
+    override fun fullScreen(window: AppWindow) = cardHost.fullScreen(window, chrome.statusBar)
 
     override fun activate(window: AppWindow) = cardHost.activate(window)
 
-    // ---- keyboard ----
+    // ---- keyboard and screen ----
 
-    private val imm by lazy { getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager }
-    /** The keyboard's height in Android px, 0 when hidden. */
-    private var keyboardHeight = 0
+    override fun keyboard(window: AppWindow, show: Boolean) = chrome.keyboard(window, show)
 
     /**
      * Windows holding the screen awake. webOS let an app ask for this per window, and a video
@@ -1436,69 +876,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         } else {
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
-    }
-
-    /** A window that asked for the keyboard before its card had finished opening. */
-    private var keyboardWanted: AppWindow? = null
-
-    /**
-     * Only the active card's window gets the keyboard, as on webOS - and "active" means the
-     * card on its way to maximized as well as the one already there. An app that focuses a
-     * field while its first scene is built (webOS SimpleChat's compose box) asks for the
-     * keyboard during the open animation; LunaSysMgr made the same allowance, in so many
-     * words (CardWindow::slotShowIME). The request is repeated once the card has settled,
-     * because the view can't take focus while it is still being animated into place.
-     */
-    override fun keyboard(window: AppWindow, show: Boolean) {
-        if (show) {
-            if (cards.active?.window != window) return
-            keyboardWanted = if (cards.maximized?.window == window) null else window
-            window.requestFocus()
-            imm.showSoftInput(window, 0)
-        } else {
-            keyboardWanted = null
-            if (keyboardHeight > 0 && cards.maximized?.window == window) {
-                imm.hideSoftInputFromWindow(window.windowToken, 0)
-            }
-        }
-    }
-
-    /**
-     * Follows the keyboard. In full screen Android doesn't resize the window for it, so the
-     * visible frame gives its height. As LunaSysMgr did: Mojo.keyboardShown(true), then the
-     * card shrinks to the space above the keyboard (or, for a window that asked not to be
-     * resized, Mojo.positiveSpaceChanged reports that space); on hiding, the card grows back
-     * and Mojo.keyboardShown(false) follows, and the page's input focus goes with the
-     * keyboard, which is how webOS put it away (AppWindow.removeInputFocus).
-     */
-    private var keyboardWatch: android.view.ViewTreeObserver.OnGlobalLayoutListener? = null
-    private fun watchKeyboard(root: View) = android.view.ViewTreeObserver.OnGlobalLayoutListener {
-        val r = android.graphics.Rect()
-        root.getWindowVisibleDisplayFrame(r)
-        val h = (root.rootView.height - r.bottom).let { if (it > root.rootView.height / 6) it else 0 }
-        if (h == keyboardHeight) return@OnGlobalLayoutListener
-        keyboardHeight = h
-        val w = cards.maximized?.window
-        val lp = cards.layoutParams as FrameLayout.LayoutParams
-        // A phone's notification area steps aside for the keyboard and comes back after it.
-        area?.suspended = h > 0
-        if (h > 0) {
-            w?.callMojo("keyboardShown", "true")
-            if (w == null || w.keyboardResizes) { lp.bottomMargin = h; cards.layoutParams = lp }
-            // In the page's own px, which on a phone may be scaled (AppWindow.pageScale).
-            else w.callMojo("positiveSpaceChanged", "${Math.round(cards.width / w.pageScale)},${Math.round((cards.areaHeight - h) / w.pageScale)}")
-        } else {
-            val resized = lp.bottomMargin != 0
-            lp.bottomMargin = 0; cards.layoutParams = lp
-            if (w != null && !resized) w.callMojo("positiveSpaceChanged", "${Math.round(cards.width / w.pageScale)},${Math.round(cards.areaHeight / w.pageScale)}")
-            w?.let { win -> cards.post { win.callMojo("keyboardShown", "false") } }
-            w?.removeInputFocus()
-            goImmersive()  // Android shows its bars with the keyboard and leaves them up
-        }
-    }.also { keyboardWatch = it; root.viewTreeObserver.addOnGlobalLayoutListener(it) }
-
-    private fun hideKeyboard() {
-        if (keyboardHeight > 0) imm.hideSoftInputFromWindow(window.decorView.windowToken, 0)
     }
 
     override val pixelScale get() = luna.density
@@ -1682,119 +1059,16 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         val o = screenOrientation()
         if (o == reportedOrientation) return
         reportedOrientation = o
-        running.values.flatten().forEach { it.setScreenOrientation(o) }
+        lifecycle.windows.forEach { it.setScreenOrientation(o) }
     }
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
         updateOrientation()
-        goImmersive()
+        chrome.goImmersive()
         // A foldable folded or opened: the screen may now call for the other layout. Once the
         // display has its new size (the configuration can arrive first).
-        window.decorView.post { if (shownKind() != FormFactor.decide(this)) reshell() else notificationHost.placeNotifications() }
-    }
-
-    /**
-     * The shell rebuilt in the layout the screen now calls for - a foldable folded onto its
-     * narrow outer screen, or opened out - or that the owner has just chosen (Screen & Lock,
-     * `--es layout`). The phone or tablet decision and the shell's scale were made once, at
-     * startup, and a folded phone kept a tablet's launcher squeezed onto its outer screen.
-     *
-     * Only the shell's own views are rebuilt. The apps run on through it: every card keeps its
-     * page, its place in its group and its state (maximized, in the card view, still loading),
-     * and its frame is drawn again at the new scale; dashboards, alerts and banners move to the
-     * new bar. What was open over the cards - the launcher, Just Type, a menu, Exhibition - was
-     * the old layout's and closes, as a press of home would. A page is told its new scale (its
-     * viewport written again); what a window was told about the device when it opened, a Pre3
-     * or a TouchPad, it keeps, and the next window opened is told the new one.
-     */
-    /**
-     * The layout this shell is drawn in. Its own rather than FormFactor.shown: Android can run
-     * a second shell activity in the process (Lunacy as the home app, beside one started
-     * another way), and the newer one's decision mustn't stop this one rebuilding.
-     */
-    private fun shownKind() = if (luna.phone) FormFactor.Kind.PHONE else FormFactor.Kind.TABLET
-
-    private fun reshell() {
-        val kind = FormFactor.decide(this)
-        if (kind == shownKind()) return
-        val old = shellRoot ?: return
-        Log.i(AppServer.TAG, "layout: ${shownKind()} -> $kind; the shell is rebuilt, its cards kept")
-        if (exhibitions.exhibitionOn) exhibitions.setExhibition(false)
-        hideKeyboard()
-        keyboardWatch?.let { old.viewTreeObserver.removeOnGlobalLayoutListener(it) }
-        keyboardWatch = null
-        keyboardHeight = 0
-        launcherOpen = false
-        exhibitions.forgetShown()
-
-        // What the old views hold, before they go.
-        val handover = cardHost.handOver()
-        val dashboards = notifications.dashboards
-        val alerts = notifications.popups.windows
-        val banners = notifications.handOverBanners()
-        // Every page out of the old views but the cards' own, which come out as their new cards take them.
-        for (w in running.values.flatten()) if (w.parent !is Card) (w.parent as? android.view.ViewGroup)?.removeView(w)
-
-        FormFactor.shown = kind
-        luna = Luna(this, kind == FormFactor.Kind.PHONE)
-        androidAppsAt = null
-        buildShell()
-
-        cardHost.takeOver(handover)
-        exhibitions.takeWindowsBack()
-        notificationHost.giveNotifications(dashboards, alerts, banners)
-        // Once the pages are laid out in their new cards: the viewport is written from the card's size.
-        cards.post { running.values.flatten().forEach { it.rescale() } }
-        // Pages loaded under the other layout fetch the images served by layout again.
-        running.values.flatten().forEach { it.evaluateJavascript(AppServer.REFETCH_LAYOUT_IMAGES, null) }
-        val maximized = cards.maximized
-        if (maximized != null) onMaximized(maximized) else onCardView()
-        goImmersive()
-    }
-
-    /**
-     * The wallpaper the system service holds, else the one Lunacy ships. The reference
-     * TouchPad's own preference names a file in /media/internal/.wallpapers; Lunacy's is the
-     * same shape, so Screen & Lock's "Change Wallpaper" sets this one.
-     */
-    private fun showWallpaper() {
-        val chosen = systemService.fileOf(systemService.get("wallpaper") as? JSONObject)
-        val dm = realMetrics()
-        val bmp = chosen?.let { f -> luna.decodeFull(f, maxOf(dm.widthPixels, dm.heightPixels)) } ?: luna.wallpaper()
-        if (bmp != null) {
-            // LunaSysMgr filled the screen only with an image that could fill it one way up or
-            // the other; a smaller one was drawn at its own size, centred on the screen, over
-            // the scene's Qt::darkGray (WindowServerLuna::generateWallpaperImages; measured on
-            // the reference TouchPad with a 600 x 400 image). Its own size is in TouchPad px.
-            // "The screen" is at most a TouchPad's 1024 x 768: a screen larger than that would
-            // otherwise leave webOS's own 1024 x 1024 wallpapers, made to fill a TouchPad,
-            // floating in grey.
-            val long = minOf(maxOf(dm.widthPixels, dm.heightPixels) / luna.density, 1024f)
-            val short = minOf(minOf(dm.widthPixels, dm.heightPixels) / luna.density, 768f)
-            val fills = (bmp.width >= long && bmp.height >= short) || (bmp.width >= short && bmp.height >= long)
-            if (fills) {
-                wallpaperView.scaleType = ImageView.ScaleType.CENTER_CROP
-                wallpaperView.setImageBitmap(bmp)
-                wallpaperView.background = null
-            } else {
-                wallpaperView.scaleType = ImageView.ScaleType.CENTER
-                wallpaperView.setImageBitmap(if (luna.density == 1f) bmp else android.graphics.Bitmap.createScaledBitmap(
-                    bmp, luna.px(bmp.width), luna.px(bmp.height), true))
-                wallpaperView.setBackgroundColor(Color.rgb(0x80, 0x80, 0x80))
-            }
-        } else {
-            wallpaperView.scaleType = ImageView.ScaleType.CENTER_CROP
-            wallpaperView.setImageDrawable(null)
-            wallpaperView.background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(Color.rgb(8, 24, 64), Color.rgb(20, 90, 200)))
-        }
-    }
-
-    /** Reads the wallpaper [showWallpaper] shows: the owner's pick, else the one Lunacy ships. */
-    private fun wallpaperSource(): () -> java.io.InputStream {
-        val chosen = systemService.fileOf(systemService.get("wallpaper") as? JSONObject)
-        return { chosen?.inputStream() ?: assets.open("luna/wallpapers/${Luna.DEFAULT_WALLPAPER}") }
+        window.decorView.post { chrome.screenChanged() }
     }
 
     /**
@@ -1805,10 +1079,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun onPreferenceChanged(key: String, value: Any?) {
         when (key) {
             "wallpaper" -> {
-                showWallpaper()
+                chrome.showWallpaper()
                 // Android's own wallpaper follows, if the owner asked (Screen & Lock).
                 if (HostWallpaper.isOn(this)) {
-                    val open = wallpaperSource()
+                    val open = chrome.wallpaperSource()
                     Thread { HostWallpaper.follow(applicationContext, open) }.start()
                 }
             }
@@ -1829,9 +1103,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
     }.start()
 
-    /** The whole display in real pixels, the way round it is now, bars and cutouts included. */
-    @Suppress("DEPRECATION")
-    private fun realMetrics() = android.util.DisplayMetrics().also { windowManager.defaultDisplay.getRealMetrics(it) }
 
     /** What the shell knows about the screen: real pixels, and the TouchPad px apps lay out in. */
     private fun displayInfo(): JSONObject {
@@ -1902,8 +1173,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             override fun requestPermissions(permissions: List<String>, answer: (granted: Boolean, askAgain: Boolean) -> Unit) =
                 askPermissions(permissions, answer)
             override fun startForResult(intent: android.content.Intent) = runCatching { startActivityForResult(intent, HOME_ROLE_REQUEST) }.isSuccess
-            override fun onLayoutChanged() = reshell()
-            override fun wallpaper() = wallpaperSource()
+            override fun onLayoutChanged() = chrome.reshell()
+            override fun wallpaper() = chrome.wallpaperSource()
             override fun onFirstUseDone() = afterFirstUse()
             override val hidden get() = hiddenApps
             override fun launcherApps() = allLaunchPoints()
@@ -1955,8 +1226,8 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         NowPlaying.onKey = { k -> runOnUiThread { keys.mediaKey(k) } }
         universalSearch = UniversalSearch(this) { registry.apps }.also {
             it.register(bus)
-            it.onChange = { runOnUiThread { if (::justTypePanel.isInitialized) justTypePanel.reload() } }
-            if (::justTypePanel.isInitialized) justTypePanel.search = it
+            it.onChange = { runOnUiThread { chrome.searchChanged() } }
+            chrome.searchReady(it)
         }
         // browserserver's own calls, which the Web app makes for its Preferences.
         bus.register("com.palm.browserServer", "clearCache") { _, _, reply ->
@@ -2008,7 +1279,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * services, db8 kinds and dock are brought up to date before [done] hears how it went.
      */
     private fun removeInstalled(app: AppInfo, done: (String?) -> Unit) {
-        running[app.id]?.toList()?.forEach { w -> onWindowClosed(w) }
+        lifecycle.apps[app.id]?.toList()?.forEach { w -> lifecycle.windowClosed(w) }
         FixedViewport.forget(this, app.id)
         packages.remove(app.id, app.dir) { error ->
             appsChanged()
@@ -2018,141 +1289,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         }
     }
 
-    // ---- the dock ----
-
-    private val dockPrefs by lazy { getSharedPreferences("launcher", MODE_PRIVATE) }
-
-    /**
-     * The dock's apps, as the user arranged them; until they do, Lunacy's
-     * assets/luna/default-dock-positions.json, in the shape of the device's
-     * /usr/palm/default-dock-positions.json (whose "quicklauncher" LunaSysMgr read for a fresh
-     * dock): Web, Email, Calendar, Photos & Videos and App Catalog (codepoet, 2026-10-08; the
-     * TouchPad's had Messaging where Lunacy has App Catalog). A phone's dock, four apps, has a
-     * list of its own, "quicklauncher-phone": Web, Email, Calendar and App Catalog (codepoet,
-     * 2026-11-04).
-     */
-    private fun dock(): List<String> {
-        val a = dockPrefs.getString("dock", null)?.let { runCatching { org.json.JSONArray(it) }.getOrNull() }
-            ?: runCatching {
-                val o = org.json.JSONObject(assets.open("luna/default-dock-positions.json").bufferedReader().use { it.readText() })
-                (if (luna.phone) o.optJSONArray("quicklauncher-phone") else null) ?: o.getJSONArray("quicklauncher")
-            }.getOrDefault(org.json.JSONArray())
-        return (0 until a.length()).map { a.optString(it).removeSuffix("_default") }.take(quickLaunch.maxItems)
-    }
-
-    /**
-     * The dock as arranged, from [shownDock]'s ids. A hidden app keeps its slot, so it comes
-     * back where it was when it is shown again, while there is room for it.
-     */
-    private fun setDock(ids: List<String>) {
-        val all = ids.distinct().toMutableList()
-        dock().forEachIndexed { i, id -> if (id in hiddenApps && id !in all && all.size < quickLaunch.maxItems) all.add(minOf(i, all.size), id) }
-        dockPrefs.edit().putString("dock", org.json.JSONArray(all.take(quickLaunch.maxItems)).toString()).apply()
-        showDock()
-    }
-
-    /** The dock's ids that are still apps and aren't hidden, in the order they are drawn. */
-    private fun shownDock() = dock().filter { appById(it) != null && it !in hiddenApps }
-
-    private fun showDock() { quickLaunch.apps = shownDock().mapNotNull { appById(it) } }
-
-    /**
-     * A launcher icon dropped on the dock. It joins at the slot under it; one already on the
-     * dock moves there. On a full dock it takes the place of the icon it lands on (LunaCE
-     * refused a sixth icon; swapping is Lunacy's).
-     */
-    private fun dropOnDock(app: AppInfo, x: Float) {
-        val ids = shownDock().toMutableList()
-        val present = ids.indexOf(app.id)
-        when {
-            present >= 0 -> { ids.removeAt(present); ids.add(quickLaunch.slotAt(x, ids.size + 1), app.id) }
-            ids.size < quickLaunch.maxItems -> ids.add(quickLaunch.slotAt(x, ids.size + 1), app.id)
-            else -> ids[quickLaunch.slotAt(x, ids.size)] = app.id
-        }
-        setDock(ids)
-    }
-
-    private fun exitEditMode() {
-        launcher.exitEditMode()
-        quickLaunch.editing = false
-    }
-
-    override fun onMaximized(card: Card) {
-        // A running app brought forward ends Exhibition too (setCardWindowMaximized); leaving
-        // it comes back here with the card.
-        if (exhibitions.cardArrivedInExhibition()) return
-        cardHost.maximized(card)
-        pendingLoads[card.window]?.run()
-        quickLaunch.cancelLaunchFeedback()
-        if (justTypePanel.showing) justTypePanel.close()
-        // A keyboard asked for while this card was still opening (see keyboard()).
-        if (keyboardWanted == card.window) {
-            keyboardWanted = null
-            card.window.requestFocus()
-            imm.showSoftInput(card.window, 0)
-        }
-        // An emulated card has its title on its own status bar; the main one shows the carrier
-        // string (SystemUiController::updateStatusBarTitle passes no title for it).
-        statusBar.title = if (card.window.emulated) StatusBar.CARRIER_TEXT else registry.get(card.window.appId)?.title ?: card.window.appId
-        // The app's own colour, if it set one: LunaSysMgr read it as the card was maximized
-        // and not again until the next time (measured on the reference TouchPad).
-        statusBar.setMode(StatusBar.Mode.APP, card.window.statusBarColor)
-        statusBar.slide(card.fullScreen)
-        applyOrientation(card.window)
-        if (launcherOpen) closeLauncher()
-        fade(justType, false); showDock(false)
-        // Not a headless app's root behind its launching card: a TouchPad never activates that
-        // page, and Enyo's app menu goes to the first active window it finds, which would be it.
-        if (!card.awaitingWindow) card.window.setStageActive(true)
-        cards.cards.filter { it != card }.forEach { it.window.setStageActive(false) }
-        // The active card's page holds the focus, as webOS's did. Without it document.hasFocus()
-        // is false, and Chromium then sets activeElement without dispatching focus or focusin -
-        // so an app that focuses a field itself is invisible to the bridge and gets no keyboard.
-        card.window.requestFocus()
-    }
-
-
-    /**
-     * The title's ▾: LunaSysMgr relaunched the maximized card's app with
-     * {"palm-command":"open-app-menu"}, and Enyo and Mojo open their app menu on that.
-     */
-    private fun toggleAppMenu() {
-        val card = cards.maximized ?: return
-        launch(card.window.appId, JSONObject().put("palm-command", "open-app-menu"))
-    }
-
-    override fun onCardView() {
-        // Leaving an app opened from Android's home screen goes back there (HomeScreenPins).
-        if (cardHost.leavingDirect()) moveTaskToBack(true)
-        hideKeyboard()
-        statusBar.title = StatusBar.CARRIER_TEXT
-        statusBar.setMode(if (launcherOpen) StatusBar.Mode.LAUNCHER else StatusBar.Mode.CARDS)
-        statusBar.slide(false)
-        applyOrientation(null)
-        if (!launcherOpen) fade(justType, true)
-        showDock(true)
-        cards.cards.forEach { it.window.setStageActive(false) }
-    }
-
-    /** SystemUiController::enterOrExitCardReorder: the dock fades while a card is being reordered. */
-    override fun onReorder(active: Boolean) = showDock(!active)
-
-    /**
-     * Lunacy's "Edge swipe for home" (Screen & Lock): a swipe in from a side edge does what
-     * Android's Back does, the TouchPad's Home. For Android's three-button navigation, which
-     * has no edge gesture; with gesture navigation Android takes those edges itself. The
-     * setting is the toggle's own key, sysUiEnableNextPrevGestures, on by default as on the
-     * reference TouchPad. A delta: the TouchPad's side edges did nothing (luna-deltas.md B15).
-     */
-    override fun onSideSwipe() {
-        if (systemService.get("sysUiEnableNextPrevGestures") != false) homePressed()
-    }
-
-    override fun onThrownAway(card: Card) {
-        card.window.evaluateJavascript("try{window.close()}catch(e){}", null)
-        closeWindow(card.window)
-    }
-
     /**
      * Android's back button is the TouchPad's home button (webOS tablets had no back button).
      * Same order as LunaCE's SystemUiController, Key_CoreNavi_Home: close what's open on top
@@ -2160,160 +1296,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * toggle the launcher.
      */
     @Deprecated("Deprecated in Java")
-    override fun onBackPressed() = homePressed()
-
-    private fun homePressed() {
-        if (exhibitions.menuOpen) { exhibitions.closeExhibitionMenu(); return }
-        if (exhibitions.exhibitionOn) { exhibitions.setExhibition(false); return }
-        if (notifications.menu.isOpen || systemMenu.isOpen) { closeMenu(); return }
-        notifications.popups.newest()?.let { onWindowClosed(it); return }
-        if (justTypePanel.showing) { closeJustType(); return }
-        if (tabDialog.showing) { tabDialog.dismiss(); return }
-        if (groupOverlay.showing) { groupOverlay.close(); return }
-        if (launcher.editing || quickLaunch.editing) { exitEditMode(); return }
-        if (launcherOpen) { closeLauncher(); return }
-        val max = cards.maximized
-        if (max != null) { cards.showCardView(); return }
-        toggleLauncher()
-    }
-
-    // ---- Just Type ----
-
-    /**
-     * Just Type opens over the card view or the launcher, cross-fading in (150 ms); the pill
-     * and the dock go (reference §3.1), and the status bar says "Just Type" with its ▾, as
-     * SystemUiController::updateStatusBarTitle has it.
-     */
-    private fun openJustType(initial: String = "") {
-        if (cards.maximized != null) return
-        if (launcherOpen) closeLauncher()
-        justTypePanel.apps = (registry.launchPoints + addedById.values + androidById.values).filter { it.id !in hiddenApps }
-        justTypePanel.open(initial)
-        fade(justType, false); showDock(false)
-        statusBar.setMode(StatusBar.Mode.APP)
-        statusBar.title = "Just Type"
-    }
-
-    private fun closeJustType() {
-        if (!justTypePanel.showing) return
-        justTypePanel.close()
-        if (cards.maximized == null) onCardView()
-    }
-
-    // ---- overlays (reference §3.1, §3.2) ----
-
-    private fun toggleLauncher() = if (launcherOpen) closeLauncher() else openLauncher()
-
-    /** Slides up from below the screen; the cards are hidden once it is fully open. */
-    private fun openLauncher() {
-        if (cards.maximized != null) return
-        launcherOpen = true
-        // SystemUiController::setLauncherShown, and the launcher's own title in the bar
-        // (updateStatusBarTitle: "Launcher", with no ▾).
-        sounds.feedback("LauncherOpenApp")
-        statusBar.title = LAUNCHER_TITLE
-        launcher.visibility = View.VISIBLE
-        statusBar.setMode(StatusBar.Mode.LAUNCHER)
-        launcher.translationY = launcher.height.toFloat()
-        launcher.animate().translationY(0f).setDuration(LAUNCHER_MS).setInterpolator(Easing.InOutQuint)
-            .withEndAction { if (launcherOpen) cards.visibility = View.INVISIBLE }.start()
-        fade(justType, false)
-    }
-
-    private fun closeLauncher() {
-        if (!launcherOpen) return
-        launcherOpen = false
-        sounds.feedback("LauncherCloseApp")
-        cards.visibility = View.VISIBLE
-        launcher.animate().translationY(launcher.height.toFloat()).setDuration(LAUNCHER_MS).setInterpolator(Easing.InOutQuint)
-            .withEndAction { if (!launcherOpen) { launcher.visibility = View.INVISIBLE; launcher.cancelLaunchFeedback(); exitEditMode() } }.start()
-        tabDialog.dismiss()
-        groupOverlay.close()
-        if (cards.maximized == null) { fade(justType, true); statusBar.setMode(StatusBar.Mode.CARDS); statusBar.title = StatusBar.CARRIER_TEXT }
-    }
-
-    private fun fade(v: View, show: Boolean) {
-        v.animate().cancel()
-        if (show) v.visibility = View.VISIBLE
-        v.animate().alpha(if (show) 1f else 0f).setDuration(FADE_MS).setInterpolator(Easing.OutCubic)
-            .withEndAction { if (!show) v.visibility = View.INVISIBLE }.start()
-    }
-
-    /** The dock slides by its own height and fades (quickLaunchDuration, quickLaunchFadeDuration). */
-    private fun showDock(show: Boolean) {
-        val h = quickLaunch.height.toFloat().takeIf { it > 0 } ?: luna.px(QuickLaunch.barHeight(luna.phone)).toFloat()
-        quickLaunch.animate().cancel()
-        if (show) quickLaunch.visibility = View.VISIBLE
-        quickLaunch.animate().translationY(if (show) 0f else h).setDuration(DOCK_MS).setInterpolator(Easing.OutCubic).start()
-        quickLaunch.animate().alpha(if (show) 1f else 0f).setDuration(FADE_MS).setInterpolator(Easing.OutCubic)
-            .withEndAction { if (!show) quickLaunch.visibility = View.INVISIBLE }.start()
-    }
-
-    /**
-     * A display cutout (a phone's camera): the window takes the whole screen, cutout and all,
-     * where Android would leave the cutout's band black. At the top, the shell runs up to the
-     * screen's edge as on a device without one: the status bar lays its items out around the
-     * camera, and what the camera covers below the bar is lost behind it. A cutout at the
-     * side or bottom (the phone turned) stays a black band beside the shell, so a card's
-     * edge never goes under it. Luna-deltas A20.
-     */
-    private fun fitCutout(screen: FrameLayout, root: FrameLayout) {
-        if (android.os.Build.VERSION.SDK_INT < 28) return
-        window.attributes = window.attributes.apply {
-            layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-        }
-        screen.setOnApplyWindowInsetsListener { _, insets ->
-            val cut = insets.displayCutout
-            val l = cut?.safeInsetLeft ?: 0; val r = cut?.safeInsetRight ?: 0; val b = cut?.safeInsetBottom ?: 0
-            if (root.paddingLeft != l || root.paddingRight != r || root.paddingBottom != b) {
-                root.setPadding(l, 0, r, b)
-                wallpaperView.layoutParams = (wallpaperView.layoutParams as FrameLayout.LayoutParams).apply { setMargins(l, 0, r, b) }
-            }
-            // The top corners. A screen that reports none but has a cutout in it (the Kyocera)
-            // is taken to have rounded ones all the same, a tenth of its short side in radius.
-            fun corner(pos: Int): Float = if (android.os.Build.VERSION.SDK_INT >= 31) insets.getRoundedCorner(pos)?.radius?.toFloat() ?: 0f else 0f
-            var tl = corner(android.view.RoundedCorner.POSITION_TOP_LEFT)
-            var tr = corner(android.view.RoundedCorner.POSITION_TOP_RIGHT)
-            if (cut != null && tl == 0f && tr == 0f) {
-                val dm = realMetrics()
-                tl = minOf(dm.widthPixels, dm.heightPixels) * ASSUMED_CORNER; tr = tl
-            }
-            // A side the shell is kept off (the cutout's, turned) is clear of its corner.
-            statusBar.corners = (if (l > 0) 0f else tl) to (if (r > 0) 0f else tr)
-            // The camera's span across the bar, in the bar's x, a 3 px margin either side.
-            val bar = luna.px(StatusBar.HEIGHT)
-            statusBar.cutout = cut?.boundingRects?.filter { it.top < bar && !it.isEmpty }
-                ?.takeIf { it.isNotEmpty() }
-                ?.let { rs -> (rs.minOf { it.left } - l - luna.px(3f))..(rs.maxOf { it.right } - l + luna.px(3f)) }
-            insets
-        }
-    }
-
-    /** Full screen: hide Android's bars; a swipe from the edge shows them for a moment. */
-    private fun goImmersive() {
-        @Suppress("DEPRECATION")
-        window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-            or View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
-    }
+    override fun onBackPressed() = chrome.homePressed()
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) goImmersive()
+        if (hasFocus) chrome.goImmersive()
     }
 
     companion object {
-        /** How long the slider's override outlasts the finger: the fast ramp (0.7 a second) crossing the whole range, and some. */
-        const val BRIGHTNESS_HOLD_MS = 3000L
-        /**
-         * The reference TouchPad's /etc/palm/luna-platform.conf, [LaunchAtBoot] and [KeepAlive]
-         * (it overrides luna.conf's, which name only the phone app); used in phone mode too.
-         * Measured there: closing Email's last card leaves its headless page running and
-         * Clock's (not listed) ends; closing the headless page itself ends the app, and
-         * nothing starts it again. Phone and Music Player aren't in Lunacy.
-         */
-        val LAUNCH_AT_BOOT = listOf("com.palm.app.phone", "com.palm.app.email", "com.palm.app.calendar", "com.palm.app.messaging")
-        val KEEP_ALIVE = setOf("com.palm.app.email", "com.palm.app.calendar", "com.palm.app.messaging", "com.palm.app.photos", "com.palm.app.musicplayer")
 
         /** The shell that is up, if any: a second one hands off to it ([onCreate]). */
         private var live: java.lang.ref.WeakReference<ShellActivity>? = null
@@ -2322,7 +1312,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         private const val STORAGE_REQUEST = 1
         private const val HOME_ROLE_REQUEST = 200
         /** The orientations a card can be fixed at, and the Android orientation each holds the screen in. */
-        private val ORIENTATIONS = mapOf(
+        internal val ORIENTATIONS = mapOf(
             "up" to android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
             "down" to android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT,
             "right" to android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
@@ -2332,44 +1322,16 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         )
         private const val CONFIRM_LOCK = 201
         private const val FIRST_PERMISSION_REQUEST = 1000
-        /** The launcher's launch point title, com.palm.launcher's on the reference TouchPad. */
-        const val LAUNCHER_TITLE = "Launcher"
-        /** An unreported rounded corner's radius on a screen with a cutout, as a part of its short side (fitCutout). */
-        const val ASSUMED_CORNER = 0.1f
-        const val LAUNCHER_MS = 350L   // reference TouchPad lunaAnimations.conf: launcherDuration 350, curve 15
-        const val DOCK_MS = 350L       // quickLaunchDuration
-        const val FADE_MS = 200L       // quickLaunchFadeDuration
-        /** Long enough for the launch glow to be drawn before the card work starts. */
-        const val LAUNCH_DELAY_MS = 60L
         /** A change of face in the dock: AnimationSettings' dockFadeDockAnimationDuration. */
         /** Android's screen saver asking for Exhibition; see ExhibitionDream. */
         const val EXTRA_EXHIBITION = "exhibition"
-        const val MEMORY_CHECK_MS = 10_000L
-        /** How long a headless app outlives its last visible window: long enough to hear that window go. */
-        const val HEADLESS_LINGER_MS = 1000L
         /** Lunacy's app that shows Android's notifications as dashboards. */
         const val ANDROID_NOTIFICATIONS_APP = "org.webosarchive.lunacy.notifications"
-        const val MEMORY_CALM_MS = 30_000L
-        /** Just Type's app id on a device (luna-applauncher): what its bus calls come from, and what db8 grants read to. */
-        const val JUST_TYPE = "com.palm.launcher"
     }
 
-    /**
-     * Just type: a keyboard's printable key in the card view or the launcher opens Just Type
-     * with that character, as on a TouchPad with a keyboard paired (codepoet, 2026-10-02).
-     * Not while a card is up, a text field (a tab's name, a group's) has the focus, or a
-     * modifier is held.
-     */
+    /** A keyboard's printable key may open Just Type (ShellChrome.typed). */
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
-        if (event.action == android.view.KeyEvent.ACTION_DOWN && !justTypePanel.showing && cards.maximized == null &&
-            !exhibitions.exhibitionOn && !tabDialog.showing && currentFocus !is android.widget.EditText &&
-            !event.isCtrlPressed && !event.isAltPressed && !event.isMetaPressed) {
-            val ch = event.unicodeChar
-            if (ch != 0 && (ch and android.view.KeyCharacterMap.COMBINING_ACCENT) == 0 && !Character.isISOControl(ch) && !Character.isWhitespace(ch)) {
-                openJustType(String(Character.toChars(ch)))
-                return true
-            }
-        }
+        if (::chrome.isInitialized && chrome.typed(event)) return true
         return super.dispatchKeyEvent(event)
     }
 

@@ -240,7 +240,7 @@ class WebSql(
         val type = DatabaseUtils.getSqlStatementType(sql)
         // WebKit's authorizer refused these (DatabaseAuthorizer::allowAttach): a page could
         // otherwise open any file Lunacy can, its cookies among them.
-        if (type == DatabaseUtils.STATEMENT_ATTACH || ATTACH.containsMatchIn(sql)) throw SqlFailure(SYNTAX_ERR, "not authorized")
+        if (type == DatabaseUtils.STATEMENT_ATTACH || attaches(sql)) throw SqlFailure(SYNTAX_ERR, "not authorized")
         val query = type == DatabaseUtils.STATEMENT_SELECT || LEADS_WITH_ROWS.containsMatchIn(sql)
         if (readOnly && !query) throw SqlFailure(SYNTAX_ERR, "not authorized")
         val expected = parameterCount(sql)
@@ -341,6 +341,8 @@ class WebSql(
         /** Statements that return rows but which getSqlStatementType doesn't call SELECT. */
         private val LEADS_WITH_ROWS = Regex("""^\s*(WITH|PRAGMA|EXPLAIN)\b""", RegexOption.IGNORE_CASE)
         private val ATTACH = Regex("""^(?:\s|--[^\n]*(?:\n|$)|/\*.*?\*/)*(ATTACH|DETACH)\b""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+        /** Whether [sql] attaches or detaches a database, after any comments: refused, so a page's database can't reach another file. */
+        internal fun attaches(sql: String) = ATTACH.containsMatchIn(sql)
 
         /**
          * How many `?` placeholders a statement has, outside its literals and comments, so

@@ -91,6 +91,8 @@ class PdkHost(
      * the view takes a frame under the same lock, so a bitmap is never written while drawn.
      */
     private var shownFrame = -1
+    /** Which of [frames] the reader is copying into, -1 for neither: the view doesn't take it meanwhile. */
+    private var fillingFrame = -1
     private val frameLock = Any()
 
     /**
@@ -369,7 +371,7 @@ class PdkHost(
         val config = if (bits == 16) Bitmap.Config.RGB_565 else Bitmap.Config.ARGB_8888
         synchronized(frameLock) {
             frames = arrayOf(Bitmap.createBitmap(w, h, config).also { it.setHasAlpha(false) }, Bitmap.createBitmap(w, h, config).also { it.setHasAlpha(false) })
-            shownFrame = -1
+            shownFrame = -1; fillingFrame = -1
         }
         Log.i(AppServer.TAG, "pdk [$appId]: video mode $w x $h, $bits bpp")
         main.post { listener.onMode(w, h, false) }
@@ -386,6 +388,12 @@ class PdkHost(
      * Copies the shared file into the bitmap the view isn't showing, then hands it over. Frames
      * that come faster than the view draws land in that same bitmap, newest last, so the view
      * shows the latest and never one half written.
+     *
+     * The copy (3 MB a frame at 1024 x 768) is made outside the lock, which only says which
+     * bitmap is being filled: the main thread takes that lock to show a frame, and must never
+     * wait out a copy (the 0.9.2 test round's lesson, from a lock that held up a game's audio).
+     * A hand-over that comes while its bitmap is being filled again is skipped; the frame being
+     * copied hands it over itself when it is done.
      */
     private fun frame() {
         val buf = mapped ?: return
@@ -393,12 +401,17 @@ class PdkHost(
             val index = if (shownFrame == 0) 1 else 0
             val bmp = frames[index] ?: return
             if (buf.capacity() < bmp.byteCount) return
-            buf.rewind()
-            bmp.copyPixelsFromBuffer(buf)
+            fillingFrame = index
             index to bmp
         }
+        try {
+            buf.rewind()
+            bmp.copyPixelsFromBuffer(buf)
+        } finally {
+            synchronized(frameLock) { if (fillingFrame == index) fillingFrame = -1 }
+        }
         main.post {
-            synchronized(frameLock) { if (frames[index] !== bmp) return@post; shownFrame = index }
+            synchronized(frameLock) { if (frames[index] !== bmp || fillingFrame == index) return@post; shownFrame = index }
             listener.onFrame(bmp)
         }
     }

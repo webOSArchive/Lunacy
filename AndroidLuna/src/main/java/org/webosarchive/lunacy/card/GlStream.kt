@@ -40,17 +40,27 @@ class GlStream(
 
     fun destroy() = synchronized(lock) { stream?.destroy(); stream = null }
 
+    /**
+     * The replay (a native GL context) is made outside the lock, as it was before this class:
+     * a batch arriving meanwhile waits in [onBatch] only for the early ones' replay, not for
+     * the context's creation. Two starts at once (a plugin starts on whichever thread brought
+     * the second of mode and batch) each make one; the first in keeps it, the other is let go.
+     */
     private fun start() {
-        val (s, waiting) = synchronized(lock) {
+        val (w, h, v) = synchronized(lock) {
             val (w, h) = mode ?: return
             if (stream != null || version == 0) return
-            val s = make(w, h, version) ?: return
-            val waiting = early.size
-            early.forEach { s.replay(it) }
-            early.clear()
-            stream = s
-            s to waiting
+            Triple(w, h, version)
         }
-        onStarted(s, waiting)
+        val made = make(w, h, v) ?: return
+        val waiting = synchronized(lock) {
+            if (stream != null) { made.destroy(); return }
+            val waiting = early.size
+            early.forEach { made.replay(it) }
+            early.clear()
+            stream = made
+            waiting
+        }
+        onStarted(made, waiting)
     }
 }

@@ -18,11 +18,21 @@ emoji key. Everything since 0.9.1:
 - **Security:** a JS service calls the bus as itself, never as an app it names; the Web app
   opens only webOS paths for `file:` URLs, not Lunacy's own files; an app's origin is served
   to the app, not to a website; WebSQL's migration takes the app from its origin.
+- **Links:** a card an app opens as it is relaunched comes up on top (a mailto: brought up
+  Email's compose card behind the inbox, a target=_blank link in the Web app a card nobody
+  saw); a target=_blank link in an email, or a new window in any app's web view, opens in the
+  Web app, as on the TouchPad.
+- **Just Type:** the empty panel has its magnifier and "Start typing to search or create".
 - **Fixes:** every activity is saved at start (five or six weren't: a revision race); a fold
   or unfold no longer leaves the system menu's radio watchers and the shortcut watch running
   twice; `curl`'s headers in any case and a connect timeout that times the connection; PDK
-  2D frames never drawn half written; a launcher group's panel shows current titles; Treo New
-  has the other ringtones' tags.
+  2D frames never drawn half written, and the screen never waits for one to be copied; a debug
+  build no longer stops at db8's daily purge; a database kept by an older WebView is found
+  whatever the app id's case; a launcher group's panel shows current titles; Treo New has the
+  other ringtones' tags.
+- **Caught in testing, before release:** a PDK lock shared by every socket halved games' frame
+  rates and kept Fruit Ninja's first frame off the screen on slow tablets (the A7 Lite); now a
+  lock per socket, with a test the PDK build runs.
 - **Under the hood:** the code review's clean-up (its §2 to §10): `ShellActivity` is five
   classes (the card layer's owner, the apps' lifecycle, the shell's chrome, notifications,
   Exhibition), the Launcher, the activity manager, the browser views and `compat.js` split by

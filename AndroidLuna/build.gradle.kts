@@ -105,4 +105,7 @@ kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20231013")
+    // Android's own classes off the device, for the tests that need SQLite (Db8Test): test-only,
+    // nothing of it ships in the APK.
+    testImplementation("org.robolectric:robolectric:4.14.1")
 }

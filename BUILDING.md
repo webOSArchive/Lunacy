@@ -104,6 +104,17 @@ and `arm64`). It needs the local clones under
 `Workbench/vendor/`, so a fresh checkout builds the shell but starts without Enyo until those
 are in place.
 
+### Unit tests
+
+```sh
+./gradlew :AndroidLuna:testArm32DebugUnitTest
+```
+
+Plain-JVM tests of the pure functions (`AndroidLuna/src/test`), and db8's queries on a real
+SQLite through Robolectric (`Db8Test`), a test-only dependency: nothing of it ships in the APK.
+Robolectric fetches its Android runtime from Maven the first time, so the first run needs the
+network.
+
 ## Install and run
 
 ```sh

@@ -1,12 +1,11 @@
 {
-	"_comment": "OAuth providers for mail accounts (card/OAuth.kt, Docs/oauth.md). clientId is the app registration's public client id; empty means sign-in on the device isn't offered. brokerApp names the app at the broker (oauth.wosa.link), which holds any client secret.",
+	"_comment": "OAuth providers for mail accounts (card/OAuth.kt, Docs/oauth.md). clientId is the app registration's public client id; empty means sign-in on the device isn't offered. A client secret never goes here: the build adds it from oauth.properties (AndroidLuna/build.gradle.kts). brokerApp names the app at the broker (oauth.wosa.link), which holds any client secret.",
 	"broker": "https://oauth.wosa.link",
 	"providers": {
 		"google": {
 			"title": "Google",
 			"templateId": "org.webosarchive.lunacy.google",
-			"clientId": "",
-			"clientSecret": "",
+			"clientId": "830311796468-ic2792ccefhasajlhjtlbtn04v861sq9.apps.googleusercontent.com",
 			"authorizeUrl": "https://accounts.google.com/o/oauth2/v2/auth",
 			"tokenUrl": "https://oauth2.googleapis.com/token",
 			"scope": "https://mail.google.com/ openid email",
@@ -22,7 +21,7 @@
 		"microsoft": {
 			"title": "Microsoft",
 			"templateId": "org.webosarchive.lunacy.microsoft",
-			"clientId": "",
+			"clientId": "95d7ba4d-1ae2-44d2-a8ef-3b06a31345f6",
 			"authorizeUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
 			"tokenUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
 			"scope": "https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access openid email",

@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     id("com.android.application")
@@ -96,6 +97,45 @@ val bundleCoreApps = tasks.register<BundleCoreApps>("bundleCoreApps") {
 
 androidComponents.onVariants { variant ->
     variant.sources.assets?.addGeneratedSourceDirectory(bundleCoreApps, BundleCoreApps::output)
+}
+
+/**
+ * OAuth client secrets for mail sign-in (Docs/oauth.md), from oauth.properties at the top of the
+ * repo, which is git-ignored and stays on the machines that build: `google.clientSecret=…`. Google
+ * gives a desktop client a secret it doesn't treat as one, but it watches public repositories
+ * for them and may revoke one found there. Written as assets/oauth/clients.json, which
+ * card/OAuth.kt lays over providers.json; without the file the build has none.
+ */
+abstract class OAuthClients : DefaultTask() {
+    @get:Input abstract val values: MapProperty<String, String>
+    @get:OutputDirectory abstract val output: DirectoryProperty
+
+    @TaskAction fun run() {
+        val byProvider = sortedMapOf<String, MutableMap<String, String>>()
+        for ((k, v) in values.get()) {
+            val provider = k.substringBefore('.', ""); val field = k.substringAfter('.', "")
+            if (provider.isNotEmpty() && field.isNotEmpty()) byProvider.getOrPut(provider) { sortedMapOf() }[field] = v
+        }
+        fun q(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+        val json = byProvider.entries.joinToString(",", "{\"providers\":{", "}}") { (p, f) ->
+            q(p) + ":" + f.entries.joinToString(",", "{", "}") { (k, v) -> q(k) + ":" + q(v) }
+        }
+        val file = output.file("oauth/clients.json").get().asFile
+        file.parentFile.mkdirs(); file.writeText(json)
+    }
+}
+
+val oauthValues: Map<String, String> = rootProject.file("oauth.properties").takeIf { it.isFile }?.let { f ->
+    val p = Properties().apply { f.inputStream().use { load(it) } }
+    p.stringPropertyNames().associateWith { k -> p.getProperty(k).trim() }
+} ?: emptyMap()
+
+val oauthClients = tasks.register<OAuthClients>("oauthClients") {
+    values.set(oauthValues)
+}
+
+androidComponents.onVariants { variant ->
+    variant.sources.assets?.addGeneratedSourceDirectory(oauthClients, OAuthClients::output)
 }
 
 kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }

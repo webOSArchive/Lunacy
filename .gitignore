@@ -31,3 +31,6 @@ keystore.properties
 
 # Probe packages are built from their sources here with palm-package, not kept
 Workbench/probe/*.ipk
+
+# OAuth client secrets for mail sign-in (AndroidLuna/build.gradle.kts, Docs/oauth.md)
+oauth.properties

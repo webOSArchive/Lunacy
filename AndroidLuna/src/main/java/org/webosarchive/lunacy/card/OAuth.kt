@@ -101,6 +101,13 @@ class OAuth(
         runCatching { context.assets.open("oauth/providers.json").bufferedReader().use { it.readText() } }
             .onSuccess { t -> read(t); JSONObject(t).optString("broker").takeIf { it.isNotEmpty() }?.let { brokerUrl = it } }
             .onFailure { Log.w(AppServer.TAG, "oauth: no providers.json: $it") }
+        // The client secrets the build was given (oauth.properties, kept out of the repository),
+        // laid over the providers they belong to.
+        runCatching { context.assets.open("oauth/clients.json").bufferedReader().use { it.readText() } }.getOrNull()?.let { t ->
+            val ps = runCatching { JSONObject(t).optJSONObject("providers") }.getOrNull() ?: return@let
+            for (id in ps.keys()) all[id]?.let { p -> val extra = ps.getJSONObject(id); for (k in extra.keys()) p.j.put(k, extra.get(k)) }
+            for (id in ps.keys()) all[id]?.let { all[id] = Provider(id, it.j) }
+        }
         // A development build also reads providers kept on the device: test servers (Workbench/oauth-test).
         if (devBuild) File(context.filesDir, "oauth-providers.json").takeIf { it.isFile }?.let { f ->
             runCatching { val t = f.readText(); read(t); JSONObject(t).optString("broker").takeIf { it.isNotEmpty() }?.let { brokerUrl = it } }

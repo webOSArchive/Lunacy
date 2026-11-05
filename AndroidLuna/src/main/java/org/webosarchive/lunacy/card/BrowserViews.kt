@@ -786,6 +786,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 return true
             }
             override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
+                Log.i(AppServer.TAG, "[${owner.window.appId}] browser view: a new window asked for (gesture $isUserGesture, popups ${if (blockPopups) "blocked" else "allowed"})")
                 if (blockPopups && !isUserGesture) return false
                 val child = Browser(context, owner)
                 val identifier = "lunacy-page-" + synchronized(BrowserViews) { nextPage++ }

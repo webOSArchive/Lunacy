@@ -129,11 +129,21 @@ class AppLifecycle(
      */
     private fun relaunch(app: AppInfo, windows: List<AppWindow>, params: JSONObject?, placement: Placement) {
         val appId = app.id
+        val before = windows.toSet()
         windows.first().relaunch(params?.toString() ?: "") { handled ->
-            Log.i(AppServer.TAG, "relaunch $appId ${if (Bus.handlesPeople(appId)) "" else params} handled=$handled")
+            // A window the app opened while it handled the relaunch is its answer, even when the
+            // handler doesn't say it handled it (Email's opens a compose card for a mailto: and
+            // returns nothing). On a device that card arrived after LunaSysMgr had focused the
+            // first card, and came up over it; here it is already on its way up, so the first
+            // card mustn't be brought forward over it (it was: a compose card left behind the
+            // inbox for every mailto:, 0.9.2's test round on the HP 10 G2).
+            // A card (or a window of a type the shell doesn't know, which is shown as one); a
+            // dashboard or an alert isn't a card, and the first card still comes forward.
+            val opened = running[appId]?.any { it !in before && (it.type == WindowType.CARD || it.type == null) } == true
+            Log.i(AppServer.TAG, "relaunch $appId ${if (Bus.handlesPeople(appId)) "" else params} handled=$handled${if (opened) ", opened a window" else ""}")
             // A relaunch for the dock leaves the card view alone: the app answers it with
             // a dockMode window, or the dock shows nothing of it, as on a device.
-            if (!handled && placement != Placement.DOCK) cardHost.bringForward(appId)
+            if (!handled && !opened && placement != Placement.DOCK) cardHost.bringForward(appId)
         }
     }
 

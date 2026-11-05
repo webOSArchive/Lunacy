@@ -539,7 +539,7 @@ class LunacyService(
      * An app Lunacy ships and owns, rather than one the user installed. An installed package
      * with the same id replaces the bundled app, so the registry has the last word.
      */
-    private fun ownApp(appId: String): Boolean {
+    internal fun ownApp(appId: String): Boolean {
         val known = appId in OWN_APPS || appId.startsWith("org.webosarchive.lunacy")
         return known && registry.get(appId)?.userInstalled == false
     }

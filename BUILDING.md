@@ -126,7 +126,9 @@ C tests of the PDK runtime, built with the build machine's own `cc` (or `HOST_CC
 a runtime they fail. `send_test.c` checks `LUNACY_Send` (`sdl-lunacy/lunacy_send.h`, the code the
 SDL driver compiles): a send on one socket isn't held up by another socket that is full - one
 lock for every socket halved games' frame rates in 0.9.2's test round - and threads sending on
-one socket each get their messages out whole.
+one socket each get their messages out whole. `mailauth_test.c` checks the translation of the
+mail services' logins into XOAUTH2 (`libpreload/mailauth.h`, [Docs/oauth.md](Docs/oauth.md)): the
+IMAP and SMTP logins, the hidden error challenges, and everything else passing unchanged.
 
 ## Install and run
 

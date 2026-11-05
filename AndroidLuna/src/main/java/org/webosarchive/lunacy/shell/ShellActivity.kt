@@ -1188,6 +1188,11 @@ class ShellActivity : Activity(), WindowHost {
         sleepWake.onBlocked = activityManager::networkBlocked
         // Secrets, where the accounts service keeps each account's credentials.
         KeyManager(java.io.File(filesDir, "keymanager.json")).register(bus)
+        // OAuth sign-in for mail accounts, and the tokens the mail services' logins use (Docs/oauth.md).
+        val own = lunacyService!!
+        org.webosarchive.lunacy.card.OAuth(this, java.io.File(filesDir, "oauth/accounts.json"), own::ownApp,
+            { id -> registry.get(id)?.userInstalled == false },
+            applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0).register(bus)
         DeviceProfileService(this) { profile }.register(bus)
         NetTools(this).register(bus)
         // webOS's downloader, which apps hand every file fetch to: drPodder's episodes and

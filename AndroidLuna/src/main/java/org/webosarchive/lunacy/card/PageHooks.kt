@@ -25,10 +25,12 @@ object PageHooks {
     const val PLUGIN = "__lunacyPlugin"
     /** A native browser view's event, to Enyo's WebView (enyo-1.0 patch 0005). */
     const val WEB_VIEW = "__lunacyWebView"
+    /** A native browser view's event, to the frame that made the view (bridge.js), which hands it to [WEB_VIEW]. */
+    const val WEB_VIEW_EVENT = "__lunacyWebViewEvent"
     /** A bus reply, to PalmServiceBridge (bridge.js). */
     const val REPLY = "PalmServiceBridge.__reply"
 
-    val ALL = listOf(NET_DONE, SQL_DONE, UNLOAD, REMOVE_INPUT_FOCUS, RELAUNCH, VIEWPORT, PASTE, PLUGIN, WEB_VIEW, REPLY)
+    val ALL = listOf(NET_DONE, SQL_DONE, UNLOAD, REMOVE_INPUT_FOCUS, RELAUNCH, VIEWPORT, PASTE, PLUGIN, WEB_VIEW, WEB_VIEW_EVENT, REPLY)
 
     /** [name] called with [args] (already JavaScript) if the page defines it. */
     fun call(name: String, vararg args: String) = "window.$name&&$name(${args.joinToString(",")})"

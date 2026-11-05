@@ -1,0 +1,12 @@
+Lunacy's own: the page that signs Google and Microsoft mail accounts in with OAuth, and their
+account types (accounts/), whose mail is Palm's IMAP service (Docs/oauth.md; the service is
+AndroidLuna/src/main/java/org/webosarchive/lunacy/card/OAuth.kt).
+
+Images:
+- icon.png: Palm's Email icon (com.palm.app.email, HP webOS 3.x, abandonware).
+- accounts/org.webosarchive.lunacy.google/images/google-32x32.png and google-48x48.png: the
+  Google account icon from the reference TouchPad (webOS CE 3.1.0; Mojo's shared images,
+  mojocommon/mojoImages, HP/Palm, abandonware); the "g" is Google's mark, used to name the
+  account type as webOS did.
+- The Microsoft type uses Palm's other-mail icon (com.palm.othermail), copied in at build time
+  by AndroidLuna/fetch-assets.sh, until it has one of its own.

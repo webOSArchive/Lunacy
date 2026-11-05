@@ -1,0 +1,11 @@
+{
+	"id": "org.webosarchive.lunacy.signin",
+	"version": "1.0.0",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Sign In",
+	"icon": "icon.png",
+	"uiRevision": 2,
+	"visible": false
+}

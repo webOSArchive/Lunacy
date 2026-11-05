@@ -1574,6 +1574,18 @@ with the reference TouchPad on the same account as the other side.
 
 More in [eas.md](eas.md): what was measured, HP's own bugs that show through, and what is open.
 
+## OAuth for mail (Google, Microsoft)
+
+Accounts that sign in with OAuth 2 instead of a password, on Palm's own mail services
+([oauth.md](oauth.md)). The account's password is a handle naming its tokens in Lunacy's
+`org.webosarchive.lunacy.oauth` service (`card/OAuth.kt`); Lunacy's preload, in every native
+process, turns the services' password logins into XOAUTH2 at the connection
+(`LunaRuntimes/pdk/libpreload/mailauth.h`), asking the service for the current token over the
+process's luna-send link. Signing in is the `org.webosarchive.lunacy.signin` page, the Google and
+Microsoft templates' `customUI`: the provider's page in its WebView or Android's browser, or the
+broker (oauth.wosa.link) for an engine too old. **Ratchet item:** the tokens are kept in a file
+in Lunacy's private storage, as the key manager's keys are.
+
 ## Calendar
 
 Calendar is webOS CE's (`com.palm.app.calendar` 3.2.0, from the webOS CE project, which

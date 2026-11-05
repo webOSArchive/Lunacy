@@ -1,0 +1,39 @@
+{
+	"_comment": "OAuth providers for mail accounts (card/OAuth.kt, Docs/oauth.md). clientId is the app registration's public client id; empty means sign-in on the device isn't offered. brokerApp names the app at the broker (oauth.wosa.link), which holds any client secret.",
+	"broker": "https://oauth.wosa.link",
+	"providers": {
+		"google": {
+			"title": "Google",
+			"templateId": "org.webosarchive.lunacy.google",
+			"clientId": "",
+			"clientSecret": "",
+			"authorizeUrl": "https://accounts.google.com/o/oauth2/v2/auth",
+			"tokenUrl": "https://oauth2.googleapis.com/token",
+			"scope": "https://mail.google.com/ openid email",
+			"authorizeParams": { "access_type": "offline", "prompt": "consent" },
+			"onDevice": "browser",
+			"loopbackHost": "127.0.0.1",
+			"brokerApp": "",
+			"mail": {
+				"server": "imap.gmail.com", "port": 993, "encryption": "ssl",
+				"smtpConfig": { "server": "smtp.gmail.com", "port": 465, "encryption": "ssl", "useSmtpAuth": true }
+			}
+		},
+		"microsoft": {
+			"title": "Microsoft",
+			"templateId": "org.webosarchive.lunacy.microsoft",
+			"clientId": "",
+			"authorizeUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+			"tokenUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+			"scope": "https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access openid email",
+			"authorizeParams": { "prompt": "select_account" },
+			"onDevice": "page",
+			"redirectUri": "https://login.microsoftonline.com/common/oauth2/nativeclient",
+			"brokerApp": "",
+			"mail": {
+				"server": "outlook.office365.com", "port": 993, "encryption": "ssl",
+				"smtpConfig": { "server": "smtp.office365.com", "port": 587, "encryption": "tls", "useSmtpAuth": true }
+			}
+		}
+	}
+}

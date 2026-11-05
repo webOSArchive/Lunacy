@@ -805,3 +805,22 @@ keeping CE's Enyo app rather than Palm's Mojo one, and codepoet decides each.** 
 - **The media class's volume** is Android's music stream; Music's volume-key lock points the device's volume keys at it.
 - **On a phone** its library panel and lists take turns (codepoet's exception to rule 5; its NOTICE). The Pre3's Music is an older app and not copied; it drilled down the same way.
 - **Not yet:** album art in Android's notification; `mediabroadcast`'s answer to a registered Music is unmeasured (Lunacy answers success).
+
+### B23. Signing in to Google and Microsoft mail
+
+**An addition, for codepoet's decision.** The TouchPad signed these accounts in with a username
+and password (Palm's Google template; Microsoft through Exchange); both providers refuse that
+now ([oauth.md](oauth.md)). What a person sees instead:
+
+- **Add Account** lists Google (the TouchPad's Google icon) and Microsoft (Palm's other-mail
+  icon until it has its own) beside Palm's types, in Email and in Accounts.
+- **A sign-in page** in place of the username and password form, in the TouchPad's account-page
+  look: a line on what happens, Sign In, and Sign In on Another Device (the broker's short code
+  and address, for a device whose engine can't show the provider's page).
+- **The provider's own page** inside that page, for Microsoft. For Google, which refuses web
+  views, Android's browser opens over Lunacy, and the person comes back to Lunacy when it says
+  they're signed in. That is the visible difference to decide on.
+- After that, Accounts' own Account Settings and Create Account, as for any account. A sign-in
+  that stops working shows Email's own "Check your login and password"; the account's page in
+  Accounts has Sign In Again.
+

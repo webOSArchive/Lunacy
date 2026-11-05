@@ -478,6 +478,13 @@ cp -r $M/usr/palm/services/com.palm.messaging.chatthreader $R/usr/palm/services/
 cp -r $M/usr/palm/frameworks/messaging.library $M/usr/palm/frameworks/contacts.plugin.messaging $R/usr/palm/frameworks/
 # The Android account type, Lunacy's own: its page is the core app beside it.
 cp -r ../CoreApps/org.webosarchive.lunacy.androidaccount/account $R/usr/palm/public/accounts/org.webosarchive.lunacy.androidaccount
+# Google and Microsoft mail, signed in with OAuth (Docs/oauth.md): their page is the core app
+# org.webosarchive.lunacy.signin, and Palm's IMAP service is their mail. The other-mail icon is Palm's.
+for t in ../CoreApps/org.webosarchive.lunacy.signin/accounts/*; do
+  rm -rf $R/usr/palm/public/accounts/${t##*/}; cp -r $t $R/usr/palm/public/accounts/
+  mkdir -p $R/usr/palm/public/accounts/${t##*/}/images
+  cp $R/usr/palm/public/accounts/com.palm.othermail/images/othermail32.png $R/usr/palm/public/accounts/com.palm.othermail/images/othermail48.png $R/usr/palm/public/accounts/${t##*/}/images/
+done
 # webOS Chat's account type and service: with a webOS Account signed in, the service fetches
 # the chat credentials and makes the AIM account, so nobody types a pass phrase (messaging.md).
 # They come from the webOS Chat project's repository at the commit pinned here (its

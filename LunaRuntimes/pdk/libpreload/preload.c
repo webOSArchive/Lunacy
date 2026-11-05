@@ -1248,3 +1248,209 @@ out:
 	pthread_mutex_unlock(&sem_lock);
 	return r;
 }
+
+/* ---- OAuth for the mail services (mailauth.h, Docs/oauth.md) ----
+ *
+ * Palm's mail services read and write their connections, plain and TLS alike, with glib's
+ * g_io_channel_read_chars and g_io_channel_write_chars (libemail-common's GIOChannelWrapper,
+ * over libpalmsocket's channels). Here those calls pass through mailauth.h, which turns a login
+ * carrying an OAuth handle into XOAUTH2. The token comes from Lunacy's OAuth service over the
+ * process's own luna-send link (LUNACY_BUS, with the caller token Lunacy gave the process), so
+ * the service answers only the processes Lunacy started. Channels on files and pipes are left
+ * alone. glib's own headers aren't in the PDK sysroot; the four types used are its ABI.
+ */
+#include <poll.h>
+#include <sys/un.h>
+#include "mailauth.h"
+
+typedef int GIOStatus;   /* G_IO_STATUS_ERROR 0, NORMAL 1, EOF 2, AGAIN 3 */
+enum { MA_G_ERROR = 0, MA_G_NORMAL = 1, MA_G_AGAIN = 3 };
+typedef struct { int ref_count; } GIOChannel;   /* glib 2's public struct starts so */
+typedef struct _GError GError;
+GIOStatus g_io_channel_write_chars(GIOChannel *, const char *, long, size_t *, GError **);
+GIOStatus g_io_channel_read_chars(GIOChannel *, char *, size_t, size_t *, GError **);
+GIOChannel *g_io_channel_new_file(const char *, const char *, GError **);
+GIOChannel *g_io_channel_unix_new(int);
+void g_io_channel_unref(GIOChannel *);
+
+#define MA_CHANNELS 64
+static struct ma_channel { GIOChannel *ch; int excluded; struct mailauth *m; } ma_channels[MA_CHANNELS];
+static pthread_mutex_t ma_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void *ma_next(const char *name) { return dlsym(RTLD_NEXT, name); }
+
+/* The channel's entry, made when make is set (an excluded channel needs no state). */
+static struct ma_channel *ma_find(GIOChannel *ch, int make)
+{
+	struct ma_channel *free_slot = NULL;
+	for (int i = 0; i < MA_CHANNELS; i++) {
+		if (ma_channels[i].ch == ch) return &ma_channels[i];
+		if (!ma_channels[i].ch && !free_slot) free_slot = &ma_channels[i];
+	}
+	if (!make || !free_slot) return NULL;
+	free_slot->ch = ch; free_slot->excluded = 0; free_slot->m = NULL;
+	return free_slot;
+}
+
+static void ma_exclude(GIOChannel *ch)
+{
+	if (!ch) return;
+	pthread_mutex_lock(&ma_lock);
+	struct ma_channel *c = ma_find(ch, 1);
+	if (c) c->excluded = 1;
+	pthread_mutex_unlock(&ma_lock);
+}
+
+GIOChannel *g_io_channel_new_file(const char *name, const char *mode, GError **err)
+{
+	static GIOChannel *(*real)(const char *, const char *, GError **);
+	if (!real) real = ma_next("g_io_channel_new_file");
+	GIOChannel *ch = real(name, mode, err);
+	ma_exclude(ch);
+	return ch;
+}
+
+GIOChannel *g_io_channel_unix_new(int fd)
+{
+	static GIOChannel *(*real)(int);
+	if (!real) real = ma_next("g_io_channel_unix_new");
+	GIOChannel *ch = real(fd);
+	struct stat st;
+	if (fstat(fd, &st) != 0 || !S_ISSOCK(st.st_mode)) ma_exclude(ch);
+	return ch;
+}
+
+void g_io_channel_unref(GIOChannel *ch)
+{
+	static void (*real)(GIOChannel *);
+	if (!real) real = ma_next("g_io_channel_unref");
+	if (ch && ch->ref_count == 1) {   /* this unref frees it: its address can come back as another channel */
+		pthread_mutex_lock(&ma_lock);
+		struct ma_channel *c = ma_find(ch, 0);
+		if (c) { if (c->m) { mailauth_free(c->m); free(c->m); } c->ch = NULL; c->m = NULL; c->excluded = 0; }
+		pthread_mutex_unlock(&ma_lock);
+	}
+	real(ch);
+}
+
+static GIOStatus (*ma_real_write)(GIOChannel *, const char *, long, size_t *, GError **);
+static GIOStatus (*ma_real_read)(GIOChannel *, char *, size_t, size_t *, GError **);
+
+/* All of p to the server, waiting out a full socket (the lines sent here are short). */
+static int ma_send(void *ctx, const char *p, size_t n)
+{
+	GIOChannel *ch = ctx;
+	int waited = 0;
+	while (n) {
+		size_t w = 0;
+		GIOStatus s = ma_real_write(ch, p, (long)n, &w, NULL);
+		if (s == MA_G_NORMAL || s == MA_G_AGAIN) { p += w; n -= w; }
+		else return -1;
+		if (n && !w) { if (++waited > 15000) return -1; usleep(1000); }
+	}
+	return 0;
+}
+
+/* A JSON string's contents, escaped. */
+static size_t ma_json(char *out, size_t cap, const char *s)
+{
+	size_t o = 0;
+	for (; *s && o + 7 < cap; s++) {
+		unsigned char c = (unsigned char)*s;
+		if (c == '"' || c == '\\') { out[o++] = '\\'; out[o++] = (char)c; }
+		else if (c < 0x20) o += (size_t)snprintf(out + o, cap - o, "\\u%04x", c);
+		else out[o++] = (char)c;
+	}
+	out[o] = 0;
+	return o;
+}
+
+/* The access token for a handle, from palm://org.webosarchive.lunacy.oauth/token. */
+static int ma_token(void *ctx, const char *user, const char *handle, int stale, char *buf, size_t cap)
+{
+	(void)ctx;
+	const char *bus = getenv("LUNACY_BUS"), *caller = getenv("LUNACY_BUS_TOKEN");
+	if (!bus || !caller) return 0;
+	char eu[1100], payload[1400], ep[3000], req[4000];
+	ma_json(eu, sizeof eu, user);
+	snprintf(payload, sizeof payload, "{\"handle\":\"%s\",\"user\":\"%s\"%s}", handle, eu, stale ? ",\"stale\":true" : "");
+	ma_json(ep, sizeof ep, payload);
+	int len = snprintf(req, sizeof req, "{\"token\":\"%s\",\"url\":\"palm://org.webosarchive.lunacy.oauth/token\",\"payload\":\"%s\"}\n", caller, ep);
+	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	if (fd < 0) return 0;
+	struct sockaddr_un a = { .sun_family = AF_UNIX };
+	strncpy(a.sun_path, bus, sizeof a.sun_path - 1);
+	static char reply[MAILAUTH_TOKEN_MAX + 512];
+	size_t got = 0;
+	if (connect(fd, (struct sockaddr *)&a, sizeof a) != 0 || write(fd, req, (size_t)len) != len) { close(fd); return 0; }
+	/* A refresh can take the service a few seconds; the service's own login waits 30. */
+	while (got < sizeof reply - 1) {
+		struct pollfd pf = { fd, POLLIN, 0 };
+		if (poll(&pf, 1, 25000) <= 0) break;
+		ssize_t r = read(fd, reply + got, sizeof reply - 1 - got);
+		if (r <= 0) break;
+		got += (size_t)r;
+		if (memchr(reply, '\n', got)) break;
+	}
+	close(fd);
+	reply[got] = 0;
+	if (!strstr(reply, "\"returnValue\":true")) return 0;
+	const char *t = strstr(reply, "\"accessToken\":\"");
+	if (!t) return 0;
+	size_t o = 0;
+	for (t += 15; *t && *t != '"' && o + 1 < cap; t++) {
+		if (*t == '\\' && t[1]) t++;   /* \/ and the like: tokens are printable ASCII */
+		buf[o++] = *t;
+	}
+	buf[o] = 0;
+	memset(reply, 0, got);
+	return 1;
+}
+
+GIOStatus g_io_channel_write_chars(GIOChannel *ch, const char *buf, long count, size_t *written, GError **err)
+{
+	if (!ma_real_write) ma_real_write = ma_next("g_io_channel_write_chars");
+	if (count < 0) count = buf ? (long)strlen(buf) : 0;
+	pthread_mutex_lock(&ma_lock);
+	struct ma_channel *c = ma_find(ch, 1);
+	if (!c || c->excluded || !count) { pthread_mutex_unlock(&ma_lock); return ma_real_write(ch, buf, count, written, err); }
+	if (!c->m && (c->m = calloc(1, sizeof *c->m))) mailauth_init(c->m);
+	struct mailauth *m = c->m;
+	pthread_mutex_unlock(&ma_lock);
+	if (!m) return ma_real_write(ch, buf, count, written, err);
+	struct mailauth_io io = { ma_send, ma_token, ch };
+	int direct;
+	long r = mailauth_out(m, &io, buf, (size_t)count, &direct);
+	if (r < 0) { if (written) *written = 0; return MA_G_ERROR; }
+	if (direct) {
+		size_t w = 0;
+		GIOStatus s = ma_real_write(ch, buf, r, &w, err);
+		if (w < (size_t)r) m->out_mode = MA_PASS;   /* the rest of the line is still to come */
+		if (written) *written = w;
+		return s;
+	}
+	if (written) *written = (size_t)r;
+	return MA_G_NORMAL;
+}
+
+GIOStatus g_io_channel_read_chars(GIOChannel *ch, char *buf, size_t count, size_t *got, GError **err)
+{
+	if (!ma_real_read) ma_real_read = ma_next("g_io_channel_read_chars");
+	if (!ma_real_write) ma_real_write = ma_next("g_io_channel_write_chars");
+	pthread_mutex_lock(&ma_lock);
+	struct ma_channel *c = ma_find(ch, 0);
+	struct mailauth *m = c && !c->excluded ? c->m : NULL;
+	pthread_mutex_unlock(&ma_lock);
+	if (!m || !count) return ma_real_read(ch, buf, count, got, err);
+	size_t n = mailauth_pending(m, buf, count);
+	if (n) { if (got) *got = n; return MA_G_NORMAL; }
+	size_t r = 0;
+	GIOStatus s = ma_real_read(ch, buf, count, &r, err);
+	if (got) *got = r;
+	if (s != MA_G_NORMAL || !r || !mailauth_watching(m)) return s;
+	struct mailauth_io io = { ma_send, ma_token, ch };
+	long k = mailauth_in(m, &io, buf, r, count);
+	if (k < 0) { if (got) *got = 0; return MA_G_ERROR; }
+	if (got) *got = (size_t)k;
+	return k ? MA_G_NORMAL : MA_G_AGAIN;
+}

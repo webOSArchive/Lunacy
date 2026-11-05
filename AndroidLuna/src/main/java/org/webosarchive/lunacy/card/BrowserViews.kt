@@ -165,7 +165,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
 
     internal fun send(id: Int, method: String, vararg args: Any?) {
         val a = JSONArray(); args.forEach { a.put(it ?: JSONObject.NULL) }
-        window.evaluateJavascript(jsSafe(PageHooks.call(PageHooks.WEB_VIEW, "$id", JSONObject.quote(method), a.toString())), null)
+        window.evaluateJavascript(jsSafe(PageHooks.call(PageHooks.WEB_VIEW_EVENT, "$id", JSONObject.quote(method), a.toString())), null)
     }
 
     /** A webOS path, in the webOS root; /media/internal through UserFiles, as apps see it. */
@@ -685,6 +685,24 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
             return false
         }
 
+        /** The last address [caughtLate] handed to the app, so the load's several callbacks hand it once. */
+        private var lateCaught: String? = null
+
+        /**
+         * A navigation shouldOverrideUrlLoading never saw, which the view's redirects claim:
+         * Chromium doesn't ask about a navigation that began as a form's POST, the server's
+         * redirect after it included (an OAuth consent page's Allow, whose provider then
+         * redirects to the app's address). WebKit on the TouchPad matched the redirects against
+         * every navigation, so it is caught as the page starts (or fails, for an address nothing
+         * answers), the load stopped, and handed to the app as any other redirect.
+         */
+        private fun caughtLate(view: WebView, url: String): Boolean {
+            if (!redirects.any { it.second && it.first.containsMatchIn(url) }) return false
+            view.stopLoading()
+            if (lateCaught != url) { lateCaught = url; redirected(url) }
+            return true
+        }
+
         /**
          * A link that asked for a window of its own, in an app that isn't the Web app: where the
          * view's links go, and a web page the view's redirects don't claim to the Web app.
@@ -750,6 +768,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
             @Suppress("OVERRIDE_DEPRECATION")
             override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = redirected(url)
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                if (caughtLate(view, url)) return
                 topUrl = url
                 owner.send(id, "loadStarted")
                 titleChanged()
@@ -770,6 +789,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
             override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail) = true
             @Suppress("OVERRIDE_DEPRECATION")
             override fun onReceivedError(view: WebView, errorCode: Int, description: String, failingUrl: String) {
+                if (caughtLate(view, failingUrl)) return
                 owner.send(id, "mainDocumentLoadFailed", "", webosError(errorCode), failingUrl, description)
             }
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {

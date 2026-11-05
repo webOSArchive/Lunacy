@@ -10,3 +10,5 @@ CC=${HOST_CC:-cc}
 command -v "$CC" >/dev/null || { echo "pdk tests: no host C compiler ($CC); set HOST_CC" >&2; exit 1; }
 "$CC" -O2 -Wall -pthread -I"$HERE/../sdl-lunacy" "$HERE/send_test.c" -o "$WORK/send_test"
 timeout 60 "$WORK/send_test"
+"$CC" -O2 -Wall -I"$HERE/../libpreload" "$HERE/mailauth_test.c" -o "$WORK/mailauth_test"
+timeout 60 "$WORK/mailauth_test"

@@ -5,6 +5,13 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-11-05)
 
+**OAuth for mail, for 0.9.5 (started 2026-11-05):** Google and Microsoft account types whose
+sign-in page uses OAuth on the device or through the broker, and Palm's mail services logging in
+with XOAUTH2 under them, unchanged ([oauth.md](oauth.md)). Working end to end against a stand-in
+provider on the A7 Lite (sign-in, sync, send, refresh, revocation and signing in again, the
+broker). **Waiting on the Google and Microsoft client registrations** (codepoet) for the real
+providers; then Exchange over OAuth.
+
 **0.9.2** (2026-11-05), a point release for testers: the code review's clean-up and webOS CE's
 emoji key. Everything since 0.9.1:
 

@@ -70,6 +70,30 @@
 			}
 			var gone = /^lunacyFrameGone=(\d+)$/.exec(e.data);
 			if (gone && foreign[Number(gone[1])] === e.source) { delete foreign[Number(gone[1])]; }
+			// A frame made a native browser view (Enyo patch 0015): its events go to that frame.
+			// The first frame to name a view keeps it.
+			var owner = /^lunacyWebViewOwner=(\d+)$/.exec(e.data);
+			if (owner && !viewOwners[owner[1]]) { viewOwners[owner[1]] = e.source; }
+		});
+	}
+
+	// Native browser views' events (BrowserViews.send). Native can only reach the main frame;
+	// a view made in a frame - webOS's cross-app UI, where an account's sign-in page shows the
+	// provider's page in a WebView - hears its events through it, as the frame's bus replies do.
+	var viewOwners = {};
+	window.__lunacyWebViewEvent = function (id, method, args) {
+		var f = viewOwners[id];
+		if (f && f !== window) {
+			try { f.postMessage("lunacyWebView=" + JSON.stringify([id, method, args]), "*"); } catch (e) {}
+			return;
+		}
+		if (window.__lunacyWebView) { window.__lunacyWebView(id, method, args); }
+	};
+	if (window.top !== window) {
+		window.addEventListener("message", function (e) {
+			if (typeof e.data !== "string" || e.source !== window.top || e.data.indexOf("lunacyWebView=") !== 0) { return; }
+			var d; try { d = JSON.parse(e.data.slice(14)); } catch (x) { return; }
+			if (window.__lunacyWebView) { window.__lunacyWebView(d[0], d[1], d[2]); }
 		});
 	}
 	function nextToken() {

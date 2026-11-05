@@ -423,6 +423,20 @@ the motion, are unchanged: the TouchPad's physics at any refresh rate. Checked o
 
 Files: `framework/source/base/scroller/ScrollStrategy.js`, `framework/build/enyo-build.js`.
 
+### 0015-webview-events-in-frames.patch
+
+A WebView made in a frame hears its own events. webOS's cross-app UI is a frame: an account
+type's sign-in page (`validator.customUI`) runs in one inside the app adding the account, and
+the Google and Microsoft pages show the provider's own sign-in page in an `enyo.WebView` there
+([oauth.md](../../Docs/oauth.md)). Lunacy's native views (0005) send their events with
+`evaluateJavascript`, which reaches only the main frame, where the frame's views aren't known:
+the page never heard `urlRedirected`, so the sign-in never finished. On webOS each frame's
+`BasicWebView` had its own plugin and heard its own events. The patch has a view made in a frame
+tell the main frame it owns it; `bridge.js` hands that view's events on to its frame, as it hands
+on a frame's bus replies (the first frame to name a view keeps it). Checked on the A7 Lite.
+
+Files: `framework/source/palm/controls/BasicWebView.js`, `framework/build/enyo-build.js`.
+
 ## Added
 
 Nothing, since the rebase. `lib/networkproxy` (HP's network-proxy settings library, which the

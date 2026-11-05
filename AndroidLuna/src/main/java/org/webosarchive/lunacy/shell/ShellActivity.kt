@@ -98,8 +98,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private lateinit var jsServices: JsServices
     /** The TouchPad's native system services (mail, the file cache), from the webOS root. */
     private lateinit var nativeServices: NativeServices
-    /** The app that launched each app, until that launch's card is shown (showAsCard). */
-    private val launchers = HashMap<String, String>()
     /** powerd's part: timers that wake the device, and locks that keep it awake. */
     private val powerLazy = lazy { Power(applicationContext) }
     private val power by powerLazy
@@ -175,7 +173,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // a card arriving ended dock mode (SystemUiController::cardWindowAdded). The shell is
         // already out of sight, so the screen saver's end doesn't send it there again.
         if (interactive) exhibitions.cardArrivedInExhibition()
-        if (interactive && ::cards.isInitialized) cards.maximized?.window?.let { it.setStageActive(false); coveredCard = it }
+        if (interactive && cardHost.built) cards.maximized?.window?.let { it.setStageActive(false); coveredCard = it }
         // A launch that Android answers (a settings shortcut, an Android app) covers the shell
         // while the launcher is still sliding away, and a stopped window's animation doesn't
         // finish: the launcher came back on screen but closed, deaf to taps. Finish it now.
@@ -322,8 +320,23 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         runCatching { (getSystemService(LAUNCHER_APPS_SERVICE) as android.content.pm.LauncherApps).registerCallback(cb) }.onSuccess { shortcutWatch = cb }
     }
 
+    /** What the card layer's owner asks of the shell. */
+    private val cardShell = object : CardHost.Host {
+        override val luna get() = this@ShellActivity.luna
+        override val registry get() = this@ShellActivity.registry
+        override val sounds get() = this@ShellActivity.sounds
+        override val listener get() = this@ShellActivity
+        override fun screenOrientation() = this@ShellActivity.screenOrientation()
+        override fun cardArriving() { exhibitions.cardArrivedInExhibition() }
+        override fun noCardUp() { statusBar.slide(false); applyOrientation(null) }
+        override fun toggleAppMenu() = this@ShellActivity.toggleAppMenu()
+        override fun showKeyboard(window: AppWindow) { window.requestFocus(); imm.showSoftInput(window, android.view.inputmethod.InputMethodManager.SHOW_FORCED) }
+    }
+    /** The cards and the headless windows (CardHost). After [shellHandler], which it posts to. */
+    private val cardHost by lazy { CardHost(this, cardShell, shellHandler) }
+    private val cards: CardLayer get() = cardHost.cards
+
     private lateinit var statusBar: StatusBar
-    private lateinit var cards: CardLayer
     private lateinit var justType: JustType
     private lateinit var justTypePanel: JustTypePanel
     /** com.palm.universalsearch: what Just Type offers besides apps, and its settings. */
@@ -348,8 +361,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     /** Catches taps outside the dashboard drop-down, which close it. */
     private lateinit var menuScrim: View
 
-    /** Headless root windows of noWindow apps: attached so their scripts run, never shown. */
-    private lateinit var hidden: FrameLayout
     /** A debuggable build (the debug build type), which keeps the adb development extras. */
     private val devBuild by lazy { applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0 }
 
@@ -465,10 +476,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         screen.addView(wallpaperView, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
         screen.addView(root, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
 
-        hidden = FrameLayout(this)
-        root.addView(hidden, FrameLayout.LayoutParams(1, 1))
-
-        buildCards(root)
+        cardHost.build(root)
         buildLauncher(root)
         buildJustType(root)
         buildQuickLaunch(root)
@@ -480,18 +488,6 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         watchKeyboard(root)
         statusBar.onTitleTap = { if (exhibitions.exhibitionOn) exhibitions.toggleExhibitionMenu() else toggleAppMenu() }
         shellRoot = root
-    }
-
-    /** The card layer, the whole screen, so that a full-screen card can be laid out under the status bar. */
-    private fun buildCards(root: FrameLayout) {
-        // The whole screen, so that a full-screen card can be laid out under the status bar;
-        // every other card starts below it (CardLayer.inset).
-        cards = CardLayer(this, luna, this).apply { inset = luna.px(StatusBar.HEIGHT); feedback = { sounds.feedback(it) }
-            // A phone's card view is the Pre3's: its own card ratios (Docs/pre3.md).
-            phone = luna.phone
-            // The TouchPad's landscape turned end for end, which Lunacy calls "left".
-            upsideDown = { screenOrientation() == "left" } }
-        root.addView(cards, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
     }
 
     /** The launcher, with its groups' panel and its tab dialog. */
@@ -725,7 +721,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     private fun handleIntent(intent: android.content.Intent) {
         if (devBuild) intent.takeString("install")?.let { install(it) }
         intent.getStringExtra("layout")?.let { v ->
-            if (FormFactor.setSetting(this, v)) { intent.removeExtra("layout"); if (::cards.isInitialized) reshell() }
+            if (FormFactor.setSetting(this, v)) { intent.removeExtra("layout"); if (cardHost.built) reshell() }
             else Log.w(AppServer.TAG, "layout: $v is not auto, phone or tablet")
         }
         if (intent.hasExtra("launcher")) { intent.removeExtra("launcher"); if (started && !launcherOpen) openLauncher() }
@@ -871,7 +867,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
      * (showAsCard): LunaSysMgr's launchingAppId.
      */
     fun launch(appId: String, params: JSONObject? = null, placement: Placement = Placement.CARD, launchedBy: String? = null) {
-        if (launchedBy != null && launchedBy != appId) launchers[appId] = launchedBy else launchers.remove(appId)
+        cardHost.launchedBy(appId, launchedBy)
         // An added launch point launches its app with its own params, never into the dock.
         addedById[appId]?.launchPoint?.let { lp ->
             launch(lp.appId, lp.paramsObject(), if (placement == Placement.DOCK) Placement.NO_CARD else placement); return
@@ -912,14 +908,14 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
     /** A PDK app: its own process, in a card of its own kind (Docs/pdk.md); brought forward if running. */
     private fun launchNative(app: AppInfo, windows: List<AppWindow>?) {
         val appId = app.id
-        if (windows != null) { cards.cards.firstOrNull { it.window.appId == appId }?.let { cards.maximize(it, maximizeMs(appId)) }; return }
+        if (windows != null) { cardHost.bringForward(appId); return }
         if (!pdkRuntime.available) {
             systemBanner(appId, "${app.title} is a native app; it needs Lunacy's 32-bit build on a 32-bit ARM device")
             return
         }
         val w = PdkWindow(this, appId, this, app, pdkRuntime)
         running[appId] = mutableListOf(w)
-        showAsCard(w)
+        cardHost.showAsCard(w)
         if (!w.start()) { systemBanner(appId, "Couldn't start ${app.title}"); onWindowClosed(w) }
     }
 
@@ -933,7 +929,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             Log.i(AppServer.TAG, "relaunch $appId ${if (Bus.handlesPeople(appId)) "" else params} handled=$handled")
             // A relaunch for the dock leaves the card view alone: the app answers it with
             // a dockMode window, or the dock shows nothing of it, as on a device.
-            if (!handled && placement != Placement.DOCK) cards.cards.firstOrNull { it.window.appId == appId }?.let { cards.maximize(it, maximizeMs(appId)) }
+            if (!handled && placement != Placement.DOCK) cardHost.bringForward(appId)
         }
     }
 
@@ -960,37 +956,19 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             // dockModeWindow, gets its first window as a dock window, not a card. A headless
             // app opens its dock window itself (onWindowOpened).
             Placement.DOCK -> {
-                if (app.noWindow) hidden.addView(rootWindow, FrameLayout.LayoutParams(1, 1)) else exhibitions.addDockWindow(rootWindow)
+                if (app.noWindow) cardHost.hide(rootWindow) else exhibitions.addDockWindow(rootWindow)
                 rootWindow.loadUrl(url)
             }
             Placement.NO_CARD -> {
-                if (app.noWindow) hidden.addView(rootWindow, FrameLayout.LayoutParams(1, 1)) else showAsCard(rootWindow, splash = false)
+                if (app.noWindow) cardHost.hide(rootWindow) else cardHost.showAsCard(rootWindow, splash = false)
                 rootWindow.loadUrl(url)
             }
             Placement.CARD -> {
-                showAsCard(rootWindow, placeholder = app.noWindow)
+                cardHost.showAsCard(rootWindow, placeholder = app.noWindow)
                 Log.i(AppServer.TAG, "launch $appId: window and card in ${android.os.SystemClock.uptimeMillis() - t0} ms")
                 loadWhenShown(rootWindow, url, t0)
             }
         }
-    }
-
-    /** The card waiting for a headless app's first card window, if it is [window]'s. */
-    private fun placeholderOf(window: AppWindow): Card? = cards.cards.firstOrNull { it.awaitingWindow && it.window == window }
-
-    /** The app is up and running with no card of its own: the placeholder goes, and the root goes on headless. */
-    private fun withdrawPlaceholder(window: AppWindow) {
-        // On the activity's window rather than the card layer, which a rebuild replaces (reshell).
-        this.window.decorView.postDelayed({
-            val card = placeholderOf(window) ?: return@postDelayed
-            Log.i(AppServer.TAG, "launch ${window.appId}: no card opened; the placeholder goes")
-            card.awaitingWindow = false
-            (window.parent as? android.view.ViewGroup)?.removeView(window)
-            hidden.addView(window, FrameLayout.LayoutParams(1, 1))
-            cards.remove(card)
-            if (cards.maximized == null) { statusBar.slide(false); applyOrientation(null) }
-            if (cards.cards.isEmpty()) onCardView()
-        }, PLACEHOLDER_GRACE_MS)
     }
 
     /** Page loads waiting for their startup card to be up; see [loadWhenShown]. */
@@ -1022,65 +1000,11 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         showDock(false)
     }
 
-    private fun showAsCard(w: AppWindow, parent: AppWindow? = null, placeholder: Boolean = false, splash: Boolean = true) {
-        // A card arriving ends Exhibition (SystemUiController::cardWindowAdded): an app opened
-        // from a dashboard, or one that opens a card of its own.
-        exhibitions.cardArrivedInExhibition()
-        val card = newCard(w, splash)
-        card.fullScreen = w.fullScreen && !w.emulated
-        card.awaitingWindow = placeholder
-        // A card an app opens while its own card is up joins that card's group, and so does
-        // one an app opens for another app that launched it while that app's card was up
-        // (CardWindowManager::prepareAddWindowSibling: the active card is focused and the
-        // window's launching app is its app). Closing it then comes back to that card.
-        val launchedBy = launchers.remove(w.appId)
-        val up = cards.maximized?.takeIf { (parent != null && it.window.appId == w.appId) || (launchedBy != null && it.window.appId == launchedBy) }
-        cards.add(card, up)
-        if (w.appId == directApp) cards.openMaximized(card) else cards.openLaunching(card)
-    }
-
-    /**
-     * The app opened from its icon on Android's home screen (HomeScreenPins), while its card is
-     * the one up: it opened straight away, and leaving it goes back to Android rather than to
-     * Lunacy's card view, so Lunacy's launcher never shows. Null otherwise.
-     */
-    private var directApp: String? = null
-    /** Whether [directApp]'s card has been maximized: only then does going to the card view mean leaving. */
-    private var directShown = false
-
-    /** A running app's card comes up at once for its icon on Android's home screen, from the card view otherwise. */
-    private fun maximizeMs(appId: String) = if (appId == directApp) 0L else CardLayer.Params.MAXIMIZE_MS
-
     /** Opens [appId] for its icon on Android's home screen. With Lunacy as the home app it is an ordinary launch. */
     private fun openDirect(appId: String) {
         if (homeScreenPins.lunacyIsHome()) { launch(appId); return }
-        directApp = appId
-        directShown = false
+        cardHost.openDirect(appId)
         launch(appId)
-    }
-
-    /** A card for [w], drawn at the shell's scale. */
-    private fun newCard(w: AppWindow, splash: Boolean): Card {
-        // An app that never said it was laid out for a tablet gets the phone-sized card a
-        // TouchPad gave it, rather than being stretched across the whole one.
-        val emu = if (!w.emulated) null else Pair(
-            luna.px(EmulatedCard.WIDTH.toFloat()).toInt(),
-            luna.px((EmulatedCard.HEIGHT - DeviceProfile.TOUCHPAD.positiveSpaceTopPadding).toFloat()).toInt())
-        val card = Card(this, w, luna.px(CardLayer.Params.CORNER), emu,
-            if (emu == null) null else luna.image("emucard-device-frame.png"),
-            // webOS held the card's space with the app's own icon until it had drawn.
-            if (splash) registry.get(w.appId)?.let { CardSplash(this, luna, luna.splashIcon(it)) } else null,
-            if (emu == null) null else luna, registry.get(w.appId)?.title ?: w.appId)
-        // The emulated card's own chrome: its title is the app menu, its strip the back gesture,
-        // its button the keyboard (EmulatedCardWindow).
-        card.onChrome = { action ->
-            when (action) {
-                Card.ChromeAction.APP_MENU -> toggleAppMenu()
-                Card.ChromeAction.BACK -> w.sendBack()
-                Card.ChromeAction.KEYBOARD -> { w.requestFocus(); imm.showSoftInput(w, android.view.inputmethod.InputMethodManager.SHOW_FORCED) }
-            }
-        }
-        return card
     }
 
     /** appinfo.json's requestedWindowOrientation, which every card of the app starts with. */
@@ -1101,29 +1025,17 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
             }
             // The headless app's first card: it fills the card its launch put up, and the root
             // goes on where a headless root lives.
-            WindowType.CARD -> {
-                val card = placeholderOf(parent)
-                if (card == null) showAsCard(child, parent)
-                else {
-                    val root = card.attach(child)
-                    hidden.addView(root, FrameLayout.LayoutParams(1, 1))
-                    card.fullScreen = child.fullScreen && !child.emulated
-                    if (cards.maximized == card) onMaximized(card)
-                }
-            }
+            WindowType.CARD -> cardHost.cardOpened(parent, child)
             // An app's own Exhibition view: the dock's, never a card.
             WindowType.DOCK_MODE -> exhibitions.addDockWindow(child)
             // A name the shell doesn't know.
-            null -> showAsCard(child, parent)
+            null -> cardHost.showAsCard(child, parent)
         }
     }
 
     override fun onWindowClosed(window: AppWindow) {
         exhibitions.windowClosed(window)
-        cards.cards.firstOrNull { it.window == window }?.let { cards.remove(it) }
-        // A full-screen card that closes itself while maximized takes the bar's absence with it,
-        // and one that had fixed the screen's orientation lets it go.
-        if (cards.maximized == null) { statusBar.slide(false); applyOrientation(null) }
+        cardHost.windowClosed(window)
         notifications.removeDashboard(window)
         notifications.popups.remove(window)
         closeWindow(window)
@@ -1421,9 +1333,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // it opens meanwhile keeps it. An app in [KEEP_ALIVE] keeps its headless root.
         val app = registry.get(w.appId)
         if (list.isEmpty()) endApp(w.appId, list)
-        else if (app?.noWindow == true && w.appId !in KEEP_ALIVE && list.none { it.parent != hidden }) {
+        else if (app?.noWindow == true && w.appId !in KEEP_ALIVE && list.all { cardHost.isHidden(it) }) {
             window.decorView.postDelayed({
-                if (running[w.appId] === list && list.none { it.parent != hidden }) endApp(w.appId, list)
+                if (running[w.appId] === list && list.all { cardHost.isHidden(it) }) endApp(w.appId, list)
             }, HEADLESS_LINGER_MS)
         }
         if (cards.cards.isEmpty() && !exhibitions.exhibitionOn) onCardView()
@@ -1471,45 +1383,12 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         permissionCallbacks.remove(requestCode)?.invoke(granted, askAgain)
     }
 
-    /**
-     * When a card's app counts as ready, as WindowedWebApp decided it: when the page calls
-     * stageReady, or - a page that never does - 3 s after it finished loading
-     * (kShowWindowTimeoutMs). Having drawn doesn't count: measured with the slow probe, the
-     * reference TouchPad kept a page that had painted but not called stageReady off the screen
-     * until it did. Here the card waits in the card view (CardLayer.openLaunching); being ready
-     * maximizes it, and lets its placeholder go once the page has drawn as well (onPageDrawn).
-     */
-    override fun onPageLoaded(window: AppWindow) {
-        shellHandler.postDelayed({
-            if (window.stageReady) return@postDelayed
-            if (placeholderOf(window) != null) withdrawPlaceholder(window)
-            else cardOf(window)?.let { cards.ready(it) }
-        }, SHOW_WINDOW_TIMEOUT_MS)
-    }
-
-    /** The framework says the app is ready: a launching card maximizes, and its placeholder goes once the page has drawn. */
-    override fun onStageReady(window: AppWindow) {
-        if (placeholderOf(window) != null) withdrawPlaceholder(window)
-        else cardOf(window)?.let { cards.ready(it) }
-    }
-
-    /** The app has drawn: the loading placeholder on its card can go. */
-    override fun onPageDrawn(window: AppWindow) {
-        cardOf(window)?.drawn = true
-    }
-
-    /** The card whose page is [window]; a placeholder's headless root is nobody's page. */
-    private fun cardOf(window: AppWindow): Card? = cards.cards.firstOrNull { it.window == window && !it.awaitingWindow }
+    override fun onPageLoaded(window: AppWindow) = cardHost.pageLoaded(window)
+    override fun onStageReady(window: AppWindow) = cardHost.stageReady(window)
+    override fun onPageDrawn(window: AppWindow) = cardHost.pageDrawn(window)
 
     override fun mediaBase() = mediaServer.base()
 
-    /**
-     * PalmSystem.enableFullScreenMode. The card is laid out over the bar's space at once, as
-     * LunaSysMgr resized the window at once, and the bar slides away if the card is up. Going
-     * back, the bar slides in first and the card shrinks under it when it has arrived, so
-     * nothing shows through the gap. LunaSysMgr left an emulated card's bar alone
-     * (SystemUiController::applyWindowProperties), and so does this.
-     */
     override fun orientationRequested(window: AppWindow) {
         if (cards.maximized?.window == window) applyOrientation(window)
     }
@@ -1528,19 +1407,9 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         if (requestedOrientation != want) requestedOrientation = want
     }
 
-    override fun fullScreen(window: AppWindow) {
-        if (window.emulated) return
-        val card = cards.cards.firstOrNull { it.window == window } ?: return
-        when {
-            window.fullScreen -> { card.fullScreen = true; if (cards.maximized == card) statusBar.slide(true) }
-            cards.maximized == card -> statusBar.slide(false) { if (!window.fullScreen) card.fullScreen = false }
-            else -> card.fullScreen = false
-        }
-    }
+    override fun fullScreen(window: AppWindow) = cardHost.fullScreen(window, statusBar)
 
-    override fun activate(window: AppWindow) {
-        cards.cards.firstOrNull { it.window == window }?.let { if (cards.maximized != it) cards.maximize(it) }
-    }
+    override fun activate(window: AppWindow) = cardHost.activate(window)
 
     // ---- keyboard ----
 
@@ -1860,11 +1729,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         exhibitions.forgetShown()
 
         // What the old views hold, before they go.
-        val handover = cards.handOver()
+        val handover = cardHost.handOver()
         val dashboards = notifications.dashboards
         val alerts = notifications.popups.windows
         val banners = notifications.handOverBanners()
-        val headless = (0 until hidden.childCount).map { hidden.getChildAt(it) }
         // Every page out of the old views but the cards' own, which come out as their new cards take them.
         for (w in running.values.flatten()) if (w.parent !is Card) (w.parent as? android.view.ViewGroup)?.removeView(w)
 
@@ -1873,14 +1741,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         androidAppsAt = null
         buildShell()
 
-        cards.takeOver(handover) { c ->
-            val splashing = c.splashing
-            newCard(c.release(), splashing).also { n ->
-                n.fullScreen = c.fullScreen; n.awaitingWindow = c.awaitingWindow
-                n.drawn = c.drawn; n.ready = c.ready
-            }
-        }
-        headless.forEach { hidden.addView(it, FrameLayout.LayoutParams(1, 1)) }
+        cardHost.takeOver(handover)
         exhibitions.takeWindowsBack()
         notificationHost.giveNotifications(dashboards, alerts, banners)
         // Once the pages are laid out in their new cards: the viewport is written from the card's size.
@@ -2220,7 +2081,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         // A running app brought forward ends Exhibition too (setCardWindowMaximized); leaving
         // it comes back here with the card.
         if (exhibitions.cardArrivedInExhibition()) return
-        if (card.window.appId == directApp) directShown = true
+        cardHost.maximized(card)
         pendingLoads[card.window]?.run()
         quickLaunch.cancelLaunchFeedback()
         if (justTypePanel.showing) justTypePanel.close()
@@ -2262,10 +2123,7 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
 
     override fun onCardView() {
         // Leaving an app opened from Android's home screen goes back there (HomeScreenPins).
-        if (directApp != null && directShown) {
-            directApp = null; directShown = false
-            moveTaskToBack(true)
-        }
+        if (cardHost.leavingDirect()) moveTaskToBack(true)
         hideKeyboard()
         statusBar.title = StatusBar.CARRIER_TEXT
         statusBar.setMode(if (launcherOpen) StatusBar.Mode.LAUNCHER else StatusBar.Mode.CARDS)
@@ -2487,14 +2345,10 @@ class ShellActivity : Activity(), WindowHost, CardLayer.Listener {
         /** Android's screen saver asking for Exhibition; see ExhibitionDream. */
         const val EXTRA_EXHIBITION = "exhibition"
         const val MEMORY_CHECK_MS = 10_000L
-        /** WindowedWebApp's kShowWindowTimeoutMs: how long a loaded page gets to call stageReady. */
-        const val SHOW_WINDOW_TIMEOUT_MS = 3000L
         /** How long a headless app outlives its last visible window: long enough to hear that window go. */
         const val HEADLESS_LINGER_MS = 1000L
         /** Lunacy's app that shows Android's notifications as dashboards. */
         const val ANDROID_NOTIFICATIONS_APP = "org.webosarchive.lunacy.notifications"
-        /** How long after a headless app is up its placeholder card waits for it to open one. */
-        const val PLACEHOLDER_GRACE_MS = 1000L
         const val MEMORY_CALM_MS = 30_000L
         /** Just Type's app id on a device (luna-applauncher): what its bus calls come from, and what db8 grants read to. */
         const val JUST_TYPE = "com.palm.launcher"

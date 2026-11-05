@@ -10,8 +10,10 @@ Google and Microsoft account types whose sign-in page uses OAuth on the device o
 broker, with Palm's mail services logging in with XOAUTH2 under them, unchanged
 ([oauth.md](oauth.md)). Where it stands:
 - **Gmail:** signs in (Android's browser), syncs and sends, on the Fold3. Google's client is in
-  testing (test users only, at most 100); public use needs Google's verification and a CASA
-  assessment, since full Gmail access is a restricted scope.
+  testing (test users only, at most 100); public use needs Google's restricted-scope
+  verification, which codepoet started on 2026-11-05. A security assessment (CASA, by a paid
+  lab) is tied to reaching the data through a server; signing in on the device keeps Gmail off
+  any server of ours, but the broker would put Google's tokens through one ([oauth.md](oauth.md)).
 - **Microsoft 365:** IMAP and SMTP work (Fold3). Exchange ActiveSync through Palm's own
   mojomail-eas reaches Exchange Online through three adapters in the preload (16.1 version,
   status 142 as 449, DeviceInformation): sign-in, provisioning, FolderSync, Sync and Ping proven;

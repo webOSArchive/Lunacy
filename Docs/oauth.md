@@ -127,8 +127,16 @@ address from the id_token all work. Then:
 - **Google Cloud:** an OAuth client of type Desktop app; the OAuth consent screen with the
   scopes above; the test accounts added as test users while the app is unverified (at most 100
   users). `https://mail.google.com/` is a restricted scope: public use needs Google's
-  verification and a CASA security assessment. For the broker, a Web client with
-  `https://oauth.wosa.link/callback.php` as its redirect.
+  restricted-scope verification (codepoet started it on 2026-11-05; the domain and information
+  pages wait 24 hours to be checked again). A security assessment (CASA, by an authorised lab,
+  paid at the higher tiers) is tied by Google's policy to an app that can reach the restricted
+  data through a server; whether one that keeps everything on the device is exempt isn't settled
+  in what Google publishes (its forums disagree). Lunacy's sign-in on the device has no server in
+  the Gmail path: the tokens stay on the device and Lunacy talks to Google directly. **The broker
+  is the exception:** for Google it would make the code exchange, hold the client secret and pass
+  the refresh token, which is reaching the data through a server. If Google's review raises it,
+  Google can be left off the broker (sign-in on the device only). For the broker, a Web client
+  with `https://oauth.wosa.link/callback.php` as its redirect.
 - **Microsoft Entra (Azure):** an app registration for "Accounts in any organizational directory
   and personal Microsoft accounts"; platform Mobile and desktop applications with the
   nativeclient redirect above; public client flows on; delegated permissions IMAP.AccessAsUser.All
@@ -215,7 +223,9 @@ path (Google's) is not yet tried on a device: it needs one with a browser.
   sending (16.x has no raw-MIME SendMail; Palm's 12.1 path may need a fourth adapter). Then
   choose the Microsoft account type: Exchange for work and school accounts, with Outlook.com
   told plainly it can't be added (AADSTS70011).
-- **Gmail's verification** for public use (restricted scope: Google's review and CASA).
+- **Gmail's verification** for public use: Google's restricted-scope review (started
+  2026-11-05). Whether it also asks for a security assessment turns on servers: none in the
+  on-device path; decide whether Google goes through the broker at all.
 - **The broker's apps** on oauth.wosa.link for Google and Microsoft (a Web client and secret each).
 - **Email's own "Change login settings"** opens Palm's password form for these accounts too,
   which can't sign them in. The Accounts app's page can. Email checking the template's

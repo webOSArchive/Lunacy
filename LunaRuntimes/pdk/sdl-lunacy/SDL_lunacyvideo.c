@@ -104,18 +104,25 @@ static int write_all(int fd, const void *p, size_t n)
 	return 0;
 }
 
-/* The video, audio and PDL threads all send; a message is a header and a payload written
-   separately, so one goes out whole before the next begins. */
-static pthread_mutex_t send_lock = PTHREAD_MUTEX_INITIALIZER;
+/* A message is a header and a payload written separately, so two threads sending on one socket
+   could interleave them: each socket's sends go one at a time. Only each socket's: the video,
+   audio, GL and PDL streams have sockets of their own, and a GL batch waiting for the shell to
+   read (a full socket) mustn't hold up the audio, which the game's own loop waits on. One lock
+   for every socket cost EMU7800 half its frame rate and kept Fruit Ninja's first frame off
+   the screen on the Galaxy Tab A7 Lite (0.9.2's test round). */
+#define SEND_LOCKS 64
+static pthread_mutex_t send_locks[SEND_LOCKS] = { [0 ... SEND_LOCKS - 1] = PTHREAD_MUTEX_INITIALIZER };
 
 int LUNACY_Send(int sock, uint32_t type, uint32_t a, const void *payload, uint32_t len)
 {
 	uint32_t h[3] = { type, a, len };
 	int r = 0;
 	if (sock < 0) return -1;
-	pthread_mutex_lock(&send_lock);
+	/* Two sockets can share a lock (their numbers 64 apart): that only makes them wait for each other. */
+	pthread_mutex_t *lock = &send_locks[sock % SEND_LOCKS];
+	pthread_mutex_lock(lock);
 	if (write_all(sock, h, sizeof h) < 0 || (len && write_all(sock, payload, len) < 0)) r = -1;
-	pthread_mutex_unlock(&send_lock);
+	pthread_mutex_unlock(lock);
 	return r;
 }
 

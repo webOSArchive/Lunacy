@@ -1483,8 +1483,17 @@ static struct lc_handle {
 	char handle[64];
 	lc_header_fn their_header;     /* the caller's header callback, and its data */
 	void *header_data;
+	lc_header_fn their_write;      /* the caller's body callback, and its data */
+	void *write_data;
+	char host[128];                /* the request's server, for the versions it offers */
+	long post_size;                /* the request body's size, as the caller set it */
+	int initial_provision;         /* the body is Palm's initial Provision (lc_with_device_info) */
+	unsigned char *post;           /* a body of ours set in place of the caller's */
+	int body_seen;                 /* bytes of this response's body looked at */
+	int provision;                 /* the body asked for provisioning (status 142-144) */
 } lc_handles[LC_HANDLES];
 static pthread_mutex_t lc_lock = PTHREAD_MUTEX_INITIALIZER;
+static int lc_version(const char *host, const char *asked, char *out, size_t cap);
 
 static int (*lc_real_setopt)(CURL *, int, ...);
 static struct curl_slist *(*lc_slist_append)(struct curl_slist *, const char *);
@@ -1514,11 +1523,19 @@ static struct lc_handle *lc_find(CURL *h, int make)
 static int lc_apply_headers(struct lc_handle *e)
 {
 	struct curl_slist *list = NULL;
-	for (struct curl_slist *s = e->theirs; s; s = s->next)
-		if (strncasecmp(s->data, "Authorization:", 14) != 0) list = lc_slist_append(list, s->data);
+	for (struct curl_slist *s = e->theirs; s; s = s->next) {
+		if (e->handle[0] && strncasecmp(s->data, "Authorization:", 14) == 0) continue;
+		char v[16], line[64];
+		if (strncasecmp(s->data, "MS-ASProtocolVersion:", 21) == 0 && lc_version(e->host, s->data + 21 + strspn(s->data + 21, " "), v, sizeof v)) {
+			snprintf(line, sizeof line, "MS-ASProtocolVersion: %s", v);
+			list = lc_slist_append(list, line);
+		} else list = lc_slist_append(list, s->data);
+	}
 	char line[MAILAUTH_TOKEN_MAX + 32];
-	snprintf(line, sizeof line, "Authorization: Bearer %s", e->bearer);
-	list = lc_slist_append(list, line);
+	if (e->handle[0]) {
+		snprintf(line, sizeof line, "Authorization: Bearer %s", e->bearer);
+		list = lc_slist_append(list, line);
+	}
 	memset(line, 0, sizeof line);
 	int r = lc_real_setopt(e->h, LC_CURLOPT_HTTPHEADER, list);
 	if (e->ours) lc_slist_free(e->ours);
@@ -1535,6 +1552,47 @@ static int lc_apply_headers(struct lc_handle *e)
  */
 #define LC_CURLOPT_HEADERFUNCTION 20079
 #define LC_CURLOPT_HEADERDATA 10029
+
+/*
+ * The versions the server last offered (MS-ASProtocolVersions, comma-separated). Palm's service
+ * sends some requests at a version it chose for itself (FolderSync at 12.1 whatever the server
+ * said); a version the server no longer offers - Exchange Online takes 16.1 only since March 2026
+ * - is sent as the nearest one it does, the lowest offered above it. FolderSync, Sync and the
+ * rest of mail are the same on the wire from 12.1 to 16.1.
+ */
+#define LC_SERVERS 8
+static struct { char host[128]; char offered[128]; } lc_servers[LC_SERVERS];
+
+static char *lc_offered_for(const char *host, int make)
+{
+	for (int i = 0; i < LC_SERVERS; i++) if (lc_servers[i].host[0] && strcmp(lc_servers[i].host, host) == 0) return lc_servers[i].offered;
+	if (!make) return NULL;
+	for (int i = 0; i < LC_SERVERS; i++) if (!lc_servers[i].host[0]) { snprintf(lc_servers[i].host, sizeof lc_servers[i].host, "%s", host); return lc_servers[i].offered; }
+	snprintf(lc_servers[0].host, sizeof lc_servers[0].host, "%s", host);   /* full: the oldest goes */
+	return lc_servers[0].offered;
+}
+
+/* The version to send for `asked` to host, into out; 0 when asked is fine as it is (lock held). */
+static int lc_version(const char *host, const char *asked, char *out, size_t cap)
+{
+	const char *offered = host && host[0] ? lc_offered_for(host, 0) : NULL;
+	if (!offered || !offered[0]) return 0;
+	double want = atof(asked), best = 0;
+	char bestv[16] = "";
+	const char *p = offered;
+	while (*p) {
+		const char *q = strchr(p, ','); size_t n = q ? (size_t)(q - p) : strlen(p);
+		char one[16]; if (n >= sizeof one) n = sizeof one - 1;
+		memcpy(one, p, n); one[n] = 0;
+		double v = atof(one);
+		if (v > want - 1e-6 && v < want + 1e-6) return 0;              /* offered: as it is */
+		if (v > want && (best == 0 || v < best)) { best = v; strcpy(bestv, one); }
+		p = q ? q + 1 : p + n;
+	}
+	if (!bestv[0]) return 0;
+	snprintf(out, cap, "%s", bestv);
+	return 1;
+}
 
 /* The caller's header callback for the request whose header data is this (lock taken here). */
 static lc_header_fn lc_their_header(void *data)
@@ -1554,6 +1612,18 @@ static size_t lc_header(char *buf, size_t size, size_t n, void *data)
 	size_t len = size * n;
 	static const char name[] = "MS-ASProtocolVersions:";
 	if (len > sizeof name && len < 512 && strncasecmp(buf, name, sizeof name - 1) == 0) {
+		/* The server's list, for the requests that follow to it (lc_version). */
+		pthread_mutex_lock(&lc_lock);
+		for (int i = 0; i < LC_HANDLES; i++) {
+			if (!lc_handles[i].h || lc_handles[i].header_data != data || !lc_handles[i].host[0]) continue;
+			char *offered = lc_offered_for(lc_handles[i].host, 1);
+			size_t k = 0;
+			for (const char *c = buf + sizeof name - 1; c < buf + len && k < 127; c++)
+				if (*c != ' ' && *c != '\r' && *c != '\n') offered[k++] = *c;
+			offered[k] = 0;
+			break;
+		}
+		pthread_mutex_unlock(&lc_lock);
 		/* Offered as the one version it should take: the highest the server has up to 14.1 (how
 		   the service picks from a list isn't known, and a full list gave it 2.5). */
 		char out[512], *w = out, best[16] = "";
@@ -1579,6 +1649,85 @@ static size_t lc_header(char *buf, size_t size, size_t n, void *data)
 	return theirs(buf, size, n, data);
 }
 
+/*
+ * EAS 12.1, which Palm's service works at, asked a device to provision (accept the server's
+ * security policy) with HTTP 449; from 14.0 the server says it in the reply's top-level Status
+ * (142 not provisioned, 143 policy refresh, 144 bad policy key) with HTTP 200, which the service
+ * takes for a failed command. A reply whose WBXML opens with such a status is reported to it as
+ * 449, and it provisions as it always did. Only the first bytes of a body are looked at.
+ */
+#define LC_CURLOPT_WRITEFUNCTION 20011
+#define LC_CURLOPT_WRITEDATA 10001
+
+static struct lc_handle *lc_by_write_data(void *data)
+{
+	for (int i = 0; i < LC_HANDLES; i++)
+		if (lc_handles[i].h && lc_handles[i].their_write && lc_handles[i].write_data == data) return &lc_handles[i];
+	return NULL;
+}
+
+static size_t lc_write(char *buf, size_t size, size_t n, void *data)
+{
+	pthread_mutex_lock(&lc_lock);
+	struct lc_handle *e = lc_by_write_data(data);
+	lc_header_fn theirs = e ? e->their_write : NULL;
+	if (e && e->body_seen < 48) {
+		/* WBXML: 03 01 6a 00, then a page switch and the command's tags; the status is an
+		   inline string (03 "142" 00) a few bytes in. */
+		size_t len = size * n, look = len < (size_t)(48 - e->body_seen) ? len : (size_t)(48 - e->body_seen);
+		if (e->body_seen == 0 && len >= 4 && (unsigned char)buf[0] == 0x03 && (unsigned char)buf[2] == 0x6a) {
+			for (size_t i = 4; i + 4 < look; i++)
+				if (buf[i] == 0x03 && buf[i + 1] == '1' && buf[i + 2] == '4' && buf[i + 3] >= '2' && buf[i + 3] <= '4' && buf[i + 4] == 0) e->provision = 1;
+		}
+		e->body_seen += (int)look;
+	}
+	pthread_mutex_unlock(&lc_lock);
+	return theirs ? theirs(buf, size, n, data) : size * n;
+}
+
+/*
+ * EAS 14.1 and later want a device to describe itself in its first Provision request
+ * (settings:DeviceInformation); without it Exchange Online answers status 165 and never gives a
+ * policy key. Palm's service, written for 12.1, sends only the policy type. Where the version
+ * adapter is at work (the server no longer offers the version the service asks for), that one
+ * request - Palm's exact initial Provision - gets the block, saying what this is: Lunacy, on
+ * webOS's mail service. Every other body is left as it was.
+ */
+#define LC_CURLOPT_POSTFIELDS 10015
+#define LC_CURLOPT_POSTFIELDSIZE 60
+
+static const unsigned char lc_provision_head[] = { 0x03, 0x01, 0x6a, 0x00, 0x00, 0x0e, 0x45 };
+static const unsigned char lc_provision_rest[] = { 0x46, 0x47, 0x48, 0x03,
+	'M','S','-','E','A','S','-','P','r','o','v','i','s','i','o','n','i','n','g','-','W','B','X','M','L', 0x00,
+	0x01, 0x01, 0x01, 0x01 };
+
+/* The initial Provision with DeviceInformation, into a new buffer; its length in *len. */
+static unsigned char *lc_with_device_info(size_t *len)
+{
+	static const char *const fields[][2] = {
+		{ "\x57", "Lunacy" },            /* Model */
+		{ "\x59", "Lunacy" },            /* FriendlyName */
+		{ "\x5a", "webOS" },             /* OS */
+		{ "\x5b", "English" },           /* OSLanguage */
+		{ "\x60", "Palm/1.0.1" },        /* UserAgent: what the service sends as User-Agent */
+	};
+	unsigned char *b = malloc(256), *w = b;
+	if (!b) return NULL;
+	memcpy(w, lc_provision_head, sizeof lc_provision_head); w += sizeof lc_provision_head;
+	*w++ = 0x00; *w++ = 0x12;         /* the Settings page */
+	*w++ = 0x56; *w++ = 0x48;         /* DeviceInformation, Set */
+	for (size_t i = 0; i < sizeof fields / sizeof fields[0]; i++) {
+		*w++ = (unsigned char)fields[i][0][0]; *w++ = 0x03;
+		size_t n = strlen(fields[i][1]); memcpy(w, fields[i][1], n); w += n; *w++ = 0x00;
+		*w++ = 0x01;
+	}
+	*w++ = 0x01; *w++ = 0x01;         /* /Set, /DeviceInformation */
+	*w++ = 0x00; *w++ = 0x0e;         /* back to the Provision page */
+	memcpy(w, lc_provision_rest, sizeof lc_provision_rest); w += sizeof lc_provision_rest;
+	*len = (size_t)(w - b);
+	return b;
+}
+
 int curl_easy_setopt(CURL *h, int option, ...)
 {
 	lc_init();
@@ -1591,6 +1740,43 @@ int curl_easy_setopt(CURL *h, int option, ...)
 	}
 	void *v = va_arg(ap, void *);
 	va_end(ap);
+	if (option == LC_CURLOPT_POSTFIELDSIZE || option == LC_CURLOPT_POSTFIELDS) {
+		pthread_mutex_lock(&lc_lock);
+		struct lc_handle *e = lc_find(h, 1);
+		if (e && option == LC_CURLOPT_POSTFIELDSIZE) e->post_size = (long)v;
+		/* Palm sets the body before the URL: it is marked here and swapped once the server is known. */
+		if (e && option == LC_CURLOPT_POSTFIELDS)
+			e->initial_provision = v && e->post_size == (long)(sizeof lc_provision_head + sizeof lc_provision_rest)
+				&& memcmp(v, lc_provision_head, sizeof lc_provision_head) == 0
+				&& memcmp((char *)v + sizeof lc_provision_head, lc_provision_rest, sizeof lc_provision_rest) == 0;
+		pthread_mutex_unlock(&lc_lock);
+	}
+	if (option == LC_CURLOPT_WRITEFUNCTION || option == LC_CURLOPT_WRITEDATA || option == 10002 /* URL: a new request */) {
+		pthread_mutex_lock(&lc_lock);
+		struct lc_handle *e = lc_find(h, 1);
+		if (e) {
+			if (option == LC_CURLOPT_WRITEDATA) e->write_data = v;
+			else if (option == LC_CURLOPT_WRITEFUNCTION) e->their_write = (lc_header_fn)v;
+			else {
+				e->body_seen = 0; e->provision = 0; e->host[0] = 0;
+				const char *u = v, *hs = u ? strstr(u, "://") : NULL;
+				if (hs) { hs += 3; size_t n = strcspn(hs, "/:?"); if (n < sizeof e->host) { memcpy(e->host, hs, n); e->host[n] = 0; } }
+				char ver[16];
+				if (e->initial_provision && lc_version(e->host, "12.1", ver, sizeof ver)) {
+					size_t len;
+					unsigned char *b = lc_with_device_info(&len);
+					if (b) {
+						free(e->post); e->post = b;
+						lc_real_setopt(h, LC_CURLOPT_POSTFIELDSIZE, (long)len);
+						lc_real_setopt(h, LC_CURLOPT_POSTFIELDS, (void *)b);
+					}
+				}
+				e->initial_provision = 0;
+			}
+		}
+		pthread_mutex_unlock(&lc_lock);
+		if (e && option == LC_CURLOPT_WRITEFUNCTION && v) return lc_real_setopt(h, option, (void *)lc_write);
+	}
 	if (option == LC_CURLOPT_HEADERFUNCTION || option == LC_CURLOPT_HEADERDATA) {
 		pthread_mutex_lock(&lc_lock);
 		struct lc_handle *e = lc_find(h, 1);
@@ -1637,7 +1823,11 @@ int curl_easy_setopt(CURL *h, int option, ...)
 		struct lc_handle *e = lc_find(h, 1);   /* kept even before any credentials: they may come later */
 		if (e) {
 			e->theirs = v;
-			if (e->handle[0]) { int r = lc_apply_headers(e); pthread_mutex_unlock(&lc_lock); return r; }
+			int change = e->handle[0] != 0;
+			char ver[16];
+			for (struct curl_slist *q = v; q && !change; q = q->next)
+				if (strncasecmp(q->data, "MS-ASProtocolVersion:", 21) == 0 && lc_version(e->host, q->data + 21 + strspn(q->data + 21, " "), ver, sizeof ver)) change = 1;
+			if (change) { int r = lc_apply_headers(e); pthread_mutex_unlock(&lc_lock); return r; }
 		}
 		pthread_mutex_unlock(&lc_lock);
 	}
@@ -1654,6 +1844,12 @@ int curl_easy_getinfo(CURL *h, int info, ...)
 	void *out = va_arg(ap, void *);
 	va_end(ap);
 	int r = real(h, info, out);
+	if (r == 0 && info == LC_CURLINFO_RESPONSE_CODE && out && *(long *)out == 200) {
+		pthread_mutex_lock(&lc_lock);
+		struct lc_handle *e = lc_find(h, 0);
+		if (e && e->provision) *(long *)out = 449;
+		pthread_mutex_unlock(&lc_lock);
+	}
 	if (r == 0 && info == LC_CURLINFO_RESPONSE_CODE && out && *(long *)out == 401) {
 		pthread_mutex_lock(&lc_lock);
 		struct lc_handle *e = lc_find(h, 0);
@@ -1673,6 +1869,7 @@ void curl_easy_cleanup(CURL *h)
 	struct lc_handle *e = lc_find(h, 0);
 	if (e) {
 		if (e->ours) lc_slist_free(e->ours);
+		free(e->post);
 		memset(e, 0, sizeof *e);
 	}
 	pthread_mutex_unlock(&lc_lock);

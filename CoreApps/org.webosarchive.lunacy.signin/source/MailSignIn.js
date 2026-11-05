@@ -62,7 +62,11 @@ enyo.kind({
 		{name: "redirected", kind: "PalmService", service: "palm://org.webosarchive.lunacy.oauth/", method: "redirected"},
 		{name: "forget", kind: "PalmService", service: "palm://org.webosarchive.lunacy.oauth/", method: "forget"},
 		{name: "validate", kind: "PalmService", service: "palm://com.palm.imap/", method: "validateAccount", onResponse: "validated"},
-		{name: "modifyAccount", kind: "PalmService", service: "palm://com.palm.service.accounts/", method: "modifyAccount", onResponse: "modified"}
+		{name: "modifyAccount", kind: "PalmService", service: "palm://com.palm.service.accounts/", method: "modifyAccount", onResponse: "modified"},
+		// An Exchange server's security policy, as Email's wizard handles one (CRUDAccounts.handlePasswordPolicy):
+		// the policy the service downloaded, and webOS's own prompt to set the PIN or password it asks for.
+		{name: "getPolicy", kind: "PalmService", service: "palm://com.palm.systemmanager/", method: "getSecurityPolicy", onResponse: "gotPolicy"},
+		{name: "guard", kind: "SecurityPolicyGuard", onSuccess: "policyMet", onFailure: "policyRefused", onCancel: "policyRefused"}
 	],
 
 	create: function () {
@@ -179,6 +183,13 @@ enyo.kind({
 	},
 
 	validated: function (inSender, r) {
+		// 2500: the account is fine, and its Exchange server sent a security policy to meet first
+		// (EmailAccountValidation.SECURITY_POLICY_CHECK_NEEDED; the mail services say it in
+		// mailErrorCode, as Email's wizard reads it).
+		if (r && !r.returnValue && (r.mailErrorCode === 2500 || r.errorCode === 2500)) {
+			this.$.getPolicy.call({});
+			return;
+		}
 		if (!r || !r.returnValue) {
 			this.failed(new enyo.g11n.Template($L("#{email} signed in, but its mail server didn't take the sign-in. #{why}")).evaluate({
 				email: this.email, why: (r && r.errorText) || ""}));
@@ -204,6 +215,27 @@ enyo.kind({
 			config: config
 		});
 		this.handle = null;
+	},
+
+	gotPolicy: function (inSender, r) {
+		var policy = r && r.policy;
+		var status = policy && policy.status, password = policy && policy.password;
+		if (status && status.enforced === false && password && password.enabled === true) {
+			policy.id = this.email;   // as Email's wizard does: the policy is this account's
+			this.$.guard.setPolicy(policy);
+			return;
+		}
+		this.policyMet();
+	},
+
+	// The policy is met: the account is made from what the sign-in gave, as Email's wizard does.
+	policyMet: function () {
+		this.validated(null, {returnValue: true});
+	},
+
+	policyRefused: function () {
+		this.failed($L("This account's server requires a screen lock on this device. Set one when asked to add the account."));
+		this.forgetHandle();
 	},
 
 	modified: function (inSender, r) {

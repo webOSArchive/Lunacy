@@ -140,21 +140,39 @@ address from the id_token all work. Then:
 - **The broker:** `apps/google/` and `apps/microsoft/` configs on oauth.wosa.link (the secrets
   stay on the server), and their names in `brokerApp`.
 
-**Exchange ActiveSync with OAuth (2026-11-05): built, and closed by Microsoft.** mojomail-eas
-reaches its server through libemail-common's `CurlConnection`, which gives curl `user:password`
-as `CURLOPT_USERPWD`. The preload (end of `preload.c`) takes a handle out of it and adds
-`Authorization: Bearer <token>` to the request's own headers instead (a copy of the caller's
-list); a 401 marks the token stale. It also shows the service only the highest
-`MS-ASProtocolVersions` entry up to 14.1, which it knows, since it would otherwise take a
-server's newest. Checked with real libcurl on the build machine, and on the A7 against
-Microsoft 365: the OPTIONS request with the token succeeded. But **Exchange Online has refused
-ActiveSync older than 16.1 since 2026-03-01** (Microsoft's MC1197103, announced 2025-12-15),
-and offers this client 16.1 only; Palm's mojomail-eas speaks up to 14.1, so FolderSync gets a
-bare 400 whatever version it claims. Microsoft accounts stay on IMAP and SMTP. The Bearer support
-stays for Exchange servers of one's own that still take 14.1. For Outlook.com, Microsoft also
-refuses the EAS scope for personal accounts outright (AADSTS70011, "not configured for this
-tenant"). Microsoft's token endpoint wants the scope again on the code exchange
-(`scopeOnToken`).
+**Exchange ActiveSync to Microsoft 365, on Palm's own mojomail-eas (2026-11-05).** Exchange
+Online refuses ActiveSync older than 16.1 since 2026-03-01 (MC1197103) and offers this client
+16.1 only. Palm's service negotiates the newest version offered but actually works at 12.1, so
+three narrow adapters in the preload's curl glue (`preload.c`, after the Bearer support) carry it
+to 16.1, with the binary unchanged:
+
+1. **Version.** The versions each server offers (`MS-ASProtocolVersions`, kept per host) decide:
+   a request whose `MS-ASProtocolVersion` the server no longer offers goes at the nearest offered
+   version above it (12.1 becomes 16.1 for Exchange Online). FolderSync, Sync and Ping are the same
+   on the wire from 12.1 to 16.1. A server still offering 14.1 or lower (Zoho, an Exchange of one's
+   own) is shown no newer version and gets Palm's requests unchanged.
+2. **Provisioning.** At 12.1 a server asked a device to accept its security policy with HTTP 449;
+   from 14.0 it says so in the reply's Status (142, 143, 144). Such a reply is reported to the
+   service as 449, and it provisions as it always did.
+3. **Device information.** From 14.1 the first Provision request must describe the device
+   (`settings:DeviceInformation`), or Exchange Online answers 165 and gives no policy key. Where
+   adapter 1 is at work, Palm's exact initial Provision request gets the block: Model and
+   FriendlyName "Lunacy", OS "webOS", UserAgent "Palm/1.0.1".
+
+Checked on the Galaxy Z Fold3 against `wosatester@jonandnic.onmicrosoft.com`: OAuth sign-in,
+validation, provisioning (policy fetched and acknowledged, a policy key), FolderSync (17 folders),
+Sync of every collection with advancing sync keys, and Ping. The sign-in page handles a security
+policy as Email's wizard does (`mailErrorCode` 2500: `systemmanager/getSecurityPolicy`, then
+authlib's `SecurityPolicyGuard`, webOS's "Device Password Upgrade Required"), and Lunacy meets it
+with Android's screen lock (luna-deltas A21). Tested with real libcurl on the build machine too.
+Two findings: Palm's debug log (`com.palm.eas` at debug) aborts the service while printing a
+contacts Sync request against Microsoft 365 (info level is fine), and the crash loop it caused
+got the test account throttled (503 with `X-MS-BackOffDuration`). **Open:** mail actually arriving
+in Email from Microsoft 365, contacts and calendar items, sending (16.x dropped the raw-MIME
+SendMail that 12.1 clients use), once the throttle lifts. The Microsoft account type stays on
+IMAP in the repository until then. Outlook.com: Microsoft refuses the EAS scope for personal
+accounts (AADSTS70011) and its IMAP refuses them too (above). Microsoft's token endpoint wants the
+scope again on the code exchange (`scopeOnToken`).
 
 ## Testing without the real providers
 

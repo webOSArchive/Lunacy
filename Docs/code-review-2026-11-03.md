@@ -110,24 +110,38 @@ Left by judgment:
 and §10. Measurements on the TouchPad (§11) decide B4, B5, B6, S5, S7/S8, S14 and §4.3.
 
 **Done toward 1.0 (2026-11-04):** B14 (curl's headers and connect timeout); S13 and B15 (the
-PDK runtime's lengths and allocations); the rest of §8 (2D frames, browser windows left
-pending, Luna's silent misses, `syncAccount`, the group labels, the splash pulse, the keyboard
-on detach, frames' token ranges handed out in turn, the relay's reader; `FilePicker`'s
-`url()` no longer applies, the picker being Palm's own); §10's Workbench scripts, Gradle
-(one version name, `compilerOptions`, no `afterEvaluate`), `fetch-assets.sh` (Mojo at no fuzz,
-the calendar guard, the trap), failures on stderr, `make-patch.sh` for every framework,
-`build.sh --help`, and the GL server's data folder, opcodes, `LUNACY_PDK_MEDIA` parsing and
-shared helpers; §9's transforms, `privileged` and phone-or-tablet tests; and from §3.1
-`animateValue` (18 of 24 sites), `centredBaseline`, `Easing.InCubic` and the one
-`InOutQuad`, `appIconOrDefault`, `show/hideKeyboard` and `DialogPaints`.
+PDK runtime's lengths and allocations); all of §8 (2D frames, browser windows left pending,
+Luna's silent misses, `syncAccount`, the group labels, the splash pulse, the keyboard on
+detach, frames' token ranges handed out in turn, the relay's reader; `FilePicker`'s `url()` no
+longer applies, the picker being Palm's own); all of §10 (the Workbench scripts, Gradle's one
+version name and `compilerOptions`, Mojo's patches at no fuzz, failures on stderr,
+`make-patch.sh` for every framework, the GL server's data folder, one protocol header and the
+shared helpers); §9's tests (28: the transforms, `privileged`, phone-or-tablet,
+`KineticScroll.plan`, `EmailDocument`, WebSQL's ATTACH); §3.1's `animateValue` (18 of 24
+sites), `centredBaseline`, the easings, `appIconOrDefault`, `show/hideKeyboard`,
+`DialogPaints`, `AndroidIconCache`, `Sounds.start`, `LaunchGlow`, `Flick` and `DashboardRow`;
+and §2: `Launcher` (`LauncherStore`, `RemoveDialog`, `KineticScroll`; 1,268 lines to 1,030),
+`ActivityManager` (`ActivitySchedule`, `TriggerMatch`, `ActivityRequirements`, the lookup
+and constants; 1,101 to 885), `BrowserViews` (`EmailDocument`, `SiteTrust`) and `compat.js`
+(four files by position: `input.js`, `engine.js`, `media.js`, `layout.js`).
 
-Left in §3.1 by judgment: the rename fields (they differ in size, colour, cursor and back
-key), the two-state sprites (each site picks its half its own way), and the two-line labels
-- the launcher elides each word on a phone and a group's panel doesn't, so one function
-would change what the panel shows there, which is codepoet's call. Still to do: §3.1's
-`Hold`, `Flick`, `DashboardRow`, `ScrollMasks`, `AndroidIconCache`, `Sounds.start`,
-`LaunchGlow` and the drawer's animator (each to be checked frame by frame), then §2's
-splits and `compat.js` last.
+Left by judgment, each for a reason found in the code:
+- §2.1's `AppLifecycle` and `ShellChrome`: the lifecycle's members use 43 of the shell's
+  others and share the card layer with the chrome; one owner for the card layer first.
+- §2.2's 13 phone-or-tablet metrics: each pair is one line, the 13 in one block.
+- §2.5's `HeaderStrip`: its functions run on the browser's own scroll, scale, clip and holes.
+- §3.1's `Hold` (each long press is one post and one remove around its own runnable), the
+  rename fields (they differ in size, colour, cursor and back key), the two-state sprites
+  (each site picks its half its own way), `ScrollMasks` (a shared class would change how one
+  of the two is driven, against its measured fade) and the drawer's animator (its height is
+  worked out per frame so a resize can retarget it mid-way; the timing is Drawer.qml's).
+- The two-line labels, codepoet's call: the launcher elides each word on a phone and a
+  group's panel doesn't.
+- §9's db8 query translation needs SQLite off the device (Robolectric), a new test
+  dependency, codepoet's call.
+- Seen while checking, not caused by this work: an activity's persistence can meet a db8
+  revision mismatch at start ("not persisted", the webOS Chat activities), timing-dependent;
+  Memos' stageDeactivated throws on null displayText.
 
 ---
 

@@ -321,8 +321,13 @@ open class AppWindow(
         if (scheme in IN_PAGE_SCHEMES) return false
         if ((scheme == "https" || scheme == "http") && u.host?.endsWith(AppServer.HOST_SUFFIX) == true) return false
         Log.i(AppServer.TAG, "[$appId] navigation to $url handed to applicationManager/open")
-        host.bus.call(appId, "palm://com.palm.applicationManager/open", JSONObject().put("target", url).toString()) {}
+        openElsewhere(url)
         return true
+    }
+
+    /** [url] opened by the system as this app asked: applicationManager/open, in the app's name. */
+    fun openElsewhere(url: String) {
+        host.bus.call(appId, "palm://com.palm.applicationManager/open", JSONObject().put("target", url).toString()) {}
     }
 
     /** The browser views over the page see every touch, after it is dispatched (BrowserViews.touched). */

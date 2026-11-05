@@ -42,5 +42,19 @@ object EmailDocument {
     fun escape(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     fun unescape(s: String) = s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
         .replace(Regex("&#(\\d+);")) { m -> m.groupValues[1].toIntOrNull()?.takeIf { Character.isValidCodePoint(it) }?.let { String(Character.toChars(it)) } ?: m.value }.replace("&amp;", "&")
+    /**
+     * Every link in the message opened where links go, not in a window of its own: a link's
+     * target (and a <base> that sets one) taken off. A message is shown with JavaScript off,
+     * as Email asks, and Android's engine then drops a click on a target="_blank" link - no new
+     * window is asked for - where the reference TouchPad's Email opened it in the Web app as it
+     * did any other link (codepoet, 2026-11-05). Without its target the link is an ordinary
+     * one, and goes through the view's redirects like the rest.
+     */
+    fun sameWindowLinks(doc: String): String =
+        LINK_TAG.replace(doc) { m -> TARGET_ATTR.replace(m.value, "") }
+
+    private val LINK_TAG = Regex("<(?:a|area|base)\\b[^>]*>", RegexOption.IGNORE_CASE)
+    private val TARGET_ATTR = Regex("\\s+target\\s*=\\s*(?:\"[^\"]*\"|'[^']*'|[^\\s>]+)", RegexOption.IGNORE_CASE)
+
     fun linkify(s: String) = s.replace(Regex("\\b(https?://[^\\s<>\"]+)")) { "<a href=\"${it.value}\">${it.value}</a>" }
 }

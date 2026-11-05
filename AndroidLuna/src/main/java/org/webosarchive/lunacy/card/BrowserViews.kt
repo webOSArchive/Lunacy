@@ -642,6 +642,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                     EmailDocument.linkify(EmailDocument.escape(text)) + "</div></body></html>" else text.ifEmpty { "<html><head></head><body></body></html>" }
                 for (k in cids.keys()) if (k.isNotEmpty()) doc = doc.replace(k, "file://" + cids.optString(k))
                 doc = EmailDocument.touchpadFonts(doc)
+                doc = EmailDocument.sameWindowLinks(doc)
                 doc = EmailDocument.insertAfter(doc, "<head[^>]*>", FONTS_LINK + head) ?: "<head>$FONTS_LINK$head</head>$doc"
                 // The message is laid out at the view's own width, as webOS's message view did
                 // and a current WebView does by itself. Without a viewport an older engine (the
@@ -667,6 +668,33 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
 
         /** The page the view is showing, for its loads ([Client.shouldInterceptRequest] runs off the main thread). */
         @Volatile private var topUrl: String? = null
+
+        /**
+         * A navigation the view's redirects claim, or that isn't a web page: handed to the app
+         * (urlRedirected), which opens it the way webOS did (applicationManager/open), as the
+         * system's redirects did. True if it was.
+         */
+        internal fun redirected(url: String): Boolean {
+            val scheme = Uri.parse(url).scheme?.lowercase().orEmpty()
+            redirects.firstOrNull { it.second && it.first.containsMatchIn(url) }?.let {
+                owner.send(id, "urlRedirected", url, it.third); return true
+            }
+            if (scheme !in setOf("http", "https", "data", "about", "javascript", "blob", "file")) {
+                owner.send(id, "urlRedirected", url, ""); return true
+            }
+            return false
+        }
+
+        /**
+         * A link that asked for a window of its own, in an app that isn't the Web app: where the
+         * view's links go, and a web page the view's redirects don't claim to the Web app.
+         */
+        private fun followAsLink(url: String) {
+            Log.i(AppServer.TAG, "[${window.appId}] browser view: $url wanted a new window; followed as a link")
+            if (redirected(url)) return
+            val scheme = Uri.parse(url).scheme?.lowercase().orEmpty()
+            if (scheme == "http" || scheme == "https") window.openElsewhere(url)
+        }
 
         inner class Client : WebViewClient() {
             override fun onScaleChanged(view: WebView, oldScale: Float, newScale: Float) {
@@ -720,18 +748,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 android.webkit.WebResourceResponse("text/plain", null, 404, "Not Found", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0)))
 
             @Suppress("OVERRIDE_DEPRECATION")
-            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
-                val scheme = Uri.parse(url).scheme?.lowercase().orEmpty()
-                redirects.firstOrNull { it.second && it.first.containsMatchIn(url) }?.let {
-                    owner.send(id, "urlRedirected", url, it.third); return true
-                }
-                // Anything that isn't a web page is handed to the app, which opens it the way
-                // webOS did (applicationManager/open), as the system's redirects did.
-                if (scheme !in setOf("http", "https", "data", "about", "javascript", "blob", "file")) {
-                    owner.send(id, "urlRedirected", url, ""); return true
-                }
-                return false
-            }
+            override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = redirected(url)
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 topUrl = url
                 owner.send(id, "loadStarted")
@@ -788,6 +805,34 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
             override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
                 Log.i(AppServer.TAG, "[${owner.window.appId}] browser view: a new window asked for (gesture $isUserGesture, popups ${if (blockPopups) "blocked" else "allowed"})")
                 if (blockPopups && !isUserGesture) return false
+                // Only the Web app opens a page in a window of its own (createPage, below). In any
+                // other app's view - an email's - a link to a new window is a link: it goes where
+                // the view's links go, so a web page opens in the Web app, as the reference
+                // TouchPad's Email did with a target=_blank link (codepoet, 2026-11-05).
+                if (owner.window.appId != ApplicationManager.BROWSER) {
+                    val hit = view.hitTestResult
+                    val tapped = hit.extra?.takeIf { hit.type == WebView.HitTestResult.SRC_ANCHOR_TYPE }
+                    if (tapped != null) { followAsLink(tapped); return false }
+                    // Not a plain link (window.open, an image's link): the first address the
+                    // new window would load is the link, caught by a view that loads nothing.
+                    val catcher = WebView(context)
+                    var caught = false
+                    fun caught(v: WebView, url: String) {
+                        if (caught) return
+                        caught = true
+                        v.stopLoading()
+                        main.post { followAsLink(url); v.destroy() }
+                    }
+                    catcher.webViewClient = object : android.webkit.WebViewClient() {
+                        @Suppress("OVERRIDE_DEPRECATION")
+                        override fun shouldOverrideUrlLoading(v: WebView, url: String): Boolean { caught(v, url); return true }
+                        override fun onPageStarted(v: WebView, url: String, favicon: Bitmap?) { caught(v, url) }
+                    }
+                    (resultMsg.obj as WebView.WebViewTransport).webView = catcher
+                    resultMsg.sendToTarget()
+                    main.postDelayed({ if (!caught) { caught = true; catcher.destroy() } }, PENDING_MS)
+                    return true
+                }
                 val child = Browser(context, owner)
                 val identifier = "lunacy-page-" + synchronized(BrowserViews) { nextPage++ }
                 (resultMsg.obj as WebView.WebViewTransport).webView = child

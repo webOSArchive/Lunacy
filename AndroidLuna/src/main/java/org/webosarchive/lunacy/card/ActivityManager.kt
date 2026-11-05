@@ -287,7 +287,10 @@ class ActivityManager(private val context: Context, private val power: Power) {
     private fun subscribe(a: Activity, call: Bus.Call): Sub {
         val s = Sub(call, call.params.optBoolean("detailedEvents"), busId(call))
         a.subs += s
-        call.onCancel { dropped(a, s) }
+        // Posted, even on the main thread: a call cancelled already runs this at once, and
+        // create hasn't made the subscription the activity's parent yet - dropped then would
+        // leave it parented by a subscription that is gone, never to be cancelled.
+        call.onCancel { main.post { dropped(a, s) } }
         return s
     }
 
@@ -770,9 +773,14 @@ class ActivityManager(private val context: Context, private val power: Power) {
      * sent the same revision, and db8 refused the second ("revision mismatch"), after which
      * every save of that record failed.
      */
-    private fun persist(a: Activity, done: () -> Unit = {}) {
-        val record = a.record
-        if (record.saving) { record.waiting += { persist(a, done) }; return }
+    private fun persist(a: Activity, done: () -> Unit = {}) = persistTo(a.record, a, done)
+
+    private fun persistTo(record: DbRecord, a: Activity, done: () -> Unit) {
+        // A save waits on the record it was made for, whatever happens to the activity meanwhile.
+        if (record.saving) { record.waiting += { persistTo(record, a, done) }; return }
+        // Replaced while it waited (create gave the record to its successor and it a new one):
+        // the successor saves the record; this one is answered, and the queue goes on.
+        if (a.record !== record) { done(); record.waiting.removeFirstOrNull()?.invoke(); return }
         record.saving = true
         val rep = toJson(a, detail = true, subscribers = false, current = false, persisting = true).put("_kind", KIND)
         record.id?.let { rep.put("_id", it) }

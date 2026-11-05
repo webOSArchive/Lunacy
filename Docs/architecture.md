@@ -1583,8 +1583,10 @@ process, turns the services' password logins into XOAUTH2 at the connection
 (`LunaRuntimes/pdk/libpreload/mailauth.h`), asking the service for the current token over the
 process's luna-send link. Signing in is the `org.webosarchive.lunacy.signin` page, the Google and
 Microsoft templates' `customUI`: the provider's page in its WebView or Android's browser, or the
-broker (oauth.wosa.link) for an engine too old. **Ratchet item:** the tokens are kept in a file
-in Lunacy's private storage, as the key manager's keys are.
+broker (oauth.wosa.link) for an engine too old. Exchange ActiveSync goes the same way through
+curl: the preload swaps the Basic credentials for a Bearer token, and three adapters let Palm's
+12.1-era mojomail-eas reach Exchange Online, which takes 16.1 only (oauth.md). **Ratchet item:**
+the tokens are kept in a file in Lunacy's private storage, as the key manager's keys are.
 
 ## Calendar
 

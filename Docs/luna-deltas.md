@@ -822,5 +822,6 @@ now ([oauth.md](oauth.md)). What a person sees instead:
   they're signed in. That is the visible difference to decide on.
 - After that, Accounts' own Account Settings and Create Account, as for any account. A sign-in
   that stops working shows Email's own "Check your login and password"; the account's page in
-  Accounts has Sign In Again.
+  Accounts has Sign In Again. An Exchange server's security policy brings webOS's own "Device
+  Password Upgrade Required", as Email's wizard does, met by Android's screen lock.
 

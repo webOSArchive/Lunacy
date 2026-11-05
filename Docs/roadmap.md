@@ -5,12 +5,27 @@ and a phase is finished when its criterion is met, not when its task list runs o
 
 ## Where things stand (2026-11-05)
 
-**OAuth for mail, for 0.9.5 (started 2026-11-05):** Google and Microsoft account types whose
-sign-in page uses OAuth on the device or through the broker, and Palm's mail services logging in
-with XOAUTH2 under them, unchanged ([oauth.md](oauth.md)). Working end to end against a stand-in
-provider on the A7 Lite (sign-in, sync, send, refresh, revocation and signing in again, the
-broker). **Waiting on the Google and Microsoft client registrations** (codepoet) for the real
-providers; then Exchange over OAuth.
+**OAuth for mail, for 0.9.5 (started 2026-11-05, pushed through 25d82d7; b64149a local):**
+Google and Microsoft account types whose sign-in page uses OAuth on the device or through the
+broker, with Palm's mail services logging in with XOAUTH2 under them, unchanged
+([oauth.md](oauth.md)). Where it stands:
+- **Gmail:** signs in (Android's browser), syncs and sends, on the Fold3. Google's client is in
+  testing (test users only, at most 100); public use needs Google's verification and a CASA
+  assessment, since full Gmail access is a restricted scope.
+- **Microsoft 365:** IMAP and SMTP work (Fold3). Exchange ActiveSync through Palm's own
+  mojomail-eas reaches Exchange Online through three adapters in the preload (16.1 version,
+  status 142 as 449, DeviceInformation): sign-in, provisioning, FolderSync, Sync and Ping proven;
+  mail, contacts and calendar content and sending wait on Microsoft's throttling of the test
+  account (2026-11-05). The account type stays IMAP in the repository until EAS is proven whole.
+- **Outlook.com (personal):** Microsoft's own bug: its IMAP refuses OAuth logins for personal
+  accounts ("authenticated but not connected"), reproduced outside Lunacy; the EAS scope is
+  refused for them too.
+- **Next:** finish EAS for Microsoft 365 (content, then sending: 16.x dropped raw-MIME SendMail);
+  choose the Microsoft account type (Exchange for work and school accounts); the broker's
+  `google` and `microsoft` apps on oauth.wosa.link; codepoet's call on Email's "Change login
+  settings"; luna-deltas B23. Herrie's mojomail-legacy-eas rewrite was looked at and isn't usable
+  yet (a skeleton: no password sent, blocking network calls, stubbed sends); it builds here with
+  the PDK's GCC 4.3.3 and HP's CE build-support headers.
 
 **0.9.2** (2026-11-05), a point release for testers: the code review's clean-up and webOS CE's
 emoji key. Everything since 0.9.1:

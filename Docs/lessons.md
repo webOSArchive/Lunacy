@@ -160,3 +160,16 @@ feel is a requirement, not polish.**
   shell crashed. Anything the shell hosts per app has to be per app all the way down.
 - **Sweep every PDK app after any runtime change.** The four fixes for the Broken folder
   passed on the games they were for; the full sweep caught Fruit Ninja breaking.
+- **A test server has to have the production server's features, or it hides bugs.** The OAuth
+  login translator held each outgoing line until it could rule out a login; the stand-in IMAP
+  server never offered COMPRESS, Gmail does, and a compressed command has no newline, so every
+  Gmail sync hung - and every other compressing account with it - on the first real test.
+- **Believe the wire, not the program's log.** Palm's Exchange service logged "protocol version
+  16.1" while every request it sent said 12.1. A ten-line logger in the curl hook showed it at
+  once; hours could have gone into the 16.1 differences that weren't the problem.
+- **A server's answer to someone else's client is the cheapest proof.** Outlook.com's IMAP
+  refused Lunacy's XOAUTH2; a plain Python login with a fresh token got the same refusal, which
+  moved the bug to Microsoft in one step.
+- **Debug logging is code too.** Palm's own EAS debug printer aborts on a Microsoft 365 reply;
+  the crash loop it caused got the test account throttled for an hour.
+

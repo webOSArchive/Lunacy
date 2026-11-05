@@ -209,13 +209,20 @@ path (Google's) is not yet tried on a device: it needs one with a browser.
 ## Open
 
 
-- Client registrations (above), then the real providers: Gmail, Outlook.com, Microsoft 365.
+- **Microsoft 365 over Exchange:** retry once Microsoft's throttling of the test account lifts
+  (it followed a crash loop from Palm's debug log; keep `com.palm.eas` at info): mail arriving
+  (a test message was sent to it from the Gmail account), contacts, calendar, Ping push, then
+  sending (16.x has no raw-MIME SendMail; Palm's 12.1 path may need a fourth adapter). Then
+  choose the Microsoft account type: Exchange for work and school accounts, with Outlook.com
+  told plainly it can't be added (AADSTS70011).
+- **Gmail's verification** for public use (restricted scope: Google's review and CASA).
+- **The broker's apps** on oauth.wosa.link for Google and Microsoft (a Web client and secret each).
 - **Email's own "Change login settings"** opens Palm's password form for these accounts too,
   which can't sign them in. The Accounts app's page can. Email checking the template's
   `customUI` there would be a change to Email (rule 5's exceptions are codepoet's).
 - The browser path's look: Android's browser appearing mid-sign-in is a visible difference
   (luna-deltas B23).
-- EAS with OAuth (above). Yahoo (app passwords already work with plain IMAP).
+- Yahoo (app passwords already work with plain IMAP).
 - webOS CE: the translation is a few hundred lines of C with no Lunacy dependency but its token
   source; CE could carry it in its mail shim with the token from a service of its own, and use
   the same sign-in page and templates with the broker.

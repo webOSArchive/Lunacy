@@ -974,8 +974,12 @@ class Db8(private val service: String, file: File?,
             done = true
             work {
                 runCatching { purgeDeleted(PURGE_WINDOW_DAYS) }.onFailure { Log.w(AppServer.TAG, "$service: purge failed", it) }
-                bus.call(service, "palm://com.palm.activitymanager/complete", JSONObject(ids.toString()).put("restart", true).toString(), privateBus = true) {
-                    main.post { adopt?.cancel() }
+                // The bus is the main thread's (Bus.mainOnly): a debug build stopped the process
+                // here, on db8's worker, once a day.
+                main.post {
+                    bus.call(service, "palm://com.palm.activitymanager/complete", JSONObject(ids.toString()).put("restart", true).toString(), privateBus = true) {
+                        main.post { adopt?.cancel() }
+                    }
                 }
             }
         }

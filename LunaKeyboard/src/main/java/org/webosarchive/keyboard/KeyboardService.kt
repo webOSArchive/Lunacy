@@ -359,6 +359,23 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
 
     // --- What the keyboard reports ----------------------------------------------------------
 
+    /**
+     * webOS CE's emoji key (TabletKeyboard::handleKey): whatever was being typed is left as it
+     * is - the shortcuts and corrections forget it rather than act on it - and the emoji goes
+     * in whole, surrogate pairs and variation selector together.
+     */
+    override fun onEmoji(text: String) {
+        val ic = currentInputConnection ?: return
+        flushPending()
+        overlay?.hideBubble()
+        if (selEnd >= 0 && word.isEmpty()) dropMarksFrom(selEnd)
+        word.setLength(0); wordEnd = -1
+        own()
+        ic.commitText(text, 1)
+        undo = null
+        updateCaps()
+    }
+
     override fun onText(text: String) {
         val ic = currentInputConnection ?: return
         flushPending()

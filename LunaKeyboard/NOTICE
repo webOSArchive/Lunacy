@@ -29,3 +29,10 @@ Text Assist (auto-correction):
     (English, OpenSubtitles 2018), licensed CC BY-SA 4.0. The word list is therefore also
     available under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/).
 - The correction's art and sound (src/main/assets/assist) are the TouchPad's; see their NOTICE.
+
+The emoji key (webOS CE 3.2):
+
+- The emoji images, src/main/assets/emoji, are OpenMoji's (https://openmoji.org), CC BY-SA 4.0,
+  release 17.0.0, resized. See src/main/assets/emoji/NOTICE.
+- The emoji layer is ported from LunaCE's Src/ime/TabletKeyboard.cpp and TabletKeymap.cpp
+  (commits edc7408, eb6dfc6, bfce491), Apache 2.0; its list, keyboard-emoji.txt, is webOS CE's.

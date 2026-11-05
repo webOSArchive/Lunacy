@@ -103,6 +103,23 @@ character for every 15 px of travel, and the four arrows around it light up in t
 it is being pushed, fading back over the next second once it is let go. Here it moves the
 cursor with arrow-key events, so it works in any app's text field.
 
+## The emoji key
+
+webOS CE 3.2's, ported from LunaCE (edc7408, eb6dfc6, bfce491). The key beside the symbol key,
+where the language key was, wears a smiley in the function keys' gray. A tap turns the
+character keys of the top four rows into emoji: 38 to a page, four pages, in CE's own order
+(its `keyboard-emoji.txt`). Shift turns the page and reads "1/4"; the emoji key reads "ABC" and
+goes back to the letters, and so do the symbol key (to the symbols) and a new text field. Space,
+Return, Backspace and the bottom row's punctuation work as ever, and there are no accents to
+hold for over an emoji. An emoji goes in whole, and the word before it is left as typed, not
+corrected, as CE's keyboard leaves it.
+
+The keys draw OpenMoji's art, as CE's do, three quarters of the key's shorter side. CE draws
+OpenMoji's 72 px images; these are 144 px, made from the same release's large ones
+(`tools/emoji-images.py`), so they stay sharp at scale 2. CE's emoji key holds a pop-up of the
+language's other layouts and the next language; with only US QWERTY here there is nothing to
+list, and CE shows no pop-up for an empty list either.
+
 ## The press-and-hold balloon
 
 The balloon has to reach above the keyboard: two lines of accents are 150 px tall and a
@@ -207,9 +224,8 @@ away first. And replacing the APK deselects it, so `ime set` it again afterwards
 
 ## Not yet
 
-- **Only US QWERTY.** LunaCE ships fourteen keymaps; the rest are a port away. While there
-  is one layout the symbol key is two units wide, which is what webOS did - the second unit
-  is the language key's, and it only appears when there is a language to switch to.
+- **Only US QWERTY.** LunaCE ships fourteen keymaps; the rest are a port away, and with them
+  the emoji key's hold pop-up of layouts and languages.
 - **One height.** Resizing is deliberately gone, for the reasons above. Restoring it means
   accepting resampled glyphs, or a second set of art.
 - **No suggestion bar**, so no auto-correct and no learned words.
@@ -220,4 +236,4 @@ away first. And replacing the APK deselects it, so `ime set` it again afterwards
 ## Licence and provenance
 
 See [NOTICE](NOTICE). The art and the ported layout are LunaCE's, Apache 2.0; the Prelude
-fonts ship as abandonware.
+fonts ship as abandonware; the emoji are OpenMoji's, CC BY-SA 4.0.

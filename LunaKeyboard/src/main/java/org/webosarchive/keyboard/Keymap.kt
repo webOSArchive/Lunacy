@@ -15,6 +15,8 @@ object Fn {
     const val SYMBOL = -5
     const val HIDE = -6
     const val TRACKBALL = -7
+    /** webOS CE's emoji key: tap for the emoji layer, tap again ("ABC") for the letters. */
+    const val EMOJI = -8
 
     fun isFunction(k: Int) = k < 0
 }
@@ -100,9 +102,11 @@ object Keymap {
         ),
         arrayOf(
             fn(1f, Fn.TAB),
-            // Two units wide while only one layout is installed: webOS gave the second unit to
-            // the language key as soon as there was more than one (TabletKeymap::updateLanguageKey).
-            fn(2f, Fn.SYMBOL),
+            // webOS CE 3.2: the language key's unit is the emoji key's, whatever is installed
+            // (TabletKeymap::updateLanguageKey, LunaCE edc7408). Palm's webOS gave the symbol key
+            // both units while only one layout was installed.
+            fn(1f, Fn.SYMBOL),
+            fn(1f, Fn.EMOJI),
             k(5f, ' '),
             k(1f, '\'', '"', "'\"`‘’“”"),
             k(1f, '-', '_', "-_±¬"),

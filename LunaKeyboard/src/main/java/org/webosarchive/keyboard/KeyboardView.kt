@@ -42,6 +42,8 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
     /** What the keyboard needs from whatever is hosting it. */
     interface Host {
         fun onText(text: String)
+        /** An emoji key: [text] goes in whole, and the word before it is left as typed. */
+        fun onEmoji(text: String)
         fun onBackspace(word: Boolean)
         fun onEnter()
         fun onTab()
@@ -139,6 +141,27 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
         return if (letter) symbols else shift == Shift.ONCE
     }
 
+    /**
+     * webOS CE's emoji layer (LunaCE edc7408): the character keys of the top four rows type
+     * emoji, a page at a time; shift turns the page, and the emoji key, reading "ABC", goes back.
+     */
+    private val emoji = Emoji(context)
+    private var emojiMode = false
+    private var emojiPage = 0
+    /** Each emoji key's place on a page, in reading order; an edge zone shares its key's. */
+    private val emojiSlot = HashMap<Zone, Int>()
+    private var emojiPerPage = 0
+    private val emojiPages get() = if (emojiPerPage > 0) Math.max(1, (emoji.all.size + emojiPerPage - 1) / emojiPerPage) else 1
+
+    /** What [z] types on the emoji layer, or null: not an emoji key, or past the last emoji. */
+    private fun emojiFor(z: Zone): String? {
+        if (!emojiMode) return null
+        val slot = emojiSlot[z] ?: return null
+        return emoji.all.getOrNull(emojiPage * emojiPerPage + slot)
+    }
+
+    private fun leaveEmoji() { emojiMode = false; emojiPage = 0 }
+
     private var pressed: Key? = null
 
     /** The press-and-hold popup: the characters offered, and which one the finger is over. */
@@ -180,6 +203,16 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
                 left = right
             }
             top = bottom
+        }
+        // TabletKeymap::updateEmojiSlots: every character key of the top four rows, numbered in
+        // reading order, then each edge zone given the slot of the key it types.
+        emojiSlot.clear()
+        emojiPerPage = 0
+        for (z in zones) if (z.row < Keymap.rows.size - 1 && z.key.weight > 0 && !Fn.isFunction(z.key.main)) emojiSlot[z] = emojiPerPage++
+        for ((i, z) in zones.withIndex()) if (z.row < Keymap.rows.size - 1 && z.key.weight < 0) {
+            listOfNotNull(zones.getOrNull(i - 1), zones.getOrNull(i + 1))
+                .firstOrNull { it.row == z.row && it.key.main == z.key.main && emojiSlot[it] != null }
+                ?.let { emojiSlot[z] = emojiSlot[it]!! }
         }
     }
 
@@ -235,11 +268,43 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
         val box = RectF(z.rect.left, z.rect.top, z.rect.right, z.rect.bottom - 4)
         if (down) box.offset(0f, 2f)
 
+        if (drawEmojiLayer(c, z, box)) return
         icon(z)?.let { name ->
             art.image(name)?.let { Art.centred(c, it, box.centerX(), box.centerY(), paint) }
             return
         }
         drawCap(c, z, box)
+    }
+
+    /**
+     * The emoji layer's caps, as TabletKeyboard::drawKeyCap drew them: an emoji three quarters
+     * of the key's shorter side, centred; shift's page ("1/4") and the emoji key's "ABC" in the
+     * function keys' gray; and, off the layer, the emoji key's own smiley in that gray. True if
+     * the cap was drawn here.
+     */
+    private fun drawEmojiLayer(c: Canvas, z: Zone, box: RectF): Boolean {
+        if (z.key.main == Fn.EMOJI) {
+            if (emojiMode) label(c, "ABC", box, functionColor, 22f, true)
+            else if (!drawEmoji(c, Emoji.KEY_FACE, box, true)) label(c, Emoji.KEY_FACE, box, functionColor, 22f, false)
+            return true
+        }
+        if (!emojiMode) return false
+        if (z.key.main == Fn.SHIFT) { label(c, "${emojiPage + 1}/$emojiPages", box, functionColor, 22f, true); return true }
+        if (emojiSlot[z] == null) return false
+        val e = emojiFor(z) ?: return true
+        if (!drawEmoji(c, e, box, false)) label(c, e, box, activeColor, 26f, false)
+        return true
+    }
+
+    private val emojiPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+
+    private fun drawEmoji(c: Canvas, e: String, box: RectF, gray: Boolean): Boolean {
+        val size = Math.min(box.width(), box.height()) * 3 / 4
+        // Made at the device's own pixel size, so the canvas's scale doesn't resample it again.
+        val bmp = emoji.image(e, Math.round(size * scale), gray) ?: return false
+        val l = Math.round(box.centerX() - size / 2).toFloat(); val t = Math.round(box.centerY() - size / 2).toFloat()
+        c.drawBitmap(bmp, null, RectF(l, t, l + bmp.width / scale.toFloat(), t + bmp.height / scale.toFloat()), emojiPaint)
+        return true
     }
 
     private fun icon(z: Zone): String? = when (z.key.main) {
@@ -505,7 +570,9 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
                     host.onBackspace(false)
                     handler.postDelayed(repeat, FIRST_REPEAT)
                 }
-                if (z.key.extended != null) handler.postDelayed(longPress, HOLD_FOR_EXTENDED)
+                // No accents over the emoji layer's keys, nor over its page key (TabletKeymap::getExtendedChars).
+                val emojiKey = emojiMode && (emojiSlot[z] != null || z.key.main == Fn.SHIFT)
+                if (z.key.extended != null && !emojiKey) handler.postDelayed(longPress, HOLD_FOR_EXTENDED)
                 invalidate()
             }
             MotionEvent.ACTION_MOVE -> {
@@ -551,8 +618,19 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
             if (shift == Shift.ONCE) shift = Shift.OFF
             return
         }
-        val key = pressedZone?.key ?: return
+        val zone = pressedZone ?: return
+        val key = zone.key
+        if (emojiMode) {
+            if (emojiSlot[zone] != null) { emojiFor(zone)?.let { host.onEmoji(it) }; return }
+            if (key.main == Fn.SHIFT) { emojiPage = (emojiPage + 1) % emojiPages; return }
+        }
         when (key.main) {
+            Fn.EMOJI -> {
+                // The layer starts on its first page, with symbols and shift off.
+                if (emojiMode) leaveEmoji() else { emojiMode = true; emojiPage = 0 }
+                symbols = false; shift = Shift.OFF
+                return
+            }
             Fn.SHIFT -> {
                 val now = System.currentTimeMillis()
                 shift = when {
@@ -564,7 +642,8 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
                 autoCap = false
                 return
             }
-            Fn.SYMBOL -> { symbols = !symbols; return }
+            // The symbol key leaves the emoji layer for the symbols.
+            Fn.SYMBOL -> { leaveEmoji(); symbols = !symbols; return }
             Fn.BACKSPACE -> return          // already sent on the way down, and repeated since
             Fn.RETURN -> { host.onEnter(); return }
             Fn.TAB -> { host.onTab(); return }
@@ -595,6 +674,7 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
     /** Called when the field being edited changes, so the keyboard starts from a clean state. */
     fun reset() {
         shift = Shift.OFF; symbols = false; autoCap = false
+        leaveEmoji()
         hideExtended()
         pressed = null; pressedZone = null
         trackball = false; trackVX = 0f; trackVY = 0f

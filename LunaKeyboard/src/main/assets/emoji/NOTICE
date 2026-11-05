@@ -1,0 +1,9 @@
+Emoji images: OpenMoji (https://openmoji.org), the open-source emoji and icon project.
+License: CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/).
+
+Release 17.0.0, color/618x618, resized to 144 x 144 and saved with a 256-colour palette;
+files renamed to their code points without U+FE0F. Made by LunaKeyboard/tools/emoji-images.py.
+The same emoji webOS CE's keyboard draws from OpenMoji's 72 x 72 set.
+
+keyboard-emoji.txt, the emoji layer's list in key order, is webOS CE's: packages/ce-emoji in
+https://github.com/webOSArchive/webOS-Community-Edition (commit 8aaa426).

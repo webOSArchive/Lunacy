@@ -331,9 +331,16 @@ open class AppWindow(
     }
 
     /** The browser views over the page see every touch, after it is dispatched (BrowserViews.touched). */
-    /** A WebView keeps key events for its page, which would leave a page's dialog without Backspace. */
-    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean =
-        (focusedChild as? PageDialog)?.dispatchKeyEvent(event) ?: super.dispatchKeyEvent(event)
+    /**
+     * A WebView keeps key events for its page, so the views over it that have the focus get them
+     * here: a page's dialog (Backspace), and a native browser view (a hardware keyboard, or adb,
+     * typing into the page it shows - an account's sign-in page, the Web app's pages). The
+     * on-screen keyboard reached a browser view all along, through its own input connection.
+     */
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean = when (val f = focusedChild) {
+        is PageDialog, is BrowserViews.Browser -> f.dispatchKeyEvent(event)
+        else -> super.dispatchKeyEvent(event)
+    }
 
     override fun dispatchTouchEvent(e: MotionEvent): Boolean {
         val handled = super.dispatchTouchEvent(e)

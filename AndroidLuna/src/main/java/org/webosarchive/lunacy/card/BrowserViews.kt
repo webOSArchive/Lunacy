@@ -151,7 +151,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
     /** The page is showing the picture of a covered view, so the view can step aside. */
     fun covered(id: Int, generation: Int) { main.post { views[id]?.coveredShown(generation) } }
 
-    fun destroy(id: Int) { main.post { views.remove(id)?.let { window.removeView(it); it.destroy() } } }
+    fun destroy(id: Int) { main.post { views.remove(id)?.let { it.letKeyboardGo(); window.removeView(it); it.destroy() } } }
 
     /** A touch the card dispatched (AppWindow.dispatchTouchEvent): a view whose header strip it began on may scroll by it. */
     fun touched(e: MotionEvent) { for (b in views.values) b.headerTouch(e) }
@@ -283,6 +283,18 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
             if (wantCover && !cover) coverNow()
             else if (!wantCover && cover) uncover()
             if (!cover) visibility = if (shown) View.VISIBLE else View.INVISIBLE
+            if (!shown) letKeyboardGo()
+        }
+
+        /**
+         * The page hid the view, or it goes, while one of its fields had the keyboard: the
+         * keyboard goes too (an account's sign-in page leaving the provider's page behind).
+         */
+        fun letKeyboardGo() {
+            if (!hasFocus()) return
+            (context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                .hideSoftInputFromWindow(windowToken, 0)
+            clearFocus()
         }
 
         /**

@@ -8,5 +8,6 @@ Images:
   Google account icon from the reference TouchPad (webOS CE 3.1.0; Mojo's shared images,
   mojocommon/mojoImages, HP/Palm, abandonware); the "g" is Google's mark, used to name the
   account type as webOS did.
-- The Microsoft type uses Palm's other-mail icon (com.palm.othermail), copied in at build time
-  by AndroidLuna/fetch-assets.sh, until it has one of its own.
+- accounts/org.webosarchive.lunacy.microsoft/images/microsoft-32x32.png and microsoft-48x48.png:
+  an Outlook icon supplied by codepoet (2026-11-05) for the Microsoft account type; the Outlook
+  mark is Microsoft's, used to name the account type.

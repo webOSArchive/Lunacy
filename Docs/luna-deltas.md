@@ -812,8 +812,8 @@ keeping CE's Enyo app rather than Palm's Mojo one, and codepoet decides each.** 
 and password (Palm's Google template; Microsoft through Exchange); both providers refuse that
 now ([oauth.md](oauth.md)). What a person sees instead:
 
-- **Add Account** lists Google (the TouchPad's Google icon) and Microsoft (Palm's other-mail
-  icon until it has its own) beside Palm's types, in Email and in Accounts.
+- **Add Account** lists Google (the TouchPad's Google icon) and Microsoft (an Outlook icon)
+  beside Palm's types, in Email and in Accounts.
 - **A sign-in page** in place of the username and password form, in the TouchPad's account-page
   look: a line on what happens, Sign In, and Sign In on Another Device (the broker's short code
   and address, for a device whose engine can't show the provider's page).

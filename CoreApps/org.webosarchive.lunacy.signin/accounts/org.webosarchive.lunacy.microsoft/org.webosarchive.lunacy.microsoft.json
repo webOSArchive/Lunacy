@@ -2,8 +2,8 @@
 	"templateId": "org.webosarchive.lunacy.microsoft",
 	"loc_name": "Microsoft",
 	"icon": {
-		"loc_32x32": "images/othermail32.png",
-		"loc_48x48": "images/othermail48.png"
+		"loc_32x32": "images/microsoft-32x32.png",
+		"loc_48x48": "images/microsoft-48x48.png"
 	},
 	"validator": {
 		"customUI": {
@@ -26,8 +26,8 @@
 			"capability": "MAIL",
 			"id": "org.webosarchive.lunacy.microsoft.mail",
 			"icon": {
-				"loc_32x32": "images/othermail32.png",
-				"loc_48x48": "images/othermail48.png"
+				"loc_32x32": "images/microsoft-32x32.png",
+				"loc_48x48": "images/microsoft-48x48.png"
 			},
 			"implementation": "palm://com.palm.imap/",
 			"onCreate": "palm://com.palm.imap/accountCreated",

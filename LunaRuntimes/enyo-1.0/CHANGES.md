@@ -433,7 +433,10 @@ the Google and Microsoft pages show the provider's own sign-in page in an `enyo.
 the page never heard `urlRedirected`, so the sign-in never finished. On webOS each frame's
 `BasicWebView` had its own plugin and heard its own events. The patch has a view made in a frame
 tell the main frame it owns it; `bridge.js` hands that view's events on to its frame, as it hands
-on a frame's bus replies (the first frame to name a view keeps it). Checked on the A7 Lite.
+on a frame's bus replies (the first frame to name a view keeps it). And a frame's views go
+when the frame unloads: Accounts takes an account's page away without destroying its controls,
+and the provider's page stayed on the card over Account Settings. Checked on the A7 Lite and
+the Fold3.
 
 Files: `framework/source/palm/controls/BasicWebView.js`, `framework/build/enyo-build.js`.
 

@@ -102,9 +102,18 @@ IDLE. Google granted `https://mail.google.com/ openid userinfo.email`. A first a
 day got "Invalid credentials" from Gmail; the service now logs the granted scopes and refuses a
 sign-in without the mail scope (Google's consent lets a person untick it) with a message saying so.
 
+**Microsoft 365 works (2026-11-05, Fold3):** `wosatester@jonandnic.onmicrosoft.com`, once
+codepoet granted the tenant's admin consent: signed in in the page's WebView (no consent page:
+the admin had given it), validated, made, synced. Microsoft granted the Exchange Online scopes
+the consent covers (`https://outlook.office.com/…`, EAS among them). **Outlook.com**
+(`wosatester@outlook.com`) still signs in but its IMAP answers "User is authenticated but not
+connected", on the Fold3 as on the A7, while Outlook on the web says the mailbox isn't set up yet
+for that account: Microsoft's side, not Lunacy's. To try again once the mailbox is there.
+
 First real tests, on the A7 Lite (2026-11-05): Microsoft's own sign-in page works in the
-sign-in page's WebView (the Samsung keyboard types into it; adb's `input text` and key events
-don't reach a native browser view, see Open), and its redirect, the code exchange and the
+sign-in page's WebView (the Samsung keyboard typed into it; key events - adb's, a hardware keyboard's - didn't reach a
+native browser view until `AppWindow.dispatchKeyEvent` passed them to the focused one, fixed the
+same day), and its redirect, the code exchange and the
 address from the id_token all work. Then:
 - **Outlook.com** (`wosatester@outlook.com`): the token was taken, but IMAP answered "User is
   authenticated but not connected." Microsoft had asked to verify the account by a code sent to
@@ -169,9 +178,6 @@ path (Google's) is not yet tried on a device: it needs one with a browser.
 
 ## Open
 
-- **Typing from adb or a hardware keyboard into a native browser view** (the sign-in page's
-  WebView, and probably the Web app's pages): `input text` and key events don't arrive; the
-  on-screen keyboard's own keys do. A Bluetooth keyboard user would be stuck. To look into.
 
 - Client registrations (above), then the real providers: Gmail, Outlook.com, Microsoft 365.
 - **Email's own "Change login settings"** opens Palm's password form for these accounts too,

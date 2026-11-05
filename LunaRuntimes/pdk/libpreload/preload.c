@@ -1454,3 +1454,226 @@ GIOStatus g_io_channel_read_chars(GIOChannel *ch, char *buf, size_t count, size_
 	if (got) *got = (size_t)k;
 	return k ? MA_G_NORMAL : MA_G_AGAIN;
 }
+
+/* ---- OAuth for Exchange ActiveSync (Docs/oauth.md) ----
+ *
+ * mojomail-eas reaches its server through libemail-common's CurlConnection, which hands curl
+ * the account's "user:password" as CURLOPT_USERPWD (Basic auth) and its own headers as
+ * CURLOPT_HTTPHEADER. A password that is an OAuth handle is taken out here: the request goes
+ * without Basic auth and with `Authorization: Bearer <token>` added to its own header list
+ * (a copy, so the caller's list is never changed). A 401 to a bearer request marks the token
+ * refused, so the next login asks for a fresh one (mailauth.h's stale), as for IMAP. Every
+ * other option and request passes as it was.
+ */
+typedef void CURL;
+struct curl_slist { char *data; struct curl_slist *next; };
+typedef size_t (*lc_header_fn)(char *, size_t, size_t, void *);
+#define LC_CURLOPT_USERPWD 10005
+#define LC_CURLOPT_HTTPHEADER 10023
+#define LC_CURLOPT_HTTPAUTH 107
+#define LC_CURLINFO_RESPONSE_CODE 0x200002
+#define LC_OFF_T_BASE 30000
+
+#define LC_HANDLES 32
+static struct lc_handle {
+	CURL *h;
+	struct curl_slist *theirs;     /* the caller's own header list */
+	struct curl_slist *ours;       /* theirs + Authorization, set in its place */
+	char bearer[MAILAUTH_TOKEN_MAX];
+	char handle[64];
+	lc_header_fn their_header;     /* the caller's header callback, and its data */
+	void *header_data;
+} lc_handles[LC_HANDLES];
+static pthread_mutex_t lc_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static int (*lc_real_setopt)(CURL *, int, ...);
+static struct curl_slist *(*lc_slist_append)(struct curl_slist *, const char *);
+static void (*lc_slist_free)(struct curl_slist *);
+
+static void lc_init(void)
+{
+	if (!lc_real_setopt) lc_real_setopt = ma_next("curl_easy_setopt");
+	if (!lc_slist_append) lc_slist_append = ma_next("curl_slist_append");
+	if (!lc_slist_free) lc_slist_free = ma_next("curl_slist_free_all");
+}
+
+static struct lc_handle *lc_find(CURL *h, int make)
+{
+	struct lc_handle *free_slot = NULL;
+	for (int i = 0; i < LC_HANDLES; i++) {
+		if (lc_handles[i].h == h) return &lc_handles[i];
+		if (!lc_handles[i].h && !free_slot) free_slot = &lc_handles[i];
+	}
+	if (!make || !free_slot) return NULL;
+	memset(free_slot, 0, sizeof *free_slot);
+	free_slot->h = h;
+	return free_slot;
+}
+
+/* Sets the caller's headers plus the bearer on the handle (lock held). */
+static int lc_apply_headers(struct lc_handle *e)
+{
+	struct curl_slist *list = NULL;
+	for (struct curl_slist *s = e->theirs; s; s = s->next)
+		if (strncasecmp(s->data, "Authorization:", 14) != 0) list = lc_slist_append(list, s->data);
+	char line[MAILAUTH_TOKEN_MAX + 32];
+	snprintf(line, sizeof line, "Authorization: Bearer %s", e->bearer);
+	list = lc_slist_append(list, line);
+	memset(line, 0, sizeof line);
+	int r = lc_real_setopt(e->h, LC_CURLOPT_HTTPHEADER, list);
+	if (e->ours) lc_slist_free(e->ours);
+	e->ours = list;
+	return r;
+}
+
+/*
+ * Palm's mojomail-eas speaks EAS 2.5 to 14.1 but takes the highest version a server offers
+ * (MS-ASProtocolVersions); Microsoft 365 offers 16.0 and 16.1, and the service then sent 14.1's
+ * requests as 16.1 and got 400s. The header is shown to it with only the versions up to 14.1, as
+ * a server of its day would have offered. Its header callback (one for every handle in
+ * libemail-common, CurlHeaderCallback) is wrapped to do it; every other header passes as it was.
+ */
+#define LC_CURLOPT_HEADERFUNCTION 20079
+#define LC_CURLOPT_HEADERDATA 10029
+
+/* The caller's header callback for the request whose header data is this (lock taken here). */
+static lc_header_fn lc_their_header(void *data)
+{
+	lc_header_fn f = NULL;
+	pthread_mutex_lock(&lc_lock);
+	for (int i = 0; i < LC_HANDLES && !f; i++)
+		if (lc_handles[i].h && lc_handles[i].their_header && lc_handles[i].header_data == data) f = lc_handles[i].their_header;
+	pthread_mutex_unlock(&lc_lock);
+	return f;
+}
+
+static size_t lc_header(char *buf, size_t size, size_t n, void *data)
+{
+	lc_header_fn theirs = lc_their_header(data);
+	if (!theirs) return size * n;   /* can't happen: set together with the callback */
+	size_t len = size * n;
+	static const char name[] = "MS-ASProtocolVersions:";
+	if (len > sizeof name && len < 512 && strncasecmp(buf, name, sizeof name - 1) == 0) {
+		/* Offered as the one version it should take: the highest the server has up to 14.1 (how
+		   the service picks from a list isn't known, and a full list gave it 2.5). */
+		char out[512], *w = out, best[16] = "";
+		double bestv = 0;
+		const char *p = buf + sizeof name - 1;
+		while (p < buf + len) {
+			while (p < buf + len && (*p == ' ' || *p == ',')) p++;
+			const char *q = p;
+			while (q < buf + len && *q != ',' && *q != '\r' && *q != '\n') q++;
+			if (q > p && q - p < (long)sizeof best) {
+				char one[16]; memcpy(one, p, (size_t)(q - p)); one[q - p] = 0;
+				double v = atof(one);
+				if (v <= 14.1 + 1e-6 && v > bestv) { bestv = v; strcpy(best, one); }
+			}
+			p = q;
+			if (p < buf + len && (*p == '\r' || *p == '\n')) break;
+		}
+		if (!best[0]) return theirs(buf, size, n, data);   /* nothing it knows: Exchange Online since March 2026 (16.1 only) */
+		w += snprintf(out, sizeof out, "%s %s\r\n", name, best);
+		size_t r = theirs(out, 1, (size_t)(w - out), data);
+		return r == (size_t)(w - out) ? len : 0;   /* curl wants its own length back */
+	}
+	return theirs(buf, size, n, data);
+}
+
+int curl_easy_setopt(CURL *h, int option, ...)
+{
+	lc_init();
+	va_list ap;
+	va_start(ap, option);
+	if (option >= LC_OFF_T_BASE && option < LC_OFF_T_BASE + 10000) {
+		long long v = va_arg(ap, long long);
+		va_end(ap);
+		return lc_real_setopt(h, option, v);
+	}
+	void *v = va_arg(ap, void *);
+	va_end(ap);
+	if (option == LC_CURLOPT_HEADERFUNCTION || option == LC_CURLOPT_HEADERDATA) {
+		pthread_mutex_lock(&lc_lock);
+		struct lc_handle *e = lc_find(h, 1);
+		if (e) {
+			if (option == LC_CURLOPT_HEADERDATA) e->header_data = v;
+			else e->their_header = (lc_header_fn)v;
+		}
+		pthread_mutex_unlock(&lc_lock);
+		if (e && option == LC_CURLOPT_HEADERFUNCTION && v) return lc_real_setopt(h, option, (void *)lc_header);
+	}
+	if (option == LC_CURLOPT_USERPWD) {
+		/* Whatever this handle carried for an earlier request, this one says afresh. */
+		pthread_mutex_lock(&lc_lock);
+		struct lc_handle *was = lc_find(h, 0);
+		if (was && was->handle[0]) { was->handle[0] = 0; memset(was->bearer, 0, sizeof was->bearer); lc_real_setopt(h, LC_CURLOPT_HTTPHEADER, was->theirs); }
+		pthread_mutex_unlock(&lc_lock);
+	}
+	if (option == LC_CURLOPT_USERPWD && v) {
+		const char *up = v, *colon = strchr(up, ':');
+		if (colon && ma_is_handle(colon + 1)) {
+			char user[512];
+			size_t ul = (size_t)(colon - up) < sizeof user - 1 ? (size_t)(colon - up) : sizeof user - 1;
+			memcpy(user, up, ul); user[ul] = 0;
+			pthread_mutex_lock(&lc_lock);
+			struct lc_handle *e = lc_find(h, 1);
+			if (e) {
+				int stale = strcmp(ma_refused, colon + 1) == 0;
+				if (ma_token(NULL, user, colon + 1, stale, e->bearer, sizeof e->bearer)) {
+					if (stale) ma_refused[0] = 0;
+					snprintf(e->handle, sizeof e->handle, "%s", colon + 1);
+					lc_real_setopt(h, LC_CURLOPT_USERPWD, (void *)NULL);
+					lc_real_setopt(h, LC_CURLOPT_HTTPAUTH, 0L);
+					int r = lc_apply_headers(e);
+					pthread_mutex_unlock(&lc_lock);
+					return r;
+				}
+				e->handle[0] = 0;   /* unknown handle: an ordinary password after all */
+			}
+			pthread_mutex_unlock(&lc_lock);
+		}
+	}
+	if (option == LC_CURLOPT_HTTPHEADER) {
+		pthread_mutex_lock(&lc_lock);
+		struct lc_handle *e = lc_find(h, 1);   /* kept even before any credentials: they may come later */
+		if (e) {
+			e->theirs = v;
+			if (e->handle[0]) { int r = lc_apply_headers(e); pthread_mutex_unlock(&lc_lock); return r; }
+		}
+		pthread_mutex_unlock(&lc_lock);
+	}
+	return lc_real_setopt(h, option, v);
+}
+
+/* A server's 401 to a bearer request: its token was refused (mailauth.h's ma_refused). */
+int curl_easy_getinfo(CURL *h, int info, ...)
+{
+	static int (*real)(CURL *, int, ...);
+	if (!real) real = ma_next("curl_easy_getinfo");
+	va_list ap;
+	va_start(ap, info);
+	void *out = va_arg(ap, void *);
+	va_end(ap);
+	int r = real(h, info, out);
+	if (r == 0 && info == LC_CURLINFO_RESPONSE_CODE && out && *(long *)out == 401) {
+		pthread_mutex_lock(&lc_lock);
+		struct lc_handle *e = lc_find(h, 0);
+		if (e && e->handle[0]) snprintf(ma_refused, sizeof ma_refused, "%s", e->handle);
+		pthread_mutex_unlock(&lc_lock);
+	}
+	return r;
+}
+
+void curl_easy_cleanup(CURL *h)
+{
+	static void (*real)(CURL *);
+	if (!real) real = ma_next("curl_easy_cleanup");
+	lc_init();
+	real(h);
+	pthread_mutex_lock(&lc_lock);
+	struct lc_handle *e = lc_find(h, 0);
+	if (e) {
+		if (e->ours) lc_slist_free(e->ours);
+		memset(e, 0, sizeof *e);
+	}
+	pthread_mutex_unlock(&lc_lock);
+}

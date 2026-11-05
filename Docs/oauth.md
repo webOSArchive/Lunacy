@@ -140,9 +140,21 @@ address from the id_token all work. Then:
 - **The broker:** `apps/google/` and `apps/microsoft/` configs on oauth.wosa.link (the secrets
   stay on the server), and their names in `brokerApp`.
 
-Exchange ActiveSync over OAuth (Microsoft 365's contacts and calendar through Palm's
-mojomail-eas) is the next step after mail: mojomail-eas sends Basic auth through curl, so it
-needs a Bearer header in place of it, which the same preload can give.
+**Exchange ActiveSync with OAuth (2026-11-05): built, and closed by Microsoft.** mojomail-eas
+reaches its server through libemail-common's `CurlConnection`, which gives curl `user:password`
+as `CURLOPT_USERPWD`. The preload (end of `preload.c`) takes a handle out of it and adds
+`Authorization: Bearer <token>` to the request's own headers instead (a copy of the caller's
+list); a 401 marks the token stale. It also shows the service only the highest
+`MS-ASProtocolVersions` entry up to 14.1, which it knows, since it would otherwise take a
+server's newest. Checked with real libcurl on the build machine, and on the A7 against
+Microsoft 365: the OPTIONS request with the token succeeded. But **Exchange Online has refused
+ActiveSync older than 16.1 since 2026-03-01** (Microsoft's MC1197103, announced 2025-12-15),
+and offers this client 16.1 only; Palm's mojomail-eas speaks up to 14.1, so FolderSync gets a
+bare 400 whatever version it claims. Microsoft accounts stay on IMAP and SMTP. The Bearer support
+stays for Exchange servers of one's own that still take 14.1. For Outlook.com, Microsoft also
+refuses the EAS scope for personal accounts outright (AADSTS70011, "not configured for this
+tenant"). Microsoft's token endpoint wants the scope again on the code exchange
+(`scopeOnToken`).
 
 ## Testing without the real providers
 

@@ -63,6 +63,8 @@ class OAuth(
         /** "page" (the sign-in page's web view) or "browser" (Android's, for a provider that refuses web views). */
         val onDevice: String = j.optString("onDevice", "page")
         val brokerApp: String? = j.optString("brokerApp").takeIf { it.isNotEmpty() }
+        /** The scope, sent again with the token requests where the provider wants it (Microsoft, for Exchange's). */
+        val tokenScope: String? get() = j.optString("scope").takeIf { j.optBoolean("scopeOnToken") && it.isNotEmpty() }
         val canSignInHere get() = clientId != null && j.has("authorizeUrl") && j.has("tokenUrl")
         val canUseBroker get() = brokerApp != null
     }
@@ -266,7 +268,7 @@ class OAuth(
             val r = runCatching {
                 val tokens = post(w.provider.j.getString("tokenUrl"), form("grant_type" to "authorization_code", "code" to code,
                     "redirect_uri" to w.redirectUri, "client_id" to w.provider.clientId, "client_secret" to w.provider.clientSecret,
-                    "code_verifier" to w.verifier))
+                    "code_verifier" to w.verifier, "scope" to w.provider.tokenScope))
                 done(w.provider, tokens, viaBroker = false)
             }
             main.post { w.call.reply(r.getOrElse { Bus.error("Sign-in failed: ${it.message}", -8) }) }
@@ -339,6 +341,8 @@ class OAuth(
         config.put("email", email).put("username", email)
         config.optJSONObject("smtpConfig")?.put("username", email)
         return Bus.ok(mapOf("step" to "done", "handle" to handle, "existing" to (existing != null), "email" to email, "config" to config,
+            // Which mail service checks and keeps the account: IMAP, or Exchange ActiveSync.
+            "validator" to p.j.optString("validator", "palm://com.palm.imap/validateAccount"),
             "templateId" to p.j.optString("templateId")))
     }
 
@@ -384,7 +388,7 @@ class OAuth(
         val r = runCatching {
             if (a.viaBroker) post("$broker/refresh.php?app=${enc(p?.brokerApp ?: a.provider)}", form("refresh_token" to refresh))
             else post(p!!.j.getString("tokenUrl"), form("grant_type" to "refresh_token", "refresh_token" to refresh,
-                "client_id" to p.clientId, "client_secret" to p.clientSecret))
+                "client_id" to p.clientId, "client_secret" to p.clientSecret, "scope" to p.tokenScope))
         }
         val t = r.getOrNull()
         if (t != null && t.optString("access_token").isNotEmpty()) {

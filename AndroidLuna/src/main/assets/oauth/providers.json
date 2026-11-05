@@ -26,10 +26,12 @@
 			"authorizeUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
 			"tokenUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
 			"scope": "https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access openid email",
+			"scopeOnToken": true,
 			"authorizeParams": { "prompt": "select_account" },
 			"onDevice": "page",
 			"redirectUri": "https://login.microsoftonline.com/common/oauth2/nativeclient",
 			"brokerApp": "",
+			"_mail": "IMAP and SMTP. Not Exchange ActiveSync: Exchange Online refuses EAS older than 16.1 since 2026-03-01, and Palm's mojomail-eas speaks up to 14.1 (Docs/oauth.md).",
 			"mail": {
 				"server": "outlook.office365.com", "port": 993, "encryption": "ssl",
 				"smtpConfig": { "server": "smtp.office365.com", "port": 587, "encryption": "tls", "useSmtpAuth": true }

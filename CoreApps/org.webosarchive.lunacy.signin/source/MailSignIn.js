@@ -154,6 +154,11 @@ enyo.kind({
 				this.failed(new enyo.g11n.Template($L("That was #{other}. Sign in as #{email} to keep this account.")).evaluate({other: r.email, email: this.modifying.username}));
 				return;
 			}
+			// The provider's mail service checks the account, as Email's wizard has it checked:
+			// Palm's IMAP service, or its Exchange ActiveSync one.
+			var v = /^(palm:\/\/[^\/]+\/)(.+)$/.exec(r.validator || "palm://com.palm.imap/validateAccount");
+			this.$.validate.setService(v[1]);
+			this.$.validate.setMethod(v[2]);
 			this.$.validate.call({username: r.email, password: r.handle, templateId: this.templateId, config: r.config});
 		}
 	},

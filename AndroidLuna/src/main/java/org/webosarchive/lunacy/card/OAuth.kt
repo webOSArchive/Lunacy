@@ -311,6 +311,13 @@ class OAuth(
     private fun done(p: Provider, tokens: JSONObject, viaBroker: Boolean): String {
         val access = tokens.optString("access_token").takeIf { it.isNotEmpty() } ?: throw IOException(tokens.optString("error_description", tokens.optString("error", "no token")))
         val email = emailOf(tokens) ?: throw IOException("${p.title} didn't say which account this is")
+        // Google lets the person untick a permission on its consent page (granular consent); a
+        // token without the mail scope would only fail later, at the mail server, as a bad login.
+        val granted = tokens.optString("scope")
+        Log.i(AppServer.TAG, "oauth: ${p.id} granted: $granted")
+        p.j.optString("requiredScope").takeIf { it.isNotEmpty() && granted.isNotEmpty() }?.let { need ->
+            if (need !in granted.split(' ')) throw IOException("${p.title} wasn't given access to your mail. Sign in again and tick the box that lets webOS Email read and send your email.")
+        }
         // Signing the same account in again (its sign-in stopped working) keeps its handle, which
         // is the account's password: only the tokens behind it change.
         // Every handle this account was given before (an account kept, a sign-in abandoned) is

@@ -319,7 +319,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
 
         fun command(method: String, a: JSONArray) {
             when (method) {
-                "openURL" -> a.optString(0).takeIf { it.isNotEmpty() }?.let { lastDoc = null; loadUrl(withScheme(it)) }
+                "openURL" -> a.optString(0).takeIf { it.isNotEmpty() }?.let { lastDoc = null; withScheme(it).let { u -> ownLoad = u; loadUrl(u) } }
                 "setHTML" -> setHtml(a.optString(0).ifEmpty { null }, a.optString(1))
                 "setHeaderHeight" -> a.optDouble(0, 0.0).coerceAtLeast(0.0).let { if (it != headerCss) { headerCss = it; applyHeader() } }
                 "reloadPage" -> reload()
@@ -547,7 +547,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         }
 
         private fun loadDoc(doc: String) =
-            loadDataWithBaseURL(lastBase, EmailDocument.insertAfter(doc, "<head[^>]*>", roomStyle()) ?: (roomStyle() + doc), "text/html", "utf-8", null)
+            loadDataWithBaseURL(lastBase.also { ownLoad = it }, EmailDocument.insertAfter(doc, "<head[^>]*>", roomStyle()) ?: (roomStyle() + doc), "text/html", "utf-8", null)
 
         override fun onScrollChanged(l: Int, t: Int, oldl: Int, oldt: Int) {
             super.onScrollChanged(l, t, oldl, oldt)
@@ -687,16 +687,22 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
 
         /** The last address [caughtLate] handed to the app, so the load's several callbacks hand it once. */
         private var lateCaught: String? = null
+        /** What the app itself last told the view to load (openURL, a document): never a redirect to catch. */
+        private var ownLoad: String? = null
 
         /**
          * A navigation shouldOverrideUrlLoading never saw, which the view's redirects claim:
          * Chromium doesn't ask about a navigation that began as a form's POST, the server's
          * redirect after it included (an OAuth consent page's Allow, whose provider then
          * redirects to the app's address). WebKit on the TouchPad matched the redirects against
-         * every navigation, so it is caught as the page starts (or fails, for an address nothing
-         * answers), the load stopped, and handed to the app as any other redirect.
+         * every navigation the page made, so it is caught as the page starts (or fails, for an
+         * address nothing answers), the load stopped, and handed to the app as any other redirect.
+         * Not the app's own loads, which webOS's redirects never claimed either.
          */
         private fun caughtLate(view: WebView, url: String): Boolean {
+            // The app's own load starts this way too (Email's message, a page it opens), and an app
+            // whose redirects claim every address (Email's, for its links) would lose it.
+            if (url == ownLoad || url.startsWith("data:") || url.startsWith("about:")) return false
             if (!redirects.any { it.second && it.first.containsMatchIn(url) }) return false
             view.stopLoading()
             if (lateCaught != url) { lateCaught = url; redirected(url) }

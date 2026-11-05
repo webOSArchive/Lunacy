@@ -50,7 +50,10 @@ webOSArchive's broker for devices too old for the providers' pages); the work st
     answered and hidden. A real password on such a server (Microsoft offers LOGIN and XOAUTH2,
     no PLAIN) is sent as the AUTH LOGIN exchange mojomail would have made.
   - A handle the service doesn't know leaves the line untouched. Channels on files and pipes
-    are left alone. A refused token makes the next login for that handle ask for a fresh one
+    are left alone. Nothing that isn't text is ever held, and a connection that sends IMAP's
+    `COMPRESS DEFLATE` is left alone from then on: Gmail offers it, and mojomail takes it, so
+    every byte after it is deflate's. (Holding a compressed command, which has no newline, hung
+    every Gmail sync and every other IMAP account that compresses, on the first Gmail test.) A refused token makes the next login for that handle ask for a fresh one
     (`stale`), since a provider can end a token early (a password change).
 - **The token** comes over the process's own luna-send link (`LUNACY_BUS` and the caller
   token Lunacy gave the process), so `oauth/token` is reachable on the private bus only, and
@@ -91,6 +94,13 @@ and may revoke one found there. It lives in `oauth.properties` at the top of the
 builds releases needs that file. Microsoft: an Entra app registration "webOS Email"
 (`95d7ba4d-1ae2-44d2-a8ef-3b06a31345f6`), multitenant plus personal accounts, public client, no
 secret.
+
+**Gmail works (2026-11-05, Galaxy Z Fold3):** `jonathan@bennit.ai` signed in through Firefox
+(Google's unverified-app warning, 2-Step Verification by text message), Lunacy came back over
+the browser on its own, the account was validated and made, and its inbox synced and went to
+IDLE. Google granted `https://mail.google.com/ openid userinfo.email`. A first attempt that
+day got "Invalid credentials" from Gmail; the service now logs the granted scopes and refuses a
+sign-in without the mail scope (Google's consent lets a person untick it) with a message saying so.
 
 First real tests, on the A7 Lite (2026-11-05): Microsoft's own sign-in page works in the
 sign-in page's WebView (the Samsung keyboard types into it; adb's `input text` and key events

@@ -69,6 +69,7 @@ struct mailauth {
 	int smtp_replay;                 /* AUTH LOGIN in place of PLAIN: 1 user next, 2 password next */
 	char replay_user[512], replay_pass[512];
 	char sent_handle[64];            /* the handle whose token went in the XOAUTH2 just sent */
+	int off;                         /* COMPRESS sent: the rest of the connection is deflate's, not lines */
 };
 
 /* The handle whose token a server last refused, in this process: its next login asks for a
@@ -93,6 +94,7 @@ static void mailauth_init(struct mailauth *m) { memset(m, 0, sizeof *m); }
 /* Whether the server's bytes need looking at (otherwise they pass untouched). */
 static int mailauth_watching(const struct mailauth *m)
 {
+	if (m->off) return 0;
 	return m->imap_await || m->smtp_ehlo || m->smtp_await || m->smtp_replay || m->carry_len;
 }
 
@@ -159,6 +161,11 @@ static int ma_starts_ci(const char *s, size_t n, const char *word)
 /* Could the line so far still become one this code changes or watches? */
 static int ma_viable(const char *s, size_t n)
 {
+	/* Commands are text: a byte that isn't (compressed or binary data) is never held. */
+	for (size_t i = 0; i < n; i++) {
+		unsigned char c = (unsigned char)s[i];
+		if ((c < 0x20 && c != '\r' && c != '\n') || c > 0x7e) return 0;
+	}
 	static const char *const smtp[] = { "AUTH PLAIN ", "EHLO " };
 	for (int i = 0; i < 2; i++) {
 		size_t w = strlen(smtp[i]);
@@ -170,7 +177,7 @@ static int ma_viable(const char *s, size_t n)
 	if (t == n) return t < 63;
 	if (t == 0 || s[t] != ' ') return 0;
 	const char *rest = s + t + 1; size_t r = n - t - 1;
-	return strncasecmp(rest, "LOGIN ", r < 6 ? r : 6) == 0;
+	return strncasecmp(rest, "LOGIN ", r < 6 ? r : 6) == 0 || strncasecmp(rest, "COMPRESS ", r < 9 ? r : 9) == 0;
 }
 
 /* An IMAP quoted string at *p (as mojomail writes them: always quoted, \ before " and \). */
@@ -231,6 +238,11 @@ static int ma_line(struct mailauth *m, const struct mailauth_io *io, const char 
 	}
 	/* IMAP: tag LOGIN "user" "password" */
 	const char *sp = memchr(s, ' ', n), *end = s + n;
+	if (sp && sp - s < 63 && ma_starts_ci(sp + 1, (size_t)(end - sp - 1), "COMPRESS ")) {
+		/* RFC 4978: after its OK both directions are deflate streams. Logins are over by then. */
+		m->off = 1;
+		return io->send(io->ctx, s, n);
+	}
 	if (sp && sp - s < 63 && ma_starts_ci(sp + 1, (size_t)(end - sp - 1), "LOGIN ")) {
 		const char *p = sp + 7;
 		if (ma_quoted(&p, end, user, sizeof user) && p < end && *p == ' ' && (p++, ma_quoted(&p, end, pass, sizeof pass))
@@ -261,6 +273,7 @@ static long mailauth_out(struct mailauth *m, const struct mailauth_io *io, const
 {
 	*direct = 0;
 	if (!n) return 0;
+	if (m->off) { *direct = 1; return (long)n; }
 	if (m->out_mode == MA_PASS) {
 		const char *nl = memchr(p, '\n', n);
 		*direct = 1;

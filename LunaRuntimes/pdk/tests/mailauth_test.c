@@ -225,6 +225,23 @@ int main(void)
 	write_as_service(&m, line, strlen(line), 4096);
 	check(sent_is(line), "PLAIN offered by the server: sent unchanged");
 
+	/* COMPRESS: after it the stream is deflate's. Nothing may be held, newline or not (a
+	   compressed command has none: holding one hung every sync with Gmail). */
+	for (int k = 0; k < 4; k++) {
+		reset(&m);
+		const char *c = "a5 COMPRESS DEFLATE\r\n";
+		write_as_service(&m, c, strlen(c), steps[k]);
+		check(sent_is(c), "COMPRESS is sent unchanged");
+		sent_len = 0;
+		static const char packed[] = "x LOGIN \x01\x9c\x4b";   /* no newline, starts like a login */
+		write_as_service(&m, packed, sizeof packed - 1, steps[k]);
+		check(sent_len == sizeof packed - 1 && !memcmp(sent, packed, sent_len), "after COMPRESS every byte goes at once");
+		check(!mailauth_watching(&m), "after COMPRESS nothing is watched");
+	}
+	/* Bytes that aren't text are never held, even with no COMPRESS seen. */
+	reset(&m);
+	{ static const char bin[] = "\x78\x9c\x03\x00"; write_as_service(&m, bin, 4, 4096); check(sent_len == 4, "binary bytes go at once"); }
+
 	/* A message body, cut every which way, goes through byte for byte. */
 	static char body[200000];
 	unsigned seed = 7;

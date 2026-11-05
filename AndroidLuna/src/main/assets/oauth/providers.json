@@ -9,6 +9,7 @@
 			"authorizeUrl": "https://accounts.google.com/o/oauth2/v2/auth",
 			"tokenUrl": "https://oauth2.googleapis.com/token",
 			"scope": "https://mail.google.com/ openid email",
+			"requiredScope": "https://mail.google.com/",
 			"authorizeParams": { "access_type": "offline", "prompt": "consent" },
 			"onDevice": "browser",
 			"loopbackHost": "127.0.0.1",

@@ -1,0 +1,7 @@
+<!DOCTYPE html>
+<html><head><meta name="viewport" content="width=device-width"><title>Opened window</title>
+<style>body{font-family:sans-serif;font-size:22px;margin:24px;background:#e8f0ff}</style></head>
+<body><h2>The new window opened</h2><p>Opened at <span id="t"></span>, opener: <span id="o"></span>.</p>
+<button onclick="window.close()" style="font-size:20px;padding:10px">Close this window</button>
+<script>document.getElementById('t').textContent = new Date().toLocaleTimeString(); document.getElementById('o').textContent = window.opener ? 'yes' : 'none';</script>
+</body></html>

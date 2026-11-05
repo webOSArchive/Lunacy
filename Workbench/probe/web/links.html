@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<!-- Web app test page (Workbench/probe/web): a link to a new window and pop-ups, for the
+     browser views' windows (code review 6ee91aa: a window no card takes goes after a minute). -->
+<html><head><meta name="viewport" content="width=device-width"><title>Lunacy window test</title>
+<style>body{font-family:sans-serif;font-size:20px;margin:24px}a,button{display:block;margin:18px 0;font-size:20px;padding:10px}#log{color:#555;font-size:16px}</style>
+</head><body>
+<h2>Lunacy window test</h2>
+<a href="opened.html" target="_blank">1. A link with target="_blank"</a>
+<button onclick="note(window.open('opened.html', 'popup', 'width=500,height=400'))">2. window.open with a size (a pop-up)</button>
+<button onclick="note(window.open('opened.html'))">3. window.open with nothing else</button>
+<a href="mailto:dummy@lunacy.test?subject=From%20the%20Web%20app">4. A mailto: link (should open webOS Email)</a>
+<div id="log"></div>
+<script>
+function note(w) { document.getElementById('log').textContent = 'window.open returned ' + (w ? 'a window' : 'null') + ' at ' + new Date().toLocaleTimeString(); }
+</script>
+</body></html>

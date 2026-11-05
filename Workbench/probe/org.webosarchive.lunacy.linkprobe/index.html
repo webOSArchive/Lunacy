@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<!-- Link Probe: how an app hands a URL to the system - a plain link, and applicationManager's
+     open and getHandlerForUrl over the bus - with each answer shown. For mailto: (b968e4d: it
+     goes to webOS Email, from the system's handler table) and the other schemes the table lists.
+     No framework, so nothing but Lunacy is being tested. -->
+<html><head><meta name="viewport" content="width=device-width"><title>Link Probe</title>
+<style>
+body{font-family:sans-serif;font-size:20px;margin:20px;background:#fff}
+a,button{display:block;margin:14px 0;font-size:20px;padding:10px;text-align:left}
+#log{font-family:monospace;font-size:14px;white-space:pre-wrap;color:#333;border-top:1px solid #ccc;padding-top:8px}
+</style></head><body>
+<h2>Link Probe</h2>
+<a href="mailto:dummy@lunacy.test?subject=From%20a%20link">1. A plain mailto: link</a>
+<button onclick="open_('mailto:dummy@lunacy.test?subject=From%20applicationManager.open')">2. applicationManager/open mailto:</button>
+<button onclick="handler('mailto:dummy@lunacy.test')">3. Which app handles mailto:? (getHandlerForUrl)</button>
+<button onclick="open_('http://192.168.10.45:8000/links.html')">4. applicationManager/open an http: URL (the Web app)</button>
+<div id="log"></div>
+<script>
+function log(s) { var l = document.getElementById('log'); l.textContent = new Date().toLocaleTimeString() + '  ' + s + '\n' + l.textContent; }
+function call(url, params, what) {
+	var b = new PalmServiceBridge();
+	b.onservicecallback = function (reply) { log(what + ' -> ' + reply); };
+	b.call(url, JSON.stringify(params));
+	log(what + ' sent');
+}
+function open_(target) { call('palm://com.palm.applicationManager/open', { target: target }, 'open ' + target); }
+function handler(url) { call('palm://com.palm.applicationManager/getHandlerForUrl', { url: url }, 'getHandlerForUrl ' + url); }
+if (window.PalmSystem && PalmSystem.stageReady) PalmSystem.stageReady();
+</script>
+</body></html>

@@ -17,7 +17,7 @@ ENYO=${ENYO_FRAMEWORK:-$HERE/../../webos-sdk-redux/0.4.1/share/framework/enyo/1.
 DEST=$1
 mkdir -p "$DEST/lunacy" "$DEST/fonts" "$DEST/fw/enyo"
 # The page-side scripts only: services/ and the Mojo boot files are for things iOSLuna doesn't run.
-for f in compat.js bridge.js crypt.js textedit.js net.js websql.js fonts.css; do
+for f in input.js engine.js media.js layout.js bridge.js crypt.js textedit.js net.js websql.js fonts.css; do
     cp "$ASSETS/lunacy/$f" "$DEST/lunacy/$f"
 done
 rsync -a --delete "$ASSETS/luna/fonts/" "$DEST/fonts/"

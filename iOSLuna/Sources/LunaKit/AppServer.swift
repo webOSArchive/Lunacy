@@ -148,7 +148,7 @@ final class AppServer: NSObject, WKURLSchemeHandler {
     private func inject(_ html: String) -> String {
         tokenLock.lock(); tokens += 1; let token = "\(tokens)"; tokenLock.unlock()
         let tag = "<link rel=\"stylesheet\" href=\"/__lunacy/fonts.css\">" + Self.fontLoad(token) +
-            "<script src=\"/__lunacy/compat.js\"></script><script src=\"/__lunacy/bridge.js\"></script>" +
+            "<script src=\"/__lunacy/input.js\"></script><script src=\"/__lunacy/engine.js\"></script><script src=\"/__lunacy/media.js\"></script><script src=\"/__lunacy/layout.js\"></script><script src=\"/__lunacy/bridge.js\"></script>" +
             "<script src=\"/__lunacy/crypt.js\"></script>" +
             "<script src=\"/__lunacy/textedit.js\"></script>" +
             "<script src=\"/__lunacy/net.js\"></script><script src=\"/__lunacy/websql.js\"></script>" +

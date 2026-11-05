@@ -9,5 +9,6 @@ Images:
   mojocommon/mojoImages, HP/Palm, abandonware); the "g" is Google's mark, used to name the
   account type as webOS did.
 - accounts/org.webosarchive.lunacy.microsoft/images/microsoft-32x32.png and microsoft-48x48.png:
-  an Outlook icon supplied by codepoet (2026-11-05) for the Microsoft account type; the Outlook
-  mark is Microsoft's, used to name the account type.
+  Outlook's icon, from a 192 px copy supplied by codepoet (2026-11-05), cropped to its art and
+  scaled (Lanczos, premultiplied, a light unsharp mask) into the TouchPad Google icon's margins;
+  the Outlook mark is Microsoft's, used to name the account type.

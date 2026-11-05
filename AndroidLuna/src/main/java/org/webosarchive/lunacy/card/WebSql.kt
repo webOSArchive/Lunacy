@@ -92,7 +92,9 @@ class WebSql(
         val file = File(dir, Base64.encodeToString(name.toByteArray(), Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP) + ".db")
         // The WebView kept it under the app's own origin, worked out from its id rather than
         // taken from the page, which could name another app's (code review S14, rule 10).
-        if (!file.exists()) migrate(file, appId + AppServer.HOST_SUFFIX, name)
+        // Lowercased, as Chromium writes a host (and as location.host read it before): an app
+        // id with capitals would otherwise miss its own database.
+        if (!file.exists()) migrate(file, appId.lowercase(java.util.Locale.ROOT) + AppServer.HOST_SUFFIX, name)
         return SQLiteDatabase.openOrCreateDatabase(file, null)
     }
 

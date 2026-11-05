@@ -1,18 +1,11 @@
 package org.webosarchive.lunacy.card
 
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.os.BatteryManager
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.util.TimeZone
 
 /**
  * palm://com.palm.activitymanager: webOS's scheduler of work. An activity runs when its
@@ -39,6 +32,15 @@ import java.util.TimeZone
 class ActivityManager(private val context: Context, private val power: Power) {
     private lateinit var bus: Bus
     private val main = Handler(Looper.getMainLooper())
+    /**
+     * The network and the battery, as requirements see them. A change re-evaluates every activity
+     * that has requirements, and starts those it has just met.
+     */
+    private val requirements: ActivityRequirements = ActivityRequirements(context, SERVICE) { change ->
+        val before = activities.values.associateWith { requirementsMet(it) }
+        change()
+        requirementsChanged(before)
+    }
 
     private inner class Sub(val call: Bus.Call, val detailed: Boolean, val who: JSONObject)
 
@@ -123,8 +125,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
         for (m in listOf("associateApp", "associateService", "associateProcess", "associateNetworkFlow",
                 "dissociateApp", "dissociateService", "dissociateProcess", "dissociateNetworkFlow", "unmapProcess"))
             bus.register(SERVICE, m, Bus.CallHandler { it.reply(Bus.ok()) })
-        watchNetwork()
-        watchBattery()
+        requirements.watch(bus)
         power.onDue { wakeup() }
         load()
     }
@@ -137,21 +138,22 @@ class ActivityManager(private val context: Context, private val power: Power) {
 
     private fun creatorKey(o: JSONObject) = o.optString("serviceId").ifEmpty { o.optString("appId").ifEmpty { o.optString("anonId") } }
 
-    private fun lookup(call: Bus.Call): Activity? {
+    /** The activity a call names by id or by name, or null once the call has been answered with why not. */
+    private fun activityOrReplyError(call: Bus.Call): Activity? {
         val p = call.params
+        fun fail(text: String): Activity? { call.reply(Bus.error(text, 2)); return null }
         if (p.has("activityId")) {
-            val id = p.opt("activityId") as? Number ?: return null.also { call.reply(Bus.error("Error retrieving activityId of Activity to operate on", 2)) }
-            return activities[id.toInt()] ?: null.also { call.reply(Bus.error("activityId not found", 2)) }
+            val id = p.opt("activityId") as? Number ?: return fail("Error retrieving activityId of Activity to operate on")
+            return activities[id.toInt()] ?: fail("activityId not found")
         }
         if (p.has("activityName")) {
-            val name = p.opt("activityName") as? String ?: return null.also { call.reply(Bus.error("Error retrieving activityName of Activity to operate on", 2)) }
-            return byName["$name\u0000${creatorKey(busId(call))}"] ?: null.also { call.reply(Bus.error("Activity name/creator pair not found", 2)) }
+            val name = p.opt("activityName") as? String ?: return fail("Error retrieving activityName of Activity to operate on")
+            return byName["$name\u0000${creatorKey(busId(call))}"] ?: fail("Activity name/creator pair not found")
         }
-        call.reply(Bus.error("Activity ID or name not present in request", 2))
-        return null
+        return fail("Activity ID or name not present in request")
     }
 
-    private inline fun withActivity(call: Bus.Call, f: (Activity) -> Unit) { lookup(call)?.let(f) }
+    private inline fun withActivity(call: Bus.Call, f: (Activity) -> Unit) { activityOrReplyError(call)?.let(f) }
 
     private fun serialOk(a: Activity, call: Bus.Call): Boolean {
         if (!call.params.has("serial")) return true
@@ -193,7 +195,6 @@ class ActivityManager(private val context: Context, private val power: Power) {
         if (a.persist) persist(a, go) else go()
     }
 
-    private class SpecError(text: String) : Exception(text)
 
     private fun parse(spec: JSONObject, caller: JSONObject): Activity {
         val name = spec.opt("name") as? String ?: throw SpecError("Activity name is required")
@@ -469,7 +470,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
     }
 
     private fun callCallback(a: Activity, cb: JSONObject) {
-        a.serial = (Math.random() * 0xffffffffL).toLong()
+        a.serial = (Math.random() * SERIAL_RANGE).toLong()
         val params = JSONObject((cb.optJSONObject("params") ?: JSONObject()).toString()).put("\$activity", info(a))
         bus.call(SERVICE, cb.getString("method"), params.toString(), privateBus = true) { reply ->
             main.post { callbackReplied(a, reply) }
@@ -533,15 +534,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
             main.post {
                 if (a.triggerCall == null || a.fired != null) return@post
                 val r = runCatching { JSONObject(reply) }.getOrNull() ?: JSONObject()
-                val isBasic = !t.has("key") && !t.has("where") && !t.has("compare")
-                val match = when {
-                    r.has("returnValue") && !r.optBoolean("returnValue") -> true   // an error fires it, with the error
-                    t.has("key") -> r.has(t.getString("key"))
-                    t.has("compare") -> t.getJSONObject("compare").let { c -> r.has(c.getString("key")) && !same(r.get(c.getString("key")), c.get("value")) }
-                    t.has("where") -> where(r, t.get("where"))
-                    isBasic -> !first
-                    else -> false
-                }
+                val match = TriggerMatch.matches(t, r, first)
                 first = false
                 if (!match) return@post
                 a.fired = r
@@ -549,42 +542,6 @@ class ActivityManager(private val context: Context, private val power: Power) {
                 evaluate(a)
             }
         }
-    }
-
-    private fun same(x: Any?, y: Any?) = x == y || (x is Number && y is Number && x.javaClass == y.javaClass && x.toDouble() == y.toDouble())
-
-    private fun where(o: JSONObject, w: Any): Boolean = when (w) {
-        is JSONArray -> (0 until w.length()).all { where(o, w.get(it)) }
-        is JSONObject -> when {
-            w.has("and") -> where(o, w.get("and"))
-            w.has("or") -> w.get("or").let { or -> if (or is JSONArray) (0 until or.length()).any { where(o, or.get(it)) } else where(o, or) }
-            else -> {
-                val v = path(o, w.opt("prop")) ?: NONE
-                if (v === NONE) false else if (w.optString("op") == "where") true else compareOp(v, w.optString("op"), w.opt("val"))
-            }
-        }
-        else -> false
-    }
-
-    private val NONE = Any()
-
-    private fun path(o: JSONObject, prop: Any?): Any? {
-        val parts = when (prop) { is String -> prop.split('.'); is JSONArray -> (0 until prop.length()).map { prop.getString(it) }; else -> return null }
-        var cur: Any? = o
-        for (p in parts) cur = (cur as? JSONObject)?.opt(p) ?: return null
-        return cur
-    }
-
-    /** MojObject's order: different types order by type, so int 1 and decimal 1.0 differ. */
-    private fun compareOp(a: Any?, op: String, b: Any?): Boolean {
-        fun rank(v: Any?) = when (v) { null, JSONObject.NULL -> 1; is JSONObject -> 2; is JSONArray -> 3; is String -> 4; is Boolean -> 5; is Double, is Float -> 6; is Number -> 7; else -> 0 }
-        val c = if (rank(a) != rank(b)) rank(a).compareTo(rank(b)) else when (a) {
-            is String -> a.compareTo(b as String)
-            is Boolean -> a.compareTo(b as Boolean)
-            is Number -> a.toDouble().compareTo((b as Number).toDouble())
-            else -> if (a.toString() == b.toString()) 0 else 1
-        }
-        return when (op) { "<" -> c < 0; "<=" -> c <= 0; "=" -> c == 0; "!=" -> c != 0; ">=" -> c >= 0; ">" -> c > 0; else -> false }
     }
 
     // ---- schedules ----
@@ -667,115 +624,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
         power.at(TIMER, next)
     }
 
-    private class Schedule(val spec: JSONObject) {
-        var start: Long? = null; var end: Long? = null; var interval: Long? = null
-        var precise = false; var relative = false; var skip = false; var local = false
-        var lastFinished: Long? = null
-        var nextStart: Long? = null
-        /** When it was last armed (wall clock). */
-        var setAt = 0L
-        var due = false
-
-        fun past() = end?.let { e -> (nextStart ?: System.currentTimeMillis()) >= e } ?: false
-
-        /** Works out the next start and clears due, as each queueing did. */
-        fun queue() {
-            due = false
-            setAt = System.currentTimeMillis()
-            val now = System.currentTimeMillis()
-            val iv = interval
-            if (iv == null) { nextStart = start; return }
-            // A precise interval with no start ticks from DAY_ONE (2 January 1970), in local time
-            // since nothing named UTC, as MojoJsonConverter and PreciseIntervalSchedule had it
-            // (RelativeIntervalSchedule too, until it has finished once): the first run is the
-            // next tick, never at once. Taken from now, an activity that recreates its own
-            // schedule from its callback (the BlueBubbles connector's 2m periodic sync) ran
-            // again a few milliseconds later, over and over.
-            val dayOne = DAY_ONE - TimeZone.getDefault().getOffset(now)
-            val base = when {
-                relative -> lastFinished ?: start ?: dayOne
-                precise -> start ?: dayOne
-                else -> SMART_BASE
-            }
-            var next = if (now <= base) base else base + ((now - base) / iv + 1) * iv
-            val missedFrom = lastFinished ?: if (spec.has("start")) start else null
-            if (!skip && missedFrom != null && next - missedFrom > iv) next = now
-            if (end != null && end!! - next <= 0) { nextStart = null; return }
-            nextStart = next
-        }
-
-        fun toJson(current: Boolean): JSONObject {
-            val o = JSONObject()
-            if (precise) o.put("precise", true)
-            if (relative) o.put("relative", true)
-            if (current) nextStart?.let { o.put("nextStart", format(it, local)) }
-            end?.let { o.put("end", format(it, local)) }
-            if (skip) o.put("skip", true)
-            lastFinished?.let { o.put("lastFinished", format(it, local)) }
-            spec.optString("interval").takeIf { it.isNotEmpty() }?.let { o.put("interval", it) }
-            if (current) o.put("scheduled", due)
-            if (local) o.put("local", true)
-            start?.let { o.put("start", format(it, local)) }
-            return o
-        }
-
-        companion object {
-            /** webOS's Schedule::DAY_ONE: a schedule's start when it names none. */
-            const val DAY_ONE = 86_400_000L
-            /** Smart intervals tick on a base drawn once, between 23:00 and 05:00 after the epoch. */
-            val SMART_BASE = (23 * 3600 + (Math.random() * 6 * 3600).toLong()) * 1000L
-            private val SMART = setOf(5, 10, 15, 20, 30, 60, 180, 360, 720).map { it * 60_000L }.toSet()
-
-            fun parse(s: JSONObject): Schedule {
-                val sc = Schedule(s)
-                sc.precise = s.optBoolean("precise"); sc.relative = s.optBoolean("relative"); sc.skip = s.optBoolean("skip")
-                val startText = s.opt("start") as? String; val endText = s.opt("end") as? String
-                val utc = listOfNotNull(startText, endText).map { it.endsWith("Z") }.distinct()
-                if (utc.size > 1) throw SpecError("Start and end time must both be specified in UTC or local time")
-                sc.local = s.optBoolean("local") || utc.singleOrNull() == false
-                sc.start = startText?.let { time(it, sc.local) }
-                sc.end = endText?.let { time(it, sc.local) }
-                val iv = s.opt("interval") as? String
-                if (iv != null) {
-                    val ms = duration(iv)
-                    if (!sc.precise) {
-                        if (ms % 60_000L != 0L) throw SpecError("Only durations of even minutes may be specified")
-                        if (ms !in SMART && ms % 86_400_000L != 0L) throw SpecError("Interval must be a number of days<n>d, or one of: 12h, 6h, 3h, 1h, 20m, 30m, 15m, 10m or 5m")
-                        if (sc.start != null || sc.end != null) throw SpecError("Unless precise time is specified, time intervals may not specify a start or end time")
-                        if (sc.relative) throw SpecError("Relative schedules must be precise")
-                    }
-                    sc.interval = ms
-                } else if (sc.start == null) throw SpecError("Non Interval Schedules must specify a start time")
-                (s.opt("lastFinished") as? String)?.let { lf ->
-                    val t = time(lf, sc.local)
-                    if (t < System.currentTimeMillis() && (sc.start == null || t > sc.start!!)) sc.lastFinished = t
-                }
-                return sc
-            }
-
-            private fun fmt(local: Boolean) = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply { timeZone = if (local) TimeZone.getDefault() else TimeZone.getTimeZone("UTC") }
-            fun format(t: Long, local: Boolean) = fmt(local).format(t) + if (local) "" else "Z"
-            fun time(s: String, local: Boolean): Long {
-                val z = s.endsWith("Z")
-                if (!z && s.isNotEmpty() && !s.last().isDigit()) throw SpecError("Start time must end in 'Z' for UTC, or nothing")
-                return runCatching { fmt(!z && local).parse(s.removeSuffix("Z"))!!.time }.getOrElse { throw SpecError("Failed to parse start time") }
-            }
-            fun duration(s: String): Long {
-                val m = Regex("^(?:(\\d+)D)?(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?$", RegexOption.IGNORE_CASE).find(s.trim())
-                    ?: throw SpecError("Failed to parse scheduling interval")
-                val (d, h, mi, se) = m.destructured
-                val ms = ((d.toLongOrNull() ?: 0) * 86400 + (h.toLongOrNull() ?: 0) * 3600 + (mi.toLongOrNull() ?: 0) * 60 + (se.toLongOrNull() ?: 0)) * 1000
-                if (ms == 0L) throw SpecError("Duration must be non-zero")
-                return ms
-            }
-        }
-    }
-
     // ---- requirements ----
-
-    private var netStatus: JSONObject? = null
-    private var batteryPercent = -1
-    private var charger: String? = null
 
     private fun setRequirement(a: Activity, name: String, v: Any) {
         when (name) {
@@ -787,7 +636,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
                 if (v != true) throw SpecError("If an '$name' requirement is specified, the only legal value is 'true'")
             }
             "internetConfidence", "wifiConfidence", "wanConfidence" ->
-                if (v !is String || v !in CONFIDENCE) throw SpecError("Invalid connection confidence level specified")
+                if (v !is String || v !in ActivityRequirements.CONFIDENCE) throw SpecError("Invalid connection confidence level specified")
             "battery" -> if (v !is Int || v !in 0..100) throw SpecError("A \"battery\" requirement must specify a value between 0 and 100")
             // A wifi TouchPad had no telephony manager to ask.
             else -> throw SpecError("Manager for requirement not found")
@@ -795,79 +644,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
         a.requirements.put(name, v)
     }
 
-    private fun confidence(o: JSONObject?): Int {
-        if (o == null || o.optString("state") != "connected" || o.optString("onInternet") != "yes") return -1
-        return CONFIDENCE.indexOf(o.optString("networkConfidenceLevel"))
-    }
-
-    private fun met(name: String, v: Any): Boolean {
-        val s = netStatus
-        val wifi = s?.optJSONObject("wifi"); val wan = s?.optJSONObject("wan")
-        return when (name) {
-            "internet" -> s?.optBoolean("isInternetConnectionAvailable") == true
-            "wifi" -> wifi?.optString("state") == "connected" && wifi.optString("onInternet") == "yes"
-            "wan" -> wan?.optString("state") == "connected" && wan.optString("network") != "unusable" && wan.optString("onInternet") == "yes"
-            "internetConfidence" -> maxOf(confidence(wifi), confidence(wan)).let { it >= 0 && it >= CONFIDENCE.indexOf(v) }
-            "wifiConfidence" -> confidence(wifi).let { it >= 0 && it >= CONFIDENCE.indexOf(v) }
-            "wanConfidence" -> confidence(wan).let { it >= 0 && it >= CONFIDENCE.indexOf(v) }
-            "charging" -> charger != null
-            "docked" -> charger == "puck"
-            "battery" -> batteryPercent >= (v as Int)
-            "bootup" -> true
-            else -> false
-        }
-    }
-
-    private fun current(name: String): Any {
-        val s = netStatus
-        return when (name) {
-            "internet" -> s ?: false
-            "wifi" -> s?.optJSONObject("wifi") ?: false
-            "wan" -> s?.optJSONObject("wan") ?: false
-            "internetConfidence" -> maxOf(confidence(s?.optJSONObject("wifi")), confidence(s?.optJSONObject("wan"))).let { if (it < 0) "unknown" else CONFIDENCE[it] }
-            "wifiConfidence" -> confidence(s?.optJSONObject("wifi")).let { if (it < 0) "unknown" else CONFIDENCE[it] }
-            "wanConfidence" -> confidence(s?.optJSONObject("wan")).let { if (it < 0) "unknown" else CONFIDENCE[it] }
-            "battery" -> batteryPercent
-            else -> met(name, requirementsValue(name))
-        }
-    }
-
-    private fun requirementsValue(name: String): Any = true
-
-    private fun requirementsMet(a: Activity) = a.requirements.keys().asSequence().all { met(it, a.requirements.get(it)) }
-
-    /** The connection manager's status, as the device's activity manager subscribed to it. */
-    private var networkWatch: Bus.Call? = null
-
-    private fun watchNetwork() {
-        networkWatch = bus.call(SERVICE, "palm://com.palm.connectionmanager/getstatus", "{\"subscribe\":true}", privateBus = true) { reply ->
-            main.post {
-                val r = runCatching { JSONObject(reply) }.getOrNull() ?: return@post
-                val before = activities.values.associateWith { requirementsMet(it) }
-                netStatus = r
-                requirementsChanged(before)
-            }
-        }
-    }
-
-    private var batteryReceiver: BroadcastReceiver? = null
-
-    private fun watchBattery() {
-        val r = object : BroadcastReceiver() {
-            override fun onReceive(c: Context, i: Intent) {
-                val before = activities.values.associateWith { requirementsMet(it) }
-                val level = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1); val scale = i.getIntExtra(BatteryManager.EXTRA_SCALE, 100)
-                batteryPercent = if (level < 0 || scale <= 0) -1 else level * 100 / scale
-                charger = when (i.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)) {
-                    BatteryManager.BATTERY_PLUGGED_USB -> "usb"; BatteryManager.BATTERY_PLUGGED_WIRELESS -> "inductive"
-                    BatteryManager.BATTERY_PLUGGED_AC -> "usb"; else -> null
-                }
-                requirementsChanged(before)
-            }
-        }
-        batteryReceiver = r
-        context.registerReceiver(r, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-    }
+    private fun requirementsMet(a: Activity): Boolean = a.requirements.keys().asSequence().all { requirements.met(it, a.requirements.get(it)) }
 
     private fun requirementsChanged(before: Map<Activity, Boolean>) {
         for (a in activities.values.toList()) {
@@ -919,7 +696,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
         val o = JSONObject().put("activityId", a.id)
         if (a.callback != null) o.put("callback", JSONObject().put("serial", a.serial))
         if (a.trigger != null) o.put("trigger", a.fired ?: false)
-        if (a.requirements.length() > 0) o.put("requirements", JSONObject().also { r -> for (k in a.requirements.keys()) r.put(k, current(k)) })
+        if (a.requirements.length() > 0) o.put("requirements", JSONObject().also { r -> for (k in a.requirements.keys()) r.put(k, requirements.current(k)) })
         o.put("creator", a.creator).put("name", a.name)
         a.metadata?.let { o.put("metadata", it) }
         return o
@@ -959,7 +736,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
             a.callback?.let { o.put("callback", if (current) (if (a.serial != 0L) JSONObject().put("serial", a.serial) else JSONObject()) else it) }
             a.schedule?.let { o.put("schedule", it.toJson(current)) }
             a.trigger?.let { o.put("trigger", if (current) (a.fired ?: false) else it) }
-            if (a.requirements.length() > 0) o.put("requirements", if (current) JSONObject().also { r -> for (k in a.requirements.keys()) r.put(k, current(k)) } else a.requirements)
+            if (a.requirements.length() > 0) o.put("requirements", if (current) JSONObject().also { r -> for (k in a.requirements.keys()) r.put(k, requirements.current(k)) } else a.requirements)
         }
         return o
     }
@@ -1034,8 +811,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
      */
     fun stop() {
         started = false
-        batteryReceiver?.let { context.unregisterReceiver(it) }; batteryReceiver = null
-        networkWatch?.cancel(); networkWatch = null
+        requirements.stop()
         main.removeCallbacksAndMessages(null)
         for (a in activities.values) { a.triggerCall?.cancel(); a.triggerCall = null }
         activities.clear(); byName.clear(); queue.clear(); due.clear(); waitingForEnable.clear()
@@ -1087,6 +863,8 @@ class ActivityManager(private val context: Context, private val power: Power) {
     companion object {
         /** How long a callback whose service went away waits before it is tried again. */
         private const val RETRY_MS = 5000L
+        /** A callback's serial, which a reply must quote: a random 32-bit number, as webOS's. */
+        private const val SERIAL_RANGE = 0xffffffffL
         const val SERVICE = "com.palm.activitymanager"
         /** Its timer with [Power], under the key it had with powerd. */
         private const val TIMER = "com.palm.activitymanager.wakeup"
@@ -1095,7 +873,6 @@ class ActivityManager(private val context: Context, private val power: Power) {
         private const val BLOCK_LEAD_MS = 10_000L
         private const val KIND = "com.palm.activity:1"
         private val PRIORITIES = listOf("none", "lowest", "low", "normal", "high", "highest")
-        private val CONFIDENCE = listOf("none", "poor", "fair", "excellent")
         private val WHERE_OPS = setOf("<", "<=", "=", "!=", ">=", ">", "where")
     }
 }

@@ -586,6 +586,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         val text = term.trim().lowercase()
         for (g in gs) drawGroup(c, g, text)
         if (searched && gs.isEmpty() && (view == Filter.CONTENT || view == Filter.CONTACTS)) drawNoResults(c)
+        if (!searched && field.text.isEmpty()) drawEmpty(c)
         c.restore()
         // The header and the tabs over what scrolls under them, and their shadow.
         luna.tile(c, "justtype/search-header-bg.png", RectF(0f, 0f, width.toFloat(), px(HEADER_H)))
@@ -763,6 +764,21 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         c.drawBitmap(b, Rect(0, y0, cap, y1), RectF(r.left, r.top, r.left + capW, r.bottom), iconPaint)
         c.drawBitmap(b, Rect(cap, y0, b.width - cap, y1), RectF(r.left + capW, r.top, r.right - capW, r.bottom), iconPaint)
         c.drawBitmap(b, Rect(b.width - cap, y0, b.width, y1), RectF(r.right - capW, r.top, r.right, r.bottom), iconPaint)
+    }
+
+    /**
+     * Just Type with nothing typed: HomeView's emptyMain, empty-search.png 100 px down the
+     * scroller and "Start typing to search or create" 80 px up into its bottom margin
+     * (style.css: .large-empty-icon, .empty-text). Measured against the reference TouchPad
+     * (CE 3.2.0, 2026-11-05): the icon's ink from 190 to 360 and the text's from 391 to 410
+     * on its 768 px screen, which is this. HomeView shows its Recent Searches there instead
+     * once there are some; Lunacy keeps none yet.
+     */
+    private fun drawEmpty(c: Canvas) {
+        val s = px(176f)
+        val top = topOfList() + px(100f)
+        luna.image("justtype/empty-search.png")?.let { c.drawBitmap(it, null, RectF(width / 2f - s / 2, top, width / 2f + s / 2, top + s), iconPaint) }
+        c.drawText("Start typing to search or create", width / 2f, top + s + px(100f) - px(80f) - emptyText.ascent(), emptyText)
     }
 
     /** "No Search Results Found" under empty-search.png, as DbSearch and ContactSearch show it. */

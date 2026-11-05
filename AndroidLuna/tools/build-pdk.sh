@@ -23,6 +23,11 @@ DEBIAN=https://deb.debian.org/debian
 SDL_VER=1.2.15
 
 mkdir -p "$WORK/deb" "$WORK/sysroot" "$OUT/lib" "$JNI" "$JNI64"
+
+# The runtime's host tests first: LUNACY_Send's locking (LunaRuntimes/pdk/tests). A failure
+# stops the build, so no APK carries the runtime it found wrong.
+"$SRC/tests/run.sh" "$WORK/tests"
+
 cd "$WORK"
 
 # A download that fails leaves nothing behind (not a 404 page cached as the file), and a
@@ -65,7 +70,7 @@ fi
 S=$WORK/SDL-$SDL_VER
 rm -f $S/src/video/dummy/*.c $S/src/video/dummy/*.h $S/src/audio/dummy/*.c $S/src/audio/dummy/*.h
 cp $SRC/sdl-lunacy/SDL_lunacyvideo.c $SRC/sdl-lunacy/SDL_lunacyvideo.h $SRC/sdl-lunacy/SDL_lunacyevents.c \
-   $SRC/sdl-lunacy/SDL_lunacyevents_c.h $SRC/sdl-lunacy/lunacy_protocol.h $S/src/video/dummy/
+   $SRC/sdl-lunacy/SDL_lunacyevents_c.h $SRC/sdl-lunacy/lunacy_protocol.h $SRC/sdl-lunacy/lunacy_send.h $S/src/video/dummy/
 cp $SRC/sdl-lunacy/SDL_lunacyaudio.c $SRC/sdl-lunacy/SDL_lunacyaudio.h $S/src/audio/dummy/
 # The accelerometer as joystick 0, as webOS had it, in place of the Linux driver.
 cp $SRC/sdl-lunacy/SDL_lunacyjoystick.c $S/src/joystick/linux/SDL_sysjoystick.c

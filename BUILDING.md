@@ -115,6 +115,19 @@ SQLite through Robolectric (`Db8Test`), a test-only dependency: nothing of it sh
 Robolectric fetches its Android runtime from Maven the first time, so the first run needs the
 network.
 
+### The PDK runtime's host tests
+
+```sh
+LunaRuntimes/pdk/tests/run.sh
+```
+
+C tests of the PDK runtime, built with the build machine's own `cc` (or `HOST_CC`) and run there.
+`AndroidLuna/tools/build-pdk.sh` runs them before it builds anything, so a release can't carry
+a runtime they fail. `send_test.c` checks `LUNACY_Send` (`sdl-lunacy/lunacy_send.h`, the code the
+SDL driver compiles): a send on one socket isn't held up by another socket that is full - one
+lock for every socket halved games' frame rates in 0.9.2's test round - and threads sending on
+one socket each get their messages out whole.
+
 ## Install and run
 
 ```sh

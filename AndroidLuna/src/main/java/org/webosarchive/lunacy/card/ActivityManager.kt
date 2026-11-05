@@ -78,8 +78,14 @@ class ActivityManager(private val context: Context, private val power: Power) {
         /** The reply that fired the trigger, while it has. */
         var fired: JSONObject? = null
         var serial = 0L
-        var dbId: String? = null
-        var dbRev: Long? = null
+        /** Its record in db8, which the activity that replaces it takes over. */
+        var record = DbRecord()
+        var dbId: String?
+            get() = record.id
+            set(v) { record.id = v }
+        var dbRev: Long?
+            get() = record.rev
+            set(v) { record.rev = v }
 
         val key get() = "$name\u0000${creatorKey(creator)}"
     }
@@ -175,8 +181,10 @@ class ActivityManager(private val context: Context, private val power: Power) {
         a.id = newId()
         if (old != null) {
             // The new one takes the old one's place in db8; the old one is cancelled.
-            if (a.persist) { a.dbId = old.dbId; a.dbRev = old.dbRev } else old.dbId?.let { dbDel(it) }
-            old.dbId = null
+            // The record itself, not its id and revision as they stand: a save of the old one may
+            // still be on its way, and the revision it brings back is the one the next save needs.
+            if (a.persist) a.record = old.record else old.dbId?.let { dbDel(it) }
+            old.record = DbRecord()
             old.terminate = true
             byName.remove(old.key)
             command(old, "cancel")
@@ -754,19 +762,40 @@ class ActivityManager(private val context: Context, private val power: Power) {
 
     // ---- persistence ----
 
+    /**
+     * Saves the activity to db8. Saves to one record go one at a time: each sends the revision
+     * the last brought back, so a save made while another is on its way waits for it, then
+     * sends the activity as it is then. Two at once - an activity created twice in quick
+     * succession, the second replacing the first, as the configurator's two runs at start do -
+     * sent the same revision, and db8 refused the second ("revision mismatch"), after which
+     * every save of that record failed.
+     */
     private fun persist(a: Activity, done: () -> Unit = {}) {
+        val record = a.record
+        if (record.saving) { record.waiting += { persist(a, done) }; return }
+        record.saving = true
         val rep = toJson(a, detail = true, subscribers = false, current = false, persisting = true).put("_kind", KIND)
-        a.dbId?.let { rep.put("_id", it) }
-        a.dbRev?.let { rep.put("_rev", it) }
+        record.id?.let { rep.put("_id", it) }
+        record.rev?.let { rep.put("_rev", it) }
         bus.call(SERVICE, "palm://com.palm.db/put", JSONObject().put("objects", JSONArray().put(rep)).toString(), privateBus = true) { reply ->
             main.post {
                 val r = runCatching { JSONObject(reply) }.getOrNull()
                 val res = r?.optJSONArray("results")?.optJSONObject(0)
-                if (res != null) { a.dbId = res.optString("id"); a.dbRev = res.optLong("rev") }
+                if (res != null) { record.id = res.optString("id"); record.rev = res.optLong("rev") }
                 else Log.w(AppServer.TAG, "activity ${a.id} ${a.name}: not persisted: $reply")
+                record.saving = false
                 done()
+                record.waiting.removeFirstOrNull()?.invoke()
             }
         }
+    }
+
+    /** An activity's record in db8: its id and revision, and the saves waiting their turn. */
+    private class DbRecord {
+        var id: String? = null
+        var rev: Long? = null
+        var saving = false
+        val waiting = ArrayDeque<() -> Unit>()
     }
 
     private fun dbDel(id: String, done: () -> Unit = {}) {

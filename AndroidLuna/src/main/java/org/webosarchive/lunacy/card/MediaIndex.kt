@@ -103,7 +103,7 @@ class MediaIndex(private val webosRoot: File) {
 
     private fun local(o: JSONObject) = o.optString("type") == "local"
 
-    /** The images or videos, each with its album's id. Runs on db8's thread. */
+    /** The images or videos, each with its album's id. Runs on db8's mirror thread (Db8.mirror). */
     private fun files(db: Db8, type: String): List<JSONObject> {
         val albums = db.mirrorIds(ALBUM)
         return scan().filter { it.optString("mediaType") == type }.map { r ->

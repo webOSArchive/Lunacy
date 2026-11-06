@@ -108,7 +108,7 @@ class MusicLibrary(private val context: Context, private val webosRoot: File) {
 
     // ---- the songs ----
 
-    /** Every song, read from Android at most every few seconds; MediaIndex files them with the ringtones. Runs on db8's thread. */
+    /** Every song, read from Android at most every few seconds; MediaIndex files them with the ringtones. Runs on db8's mirror thread (Db8.mirror). */
     @Synchronized fun songs(): List<JSONObject> {
         val now = android.os.SystemClock.uptimeMillis()
         if (scanned != 0L && now - scanned < RESCAN_MS) return songs.map { JSONObject(it.toString()) }

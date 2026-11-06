@@ -23,7 +23,13 @@ class Db8(private val service: String, file: File?,
            /** A debuggable build: the SDK's relay may purge (see "purge"). */
            private val debuggable: Boolean = false) {
     private val db: SQLiteDatabase = if (file != null) SQLiteDatabase.openOrCreateDatabase(file, null) else SQLiteDatabase.create(null)
-    private val worker = Executors.newSingleThreadExecutor()
+    private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "db8 $service").also { dbThread = it } }
+    @Volatile private var dbThread: Thread? = null
+    /**
+     * Where mirrors read their sources (a walk of the media folders, a file's EXIF, Android's
+     * media library): never db8's thread, which every app and service is waiting on.
+     */
+    private val mirrorWorker = Executors.newSingleThreadExecutor { r -> Thread(r, "db8 $service mirrors") }
     private val main = Handler(Looper.getMainLooper())
     private val kinds = LinkedHashMap<String, Kind>()
     private val cache = HashMap<String, LinkedHashMap<String, JSONObject>>()  // kind -> id -> object
@@ -32,6 +38,8 @@ class Db8(private val service: String, file: File?,
     private class Mirror(val source: () -> List<JSONObject>, val initial: Set<String>, val owns: (JSONObject) -> Boolean,
                          val added: (() -> Unit)?, val key: (JSONObject) -> String) {
         var synced = 0L
+        /** A pass is reading the source on the mirror thread. */
+        var refreshing = false
         /** Each record's [STAMP] as the last pass saw it, by path. */
         var stamps: Map<String, String> = emptyMap()
     }
@@ -103,6 +111,7 @@ class Db8(private val service: String, file: File?,
      */
     fun close() {
         mirrorTicker?.shutdownNow(); mirrorTicker = null
+        mirrorWorker.shutdownNow()
         work { watches.clear(); db.close() }
         worker.shutdown()
     }
@@ -120,8 +129,13 @@ class Db8(private val service: String, file: File?,
 
     /**
      * A kind whose truth is elsewhere (the files under /media/internal, for FileIndex): db8
-     * registers it, and before anything reads or changes it, brings its records into line with
-     * [source], at most every [MIRROR_MS]. Each record is matched to its source by `path` (or [key]): a new
+     * registers it, and when something queries it, brings its records into line with [source],
+     * at most every [MIRROR_MS]. The source is read on a thread of its own and only the
+     * difference is written on db8's, so a query answers from what is already indexed, as
+     * webOS's filenotifyd indexed in the background while db8 kept answering: a cold start
+     * with a large camera roll held every db8 call (the accounts list, Email's folders) for a
+     * minute and more while it read each photo's EXIF. A call by `_id` names no kind and starts
+     * no pass. Each record is matched to its source by `path` (or [key]): a new
      * one is created, a changed one takes the source's properties (keeping anything an app
      * added), and one whose source has gone is purged, each firing watches as any write does.
      * While a watch is open on the kind it is checked every [MIRROR_WATCH_MS], so a list that
@@ -141,10 +155,12 @@ class Db8(private val service: String, file: File?,
             putKind(CONFIGURATOR, spec)
             putPermissions(CONFIGURATOR, JSONObject().put("permissions", permissions))
         } catch (e: Exception) { Log.w(AppServer.TAG, "$service: mirror ${spec.optString("id")}: ${e.message}"); return@work }
-        mirrors[spec.getString("id")] = Mirror(source, initial, owns, added, key)
+        // A first pass at once, as filenotifyd indexed at boot: it runs on the mirror thread
+        // while db8 answers from what the last run left.
+        Mirror(source, initial, owns, added, key).also { mirrors[spec.getString("id")] = it; refreshMirror(spec.getString("id"), it) }
         if (mirrorTicker == null) mirrorTicker = Executors.newSingleThreadScheduledExecutor().also {
             it.scheduleWithFixedDelay({
-                work { for ((k, m) in mirrors) if (watches.any { w -> k in w.kinds }) syncMirror(k, m) }
+                work { for ((k, m) in mirrors) if (watches.any { w -> k in w.kinds }) refreshMirror(k, m) }
             }, MIRROR_WATCH_MS, MIRROR_WATCH_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
         }
     }
@@ -197,11 +213,30 @@ class Db8(private val service: String, file: File?,
         }
     }
 
-    private fun syncMirror(kind: String, m: Mirror) {
-        val now = android.os.SystemClock.uptimeMillis()
-        if (m.synced != 0L && now - m.synced < MIRROR_MS) return
-        m.synced = now
-        val files = try { m.source() } catch (e: Exception) { Log.w(AppServer.TAG, "$service: mirror $kind: $e"); return }
+    /**
+     * Starts a pass of [kind]'s mirror unless one is running or the last ended less than
+     * [MIRROR_MS] ago; on db8's thread. The source is read on the mirror thread, and what it
+     * found is written back here ([applyMirror]).
+     */
+    private fun refreshMirror(kind: String, m: Mirror) {
+        if (m.refreshing || (m.synced != 0L && android.os.SystemClock.uptimeMillis() - m.synced < MIRROR_MS)) return
+        m.refreshing = true
+        try {
+            mirrorWorker.execute {
+                val files = try { m.source() } catch (e: Exception) { Log.w(AppServer.TAG, "$service: mirror $kind: $e"); null }
+                work {
+                    m.refreshing = false
+                    m.synced = android.os.SystemClock.uptimeMillis()
+                    if (files != null) applyMirror(kind, m, files)
+                }
+            }
+        } catch (e: java.util.concurrent.RejectedExecutionException) {
+            m.refreshing = false
+        }
+    }
+
+    /** A pass's result: [kind]'s records brought into line with what its source read. On db8's thread. */
+    private fun applyMirror(kind: String, m: Mirror, files: List<JSONObject>) {
         val byPath = LinkedHashMap<String, JSONObject>()
         val stamps = HashMap<String, String>()
         for (f in files) {
@@ -242,12 +277,25 @@ class Db8(private val service: String, file: File?,
     }
 
     /**
-     * For a mirror's source, on db8's thread: the mirrored [kind] brought into line, and its
-     * records' ids by path (an image's albumId is its folder's album).
+     * For a mirror's source, on the mirror thread: the mirrored [kind] brought into line (its
+     * source read here, written on db8's thread), and its records' ids by path (an image's
+     * albumId is its folder's album, which so exists before its first image is written).
      */
     fun mirrorIds(kind: String): Map<String, String> {
-        mirrors[kind]?.let { syncMirror(kind, it) }
-        return objects(kind).values.filter { !it.optBoolean("_del") }.associate { it.optString("path") to it.getString("_id") }
+        val m = mirrors[kind]
+        val files = m?.let { runCatching { it.source() }.getOrNull() }
+        return onDbThread(emptyMap()) {
+            if (m != null && files != null) { m.synced = android.os.SystemClock.uptimeMillis(); applyMirror(kind, m, files) }
+            objects(kind).values.filter { !it.optBoolean("_del") }.associate { it.optString("path") to it.getString("_id") }
+        }
+    }
+
+    /** [f] on db8's thread, waited for; [closed] once db8 has closed. */
+    private fun <T> onDbThread(closed: T, f: () -> T): T {
+        if (Thread.currentThread() === dbThread) return f()
+        return try { worker.submit(java.util.concurrent.Callable { f() }).get() }
+        catch (e: java.util.concurrent.RejectedExecutionException) { closed }
+        catch (e: java.util.concurrent.ExecutionException) { throw e.cause ?: e }
     }
 
     /** What an operation could read or change of a mirrored kind: the one it names, or all of them. */
@@ -255,8 +303,8 @@ class Db8(private val service: String, file: File?,
         if (mirrors.isEmpty() || method !in MIRRORED_OPS) return
         val from = p.optJSONObject("query")?.optString("from")
         // A query of a kind reads every kind that extends it: those are synced too.
-        if (from != null && from.isNotEmpty()) { for (k in family(from)) mirrors[k]?.let { syncMirror(k, it) } }
-        else for ((k, m) in mirrors) syncMirror(k, m)
+        // A call by _id (get, merge or del of objects) names no kind and reads what is there.
+        if (from != null && from.isNotEmpty()) { for (k in family(from)) mirrors[k]?.let { refreshMirror(k, it) } }
     }
 
     private var bus: Bus? = null

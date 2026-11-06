@@ -56,6 +56,17 @@ Added to find out more: Device Info's **Save a Log** ([dev-workflow.md](dev-work
 - **Nexus 7:** Device Info shows "Node: not available" though the JS services run (the
   version probe fails).
 
+**Found and fixed (2026-11-06), after the reasoning above was turned on the code:** db8's
+media mirrors read every photo's EXIF on db8's own thread at each cold start, holding every db8
+call: after a cold start the accounts list took 48 s, then 7-19 s a call for two minutes, on the
+Pixel Tablet with 3,000 photos. Now read on a thread of their own: 6.6 s, then about 1 s
+([fix-log.md](fix-log.md), 2026-11-06). A stand-alone Lunacy starts cold far more often, which is
+why only testers who don't use it as the home screen saw it. Also measured: a stand-alone Lunacy
+is cached about a minute after the user leaves it, and Android 17 freezes it (Pixel), which
+stops the whole webOS system; One UI 6 (A7 Lite) caches it but didn't freeze it in five minutes.
+Photos' All Photos grid leaves out an album (Wallpapers, on the Pixel in portrait) that its
+list shows, in the released 0.9.2 too: open.
+
 Still to do: an uninstall followed by a restore from Android's backup, which brings the
 accounts back without their passwords by design and is still untried.
 

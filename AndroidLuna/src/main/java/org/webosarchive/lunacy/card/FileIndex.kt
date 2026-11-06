@@ -27,7 +27,7 @@ class FileIndex(private val webosRoot: File) {
     /** Registers the kind and makes db8 answer it from the folders. */
     fun attach(db: Db8) = db.mirror(kindSpec(), permissions(), source = ::records)
 
-    /** Every document under /media/internal, as filenotifyd's records. Runs on db8's thread. */
+    /** Every document under /media/internal, as filenotifyd's records. Runs on db8's mirror thread (Db8.mirror). */
     private fun records(): List<JSONObject> =
         UserFiles.walkMedia(webosRoot) { p, f -> if (isDocument(f.name)) record(p, f) else null }
 

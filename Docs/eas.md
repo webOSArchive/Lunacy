@@ -122,7 +122,7 @@ thread (Ping would hold it for its whole heartbeat), answers `sendMail`, `moveEm
 `meetingResponse` with success while doing nothing, and writes its own db8 kinds rather than
 Palm's. It builds here unchanged with the PDK's GCC 4.3.3 (`/opt/PalmPDK/arm-gcc`), HP's CE
 build-support headers (Boost 1.39, glib, curl, cjson) and db8's, linked against the TouchPad's
-libraries. Palm's binary with three adapters (below, and [oauth.md](oauth.md)) went further, so
+libraries. Palm's binary with five adapters (below, and [oauth.md](oauth.md)) went further, so
 the rewrite waits.
 
 ## For the webOS CE project
@@ -138,11 +138,13 @@ What CE could take from this:
   TouchPad's; anyone reimplementing db8 or the system service (LuneOS, Herrie's rewrite) needs
   the same.
 - **Exchange Online since March 2026** takes ActiveSync 16.1 only, which shuts out the TouchPad's
-  mojomail-eas as shipped. Three small adapters around its curl calls carried it through
-  provisioning, FolderSync, Sync and Ping against Microsoft 365 ([oauth.md](oauth.md)): send the
+  mojomail-eas as shipped. Five small adapters around its curl calls carry it through
+  provisioning, sync and sending against Microsoft 365 ([oauth.md](oauth.md)): send the
   nearest offered version (16.1) where the server no longer offers the one asked for (the
   binary sends 12.1); report a reply whose Status is 142-144 as HTTP 449; add
-  settings:DeviceInformation to the initial Provision request. CE preloads libssl_compat into
+  settings:DeviceInformation to the initial Provision request; drop code pages above 20 from
+  replies (the parser asserts on them); and send mail, replies and forwards as ComposeMail
+  rather than raw MIME, which 16.1 answers with status 101 while the binary believes it sent. CE preloads libssl_compat into
   the mail services already, so the same code could live there, with OAuth's Bearer token
   (Microsoft 365 also wants OAuth, not passwords).
 

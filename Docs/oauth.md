@@ -151,7 +151,7 @@ address from the id_token all work. Then:
 **Exchange ActiveSync to Microsoft 365, on Palm's own mojomail-eas (2026-11-05).** Exchange
 Online refuses ActiveSync older than 16.1 since 2026-03-01 (MC1197103) and offers this client
 16.1 only. Palm's service negotiates the newest version offered but actually works at 12.1, so
-three narrow adapters in the preload's curl glue (`preload.c`, after the Bearer support) carry it
+five narrow adapters in the preload's curl glue (`preload.c`, after the Bearer support) carry it
 to 16.1, with the binary unchanged:
 
 1. **Version.** The versions each server offers (`MS-ASProtocolVersions`, kept per host) decide:
@@ -166,6 +166,20 @@ to 16.1, with the binary unchanged:
    (`settings:DeviceInformation`), or Exchange Online answers 165 and gives no policy key. Where
    adapter 1 is at work, Palm's exact initial Provision request gets the block: Model and
    FriendlyName "Lunacy", OS "webOS", UserAgent "Palm/1.0.1".
+4. **Replies cut to 12.1** (`libpreload/wbxmlfilter.h`, 2026-11-06). A 16.1 server puts code
+   pages Palm's parser doesn't know in its replies (Email2's conversation ids, RightsManagement,
+   Find: pages 21 to 25), and the service aborts on the first one (`EasTagCode::BuildId` asserts).
+   Where adapter 1 is at work, every element in a page above 20 is dropped from a WBXML reply
+   with all it contains, page switches kept right, everything else byte for byte, streamed.
+5. **Sends in ComposeMail form** (`libpreload/composemail.h`, 2026-11-06). Palm sends mail as
+   12.1 does: `Cmd=SendMail` (or `SmartReply`, `SmartForward` with `ItemId` and `CollectionId`)
+   and the raw message as `message/rfc822`. From 14.0 a server wants WBXML ComposeMail; Exchange
+   Online answers the old form with HTTP 200 and ComposeMail status 101, which the service took
+   for sent, and the mail went nowhere. Where the request goes out at 14.0 or later, the body is
+   streamed as ClientId, Source (replies and forwards), SaveInSentItems and the message in Mime,
+   Palm's own read callback passing the message through unread; Content-Type and length follow.
+   A reply with a ComposeMail status other than 1 is reported to the service as HTTP 500, so it
+   retries rather than marking the mail sent.
 
 Checked on the Galaxy Z Fold3 against `wosatester@jonandnic.onmicrosoft.com`: OAuth sign-in,
 validation, provisioning (policy fetched and acknowledged, a policy key), FolderSync (17 folders),
@@ -175,10 +189,16 @@ authlib's `SecurityPolicyGuard`, webOS's "Device Password Upgrade Required"), an
 with Android's screen lock (luna-deltas A21). Tested with real libcurl on the build machine too.
 Two findings: Palm's debug log (`com.palm.eas` at debug) aborts the service while printing a
 contacts Sync request against Microsoft 365 (info level is fine), and the crash loop it caused
-got the test account throttled (503 with `X-MS-BackOffDuration`). **Open:** mail actually arriving
-in Email from Microsoft 365, contacts and calendar items, sending (16.x dropped the raw-MIME
-SendMail that 12.1 clients use), once the throttle lifts. The Microsoft account type stays on
-IMAP in the repository until then. Outlook.com: Microsoft refuses the EAS scope for personal
+got the test account throttled (503 with `X-MS-BackOffDuration`). The throttle was per device
+partnership (`X-MS-ASThrottle: RecentCommands`, `Retry-After`), not per account: a fresh device id
+got in at once. That crash was adapter 4's case, so the debug log was not the only trigger.
+
+**Checked on the Galaxy Tab A7 Lite (2026-11-06)** with adapters 4 and 5: a new account set up
+(provisioned under the tenant's relaxed policy, no PIN), mail arrived and opened, calendar and
+contact collections synced (the test account has next to nothing in them), and a new message, a
+reply (Exchange quoted the original once) and a forward were sent and delivered, one of them to
+an outside address. The Microsoft account type stays on IMAP in the repository until the
+account type is chosen. Outlook.com: Microsoft refuses the EAS scope for personal
 accounts (AADSTS70011) and its IMAP refuses them too (above). Microsoft's token endpoint wants the
 scope again on the code exchange (`scopeOnToken`).
 
@@ -204,6 +224,8 @@ provider. A development build is pointed at both by `files/oauth-providers.json`
 `LunaRuntimes/pdk/tests/mailauth_test.c` tests the translation on the build machine (it runs
 in every PDK build): the logins, the hidden challenges, the EHLO change and AUTH LOGIN replay,
 the stale-token retry, and a message body cut every which way going through byte for byte.
+`wbxmlfilter_test.c` and `composemail_test.c` do the same for adapters 4 and 5: replies with the
+newer pages fed whole and in pieces, and the ComposeMail bytes Exchange Online accepted.
 
 **Checked on the Galaxy Tab A7 Lite (2026-11-05, arm32 debug), against the fake provider:**
 Email's welcome lists Google and Microsoft; sign-in in the page's WebView, Allow, validation
@@ -217,12 +239,11 @@ path (Google's) is not yet tried on a device: it needs one with a browser.
 ## Open
 
 
-- **Microsoft 365 over Exchange:** retry once Microsoft's throttling of the test account lifts
-  (it followed a crash loop from Palm's debug log; keep `com.palm.eas` at info): mail arriving
-  (a test message was sent to it from the Gmail account), contacts, calendar, Ping push, then
-  sending (16.x has no raw-MIME SendMail; Palm's 12.1 path may need a fourth adapter). Then
-  choose the Microsoft account type: Exchange for work and school accounts, with Outlook.com
-  told plainly it can't be added (AADSTS70011).
+- **Microsoft 365 over Exchange:** mail and sending work (A7, 2026-11-06). Still to see: real
+  contacts and calendar items through it, push arriving through Ping, the Fold3 on the new build,
+  and Palm's service ignoring Microsoft's back-off headers (one bad moment can lock a device out
+  for 15 minutes or more). Then choose the Microsoft account type: Exchange for work and school
+  accounts, with Outlook.com told plainly it can't be added (AADSTS70011).
 - **Gmail's verification** for public use: Google's restricted-scope review (started
   2026-11-05). Whether it also asks for a security assessment turns on servers: none in the
   on-device path; decide whether Google goes through the broker at all.

@@ -172,4 +172,11 @@ feel is a requirement, not polish.**
   moved the bug to Microsoft in one step.
 - **Debug logging is code too.** Palm's own EAS debug printer aborts on a Microsoft 365 reply;
   the crash loop it caused got the test account throttled for an hour.
+- **A 200 isn't a sent mail.** Palm's service marked a message sent on HTTP 200 while Exchange's
+  body said status 101, and the mail went nowhere. "Sent" was proven only by the message arriving.
+- **Check a constant against its header, not memory.** The send adapter's seek callback went in
+  at 20108, which is curl's SSL context callback (seek is 20167), and broke every send's TLS
+  handshake. A trace of every option the binary set found it in one run.
+- **Exchange throttles a device, not an account.** The 503 after a crash loop was the device
+  partnership's budget (`X-MS-ASThrottle: RecentCommands`); a fresh device id got in at once.
 

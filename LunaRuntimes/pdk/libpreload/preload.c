@@ -49,6 +49,7 @@
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/utsname.h>
+#include <time.h>
 #include "../execpdk/webos_exec.h"
 
 /* ---- /proc/self/exe ---- */
@@ -1262,6 +1263,8 @@ out:
 #include <poll.h>
 #include <sys/un.h>
 #include "mailauth.h"
+#include "wbxmlfilter.h"
+#include "composemail.h"
 
 typedef int GIOStatus;   /* G_IO_STATUS_ERROR 0, NORMAL 1, EOF 2, AGAIN 3 */
 enum { MA_G_ERROR = 0, MA_G_NORMAL = 1, MA_G_AGAIN = 3 };
@@ -1468,6 +1471,8 @@ GIOStatus g_io_channel_read_chars(GIOChannel *ch, char *buf, size_t count, size_
 typedef void CURL;
 struct curl_slist { char *data; struct curl_slist *next; };
 typedef size_t (*lc_header_fn)(char *, size_t, size_t, void *);
+typedef size_t (*lc_read_fn)(char *, size_t, size_t, void *);
+typedef int (*lc_seek_fn)(void *, long long, int);   /* curl_off_t is 64-bit here (the *_LARGE options) */
 #define LC_CURLOPT_USERPWD 10005
 #define LC_CURLOPT_HTTPHEADER 10023
 #define LC_CURLOPT_HTTPAUTH 107
@@ -1491,6 +1496,17 @@ static struct lc_handle {
 	unsigned char *post;           /* a body of ours set in place of the caller's */
 	int body_seen;                 /* bytes of this response's body looked at */
 	int provision;                 /* the body asked for provisioning (status 142-144) */
+	int filtering;                 /* the body goes through wbxmlfilter.h (a 16.1 reply to a 12.1 client) */
+	struct wbxf wbxf;
+	lc_read_fn their_read;         /* the caller's request body callback, and its data */
+	void *read_data;
+	lc_seek_fn their_seek;         /* the caller's rewind callback, and its data */
+	void *seek_data;
+	int sending;                   /* this request is a send, in ComposeMail form (composemail.h) */
+	unsigned char cm_pre[1024];    /* the bytes before the message */
+	size_t cm_pre_len, cm_pos;     /* and how far into the prefix or suffix */
+	int cm_phase;                  /* 0 prefix, 1 the caller's message, 2 suffix, 3 done */
+	int send_status;               /* the reply's ComposeMail status */
 } lc_handles[LC_HANDLES];
 static pthread_mutex_t lc_lock = PTHREAD_MUTEX_INITIALIZER;
 static int lc_version(const char *host, const char *asked, char *out, size_t cap);
@@ -1526,7 +1542,9 @@ static int lc_apply_headers(struct lc_handle *e)
 	for (struct curl_slist *s = e->theirs; s; s = s->next) {
 		if (e->handle[0] && strncasecmp(s->data, "Authorization:", 14) == 0) continue;
 		char v[16], line[64];
-		if (strncasecmp(s->data, "MS-ASProtocolVersion:", 21) == 0 && lc_version(e->host, s->data + 21 + strspn(s->data + 21, " "), v, sizeof v)) {
+		if (e->sending && strncasecmp(s->data, "Content-Type:", 13) == 0 && strcasecmp(s->data + 13 + strspn(s->data + 13, " "), "message/rfc822") == 0) {
+			list = lc_slist_append(list, "Content-Type: application/vnd.ms-sync.wbxml");
+		} else if (strncasecmp(s->data, "MS-ASProtocolVersion:", 21) == 0 && lc_version(e->host, s->data + 21 + strspn(s->data + 21, " "), v, sizeof v)) {
 			snprintf(line, sizeof line, "MS-ASProtocolVersion: %s", v);
 			list = lc_slist_append(list, line);
 		} else list = lc_slist_append(list, s->data);
@@ -1671,6 +1689,16 @@ static size_t lc_write(char *buf, size_t size, size_t n, void *data)
 	pthread_mutex_lock(&lc_lock);
 	struct lc_handle *e = lc_by_write_data(data);
 	lc_header_fn theirs = e ? e->their_write : NULL;
+	if (e && e->body_seen == 0) {
+		/* A WBXML reply from a server the version adapter speaks 16.1 to: newer code pages out. */
+		char ver[16];
+		e->filtering = !e->sending && size * n >= 4 && (unsigned char)buf[0] == 0x03 && (unsigned char)buf[2] == 0x6a && lc_version(e->host, "12.1", ver, sizeof ver);
+		if (e->filtering) wbxf_init(&e->wbxf);
+		if (e->sending) {
+			e->send_status = cm_status((unsigned char *)buf, size * n);
+			if (e->send_status && e->send_status != 1) fprintf(stderr, "lunacy: %s refused a send: ComposeMail status %d\n", e->host, e->send_status);
+		}
+	}
 	if (e && e->body_seen < 48) {
 		/* WBXML: 03 01 6a 00, then a page switch and the command's tags; the status is an
 		   inline string (03 "142" 00) a few bytes in. */
@@ -1680,6 +1708,16 @@ static size_t lc_write(char *buf, size_t size, size_t n, void *data)
 				if (buf[i] == 0x03 && buf[i + 1] == '1' && buf[i + 2] == '4' && buf[i + 3] >= '2' && buf[i + 3] <= '4' && buf[i + 4] == 0) e->provision = 1;
 		}
 		e->body_seen += (int)look;
+	}
+	if (e && e->filtering && theirs) {
+		size_t len = size * n;
+		unsigned char *out = malloc(len + 16);
+		size_t o = out ? wbxf_feed(&e->wbxf, (unsigned char *)buf, len, out) : 0;
+		pthread_mutex_unlock(&lc_lock);
+		if (!out) return 0;
+		size_t r = o ? theirs((char *)out, 1, o, data) : 0;
+		free(out);
+		return r == o ? len : 0;   /* curl wants its own length back */
 	}
 	pthread_mutex_unlock(&lc_lock);
 	return theirs ? theirs(buf, size, n, data) : size * n;
@@ -1728,6 +1766,93 @@ static unsigned char *lc_with_device_info(size_t *len)
 	return b;
 }
 
+/* The request body of a send, in ComposeMail form: prefix, the caller's message unread, suffix. */
+#define LC_CURLOPT_READFUNCTION 20012
+#define LC_CURLOPT_READDATA 10009
+#define LC_CURLOPT_SEEKFUNCTION 20167
+#define LC_CURLOPT_SEEKDATA 10168
+#define LC_READFUNC_ABORT 0x10000000
+#define LC_READFUNC_PAUSE 0x10000001
+
+static struct lc_handle *lc_by_read_data(void *data)
+{
+	for (int i = 0; i < LC_HANDLES; i++)
+		if (lc_handles[i].h && lc_handles[i].sending && lc_handles[i].read_data == data) return &lc_handles[i];
+	return NULL;
+}
+
+static size_t lc_read(char *buf, size_t size, size_t n, void *data)
+{
+	size_t cap = size * n, o = 0;
+	pthread_mutex_lock(&lc_lock);
+	struct lc_handle *e = lc_by_read_data(data);
+	if (!e) { pthread_mutex_unlock(&lc_lock); return LC_READFUNC_ABORT; }   /* can't happen: set with the handle */
+	if (e->cm_phase == 0) {
+		size_t k = e->cm_pre_len - e->cm_pos < cap ? e->cm_pre_len - e->cm_pos : cap;
+		memcpy(buf, e->cm_pre + e->cm_pos, k); e->cm_pos += k; o += k;
+		if (e->cm_pos == e->cm_pre_len) { e->cm_phase = 1; e->cm_pos = 0; }
+		if (o == cap) { pthread_mutex_unlock(&lc_lock); return o; }
+	}
+	if (e->cm_phase == 1) {
+		lc_read_fn theirs = e->their_read;
+		pthread_mutex_unlock(&lc_lock);
+		size_t r = theirs(buf + o, 1, cap - o, data);
+		if (r == LC_READFUNC_ABORT) return r;
+		if (r == LC_READFUNC_PAUSE) return o ? o : r;   /* asked again once it's unpaused */
+		if (r) return o + r;
+		pthread_mutex_lock(&lc_lock);
+		e = lc_by_read_data(data);
+		if (!e) { pthread_mutex_unlock(&lc_lock); return o; }
+		e->cm_phase = 2; e->cm_pos = 0;
+	}
+	if (e->cm_phase == 2) {
+		size_t k = sizeof cm_suffix - e->cm_pos < cap - o ? sizeof cm_suffix - e->cm_pos : cap - o;
+		memcpy(buf + o, cm_suffix + e->cm_pos, k); e->cm_pos += k; o += k;
+		if (e->cm_pos == sizeof cm_suffix) e->cm_phase = 3;
+	}
+	pthread_mutex_unlock(&lc_lock);
+	return o;
+}
+
+static int lc_seek(void *data, long long offset, int origin)
+{
+	pthread_mutex_lock(&lc_lock);
+	struct lc_handle *e = lc_by_read_data(data);
+	lc_seek_fn theirs = e ? e->their_seek : NULL;
+	void *their_data = e ? e->seek_data : NULL;
+	if (e && offset == 0 && origin == 0) { e->cm_phase = 0; e->cm_pos = 0; }
+	pthread_mutex_unlock(&lc_lock);
+	if (!e || offset != 0 || origin != 0) return 2;   /* CURL_SEEKFUNC_CANTSEEK: only a rewind to the start */
+	return theirs ? theirs(their_data, 0, 0) : 0;
+}
+
+/* Whether the request this handle is about to make is a send to wrap; sets it up (lock held). */
+static void lc_send_setup(CURL *h, struct lc_handle *e, const char *url)
+{
+	struct cm_send cs;
+	e->sending = 0; e->send_status = 0;
+	if (!e->their_read || e->post_size <= 0 || !cm_parse_url(url, &cs)) return;
+	int rfc822 = 0;
+	char asked[16] = "", ver[16];
+	for (struct curl_slist *q = e->theirs; q; q = q->next) {
+		if (strncasecmp(q->data, "Content-Type:", 13) == 0 && strcasecmp(q->data + 13 + strspn(q->data + 13, " "), "message/rfc822") == 0) rfc822 = 1;
+		if (strncasecmp(q->data, "MS-ASProtocolVersion:", 21) == 0) snprintf(asked, sizeof asked, "%s", q->data + 21 + strspn(q->data + 21, " "));
+	}
+	/* Only where the request goes out at 14.0 or later, which the version adapter decides. */
+	if (!rfc822 || !asked[0] || !lc_version(e->host, asked, ver, sizeof ver) || atof(ver) < 14.0 - 1e-6) return;
+	static unsigned counter;
+	char client_id[40];
+	snprintf(client_id, sizeof client_id, "lunacy%lx%x%x", (unsigned long)time(NULL), (unsigned)getpid(), ++counter);
+	if (strlen(cs.item) + strlen(cs.folder) > sizeof e->cm_pre - 128) return;
+	e->cm_pre_len = cm_prefix(&cs, client_id, (unsigned long)e->post_size, e->cm_pre);
+	e->cm_pos = 0; e->cm_phase = 0;
+	e->sending = 1;
+	lc_real_setopt(h, LC_CURLOPT_POSTFIELDSIZE, (long)(e->cm_pre_len + (size_t)e->post_size + sizeof cm_suffix));
+	lc_real_setopt(h, LC_CURLOPT_READFUNCTION, (void *)lc_read);
+	if (e->their_seek) lc_real_setopt(h, LC_CURLOPT_SEEKFUNCTION, (void *)lc_seek);
+	lc_apply_headers(e);
+}
+
 int curl_easy_setopt(CURL *h, int option, ...)
 {
 	lc_init();
@@ -1740,6 +1865,19 @@ int curl_easy_setopt(CURL *h, int option, ...)
 	}
 	void *v = va_arg(ap, void *);
 	va_end(ap);
+	if (option == LC_CURLOPT_READFUNCTION || option == LC_CURLOPT_READDATA || option == LC_CURLOPT_SEEKFUNCTION || option == LC_CURLOPT_SEEKDATA) {
+		pthread_mutex_lock(&lc_lock);
+		struct lc_handle *e = lc_find(h, 1);
+		int ours = 0;
+		if (e) {
+			if (option == LC_CURLOPT_READFUNCTION) e->their_read = (lc_read_fn)v;
+			else if (option == LC_CURLOPT_READDATA) e->read_data = v;
+			else if (option == LC_CURLOPT_SEEKFUNCTION) { e->their_seek = (lc_seek_fn)v; ours = e->sending && v; }
+			else e->seek_data = v;
+		}
+		pthread_mutex_unlock(&lc_lock);
+		if (ours) return lc_real_setopt(h, option, (void *)lc_seek);
+	}
 	if (option == LC_CURLOPT_POSTFIELDSIZE || option == LC_CURLOPT_POSTFIELDS) {
 		pthread_mutex_lock(&lc_lock);
 		struct lc_handle *e = lc_find(h, 1);
@@ -1758,7 +1896,7 @@ int curl_easy_setopt(CURL *h, int option, ...)
 			if (option == LC_CURLOPT_WRITEDATA) e->write_data = v;
 			else if (option == LC_CURLOPT_WRITEFUNCTION) e->their_write = (lc_header_fn)v;
 			else {
-				e->body_seen = 0; e->provision = 0; e->host[0] = 0;
+				e->body_seen = 0; e->provision = 0; e->filtering = 0; e->host[0] = 0;
 				const char *u = v, *hs = u ? strstr(u, "://") : NULL;
 				if (hs) { hs += 3; size_t n = strcspn(hs, "/:?"); if (n < sizeof e->host) { memcpy(e->host, hs, n); e->host[n] = 0; } }
 				char ver[16];
@@ -1772,6 +1910,8 @@ int curl_easy_setopt(CURL *h, int option, ...)
 					}
 				}
 				e->initial_provision = 0;
+				if (e->sending && e->their_read) lc_real_setopt(h, LC_CURLOPT_READFUNCTION, (void *)e->their_read);   /* the last request's */
+				lc_send_setup(h, e, u);
 			}
 		}
 		pthread_mutex_unlock(&lc_lock);
@@ -1848,6 +1988,7 @@ int curl_easy_getinfo(CURL *h, int info, ...)
 		pthread_mutex_lock(&lc_lock);
 		struct lc_handle *e = lc_find(h, 0);
 		if (e && e->provision) *(long *)out = 449;
+		else if (e && e->sending && e->send_status && e->send_status != 1) *(long *)out = 500;   /* the send failed: the service retries */
 		pthread_mutex_unlock(&lc_lock);
 	}
 	if (r == 0 && info == LC_CURLINFO_RESPONSE_CODE && out && *(long *)out == 401) {

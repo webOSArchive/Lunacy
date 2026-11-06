@@ -12,3 +12,7 @@ command -v "$CC" >/dev/null || { echo "pdk tests: no host C compiler ($CC); set 
 timeout 60 "$WORK/send_test"
 "$CC" -O2 -Wall -I"$HERE/../libpreload" "$HERE/mailauth_test.c" -o "$WORK/mailauth_test"
 timeout 60 "$WORK/mailauth_test"
+"$CC" -O2 -Wall -I"$HERE/../libpreload" "$HERE/wbxmlfilter_test.c" -o "$WORK/wbxmlfilter_test"
+timeout 60 "$WORK/wbxmlfilter_test"
+"$CC" -O2 -Wall -I"$HERE/../libpreload" "$HERE/composemail_test.c" -o "$WORK/composemail_test"
+timeout 60 "$WORK/composemail_test"

@@ -744,6 +744,10 @@ so it has no icon but still runs, still answers `listApps` and can still be laun
   refused write in a run opens Android's "Modify system settings" screen for Lunacy
   (`DisplayService.write`). That write still fails, and the bus says so; the ones after the
   user allows it take.
+- **A foreground service with no type (ratchet item).** `shell/BackgroundService` keeps a
+  Lunacy that isn't the home app running while it has mail (luna-deltas B24). Lunacy targets
+  below Android 14, so it declares no `foregroundServiceType`; targeting 34 or later needs one
+  (and Android 15's time limits on `dataSync` would apply), with its permission.
 - **Bluetooth state for the status bar (ratchet item).** The Bluetooth icon reads the adapter
   and its A2DP and headset connections with `BLUETOOTH`, a normal permission on API 21. From
   API 31 that needs `BLUETOOTH_CONNECT`, which the user grants; until it is asked for, the

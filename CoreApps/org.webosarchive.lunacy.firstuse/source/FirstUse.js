@@ -5,7 +5,8 @@
  * profile, one page at a time on the blue First Use background - and nothing else was
  * reachable until it was done. Lunacy's First Use asks for what Lunacy needs from Android
  * in the same way: the shared storage that stands in for /media/internal, and the system
- * settings that Screen & Lock's brightness and screen-off time really set. The pages that
+ * settings that Screen & Lock's brightness and screen-off time really set, and leave from
+ * Android's battery optimisation to keep running in the background. The pages that
  * don't apply on this Android version are skipped: Android 5 granted both at install, so
  * there it is a welcome and a Done.
  *
@@ -53,6 +54,21 @@ enyo.kind({
 				{kind: "HFlexBox", className: "buttons", pack: "center", components: [
 					{kind: "Button", name: "settingsOpen", caption: $L("Open Android Settings"), className: "enyo-button-affirmative", onclick: "openSettings"},
 					{kind: "Button", name: "settingsNext", caption: $L("Next"), onclick: "next"}
+				]}
+			]},
+			// Android's battery optimisation (codepoet, 2026-11-06: always asked). Android stops
+			// what it thinks is idle; webOS's mail, calendars and messaging never stopped.
+			{name: "background", kind: "VFlexBox", className: "page", align: "center", pack: "center", components: [
+				{content: $L("Running in the Background"), className: "title"},
+				{kind: "VFlexBox", className: "contentDefaults box", components: [
+					{content: $L("On webOS, mail, calendars and messages kept working with the screen off and other apps open."), className: "text"},
+					{content: $L("Android holds back apps it thinks are idle, to save battery. Let Lunacy run in the background; without it some things may misbehave: mail and messages can arrive late, reminders can be missed, and apps can be slow to open."), className: "text"},
+					{name: "backgroundOk", className: "ok", showing: false},
+					{name: "backgroundMessage", className: "message", showing: false}
+				]},
+				{kind: "HFlexBox", className: "buttons", pack: "center", components: [
+					{kind: "Button", name: "backgroundAllow", caption: $L("Allow"), className: "enyo-button-affirmative", onclick: "allowBackground"},
+					{kind: "Button", name: "backgroundNext", caption: $L("Skip"), onclick: "next"}
 				]}
 			]},
 			{name: "home", kind: "VFlexBox", className: "page", align: "center", pack: "center", components: [
@@ -103,6 +119,7 @@ enyo.kind({
 	permissions: null,
 	create: function() {
 		this.inherited(arguments);
+		this.only = enyo.windowParams && enyo.windowParams.only || null;
 		this.$.status.call({});
 	},
 	gotStatus: function(inSender, inResponse) {
@@ -110,8 +127,18 @@ enyo.kind({
 		var steps = ["welcome"];
 		if (inResponse.storage && inResponse.storage.asked) { steps.push("storage"); }
 		if (inResponse.systemSettings && inResponse.systemSettings.asked) { steps.push("settings"); }
+		if (inResponse.background && inResponse.background.asked) { steps.push("background"); }
 		if (inResponse.homeLauncher && inResponse.homeLauncher.asked) { steps.push("home"); }
 		steps.push("done");
+		// Opened by the shell for one page on an install that has done First Use: that page
+		// alone, put up on the first answer (the page's own watch asks again while it waits).
+		if (this.only) {
+			var first = this.steps[0] != this.only;
+			steps = [this.only];
+			this.steps = steps;
+			this.step = 0;
+			if (first) { this.showPage(this.only); }
+		}
 		this.steps = steps;
 		this.showStatus();
 	},
@@ -159,8 +186,18 @@ enyo.kind({
 		this.$.homeNext.addRemoveClass("enyo-button-affirmative", !!h);
 		if (h) { this.$.homeMessage.setShowing(false); }
 		if (this.steps[this.step] == "home") { this.watchStatus(!h); }
+		var b = p.background && p.background.granted;
+		if (b && this.steps[this.step] == "background") { this.watchStatus(false); }
+		this.$.backgroundOk.setContent(b ? $L("Allowed.") : "");
+		this.$.backgroundOk.setShowing(!!b);
+		this.$.backgroundAllow.setShowing(!b);
+		this.$.backgroundNext.setCaption(b ? $L("Next") : $L("Skip"));
+		this.$.backgroundNext.addRemoveClass("enyo-button-affirmative", !!b);
+		if (b) { this.$.backgroundMessage.setShowing(false); }
 	},
 	next: function() {
+		// The one page on its own: its Next or Skip is the end.
+		if (this.only) { this.watchStatus(false); window.close(); return; }
 		if (this.step < this.steps.length - 1) {
 			this.step++;
 			this.showPage(this.steps[this.step]);
@@ -168,11 +205,12 @@ enyo.kind({
 	},
 	showPage: function(page) {
 		this.$.pane.selectViewByName(page);
-		this.$.startOver.setShowing(page != "welcome");
+		this.$.startOver.setShowing(page != "welcome" && !this.only);
 		var p = this.permissions;
 		var storageGranted = p && p.storage && p.storage.granted;
 		var waiting = (page == "settings" && !(p && p.systemSettings && p.systemSettings.granted)) ||
-			(page == "home" && !(p && p.homeLauncher && p.homeLauncher.granted));
+			(page == "home" && !(p && p.homeLauncher && p.homeLauncher.granted)) ||
+			(page == "background" && !(p && p.background && p.background.granted));
 		this.watchStatus(waiting);
 		// The storage page asks as soon as it is up: Android's dialog over the page that
 		// explains it, as a webOS page put its question up at once. Not when Android has
@@ -201,6 +239,10 @@ enyo.kind({
 		this.$.request.call({permission: "homeLauncher"});
 		this.watchStatus(true);
 	},
+	allowBackground: function() {
+		this.$.request.call({permission: "background"});
+		this.watchStatus(true);
+	},
 	openSettings: function() {
 		this.$.request.call({permission: "systemSettings"});
 	},
@@ -222,7 +264,8 @@ enyo.kind({
 	},
 	requestFailed: function(inSender, inResponse) {
 		var text = (inResponse && inResponse.errorText) || $L("Android didn't answer.");
-		var where = inSender && inSender.params && inSender.params.permission == "systemSettings" ? this.$.settingsMessage : this.$.storageMessage;
+		var which = inSender && inSender.params && inSender.params.permission;
+		var where = which == "systemSettings" ? this.$.settingsMessage : which == "background" ? this.$.backgroundMessage : this.$.storageMessage;
 		this.$.storageAllow.setDisabled(false);
 		where.setContent(text);
 		where.setShowing(true);

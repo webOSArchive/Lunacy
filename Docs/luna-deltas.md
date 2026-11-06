@@ -825,3 +825,22 @@ now ([oauth.md](oauth.md)). What a person sees instead:
   Accounts has Sign In Again. An Exchange server's security policy brings webOS's own "Device
   Password Upgrade Required", as Email's wizard does, met by Android's screen lock.
 
+
+### B24. Running in the background when Lunacy isn't the home screen
+
+**An addition, codepoet's decision, 2026-11-06.** A webOS device's system never stopped: mail
+synced and pushed with the screen off and other apps open. As Android's home app Lunacy is the
+home process and runs the same way. Opened as an ordinary app, Android caches it about a minute
+after the owner leaves it, and from Android 12 freezes it whole (measured on the Pixel Tablet,
+Android 17: frozen at 60 to 90 s, with or without the battery exemption), which stops the
+whole webOS system until it is opened again. What a person sees instead:
+
+- **First Use asks to leave battery optimisation** on a page of its own, Running in the
+  Background, and says what may misbehave without it (mail and messages late, reminders
+  missed, apps slow to open). An install that had done First Use before that page gets it by
+  itself, once. Android's own dialog asks the question.
+- **One notification while Lunacy has a mail account and isn't the home app:** "Lunacy,
+  Keeping your mail up to date", silent and at the lowest priority Android has, from a
+  foreground service (`shell/BackgroundWork.kt`), which is what Android keeps running. None as
+  the home app, none without mail. Android hides it if Lunacy may not post notifications, and
+  the service runs the same. Swiping Lunacy out of the recent apps ends it all, as before.

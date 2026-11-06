@@ -952,8 +952,24 @@ class Db8(private val service: String, file: File?,
         call.onCancel { work { watches.remove(w) } }
     }
 
+    /** The shell's own listeners by kind ([onWrites]), told on the main thread. */
+    private val kindListeners = HashMap<String, MutableList<() -> Unit>>()
+
+    /** [f], on the main thread, after each write to an object of [kind]: the shell's bookkeeping, not an app's watch. */
+    fun onWrites(kind: String, f: () -> Unit) = work { kindListeners.getOrPut(kind) { ArrayList() } += f }
+
+    /** How many live objects of [kind] pass [test], told on the main thread. */
+    fun count(kind: String, test: (JSONObject) -> Boolean, done: (Int) -> Unit) = work {
+        val n = try { objects(kind).values.count { !it.optBoolean("_del") && test(it) } } catch (e: Exception) { 0 }
+        main.post { done(n) }
+    }
+
     /** One-shot, as on webOS: a change to anything the query could return fires the watch and ends it. */
     private fun changed(old: JSONObject?, new: JSONObject?) {
+        if (kindListeners.isNotEmpty()) {
+            val kind = (new ?: old)?.optString("_kind")
+            kindListeners[kind]?.let { fs -> val copy = fs.toList(); main.post { copy.forEach { it() } } }
+        }
         val fired = watches.filter { w ->
             listOfNotNull(old, new).any { o -> o.optString("_kind") in w.kinds && w.where.all { matches(o, it) } }
         }

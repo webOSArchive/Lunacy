@@ -147,8 +147,11 @@ class ShellActivity : Activity(), WindowHost {
     private val pinned by lazy { PinnedShortcuts(this, files, luna.px(Launcher.Params.ICON.toInt())) }
     /** Whether the shell is on screen (between onStart and onStop): a Home press then is Lunacy's own. */
     private var started = false
+    /** Keeps a stand-alone Lunacy with mail running in the background; made with db8. */
+    private var backgroundWork: BackgroundWork? = null
     override fun onStart() {
         super.onStart(); started = true; sleepWake.check("shell")
+        backgroundWork?.check()
         coveredCard?.let { w -> if (cards.maximized?.window == w) w.setStageActive(true) }
         coveredCard = null
     }
@@ -425,7 +428,14 @@ class ShellActivity : Activity(), WindowHost {
             removeOutdatedPackages()
             // What the ROM brought: its services and their db8 kinds, and any system apps.
             // Activities run once the root's services are on the bus, as webOS's waited for boot.
-            runOnUiThread { jsServices.reload(); nativeServices.reload(); appsChanged(); activityManager.enable(); powerService.enable(); afterFirstUse(); androidNotificationsChanged(); FontWarmer(this, server).warmWhenIdle() }
+            // Not for a shell that has gone meanwhile: Android 17 relaunches an app it has just
+            // updated beside the owner's own launch, finishing the first shell under it, and that
+            // one's root was ready after its onDestroy had stopped everything. It started the
+            // services and activities again on its closed bus, and launched the boot apps.
+            runOnUiThread {
+                if (isDestroyed || live?.get() !== this) { Log.i(AppServer.TAG, "webOS root ready for a shell that has gone"); return@runOnUiThread }
+                jsServices.reload(); nativeServices.reload(); appsChanged(); activityManager.enable(); powerService.enable(); afterFirstUse(); androidNotificationsChanged(); FontWarmer(this, server).warmWhenIdle()
+            }
         }, "webos-root").start()
 
         sounds.preload()
@@ -612,6 +622,9 @@ class ShellActivity : Activity(), WindowHost {
 
     override fun onResume() {
         super.onResume(); inFront = true
+        // Also here: Home pressed with the shell up comes back through onNewIntent and onResume,
+        // and is how a shell just made the home app hears it is one.
+        backgroundWork?.check()
         if (lockLeft) { lockLeft = false; val back = lockReturn; lockReturn = null; back?.invoke() }
         if (::securityPolicy.isInitialized) securityPolicy.recheck()
     }
@@ -721,6 +734,12 @@ class ShellActivity : Activity(), WindowHost {
     private fun afterFirstUse() {
         if (!LunacyService.firstUseDone(this) || !::webos.isInitialized) return
         lifecycle.launchBootTimeApps()
+        // An install whose First Use came before its Running in the Background page: that
+        // page by itself, once (codepoet, 2026-11-06: always ask).
+        if (!LunacyService.backgroundAsked(this) && !LunacyService.backgroundAllowed(this)) {
+            LunacyService.setBackgroundAsked(this)
+            launch(LunacyService.FIRST_USE_APP, JSONObject().put("only", "background"))
+        }
         val prefs = java.io.File(webos.root, "var/luna/preferences")
         runCatching { prefs.mkdirs(); java.io.File(prefs, "ran-first-use").createNewFile() }
         if (java.io.File(prefs, "first-use-profile-created").exists()) return
@@ -1204,6 +1223,8 @@ class ShellActivity : Activity(), WindowHost {
         db8.registerPickerRelay(bus)
         val tempdb = Db8("com.palm.tempdb", null).also { it.register(bus) }
         closeOnDestroy += db8::close; closeOnDestroy += tempdb::close
+        // Not the home app, with mail: a foreground service keeps the system from being frozen (BackgroundWork).
+        backgroundWork = BackgroundWork(this, db8) { homeScreenPins.lunacyIsHome() }.also { it.start(); closeOnDestroy += it::stop }
         // Documents', photos' and videos' indexes, answered from the folders themselves (FileIndex, MediaIndex).
         FileIndex(jsServices.root).attach(db8)
         // The music library, from Android's media library (MusicLibrary): its songs go in with the ringtones.

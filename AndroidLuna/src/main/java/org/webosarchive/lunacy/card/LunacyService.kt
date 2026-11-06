@@ -227,6 +227,7 @@ class LunacyService(
             "contacts" to JSONObject().put("asked", asked).put("granted", granted(CONTACTS)),
             "calendar" to JSONObject().put("asked", asked).put("granted", granted(CALENDAR)),
             "systemSettings" to JSONObject().put("asked", asked).put("granted", systemSettingsGranted()),
+            "background" to JSONObject().put("asked", asked).put("granted", backgroundAllowed(context)),
             "homeLauncher" to JSONObject().put("asked", true).put("granted", isDefaultHome()),
             "firstUseDone" to firstUseDone(context),
         ))
@@ -316,6 +317,18 @@ class LunacyService(
                 reply(if (ok) Bus.ok(mapOf("permission" to which, "granted" to false, "opened" to true))
                       else Bus.error("Couldn't open Android's home screen choice"))
             }
+            "background" -> {
+                if (backgroundAllowed(context)) { reply(Bus.ok(mapOf("permission" to which, "granted" to true))); return }
+                setBackgroundAsked(context)
+                // Android's own question ("let the app always run in the background?"), or failing
+                // that the list of apps under battery optimisation.
+                val ok = listOf(
+                    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, android.net.Uri.parse("package:" + context.packageName)),
+                    Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+                ).any { i -> runCatching { context.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess }
+                reply(if (ok) Bus.ok(mapOf("permission" to which, "granted" to false, "opened" to true))
+                      else Bus.error("Couldn't open Android's battery settings"))
+            }
             else -> reply(Bus.error("No permission \"$which\": ${PERMISSIONS.joinToString(", ")}"))
         }
     }
@@ -323,6 +336,8 @@ class LunacyService(
     /** First Use has run. The shell won't launch it again, and asks for storage itself from then on if it is missing. */
     private fun firstUseDone(): String {
         setFirstUseDone(context)
+        // First Use had its Running in the Background page; the shell doesn't put it up again.
+        setBackgroundAsked(context)
         shell.onFirstUseDone()
         return Bus.ok()
     }
@@ -670,7 +685,7 @@ class LunacyService(
         /** Bundled apps that host an account's setup page ([hostsAccountPages]). */
         private val ACCOUNT_PAGE_HOSTS = setOf("com.palm.app.contacts", "com.palm.app.calendar", "com.palm.app.accounts")
         /** What permissions/request takes: its `when`, in order. */
-        private val PERMISSIONS = listOf("storage", "contacts", "calendar", "systemSettings", "homeLauncher")
+        private val PERMISSIONS = listOf("storage", "contacts", "calendar", "systemSettings", "background", "homeLauncher")
         private val STORAGE = listOf(android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
         private val CONTACTS = listOf(android.Manifest.permission.READ_CONTACTS)
         private val CALENDAR = listOf(android.Manifest.permission.READ_CALENDAR)
@@ -680,6 +695,19 @@ class LunacyService(
             context.getSharedPreferences("device", Context.MODE_PRIVATE).getBoolean("firstUseDone", false)
         fun setFirstUseDone(context: Context) {
             context.getSharedPreferences("device", Context.MODE_PRIVATE).edit().putBoolean("firstUseDone", true).apply()
+        }
+
+        /**
+         * Whether Android leaves Lunacy out of battery optimisation (Doze's app standby), so its
+         * mail, calendars and messaging aren't held back. Android 5 has no such optimisation.
+         */
+        fun backgroundAllowed(context: Context): Boolean = if (Build.VERSION.SDK_INT < 23) true
+            else (context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).isIgnoringBatteryOptimizations(context.packageName)
+        /** Whether the owner has been asked for [backgroundAllowed] once: by First Use, or by its one page after an update. */
+        fun backgroundAsked(context: Context): Boolean =
+            context.getSharedPreferences("device", Context.MODE_PRIVATE).getBoolean("backgroundAsked", false)
+        fun setBackgroundAsked(context: Context) {
+            context.getSharedPreferences("device", Context.MODE_PRIVATE).edit().putBoolean("backgroundAsked", true).apply()
         }
         private var cachedNode: String? = null
         /** The packages that can provide the WebView on the Android versions Lunacy targets. */

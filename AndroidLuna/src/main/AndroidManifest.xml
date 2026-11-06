@@ -25,6 +25,9 @@
     <!-- What Music plays keeps playing with the screen off, behind Android's media notification (shell/NowPlaying). -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- First Use asks Android to leave Lunacy out of battery optimisation, so Doze doesn't
+         hold its mail, calendar and messaging back (permissions/request "background"). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- A second shell brings the first one's task to the front (ShellActivity.takeOver). -->
     <uses-permission android:name="android.permission.REORDER_TASKS" />
     <!-- The status bar's Bluetooth icon: whether the adapter is on and connected. -->
@@ -119,6 +122,11 @@
         <!-- Android's notifications, as webOS dashboards (card/AndroidNotifications.kt). Only
              Android may bind it, and only once the owner allows it on Android's Notification
              access screen; until then Lunacy sees nothing. -->
+        <!-- A Lunacy that isn't the home app, with a mail account, kept from being frozen in
+             the background (shell/BackgroundWork.kt). No type: Lunacy targets below Android 14,
+             which is when one became required (a ratchet item, Docs/architecture.md). -->
+        <service android:name=".shell.BackgroundService"
+            android:exported="false" />
         <service android:name=".shell.NowPlayingService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />

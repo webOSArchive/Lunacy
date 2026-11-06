@@ -88,8 +88,12 @@ Pixel Tablet with 3,000 photos. Now read on a thread of their own: 6.6 s, then a
 why only testers who don't use it as the home screen saw it. Also measured: a stand-alone Lunacy
 is cached about a minute after the user leaves it, and Android 17 freezes it (Pixel), which
 stops the whole webOS system; One UI 6 (A7 Lite) caches it but didn't freeze it in five minutes.
-Photos' All Photos grid leaves out an album (Wallpapers, on the Pixel in portrait) that its
-list shows, in the released 0.9.2 too: open.
+Photos' All Photos grid seemed to leave out an album in portrait: it doesn't. Palm's library
+grid (`LibraryMode`) always has 4 columns of 184 px, and beside the 280 px album list in an
+800 px portrait card it has 520 px, so each row's fourth album sits past the card's edge until
+the grid is slid over the list by its drag handle (Palm adjusts columns only inside an album,
+`AlbumGridView.adjustColumnCount`). A TouchPad in portrait (768 px) should do the same; to
+confirm on the reference TouchPad before calling it the device's behaviour.
 
 Still to do: an uninstall followed by a restore from Android's backup, which brings the
 accounts back without their passwords by design and is still untried.

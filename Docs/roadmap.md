@@ -30,6 +30,35 @@ broker, with Palm's mail services logging in with XOAUTH2 under them, unchanged
   yet (a skeleton: no password sent, blocking network calls, stubbed sends); it builds here with
   the PDK's GCC 4.3.3 and HP's CE build-support headers.
 
+**0.9.2 reports from testers (2026-11-06), open.** Three testers, all running Lunacy as an
+ordinary app rather than the home screen, reported problems:
+- user 1: after the update Email wanted a new login, then showed no folders, then a blank card;
+- user 2 (Galaxy S21): Photos showed no or empty albums, account lists hang, and the Android
+  account came late without data;
+- user 3: the Android account reached Contacts and Calendar late, with no data.
+
+None of it was reproduced here. Tried on the Pixel Tablet (stand-alone):
+- published 0.9.1 with IMAP and Android accounts and 3,000 photos, then 0.9.2 installed over it;
+- the phone layout;
+- limited photo access;
+- the Android account with about 650 contacts and 300 events.
+
+On the A7 Lite, Lunacy was hard-killed mid-sync (as a recents swipe kills a stand-alone
+Lunacy) and recovered fully.
+
+Added to find out more: Device Info's **Save a Log** ([dev-workflow.md](dev-workflow.md),
+"A tester's log"). Two findings on the way, neither the testers' cause:
+- **Two shells after an update:** after an update, Android 17's System UI relaunches the app
+  with CLEAR_TASK beside the user's own launch. Both shells build a system, and the one
+  Android finished tears its system down about 0.4 s later, its services cut off as in a
+  hard kill. A check of `isFinishing` in `onCreate` doesn't catch it: it is still false
+  there.
+- **Nexus 7:** Device Info shows "Node: not available" though the JS services run (the
+  version probe fails).
+
+Still to do: an uninstall followed by a restore from Android's backup, which brings the
+accounts back without their passwords by design and is still untried.
+
 **0.9.2** (2026-11-05), a point release for testers: the code review's clean-up and webOS CE's
 emoji key. Everything since 0.9.1:
 

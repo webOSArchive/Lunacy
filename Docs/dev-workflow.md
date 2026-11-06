@@ -324,6 +324,27 @@ Workbench/tp.sh 'for p in /proc/[0-9]*; do tr "\0" " " < $p/cmdline; echo; done 
   reference comparison, because such a step can equally be the artwork's own highlight. See
   "border-image seams" in [fix-log.md](fix-log.md) for what that measurement settled.
 
+## A tester's log
+
+Testers mostly have no adb, and a release build is closed to `run-as` and DevTools. Ask
+for a log instead: **Device Info, App Menu, Save a Log** writes
+`lunacy-log-<date>-<time>.txt` into Android's Download folder (Lunacy's own
+`/media/internal/downloads` if that can't be written), and its Share button hands the file
+to Android's share sheet. Ask them to save it straight after the problem shows, since
+Android's log buffer holds only the last while.
+
+The file has four parts:
+- Device Info's report, without the device's serial number and webOS device id.
+- Android's permissions for Lunacy, and whether Lunacy is the home app.
+- Lunacy's own lines from Android's log (`logcat -d`, which is only the app's own lines
+  since Android 4.1).
+- webOS's `/var/log/messages`.
+
+The bus already blanks passwords and tokens, and logs Contacts' and Calendar's calls only
+by length. An email address or a message subject can still appear, and the dialog says so.
+Code: `card/LogExport.kt`, and `system/saveLog` and `system/shareLog` on Lunacy's own
+service.
+
 ## How changes are checked
 
 Every visual change is compared with the TouchPad at the same scale. On the HP 10 G2 one

@@ -103,6 +103,23 @@ enyo.kind({
 				{kind: "Button", className: "enyo-button-affirmative", caption: $L("Save"), onclick: "saveLayout"}
 			]}
 		]},
+		// Save a Log (App Menu): one text file in Android's Download folder, for a bug report.
+		// Testers mostly have no adb, so this is how what went wrong reaches a developer.
+		{kind: "Dialog", name: "logDialog", lazy: false, components: [
+			{content: $L("Save a Log"), className: "dialog-title"},
+			{name: "logSaving", layoutKind: "HFlexLayout", align: "center", components: [
+				{kind: "Spinner", name: "logSpinner"},
+				{content: $L("Saving..."), style: "padding-left: 10px;"}
+			]},
+			{name: "logSaved", showing: false, components: [
+				{name: "logWhere", className: "note"},
+				{className: "note", content: $L("It holds what Lunacy, its apps and services did and the errors they met. Passwords, contacts and calendar entries are left out, but an email address or a message's subject can be in it: read it before you send it.")}
+			]},
+			{layoutKind: "HFlexLayout", pack: "center", components: [
+				{kind: "Button", name: "logDone", caption: $L("Done"), onclick: "closeLog"},
+				{kind: "Button", name: "logShare", className: "enyo-button-affirmative", caption: $L("Share"), showing: false, onclick: "shareLog"}
+			]}
+		]},
 		{kind: "Dialog", lazy: false, components: [
 			{name: "errorText"},
 			{layoutKind: "HFlexLayout", pack: "center", components: [
@@ -113,14 +130,17 @@ enyo.kind({
 		// raises windowRotated: the display rows are worth re-reading then.
 		{kind: "ApplicationEvents", onWindowRotated: "refresh"},
 		{kind: "AppMenu", components: [
-			{caption: $L("Refresh"), onclick: "refresh"}
+			{caption: $L("Refresh"), onclick: "refresh"},
+			{caption: $L("Save a Log"), onclick: "saveLog"}
 		]},
 		{kind: "PalmService", service: "palm://org.webosarchive.lunacy/", components: [
 			{name: "getEnvironment", method: "system/getEnvironment", onResponse: "gotEnvironment"},
 			{name: "openSettings", method: "android/openSettings", onResponse: "openedSettings"},
 			{name: "setDeviceId", method: "system/setDeviceId", onResponse: "deviceIdSet"},
 			{name: "setLayout", method: "system/setLayout", onResponse: "layoutSet"},
-			{name: "setFixedViewport", method: "system/setFixedViewport", onResponse: "fixedViewportSet"}
+			{name: "setFixedViewport", method: "system/setFixedViewport", onResponse: "fixedViewportSet"},
+			{name: "saveLogCall", method: "system/saveLog", onResponse: "logSaved"},
+			{name: "shareLogCall", method: "system/shareLog", onResponse: "logShared"}
 		]}
 	],
 	create: function() {
@@ -268,6 +288,40 @@ enyo.kind({
 	},
 	openedSettings: function(inSender, r) {
 		if (!r || !r.returnValue) { this.showError(r && r.errorText || $L("Couldn't open Android's settings.")); }
+	},
+	saveLog: function() {
+		this.logPath = null;
+		this.$.logSaving.setShowing(true);
+		this.$.logSpinner.show();
+		this.$.logSaved.setShowing(false);
+		this.$.logShare.setShowing(false);
+		this.$.logDialog.open();
+		this.$.saveLogCall.call({});
+	},
+	logSaved: function(inSender, r) {
+		this.$.logSpinner.hide();
+		this.$.logSaving.setShowing(false);
+		if (!r || !r.returnValue) {
+			this.$.logDialog.close();
+			this.showError(r && r.errorText || $L("The log couldn't be saved."));
+			return;
+		}
+		this.logPath = r.path;
+		this.$.logWhere.setContent(r.android
+			? $L("Saved in Android's Download folder as ") + r.name + "."
+			: $L("Saved in Lunacy's Downloads as ") + r.name + ".");
+		this.$.logSaved.setShowing(true);
+		this.$.logShare.setShowing(true);
+	},
+	shareLog: function() {
+		if (this.logPath) { this.$.shareLogCall.call({path: this.logPath}); }
+	},
+	logShared: function(inSender, r) {
+		if (!r || !r.returnValue) { this.showError(r && r.errorText || $L("Android couldn't share the log.")); return; }
+		this.$.logDialog.close();
+	},
+	closeLog: function() {
+		this.$.logDialog.close();
 	},
 	showError: function(text) {
 		this.$.errorText.setContent(text);

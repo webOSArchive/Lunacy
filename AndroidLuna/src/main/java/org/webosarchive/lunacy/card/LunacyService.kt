@@ -22,6 +22,8 @@ import java.io.File
  * - `system/getEnvironment` reports what Lunacy actually runs on, for Lunacy's Device Info.
  * - `system/setHostWallpaper` is the opt-in to Android's wallpaper following webOS's.
  * - `system/setNotificationIcons` chooses colour or grey app icons in the notifications.
+ * - `system/saveLog` writes a log a tester can send into Android's Download folder, and
+ *   `system/shareLog` hands it to Android's share sheet: Device Info's Save a Log ([LogExport]).
  * - `android/notifications`, `android/openNotification` and `android/dismissNotifications`
  *   are Android's notifications, for Lunacy's Android Notifications app ([AndroidNotifications]).
  * - `android/openSettings` hands a setting that belongs to the host OS to Android's own UI.
@@ -46,6 +48,7 @@ class LunacyService(
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     /** The two answers that take real time - Node's version is asked of Node, and a listing walks a folder - come from here. */
     private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val logs = LogExport(context, webosRoot)
 
     fun register(bus: Bus) {
         bus.register(SERVICE, "system/getEnvironment") { _, _, reply -> worker.execute { val r = environment(); main.post { reply(r) } } }
@@ -55,6 +58,9 @@ class LunacyService(
         bus.own("system/setFixedViewport", "set an app's viewport") { c -> c.reply(setFixedViewport(c.params)) }
         bus.own("system/setHostWallpaper", "set Android's wallpaper") { c -> setHostWallpaper(c.params, c::reply) }
         bus.own("system/setNotificationIcons", "set the notification icons") { c -> c.reply(setNotificationIcons(c.params)) }
+        // Device Info's Save a Log: a file a tester can send, and Android's share sheet for it.
+        bus.own("system/saveLog", "save a log") { c -> worker.execute { val r = logs.save(environment(), permissionsStatus()); main.post { c.reply(r) } } }
+        bus.own("system/shareLog", "share a log") { c -> c.reply(logs.share(c.params.optString("path"))) }
         bus.register(SERVICE, "android/openSettings") { _, p, reply -> reply(openSettings(p.optString("panel"))) }
         bus.register(SERVICE, "android/settingsPanels") { _, _, reply ->
             reply(Bus.ok(mapOf("panels" to org.json.JSONArray(PANELS.keys.sorted()))))

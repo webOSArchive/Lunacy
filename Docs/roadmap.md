@@ -3,7 +3,7 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
-## Where things stand (2026-11-05)
+## Where things stand (2026-11-06)
 
 **OAuth for mail, for 0.9.5 (started 2026-11-05, pushed through 25d82d7; b64149a local):**
 Google and Microsoft account types whose sign-in page uses OAuth on the device or through the
@@ -29,6 +29,30 @@ broker, with Palm's mail services logging in with XOAUTH2 under them, unchanged
   settings"; luna-deltas B23. Herrie's mojomail-legacy-eas rewrite was looked at and isn't usable
   yet (a skeleton: no password sent, blocking network calls, stubbed sends); it builds here with
   the PDK's GCC 4.3.3 and HP's CE build-support headers.
+
+**0.9.3** (2026-11-06), a point release for testers, for the problems 0.9.2's testers met
+running Lunacy as an ordinary app rather than the home screen. Everything since 0.9.2:
+
+- **Accounts no longer hang after a start.** The photo, video and music index was read on
+  db8's own thread at every cold start, holding every account list, Email's folders and the
+  Android account's copy behind it: 48 s for the first account list on the Pixel Tablet with
+  3,000 photos, now 6.6 s. The index is read in the background, as webOS's filenotifyd did.
+- **Lunacy keeps running in the background** when it isn't the home screen and has a mail
+  account: one silent notification, "Keeping your mail up to date", at Android's lowest
+  priority (Android froze it about a minute after it was left, which stopped mail and the
+  Android account's copy). None as the home screen.
+- **First Use asks to let Lunacy run in the background** (Android's battery optimisation), and
+  says what may misbehave without it; an install that has done First Use gets that page once.
+- **Save a Log**, in Device Info's App Menu: a file in Android's Download folder to send with a
+  bug report, with a Share button. Passwords, contacts and calendar entries are left out.
+- **No "built for an older version of Android" warning** on Android 14 and later with the
+  32-bit build, which now targets API 28 as the 64-bit one does.
+- **Signing in to Google and Microsoft mail** (work in progress for 0.9.5, [oauth.md](oauth.md)):
+  Google and Microsoft in Email's and Accounts' lists. Google lets in only the accounts added to
+  its test list while its review is pending; Microsoft 365 work and school accounts sign in and
+  sync over IMAP; Outlook.com personal accounts are refused by Microsoft's own servers.
+- **Fixes:** after an update on Android 17, a second start Android makes no longer leaves a
+  half-built copy of Lunacy's system running beside the real one.
 
 **0.9.2 reports from testers (2026-11-06), open.** Three testers, all running Lunacy as an
 ordinary app rather than the home screen, reported problems:

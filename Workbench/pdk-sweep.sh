@@ -9,7 +9,9 @@ A="adb -s $D"
 $A shell svc power stayon true
 while read -r id; do
   [ -n "$id" ] || continue
-  $A shell input keyevent KEYCODE_WAKEUP </dev/null; $A shell wm dismiss-keyguard </dev/null
+  $A shell input keyevent KEYCODE_WAKEUP </dev/null; $A shell wm dismiss-keyguard </dev/null >/dev/null 2>&1
+  # Android 5 has no dismiss-keyguard: a swipe lock goes with a swipe up (the HP 10 G2's).
+  $A shell dumpsys window policy </dev/null | grep -q "mShowingLockscreen=true" && { $A shell input swipe 400 1150 400 300 300 </dev/null; sleep 1; }
   $A shell am force-stop org.webosarchive.lunacy </dev/null; $A logcat -c </dev/null
   $A shell am start -n org.webosarchive.lunacy/.shell.ShellActivity </dev/null >/dev/null 2>&1; sleep 10
   $A shell am start -n org.webosarchive.lunacy/.shell.ShellActivity --es launch "$id" </dev/null >/dev/null 2>&1; sleep "${WAIT:-16}"

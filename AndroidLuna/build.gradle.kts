@@ -72,9 +72,11 @@ android {
     // run 32-bit code takes either; one that can't refuses the 32-bit APK.
     flavorDimensions += "abi"
     productFlavors {
-        // 24: the oldest target newer Android installs (Android 14 refuses below 23, Android 15
-        // below 24); Android 5 ignores a target above its own level.
-        create("arm32") { dimension = "abi"; ndk { abiFilters += "armeabi-v7a" }; targetSdk = 24 }
+        // 28 for both: Android 14 and later warn at first launch ("built for an older version
+        // of Android") below 28, and 29 would forbid running binaries from the app's own files,
+        // which the PDK runtime and Node do. What 26 to 28 change only applies on Android 8 and
+        // later, so the Android 5 devices run as they did at 24.
+        create("arm32") { dimension = "abi"; ndk { abiFilters += "armeabi-v7a" }; targetSdk = 28 }
         create("arm64") { dimension = "abi"; ndk { abiFilters += "arm64-v8a" }; targetSdk = 28 }
     }
 }

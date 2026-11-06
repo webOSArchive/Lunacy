@@ -39,13 +39,15 @@ What this target means:
 - **Lunacy's own JS runs on the oldest WebView.** The bridge, shims, polyfills and every
   change to the frameworks must run on Chromium 37. In practice that means ES5, or a build
   step that transpiles down to it.
-- **Target API 24 (32-bit) and 28 (64-bit), minimum API 21.** Android 14 refuses to install an
-  app that targets below API 23, and Android 15 below 24 (Android 16 and 17 keep that floor),
-  so the 32-bit build targets 24: the proven configuration for the Android 5 devices, which
-  are all 32-bit. Android 17 installs a target-24 app but warns at first launch ("built for an
-  older version of Android") below target 28, measured on a Pixel Tablet, so the 64-bit build,
-  whose devices run Android 8 or later in practice, targets 28: the last target with legacy
-  external storage. What 26 to 28 add on those devices: plain http needs the network security
+- **Target API 28, minimum API 21.** Android 14 refuses to install an app that targets below
+  API 23, and Android 15 below 24 (Android 16 and 17 keep that floor), and from Android 14 a
+  target below 28 brings a warning at first launch ("built for an older version of Android";
+  the threshold is `ro.build.version.min_supported_target_sdk`, 28 on the A7 Lite's Android 14
+  and the Pixel Tablet's 17). Both builds target 28 (the 32-bit one from 24 since 2026-11-06,
+  codepoet): the last target with legacy external storage, and the last before Android 10's
+  rule against running binaries from an app's own files, which the PDK runtime and Node need.
+  What 26 to 28 change applies only on Android 8 and later, so the Android 5 devices run as
+  they did at 24. What 26 to 28 add on Android 8 and later: plain http needs the network security
   config (`res/xml/network_security_config.xml`), WebView Safe Browsing is on unless the
   manifest turns it off (it is off: a Chrome interstitial in a card is not webOS), `Build.SERIAL`
   reads "unknown" (the derived device id is stored the first time it is computed, so an

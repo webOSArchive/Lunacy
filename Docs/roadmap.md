@@ -649,8 +649,8 @@ corpus survey says how many apps this phase can reach, and whether it is worth d
   - **Target 28 on the 64-bit build: what is left to check.** Android's autofill reaches
     WebView forms from a target of 26; see what it does in a card against the TouchPad.
     Android 8.0 alone refuses an orientation lock on a translucent activity (the shell's
-    theme is opaque, so this should not bite). The 32-bit build stays at 24, so the HP is
-    unaffected.
+    theme is opaque, so this should not bite). The 32-bit build is at 28 too since 2026-11-06; the HP
+    (Android 5) is unaffected, as the changes need Android 8.
   - **Android 17's memory limiter** kills any app's process past a RAM-derived limit (exit
     reason `MemoryLimiter:AnonSwap`; the figures aren't published). On the Pixel Tablet's
     Android 17 it reports itself disabled, so there was nothing to measure; check again on

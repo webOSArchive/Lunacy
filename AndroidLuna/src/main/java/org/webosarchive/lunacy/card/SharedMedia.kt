@@ -66,7 +66,11 @@ object SharedMedia {
     private fun insertMedia(context: Context, assets: String, relative: String, names: List<String>,
                             mime: (String) -> String, media: ContentValues.() -> Unit): Boolean = try {
         val resolver = context.contentResolver
-        names.all { n ->
+        // A file an earlier install left there (an uninstall keeps shared media; this install's
+        // "done" mark went with the old one's data) is the copy: Android's media library would
+        // otherwise add a second, "01 (1).jpg", and a third on the next reinstall.
+        @Suppress("DEPRECATION") val dir = Environment.getExternalStoragePublicDirectory(relative)
+        names.filter { n -> !File(dir, n).exists() }.all { n ->
             val m = mime(n)
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, n)

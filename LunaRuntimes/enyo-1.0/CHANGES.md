@@ -440,6 +440,19 @@ the Fold3.
 
 Files: `framework/source/palm/controls/BasicWebView.js`, `framework/build/enyo-build.js`.
 
+### 0016-dashboard-any-width.patch
+
+A dashboard fills its window at any width, and its drag shadow stays out of sight.
+
+Enyo's dashboard (`palm/system/dashboard-window/dashboard.css`) was made for the TouchPad's
+320 px dashboard window: the content keeps its natural 330 px, and the shadow and highlight
+drawn while the whole dashboard is dragged sit at a fixed `left: 320px`, just past the window's
+edge. In Lunacy's phone mode a dashboard spans the screen (384 CSS px on the Kyocera), so the
+shadow showed as a gray block beside every Enyo dashboard, and a thin highlight line with it
+(codepoet, 2026-11-07). The swipeable item now flexes to fill the window, and both sit at
+`left: 100%`, its right edge, which is where they were on the TouchPad. Nothing changes at
+320 px. CSS only, so the source and built copies take the same change.
+
 ## Added
 
 Nothing, since the rebase. `lib/networkproxy` (HP's network-proxy settings library, which the

@@ -1,0 +1,70 @@
+--- a/framework/source/palm/system/dashboard-window/dashboard.css
++++ b/framework/source/palm/system/dashboard-window/dashboard.css
+@@ -131,6 +131,12 @@
+ 	border: none;
+ }
+ 
++/* [Lunacy] The dashboard fills its window, however wide: on the TouchPad the window was the
++   content's 320 px, so this changes nothing there. */
++.dashboard-notification-module > .enyo-swipeableitem {
++	-webkit-box-flex: 1;
++}
++
+ 
+ .swipe-shadow {
+ 	position: absolute; 
+@@ -143,7 +149,9 @@
+ 	left: -500px; 
+ }
+ .swipe-shadow.right {
+-	left: 320px;
++	/* [Lunacy] At the item's right edge, not the TouchPad's 320 px: a wider dashboard (a phone's,
++	   the screen's width) showed it beside the content. */
++	left: 100%;
+ 	width:700px;
+ }
+ 
+@@ -160,7 +168,7 @@
+ }
+ 
+ .swipe-highlight.right {
+-	left:320px;
++	left:100%; /* [Lunacy] As .swipe-shadow.right. */
+ }
+ 
+ 
+--- a/framework/build/palm/system/dashboard-window/dashboard.css
++++ b/framework/build/palm/system/dashboard-window/dashboard.css
+@@ -131,6 +131,12 @@
+ 	border: none;
+ }
+ 
++/* [Lunacy] The dashboard fills its window, however wide: on the TouchPad the window was the
++   content's 320 px, so this changes nothing there. */
++.dashboard-notification-module > .enyo-swipeableitem {
++	-webkit-box-flex: 1;
++}
++
+ 
+ .swipe-shadow {
+ 	position: absolute; 
+@@ -143,7 +149,9 @@
+ 	left: -500px; 
+ }
+ .swipe-shadow.right {
+-	left: 320px;
++	/* [Lunacy] At the item's right edge, not the TouchPad's 320 px: a wider dashboard (a phone's,
++	   the screen's width) showed it beside the content. */
++	left: 100%;
+ 	width:700px;
+ }
+ 
+@@ -160,7 +168,7 @@
+ }
+ 
+ .swipe-highlight.right {
+-	left:320px;
++	left:100%; /* [Lunacy] As .swipe-shadow.right. */
+ }
+ 
+ 

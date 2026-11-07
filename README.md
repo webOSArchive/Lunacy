@@ -32,9 +32,9 @@ Lunacy re-implements the contract, not the OS:
 Enyo was designed to scale from phone to tablet: its flex layouts and panels fill whatever
 screen they are given. So most apps run at the device's real size, on both phones and tablets.
 
-## What comes first
+## Project Goals
 
-The look and feel is the TouchPad's, measured on an original device: how a card opens, how the launcher
+The look and feel of the TouchPad (or Pre3), measured on an original device: how a card opens, how the launcher
 moves, what a loading card does, where every pixel of the shell sits. Fidelity is the
 project's first rule, ahead of speed or simplicity, and every difference the engine forces is
 measured and written down ([Docs/luna-deltas.md](Docs/luna-deltas.md)).

@@ -352,3 +352,31 @@
 	// And when a field is focused while the keyboard is already up, which fires no resize.
 	document.addEventListener("focusin", window.__lunacyKeepFieldVisible, true);
 })();
+
+// webOS's text-entry modes, as the keyboard hears them.
+//
+// A field said what the webOS keyboard's smart text engine should do with webOS's own
+// attributes, which Chromium knows nothing of: Mojo's TextField writes x-palm-ste-mode
+// ("replace-off" for autoReplace: false; "cap-lowercase", "cap-title", "cap-sentence" for
+// textCase) or, on older controls, x-palm-disable-ste-all="true" (textReplacement: false) and
+// x-palm-title-cap="true"; Enyo's Input writes x-palm-disable-auto-cap="true" for
+// autoCapitalize "lowercase" (its autocorrect: false is already the standard autocorrect="off").
+// So every such field was autocorrected and capitalised. As a field takes focus, before the
+// keyboard is raised, each is given the standard attribute Chromium does pass on to Android's
+// keyboard: autocorrect="off" (no AUTO_CORRECT flag) and autocapitalize (the CAP flags, on
+// WebViews from Chromium 43; Chromium 37 ignores it). An attribute the page set itself stays.
+(function () {
+	function set(el, name, value) { if (!el.hasAttribute(name)) { el.setAttribute(name, value); } }
+	function modes(el) {
+		if (!el || el.nodeType !== 1 || !(/^(INPUT|TEXTAREA)$/.test(el.tagName) || el.isContentEditable)) { return; }
+		var ste = " " + (el.getAttribute("x-palm-ste-mode") || "") + " ";
+		var all = el.getAttribute("x-palm-disable-ste-all") === "true";
+		if (all || ste.indexOf(" replace-off ") >= 0) { set(el, "autocorrect", "off"); }
+		// The smart text engine off altogether takes its capitals too, unless the field asks for them.
+		if (ste.indexOf(" cap-title ") >= 0 || el.getAttribute("x-palm-title-cap") === "true") { set(el, "autocapitalize", "words"); }
+		else if (ste.indexOf(" cap-sentence ") >= 0) { set(el, "autocapitalize", "sentences"); }
+		else if (all || ste.indexOf(" cap-lowercase ") >= 0 || el.getAttribute("x-palm-disable-auto-cap") === "true") { set(el, "autocapitalize", "none"); }
+	}
+	document.addEventListener("focusin", function (ev) { modes(ev.target); }, true);
+	document.addEventListener("mousedown", function (ev) { modes(ev.target); }, true);
+})();

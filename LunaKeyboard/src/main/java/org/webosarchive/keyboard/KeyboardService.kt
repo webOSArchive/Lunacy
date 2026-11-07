@@ -170,6 +170,13 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
         val t = editor?.inputType ?: return false
         if (t and InputType.TYPE_MASK_CLASS != InputType.TYPE_CLASS_TEXT) return false
         if (t and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS != 0) return false
+        // A web page's field says "don't correct" by leaving AUTO_CORRECT out: Chromium sets it
+        // on every text field except one marked autocorrect="off" (Enyo's autocorrect: false,
+        // and Mojo's autoReplace: false through Lunacy's compat layer). Measured on the Kyocera:
+        // 0xc0a1 for a plain field, 0x40a1 with autocorrect="off"; NO_SUGGESTIONS is never set.
+        // A native Android field keeps being corrected without the flag, as other keyboards do.
+        if (t and InputType.TYPE_MASK_VARIATION == InputType.TYPE_TEXT_VARIATION_WEB_EDIT_TEXT &&
+            t and InputType.TYPE_TEXT_FLAG_AUTO_CORRECT == 0) return false
         return when (t and InputType.TYPE_MASK_VARIATION) {
             InputType.TYPE_TEXT_VARIATION_PASSWORD, InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
             InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD, InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,

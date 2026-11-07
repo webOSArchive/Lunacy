@@ -51,6 +51,13 @@ on the reference TouchPad (2026-11-04):
   left alone after that.
 - **Auto-Capitalization**, where the field asks for capitals (a sentence's start): the letters
   show and type as capitals and the shift key wears its "on" arrow.
+- **Fields that ask not to be.** A web page's field marked `autocorrect="off"` isn't corrected:
+  Chromium leaves `TYPE_TEXT_FLAG_AUTO_CORRECT` off for it (measured on the Kyocera: `0xc0a1`
+  for a plain field, `0x40a1` with the attribute), and every other web text field has it.
+  That is Enyo's `autocorrect: false`, and, through Lunacy's compat layer, Mojo's
+  `autoReplace: false` and `textReplacement: false`. Nor are password, email, URL, filter and
+  phonetic fields, or one marked `NO_SUGGESTIONS`. A native Android field is corrected with
+  or without the flag, as other keyboards do.
 - **Double Space For Period**: two spaces after a word make ". ".
 - **Shortcuts and learned words** are Android's personal dictionary (Settings, or Edit User
   Dictionary in the setup screen): an entry's shortcut expands as you type it, as webOS's

@@ -280,7 +280,7 @@ path (Google's) is not yet tried on a device: it needs one with a browser.
   that mojomail-eas retries.
 
 
-- **Microsoft 365 over Exchange:** mail and sending work (A7, 2026-11-06). Still to see: real
+- **Microsoft 365 over Exchange** (what's missing, in full: [outlook-eas.md](outlook-eas.md)): mail and sending work (A7, 2026-11-06). Still to see: real
   contacts and calendar items through it, push arriving through Ping, the Fold3 on the new build,
   and Palm's service ignoring Microsoft's back-off headers (one bad moment can lock a device out
   for 15 minutes or more). Then choose the Microsoft account type: Exchange for work and school

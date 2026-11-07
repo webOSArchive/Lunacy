@@ -420,6 +420,14 @@ starting; some may have been settled since without a note.
   cookies are shared between apps' origins (`.media.cryptofs.apps`); an app a package script put
   in the rootfs can't be removed from the launcher; Enyo's libraries other than `networkproxy`
   are upstream's, not the TouchPad's newer ones.
+- **Exhibition settings:** a button that opens Android's Screen Saver settings, so a person can
+  set Lunacy as the screen saver from there (codepoet, 2026-11-07; not a blocker).
+- **PDK (2026-11-07, [pdk.md](pdk.md) §6k):** N.O.V.A. 2 crashes as a mission starts, on every
+  device: a menu sprite or font the game looks up by name isn't there (a null from its lookup
+  at 0xc0f70); next is gdb through qemu on the desk. Why Asphalt 5's own PVRTC decoder gives
+  zeros here and not on the TouchPad (Lunacy now offers PVRTC, so it goes unused). GLES 2
+  draws still send their arrays from element 0. `Workbench/pdk-sweep.sh` reports `started=0`
+  on the HP 10 G2: Android 5's small log buffer has dropped the launch line by the time it reads.
 - **Shell (the 2026-09-22 candidates list):** the emulated card's chrome turning with the
   screen; the rest of the settings apps (Backup, Updates, and others codepoet keeps for Lunacy's own
   or hybrid apps; Bluetooth, Date & Time, Location Services and Regional Settings became

@@ -98,6 +98,8 @@ class JsServices(private val bus: Bus, private val installed: File, private val 
                 put("LD_LIBRARY_PATH", webos.nativeDir)
                 // /media/internal's folders that are Android's (UserFiles), as PDK apps get them.
                 put("LUNACY_MEDIA", UserFiles.mappedFolders().joinToString(":") { (name, dir) -> "$name=${dir.path}" })
+                // The screen's longer side in pixels, for the photos service's screennails (PhotoCache).
+                if (PhotoCache.screenPx > 0) put("LUNACY_SCREEN_PX", PhotoCache.screenPx.toString())
             }
             pb.start()
         }, onEnded = { if (running[dir] == this) running.remove(dir) })

@@ -1,0 +1,19 @@
+--- a/photos-src/tasks/BigImageProcessTask.js
++++ b/photos-src/tasks/BigImageProcessTask.js
+@@ -17,8 +17,14 @@
+ var node_path = require('path');
+ var node_http = require('http');
+ 
+-var ScreenNail_WIDTH =1024;
+-var ScreenNail_HEIGHT=768;
++// [Lunacy] The screennail is what Photos shows full screen, so it is made the screen's size: on
++// the TouchPad that was 1024 x 768, its own pixels. On a denser screen, held either way, a picture
++// that box fits came out a fraction of the screen's pixels and was magnified (a 1080 x 1920 phone
++// screenshot became 432 x 768). Lunacy gives the screen's longer side in pixels, and the box is
++// that both ways; a screen no bigger than 1024 keeps the TouchPad's box.
++var ScreenNail_SIDE = (typeof process !== "undefined" && parseInt(process.env.LUNACY_SCREEN_PX, 10)) || 0;
++var ScreenNail_WIDTH = ScreenNail_SIDE > 1024 ? ScreenNail_SIDE : 1024;
++var ScreenNail_HEIGHT = ScreenNail_SIDE > 1024 ? ScreenNail_SIDE : 768;
+ 
+ var BigImg_WIDTH = 2048;
+ var BigImg_HEIGHT= 1536;

@@ -14,14 +14,15 @@ set -e
 cd "$(dirname "$0")/.."
 HERE=$(pwd)
 fw=$1; name=$2
-[ -n "$fw" ] && [ -n "$name" ] && [ $# -gt 2 ] || { echo "usage: $0 enyo-1.0|mojo|calendar <patch-name> <file> [file...]" >&2; exit 1; }
+[ -n "$fw" ] && [ -n "$name" ] && [ $# -gt 2 ] || { echo "usage: $0 enyo-1.0|mojo|calendar|photos-service <patch-name> <file> [file...]" >&2; exit 1; }
 shift 2
 # Each framework's stock tree, as fetch-assets.sh lays it down, and where it lays it.
 case "$fw" in
     enyo-1.0) stock=../Workbench/vendor/touchpad/enyo-0.10; work=local-assets/fw/enyo/1.0 ;;
     mojo) stock=../Workbench/vendor/touchpad/mojo; work=local-assets/fw/mojo ;;
     calendar) stock=../Workbench/vendor/webos-ce/system/usr/palm/frameworks/calendar; work=local-assets/fw/frameworks/calendar ;;
-    *) echo "make-patch: no framework '$fw' (enyo-1.0, mojo or calendar)" >&2; exit 1 ;;
+    photos-service) stock=../Workbench/vendor/touchpad/os-services/com.palm.service.photos; work=local-assets/rootfs/usr/palm/services/com.palm.service.photos ;;
+    *) echo "make-patch: no framework '$fw' (enyo-1.0, mojo, calendar or photos-service)" >&2; exit 1 ;;
 esac
 out=../LunaRuntimes/$fw/patches/$name.patch
 base=$(mktemp -d)

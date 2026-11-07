@@ -29,7 +29,7 @@ class FileIndex(private val webosRoot: File) {
 
     /** Every document under /media/internal, as filenotifyd's records. Runs on db8's mirror thread (Db8.mirror). */
     private fun records(): List<JSONObject> =
-        UserFiles.walkMedia(webosRoot) { p, f -> if (isDocument(f.name)) record(p, f) else null }
+        UserFiles.walkMedia(webosRoot, "document index") { p, f -> if (isDocument(f.name)) record(p, f) else null }
 
     private fun record(path: String, f: File): JSONObject {
         val name = nameOf(path)

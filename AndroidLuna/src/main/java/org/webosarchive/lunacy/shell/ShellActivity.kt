@@ -11,6 +11,7 @@ import org.webosarchive.lunacy.card.AppFiles
 import org.webosarchive.lunacy.card.AppInfo
 import org.webosarchive.lunacy.card.AppRegistry
 import org.webosarchive.lunacy.card.LocationService
+import org.webosarchive.lunacy.card.PhotoCache
 import org.webosarchive.lunacy.card.UpdateService
 import org.webosarchive.lunacy.card.jsString
 import org.webosarchive.lunacy.card.AppServer
@@ -1268,6 +1269,9 @@ class ShellActivity : Activity(), WindowHost {
         // The music library, from Android's media library (MusicLibrary): its songs go in with the ringtones.
         val musicLibrary = MusicLibrary(this, jsServices.root).also { it.attach(db8) }
         MediaIndex(jsServices.root).also { it.music = musicLibrary::songs }.attach(db8, bus)
+        // Photos' full-view copies at the screen's size (PhotoCache; LunaRuntimes/photos-service 0001).
+        PhotoCache.measure(this)
+        PhotoCache.refresh(this, bus, jsServices.root)
         // After db8: it reads its persisted activities back as it registers.
         power.register()
         activityManager.register(bus)

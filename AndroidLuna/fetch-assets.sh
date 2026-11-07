@@ -277,9 +277,16 @@ NOTICE
 # and videos"). Its install script for developers stays out.
 cp -r $V/touchpad/os-services/com.palm.service.photos $R/usr/palm/services/
 rm -f $R/usr/palm/services/com.palm.service.photos/install-on-device.sh
+# Lunacy's changes to it, as diffs against the TouchPad's (LunaRuntimes/photos-service/CHANGES.md).
+for patch in ../LunaRuntimes/photos-service/patches/*.patch; do
+    [ -e "$patch" ] || continue
+    (cd $R/usr/palm/services/com.palm.service.photos && patch -p1 --forward --silent --fuzz=0 < "$HERE/$patch") ||
+        { echo "fetch-assets: $patch does not apply to the TouchPad's photos service" >&2; exit 1; }
+done
 cat > $R/usr/palm/services/com.palm.service.photos/NOTICE <<'NOTICE'
 Palm's photos service, copied from /usr/palm/services on the reference TouchPad (webOS CE
-3.1.0), without its developer install script. Copyright Palm, Inc. / Hewlett-Packard. Never
+3.1.0), without its developer install script, with Lunacy's changes in
+LunaRuntimes/photos-service (marked [Lunacy]). Copyright Palm, Inc. / Hewlett-Packard. Never
 released under an open licence; distributed by Lunacy as abandonware, like Mojo.
 NOTICE
 # webOS CE's photo edit service, which writes what Photos & Videos 3.2.0's rotate and crop

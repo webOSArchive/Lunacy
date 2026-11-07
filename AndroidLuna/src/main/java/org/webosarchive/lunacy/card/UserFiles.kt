@@ -98,7 +98,7 @@ object UserFiles {
      * [MAX_DEPTH] deep and [MAX_FILES] records at most. [record] gives null for a file it
      * doesn't index.
      */
-    fun walkMedia(webosRoot: File, record: (path: String, f: File) -> JSONObject?): List<JSONObject> {
+    fun walkMedia(webosRoot: File, label: String = "media index", record: (path: String, f: File) -> JSONObject?): List<JSONObject> {
         val out = ArrayList<JSONObject>()
         val paths = HashSet<String>()
         fun walk(dir: File, path: String, depth: Int) {
@@ -116,9 +116,24 @@ object UserFiles {
             }
         }
         walk(own(webosRoot), "/media/internal", 0)
-        for ((name, dir) in mappedFolders()) walk(dir, "/media/internal/$name", 0)
+        // Per folder, for a user's Save a Log: which of Android's folders could be read and what
+        // was found there. Nothing listed in one that has files means Android gives Lunacy no
+        // access to it (the storage permission refused, or limited to chosen photos).
+        val counts = ArrayList<String>()
+        for ((name, dir) in mappedFolders()) {
+            val before = out.size
+            if (dir.listFiles() == null) counts += "$name unreadable" else { walk(dir, "/media/internal/$name", 0); counts += "$name ${out.size - before}" }
+        }
+        val missing = MAPPED.keys.filter { k -> mappedFolders().none { it.first == k } }
+        val summary = "${out.size} files; ${counts.joinToString(", ")}" +
+            (if (missing.isEmpty()) "" else "; no folder for ${missing.sorted().joinToString(", ")}") +
+            (if (out.size >= MAX_FILES) "; stopped at $MAX_FILES" else "")
+        // Once, and again when it changes: a watched kind is walked every few seconds.
+        if (synchronized(lastSummary) { lastSummary.put(label, summary) } != summary) android.util.Log.i(AppServer.TAG, "$label: $summary")
         return out
     }
+
+    private val lastSummary = HashMap<String, String>()
 
     private const val MAX_DEPTH = 12
     private const val MAX_FILES = 5000

@@ -853,6 +853,17 @@ calls, for `.jpg`, `.jpeg` and `.png` files under `/media/internal`, and Contact
 `/media/internal/.contactphotos` alone, where Import vCards writes). The app lists
 what webOS's media index holds and shows the thumbnails the service makes.
 
+- **Screennails at the screen's size** (2026-11-07). The full view always shows a picture's
+  screennail, which the service fitted into the TouchPad's 1024 x 768 screen: a 1080 x 1920 phone
+  screenshot's was 432 x 768, magnified across a 1080 px screen, and users reported screenshots
+  blurry. The service's box is now the screen's longer side in pixels both ways
+  (`LUNACY_SCREEN_PX`; [photos-service 0001](../LunaRuntimes/photos-service/CHANGES.md)), and
+  screennails made at another size are cleared once (`PhotoCache.kt`). Measured on the Kyocera:
+  the screenshot's screennail is now 1080 x 1920.
+- **The index says what it found.** Each walk logs, when it changes, how many files each mapped
+  folder gave or that it couldn't be read (`UserFiles.walkMedia`), so a user's Save a Log shows
+  whether Lunacy can see their DCIM and Pictures.
+
 - **`MediaIndex.kt`** answers the media index from the files, as `FileIndex.kt` answers
   documents ([luna-deltas.md](luna-deltas.md) A16): `com.palm.media.image.file:1` (JPEG, PNG,
   BMP), `com.palm.media.video.file:1` (MP4 and QuickTime with a video track, WMV, AVI) and

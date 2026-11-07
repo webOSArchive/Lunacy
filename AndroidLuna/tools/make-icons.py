@@ -7,7 +7,7 @@ Makes Lunacy's launcher icon and notification icon from codepoet's artwork in Me
 - The launcher icon is Meta/LunacyRobot.png (the Android robot with a door open on the night
   sky and the moon) in front of a patch of Meta/LunaOnly.png's starry sky.
   - Android 8 and later: an adaptive icon (mipmap-anydpi-v26/ic_launcher.xml) with those two
-    layers, 108 dp each, the robot inside the 66 dp safe zone so a round mask doesn't cut it,
+    layers, 108 dp each, the robot as large as fits inside a round mask's 72 dp circle uncut,
     and a white silhouette of the robot as the monochrome layer for Android 13's themed icons.
   - Android 5 to 7: ic_launcher.png, the same two layers in a rounded rectangle, 48 dp.
 - The splash logo is the robot alone (drawable-*/lunacy_logo.png), on splash_background.
@@ -24,8 +24,9 @@ META = os.path.join(ROOT, "Meta")
 RES = os.path.join(ROOT, "AndroidLuna", "src", "main", "res")
 DENSITIES = [("mdpi", 1.0), ("hdpi", 1.5), ("xhdpi", 2.0), ("xxhdpi", 3.0), ("xxxhdpi", 4.0)]
 
-# The robot's height in the 108 dp adaptive layer: inside the 66 dp safe circle's reach.
-ROBOT_DP = 62
+# The robot's height in the 108 dp adaptive layer: the largest that keeps every pixel inside
+# the round mask's 72 dp circle (measured: 68 fits, 70 crosses it by a fraction of a pixel).
+ROBOT_DP = 68
 # The legacy icon's corner radius, as a share of its side (the old icon's tile was about this).
 LEGACY_RADIUS = 0.18
 # The legacy icon's tile within its 48 dp: Android's guideline keylines leave a 2 dp margin.

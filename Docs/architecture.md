@@ -862,7 +862,10 @@ what webOS's media index holds and shows the thumbnails the service makes.
   the screenshot's screennail is now 1080 x 1920.
 - **The index says what it found.** Each walk logs, when it changes, how many files each mapped
   folder gave or that it couldn't be read (`UserFiles.walkMedia`), so a user's Save a Log shows
-  whether Lunacy can see their DCIM and Pictures.
+  whether Lunacy can see their DCIM and Pictures. That line is written once and Android's log
+  turns over within minutes, so Save a Log also writes a "Media folders" section when it saves
+  (`UserFiles.diagnose`): each folder's Android path, readable or not and how many entries, the
+  indexes' last results, whether there is removable storage, and DCIM/Camera's HEIC count.
 
 - **`MediaIndex.kt`** answers the media index from the files, as `FileIndex.kt` answers
   documents ([luna-deltas.md](luna-deltas.md) A16): `com.palm.media.image.file:1` (JPEG, PNG,

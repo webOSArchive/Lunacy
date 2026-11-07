@@ -135,6 +135,32 @@ object UserFiles {
 
     private val lastSummary = HashMap<String, String>()
 
+    /**
+     * What a user's Save a Log needs to tell why pictures are missing (LogExport), counts only:
+     * each mapped folder's Android path, whether Lunacy can read it and how many entries it
+     * has; the indexes' last results; whether the device has removable storage (an SD card,
+     * whose DCIM isn't mapped); and how many HEIC pictures DCIM/Camera holds (the index takes
+     * JPEG, PNG and BMP).
+     */
+    fun diagnose(context: android.content.Context): String {
+        val sb = StringBuilder()
+        for (name in MAPPED.keys.sorted()) {
+            val dir = Environment.getExternalStoragePublicDirectory(MAPPED.getValue(name))
+            val entries = dir.listFiles()
+            sb.append("$name -> ${dir.path}: ").append(when {
+                !dir.exists() -> "no such folder"
+                entries == null -> "can't be read"
+                else -> "${entries.size} entries"
+            }).append('\n')
+        }
+        synchronized(lastSummary) { for ((k, v) in lastSummary) sb.append("last $k: $v\n") }
+        val volumes = context.getExternalFilesDirs(null).count { it != null }
+        sb.append("storage volumes: $volumes").append(if (volumes > 1) " (removable storage present: its DCIM isn't mapped)" else "").append('\n')
+        val camera = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera").listFiles()
+        if (camera != null) sb.append("DCIM/Camera: ${camera.size} entries, ${camera.count { it.name.lowercase().let { n -> n.endsWith(".heic") || n.endsWith(".heif") } }} HEIC\n")
+        return sb.toString()
+    }
+
     private const val MAX_DEPTH = 12
     private const val MAX_FILES = 5000
 

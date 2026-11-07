@@ -22,6 +22,7 @@ import java.util.Locale
  *
  * - what Lunacy runs on (Device Info's own report, without the device's serial number and
  *   webOS device id) and which of Android's permissions it holds;
+ * - what Lunacy can see of Android's media folders, counts only (UserFiles.diagnose);
  * - Lunacy's own lines from Android's log (`logcat -d`: since Android 4.1 an app reads only its
  *   own), which carry the bus, the services and every app page's console;
  * - webOS's /var/log/messages, what `palm-log` reads.
@@ -43,6 +44,9 @@ class LogExport(private val context: Context, private val webosRoot: File) {
                 w.write("Lunacy log, ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", Locale.US).format(Date())}\n\n")
                 section(w, "Environment") { w.write(environment(report)) }
                 section(w, "Android permissions") { w.write(JSONObject(permissions).apply { remove("returnValue") }.toString(2)) }
+                // Written now: the index logs only when its result changes, and that line may
+                // have left Android's log by the time a log is saved.
+                section(w, "Media folders") { w.write(UserFiles.diagnose(context)) }
                 section(w, "Android log (Lunacy's own lines)") { logcat(w) }
                 section(w, "webOS log (/var/log/messages)") {
                     for (f in listOf(File(webosRoot, "var/log/messages.0"), File(webosRoot, "var/log/messages")))

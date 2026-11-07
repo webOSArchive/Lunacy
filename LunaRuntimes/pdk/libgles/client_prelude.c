@@ -229,22 +229,26 @@ static GLint color_int(GLfloat f)
 }
 /*
  * Before a draw: for every enabled array that points at the app's memory (no VBO), send
- * the bytes the draw covers - elements 0 to the highest it touches - as an ARRAY command.
+ * the bytes the draw covers - the lowest element it touches to the highest - as an ARRAY
+ * command, with the lowest. A track drawn piece by piece from one big vertex array (Asphalt
+ * 5) touches a few hundred elements each draw; from element 0 it sent a megabyte each.
  */
-static void send_arrays(size_t vertices, size_t count, GLenum index_type, const void *indices)
+static void send_arrays(size_t first, size_t vertices, size_t count, GLenum index_type, const void *indices)
 {
-	if (count && index_extent(&vertices, count, index_type, indices) < 0) return;
+	if (count && index_extent(&first, &vertices, count, index_type, indices) < 0) return;
+	if (first >= vertices) return;
 	for (int s = 0; s < ARRAYS; s++) {
 		struct array *a = &arrays[s];
 		if (!a->enabled || a->buffer || !a->ptr || !vertices) continue;
 		size_t elem = (size_t)a->size * gl_type_size(a->type);
 		size_t stride = a->stride > 0 ? (size_t)a->stride : elem;
-		size_t n = stride * (vertices - 1) + elem;
-		uint8_t *w = begin(ARRAY_OP, 6 * 4 + 4 + blob_len(a->ptr, n));   /* the blob is padded to 4 */
+		size_t n = stride * (vertices - first - 1) + elem;
+		const uint8_t *from = (const uint8_t *)a->ptr + stride * first;
+		uint8_t *w = begin(ARRAY_OP, 6 * 4 + 4 + blob_len(from, n));   /* the blob is padded to 4 */
 		if (!w) return;
 		w = put_u32(w, (uint32_t)s); w = put_u32(w, (uint32_t)a->size); w = put_u32(w, (uint32_t)a->stride);
-		w = put_u32(w, a->type); w = put_u32(w, 0); w = put_u32(w, 0);
-		w = put_blob(w, a->ptr, n);
+		w = put_u32(w, a->type); w = put_u32(w, (uint32_t)first); w = put_u32(w, 0);
+		w = put_blob(w, from, n);
 		end(w);
 	}
 }

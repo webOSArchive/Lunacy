@@ -28,7 +28,8 @@ static struct attrib attribs[ATTRIBS];
 /* Before a draw: each enabled attribute array in the app's memory, the elements it covers. */
 static void send_attribs(size_t vertices, size_t count, GLenum index_type, const void *indices)
 {
-	if (count && index_extent(&vertices, count, index_type, indices) < 0) return;
+	size_t lowest_;   /* GLES 2 sends from element 0 */
+	if (count && index_extent(&lowest_, &vertices, count, index_type, indices) < 0) return;
 	for (uint32_t i = 0; i < ATTRIBS; i++) {
 		struct attrib *a = &attribs[i];
 		if (!a->enabled || a->buffer || !a->ptr || !vertices) continue;

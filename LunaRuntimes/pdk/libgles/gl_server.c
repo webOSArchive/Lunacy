@@ -165,6 +165,7 @@ static __thread GLuint element_bound, array_bound;
 static __thread int client_unit;
 #define ARRAYS 10
 struct array { int enabled; GLint size; GLenum type; GLsizei stride; uint32_t offset; uint8_t *data; size_t cap; int fresh; GLboolean normalized;
+	uint32_t first;  /* GLES 1.1: the element the copy starts at (the draw's lowest) */
 	GLuint buffer;   /* the buffer object the pointer was set with, 0 for an array in the app's memory */ };
 #if GLES_VERSION == 2
 #undef ARRAYS
@@ -172,13 +173,13 @@ struct array { int enabled; GLint size; GLenum type; GLsizei stride; uint32_t of
 #endif
 static __thread struct array arrays[ARRAYS];
 
-/* An ARRAY command (GLES 1.1: slot, size, stride, type, 0, 0) or ATTRIB command (GLES 2:
+/* An ARRAY command (GLES 1.1: slot, size, stride, type, first element, 0) or ATTRIB command (GLES 2:
    index, size, type, normalized, stride), then the bytes; slot 255 is a draw's indices. */
 static void take_array(struct reader *r, int attrib)
 {
-	uint32_t s = get_u32(r), size, stride, type, normalized = 0;
+	uint32_t s = get_u32(r), size, stride, type, normalized = 0, first = 0;
 	if (attrib) { size = get_u32(r); type = get_u32(r); normalized = get_u32(r); stride = get_u32(r); }
-	else { size = get_u32(r); stride = get_u32(r); type = get_u32(r); get_u32(r); get_u32(r); }
+	else { size = get_u32(r); stride = get_u32(r); type = get_u32(r); first = get_u32(r); get_u32(r); }
 	uint32_t len = get_u32(r);
 	size_t padded;
 	if (!fits(r, len, &padded)) { r->p = r->end; return; }
@@ -188,7 +189,7 @@ static void take_array(struct reader *r, int attrib)
 		struct array *a = &arrays[s];
 		if (!grow(&a->data, &a->cap, len)) { r->p += padded; return; }
 		memcpy(a->data, r->p, len);
-		a->size = (GLint)size; a->stride = (GLsizei)stride; a->type = type; a->normalized = (GLboolean)normalized; a->fresh = 1; a->buffer = 0;
+		a->size = (GLint)size; a->stride = (GLsizei)stride; a->type = type; a->normalized = (GLboolean)normalized; a->fresh = 1; a->buffer = 0; a->first = first;
 	}
 	r->p += padded;
 }
@@ -236,6 +237,13 @@ static void server_enable(GLenum cap, int on)
 	if (s >= 0) arrays[s].enabled = on;
 	if (on) glEnableClientState(cap); else glDisableClientState(cap);
 }
+/* Where element 0 would be: the copy starts at the draw's lowest element, which GL then
+   reads at its own index (it reads nothing below it). */
+static const void *array_base(const struct array *a)
+{
+	size_t stride = a->stride > 0 ? (size_t)a->stride : (size_t)(a->size ? a->size : 1) * gl_type_size(a->type);
+	return (const uint8_t *)a->data - (size_t)a->first * stride;
+}
 /* Before a draw: point the real GL at the copies that just arrived. */
 static void apply_arrays(void)
 {
@@ -243,14 +251,15 @@ static void apply_arrays(void)
 		struct array *a = &arrays[s];
 		if (!a->fresh) continue;
 		a->fresh = 0;
+		const void *p = array_base(a);
 		switch (s) {
-		case 0: glVertexPointer(a->size, a->type, a->stride, a->data); break;
-		case 1: glColorPointer(a->size, a->type, a->stride, a->data); break;
-		case 2: glNormalPointer(a->type, a->stride, a->data); break;
+		case 0: glVertexPointer(a->size, a->type, a->stride, p); break;
+		case 1: glColorPointer(a->size, a->type, a->stride, p); break;
+		case 2: glNormalPointer(a->type, a->stride, p); break;
 		case 3: case 4: case 5: case 6:
-			glClientActiveTexture(GL_TEXTURE0 + (s - 3)); glTexCoordPointer(a->size, a->type, a->stride, a->data);
+			glClientActiveTexture(GL_TEXTURE0 + (s - 3)); glTexCoordPointer(a->size, a->type, a->stride, p);
 			glClientActiveTexture(GL_TEXTURE0 + client_unit); break;
-		case 7: glPointSizePointerOES(a->type, a->stride, a->data); break;
+		case 7: glPointSizePointerOES(a->type, a->stride, p); break;
 		default: break;
 		}
 	}
@@ -486,7 +495,7 @@ static void repoint(int slot)
 	const void *p;
 	if (!a->size) return;
 	if (a->buffer) { glBindBuffer(GL_ARRAY_BUFFER, a->buffer); p = (const void *)(uintptr_t)a->offset; }
-	else if (a->data) { glBindBuffer(GL_ARRAY_BUFFER, 0); p = a->data; }
+	else if (a->data) { glBindBuffer(GL_ARRAY_BUFFER, 0); p = array_base(a); }
 	else return;
 	if (slot == 0) glVertexPointer(a->size, a->type, a->stride, p); else glTexCoordPointer(a->size, a->type, a->stride, p);
 }

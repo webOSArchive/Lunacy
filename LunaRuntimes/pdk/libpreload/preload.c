@@ -573,7 +573,14 @@ int closedir(DIR *d)
  * glib's g_module_open), which only the webOS root has. A bare name ("libfoo.so") is the
  * loader's own search and is left alone.
  */
-void *dlopen(const char *path, int flags) { REAL(dlopen); MAPPED(path); return real_dlopen(mp_, flags); }
+#include "vfpvec.h"
+void *dlopen(const char *path, int flags)
+{
+	REAL(dlopen); MAPPED(path);
+	void *h = real_dlopen(mp_, flags);
+	if (h && vv_on) dl_iterate_phdr(vv_object, NULL);  /* vfpvec.h: the new library's code */
+	return h;
+}
 /* The working directory as webOS names it: an app showing a file browser shows /media/internal. */
 char *getcwd(char *buf, size_t size)
 {

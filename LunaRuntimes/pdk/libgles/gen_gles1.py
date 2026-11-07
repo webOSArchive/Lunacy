@@ -274,9 +274,9 @@ def gen_client(protos, shared=frozenset()):
         if name == 'glScissor':
             print('    scissor[0] = x; scissor[1] = y; scissor[2] = width; scissor[3] = height;')
         if name == 'glDrawArrays':
-            print('    send_arrays((size_t)first + (size_t)count, 0, 0, NULL);')
+            print('    send_arrays((size_t)first, (size_t)first + (size_t)count, 0, 0, NULL);')
         if name == 'glDrawElements':
-            print('    send_arrays(0, (size_t)count, type, indices);')
+            print('    send_arrays(0, 0, (size_t)count, type, indices);')
         blobs = [(n, sz) for n, k, sz in kinds if k == 'blob']
         blob_len = ' + '.join([f'4 + blob_len({n}, {sz})' for n, sz in blobs] or ['0'])
         print(f'    uint8_t *wr_ = begin({op}, {4 * len(ps)} + ({blob_len}));')
@@ -305,7 +305,7 @@ def local_body(name, ret, ps):
         return '    { GLenum e = gl_error; gl_error = GL_NO_ERROR; return e; }'
     if name == 'glGetString':
         return ('    static char vendor[] = "Lunacy", renderer[] = "Lunacy GLES 1.1 stream", version[] = "OpenGL ES-CM 1.1", '
-                'extensions[] = "GL_OES_framebuffer_object GL_OES_compressed_ETC1_RGB8_texture GL_OES_draw_texture GL_OES_texture_npot GL_OES_blend_subtract GL_OES_point_sprite", none[] = "";\n'
+                'extensions[] = "GL_OES_framebuffer_object GL_OES_compressed_ETC1_RGB8_texture GL_OES_draw_texture GL_OES_texture_npot GL_OES_blend_subtract GL_OES_point_sprite GL_IMG_texture_compression_pvrtc", none[] = "";\n'
                 '    switch (name) { case GL_VENDOR: return (const GLubyte*)vendor; case GL_RENDERER: return (const GLubyte*)renderer; case GL_VERSION: return (const GLubyte*)version; case GL_EXTENSIONS: return (const GLubyte*)extensions; default: return (const GLubyte*)none; }')
     if name in ('glGenTextures', 'glGenBuffers', 'glGenFramebuffersOES', 'glGenRenderbuffersOES', 'glGenFencesNV', 'glGenProgramsARB'):
         return f'    gen({ps[0][1]}, {ps[1][1]});'

@@ -165,7 +165,7 @@ static void remember_buffer_sub(GLenum target, size_t offset, size_t size, const
  * read from the app's indices or from the copy kept of an element buffer; indices in the
  * app's memory travel with the draw as a nameless array (slot 255). -1: nothing to draw.
  */
-static int index_extent(size_t *vertices, size_t count, GLenum index_type, const void *indices)
+static int index_extent(size_t *lowest, size_t *vertices, size_t count, GLenum index_type, const void *indices)
 {
 	const void *idx = indices;
 	if (element_buffer) {
@@ -175,10 +175,11 @@ static int index_extent(size_t *vertices, size_t count, GLenum index_type, const
 		if (off + count * gl_type_size(index_type) > b->size) return -1;
 		idx = b->data + off;
 	}
-	size_t max = 0;
-	if (index_type == GL_UNSIGNED_BYTE) { const uint8_t *p = idx; for (size_t i = 0; i < count; i++) if (p[i] > max) max = p[i]; }
-	else { const uint16_t *p = idx; for (size_t i = 0; i < count; i++) if (p[i] > max) max = p[i]; }
+	size_t max = 0, min = (size_t)-1;
+	if (index_type == GL_UNSIGNED_BYTE) { const uint8_t *p = idx; for (size_t i = 0; i < count; i++) { if (p[i] > max) max = p[i]; if (p[i] < min) min = p[i]; } }
+	else { const uint16_t *p = idx; for (size_t i = 0; i < count; i++) { if (p[i] > max) max = p[i]; if (p[i] < min) min = p[i]; } }
 	*vertices = max + 1;
+	*lowest = min <= max ? min : 0;
 	if (!element_buffer) {
 		size_t n = count * gl_type_size(index_type);
 		uint8_t *w = begin(ARRAY_OP, 6 * 4 + 4 + blob_len(indices, n));   /* the blob is padded to 4 */

@@ -1076,3 +1076,64 @@ The movies on the Fold3 are ordinary MP4 and MOV (H.264 or MPEG-4 video, AAC or 
 480 x 320 intro, Oregon Trail's logo, Asphalt 5's clips, Nova 2's 1024 x 768. Checked: H.A.W.X.'s
 intro plays with its sound on the Fold3's cover screen (codepoet: "looks and sounds great").
 
+
+## 6k. VFP short vectors, PVRTC for Asphalt 5, a draw's own vertices, 2026-11-07
+
+Dead Space (apkenv) played with a screech on the Fold3, and Asphalt 5 drew a white screen; both
+are clean on the TouchPad, and Dead Space was clean on the HP 10 G2 and the Pixel Tablet.
+
+**VFP short vectors.** VFP before ARMv8 could run one data-processing instruction over a short
+vector: with FPSCR.LEN at n-1, `vadd.f32 s24, s8, s16` adds eight registers when n is 8. EA's audio
+core uses it (Dead Space's `MixWithGain`, `CopyWithGain`, `LinearInterpolate` and three more, LEN
+8 and 4), and so does Gameloft's 4x4 matrix multiply (Asphalt 5, ten copies, LEN 4). An ARMv8 CPU
+running 32-bit code under a 64-bit kernel ignores LEN, and each instruction computes its first
+element only: Dead Space mixed one sample in eight (one stereo frame, then seven of zeros, at the
+right rate), and Asphalt's matrices came out wrong. A 32-bit kernel emulates short vectors where
+the CPU lacks them, at a trap per instruction, and qemu honours them. Measured with
+`Workbench/probe/vfpvec` (a LEN-8 add of 1..8 and 10..80):
+
+| | runs | result |
+|---|---|---|
+| Galaxy Z Fold3, Kyocera A101BM, Galaxy Tab A7 Lite (64-bit kernels) | natively | 11 0 0 0 0 0 0 0 |
+| HP 10 G2 (32-bit kernel) | natively | 11 22 .. 88 |
+| Pixel Tablet (Lunacy's qemu 11), and qemu 8.2 on the desk | emulated | 11 22 .. 88 (`-cpu cortex-a15` refuses LEN) |
+
+The preload rewrites such code as it is loaded (`libpreload/vfpvec.h`), one rule for every
+program: each run from a `vmsr fpscr` whose register was just `orr`ed with LEN or STRIDE bits, up
+to the next `vmsr fpscr`, is copied into a trampoline within branch reach. Each vector
+instruction is spelt out as its n scalar ones in the architecture's order (bank 0 scalar, a
+bank-0 second operand scalar, wrap within the bank). FPSCR is written with LEN clear, so the copy
+is right on any CPU. Branches out and PC-relative loads (`ldr`, `vldr`, `add rX, pc, rY`) are made
+absolute, and the run's entry points, its start and any branch into it from outside, branch to
+the copy. The pages are patched through an anonymous copy mapped over them, so no file-backed
+page is written (anonymous executable memory, which ART's JIT and the shell's qemu need too, and
+no page is writable and executable at once). Code is scanned at start (`dl_iterate_phdr`), after
+`dlopen`, and when apkenv's linker makes a library read-execute (`mprotect`). It runs on every
+CPU, the 10 G2's too, where it saves the kernel's trap. A run it can't take is left as it was and
+logged. The log says `vector VFP runs rewritten as scalar` with the count, and whether the CPU
+ignores LEN. Dead Space's mixer plays clean on the Fold3.
+
+**PVRTC for GLES 1.** Asphalt 5, a Pre game made to run on the TouchPad, checks
+`GL_IMG_texture_compression_pvrtc` and decodes its PVRTC textures itself
+(`PVRTDecompress.cpp`) when it isn't there. On Lunacy every mipmapped texture it uploaded, its
+whole 3D world, was zeros (the single-level ones, menus and HUD, were right), black with texturing
+on, on the Fold3 and the 10 G2. Lunacy's GLES 1 now offers the extension, which is true: the
+server decodes PVRTC where the driver hasn't it (above, `pvrtc.h`). The game uploads compressed
+textures and the world draws (codepoet: "full graphics"). The TouchPad doesn't offer PVRTC
+(measured with `Workbench/probe/modeprobe/glprobe.c`: ATC, 3DC, ETC1 and paletted), so there the
+game's own decoder ran and worked. Why it gives zeros here is still open.
+
+**A draw's own vertices.** A GLES 1.1 draw from arrays in the app's memory sent elements 0 up to
+the highest it touched. Asphalt draws its track piece by piece from one array of some 32,000
+vertices, so each draw sent about 1 MB per attribute, three per draw and 80 draws a frame. The
+client now sends from the lowest element to the highest, with the lowest in the ARRAY command's
+fifth word, and the server points GL that many elements before its copy. The frame rate went from
+unplayable to smooth on the Fold3 (25 frames/s, the game's own pace). GLES 2 still sends from
+element 0.
+
+**Still open.** N.O.V.A. 2 plays its intro movie, then opens `PostEffect_gl2.bdae`, which none of
+its archives hold, and crashes on the missing object (SIGSEGV at 0x50, after "File not found"),
+on the Fold3 and on a fresh install on the 10 G2. Advertising the TouchPad's GLES 2 extensions
+that the stream passes through (depth textures, 32-bit indices, float textures, anisotropy)
+changed nothing. What the TouchPad does at that point is next to measure: its GLES 2 strings
+(`glprobe2.c`) are Adreno 220's, with 35 extensions to Lunacy's 7.

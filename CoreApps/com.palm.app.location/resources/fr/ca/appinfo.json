@@ -1,0 +1,13 @@
+{
+	"icon": "../../../icon.png",
+	"id": "com.palm.app.location",
+	"keywords": [
+		"Configuration",
+		"Préférences"
+	],
+	"main": "../../../index.html",
+	"splashicon": "../../../icon-256x256.png",
+	"title": "Service de position",
+	"type": "web",
+	"uiRevision": 2
+}

@@ -1,0 +1,12 @@
+Lunacy's System Alerts.
+
+A hidden, headless app that opens webOS SystemUI's popup alerts when the system needs one: first,
+the location service's question, "Allow the following application to use your location for
+this session?" (LocationService.kt). It does what luna-systemui's SystemManagerService did when a
+service asked, opening its alert page with the same window name, parameters and height.
+
+The app's code is Lunacy's, under the same terms as the rest of Lunacy. The alert itself is
+SystemUI's, which Lunacy serves at its webOS path from AndroidLuna/src/main/assets/luna-systemui
+(SystemManagerAlerts/, stylesheets/ and images/): Palm's files from the reference TouchPad's
+/usr/lib/luna/system/luna-systemui (webOS CE 3.1.0), copied unchanged on 2026-11-07,
+abandonware like the rest of that folder (see its FilePicker NOTICE).

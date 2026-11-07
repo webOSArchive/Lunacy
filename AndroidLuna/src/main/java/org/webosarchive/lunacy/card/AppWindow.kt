@@ -260,6 +260,10 @@ open class AppWindow(
                 return true
             }
             override fun onCloseWindow(window: WebView) { host.onWindowClosed(this@AppWindow) }
+            // navigator.geolocation in an app's own page: asked as the app, as its service calls are (LocationService).
+            override fun onGeolocationPermissionsShowPrompt(origin: String, callback: android.webkit.GeolocationPermissions.Callback) {
+                LocationService.current?.pageRequest("app", appId, origin, callback) ?: callback.invoke(origin, false, false)
+            }
         }
         webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? =

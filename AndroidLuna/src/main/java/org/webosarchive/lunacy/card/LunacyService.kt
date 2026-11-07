@@ -215,7 +215,8 @@ class LunacyService(
     /**
      * What Lunacy may do on this device. Each permission says whether Android asks for it at
      * all (`asked`: from Android 6; Android 5 granted everything at install) and whether it
-     * is granted now. `storage` is the shared storage behind /media/internal;
+     * is granted now. `storage` is the shared storage behind /media/internal; `location` is
+     * what Android asks before it names the Wi-Fi networks around (the system menu's list);
      * `systemSettings` is "Modify system settings", which Screen & Lock's brightness needs;
      * `homeLauncher` is whether Lunacy is the device's home screen, which is offered on
      * every Android version and is the owner's choice rather than a permission.
@@ -224,6 +225,7 @@ class LunacyService(
         val asked = Build.VERSION.SDK_INT >= 23
         return Bus.ok(mapOf(
             "storage" to JSONObject().put("asked", asked).put("granted", storageGranted()),
+            "location" to JSONObject().put("asked", asked).put("granted", granted(LOCATION_ANY)),
             "contacts" to JSONObject().put("asked", asked).put("granted", granted(CONTACTS)),
             "calendar" to JSONObject().put("asked", asked).put("granted", granted(CALENDAR)),
             "systemSettings" to JSONObject().put("asked", asked).put("granted", systemSettingsGranted()),
@@ -270,9 +272,13 @@ class LunacyService(
             reply(Bus.error("Only Lunacy's own apps can ask for Android's permissions (asked by $caller)", -1)); return
         }
         when (which) {
-            "storage", "contacts", "calendar" -> {
-                val permissions = when (which) { "storage" -> STORAGE; "contacts" -> CONTACTS; else -> CALENDAR }
-                if (granted(permissions)) { reply(Bus.ok(mapOf("permission" to which, "granted" to true))); return }
+            "storage", "location", "contacts", "calendar" -> {
+                val permissions = when (which) { "storage" -> STORAGE; "location" -> LOCATION; "contacts" -> CONTACTS; else -> CALENDAR }
+                // Asked once: the system menu doesn't put Android's question up again (SystemControls.scan).
+                if (which == "location") setLocationAsked(context)
+                // Location: approximate alone is enough (Android 12 lets the owner choose it).
+                val enough = if (which == "location") LOCATION_ANY else permissions
+                if (granted(enough)) { reply(Bus.ok(mapOf("permission" to which, "granted" to true))); return }
                 if (p.optBoolean("viaSettings")) {
                     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + context.packageName))
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -286,7 +292,7 @@ class LunacyService(
                     return
                 }
                 shell.requestPermissions(permissions) { granted, askAgain ->
-                    reply(Bus.ok(mapOf("permission" to which, "granted" to granted, "askAgain" to askAgain)))
+                    reply(Bus.ok(mapOf("permission" to which, "granted" to (granted || granted(enough)), "askAgain" to askAgain)))
                 }
             }
             "systemSettings" -> {
@@ -685,8 +691,15 @@ class LunacyService(
         /** Bundled apps that host an account's setup page ([hostsAccountPages]). */
         private val ACCOUNT_PAGE_HOSTS = setOf("com.palm.app.contacts", "com.palm.app.calendar", "com.palm.app.accounts")
         /** What permissions/request takes: its `when`, in order. */
-        private val PERMISSIONS = listOf("storage", "contacts", "calendar", "systemSettings", "background", "homeLauncher")
+        private val PERMISSIONS = listOf("storage", "location", "contacts", "calendar", "systemSettings", "background", "homeLauncher")
         private val STORAGE = listOf(android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        /**
+         * Location: Android names the Wi-Fi networks around only to an app with it (SystemControls),
+         * and webOS apps the owner allows get positions from it (LocationService). Precise is asked
+         * for with approximate, for GPS; approximate alone ([LOCATION_ANY]) is enough to count.
+         */
+        val LOCATION = listOf(android.Manifest.permission.ACCESS_COARSE_LOCATION, android.Manifest.permission.ACCESS_FINE_LOCATION)
+        val LOCATION_ANY = listOf(android.Manifest.permission.ACCESS_COARSE_LOCATION)
         private val CONTACTS = listOf(android.Manifest.permission.READ_CONTACTS)
         private val CALENDAR = listOf(android.Manifest.permission.READ_CALENDAR)
         /** Long enough for the setting app's reply to land and its selector to close before the shell goes. */
@@ -703,6 +716,16 @@ class LunacyService(
          */
         fun backgroundAllowed(context: Context): Boolean = if (Build.VERSION.SDK_INT < 23) true
             else (context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).isIgnoringBatteryOptimizations(context.packageName)
+        /**
+         * Whether Android's location question has been put once, by First Use (which explains
+         * it) or by the system menu's Wi-Fi list: after that the menu doesn't ask again
+         * unexplained, and a refusal stands until the owner changes it in Android's settings.
+         */
+        fun locationAsked(context: Context): Boolean =
+            context.getSharedPreferences("device", Context.MODE_PRIVATE).getBoolean("locationAsked", false)
+        fun setLocationAsked(context: Context) {
+            context.getSharedPreferences("device", Context.MODE_PRIVATE).edit().putBoolean("locationAsked", true).apply()
+        }
         /** Whether the owner has been asked for [backgroundAllowed] once: by First Use, or by its one page after an update. */
         fun backgroundAsked(context: Context): Boolean =
             context.getSharedPreferences("device", Context.MODE_PRIVATE).getBoolean("backgroundAsked", false)

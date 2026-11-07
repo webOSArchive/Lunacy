@@ -365,6 +365,10 @@ reports `none` when it hasn't, and `pin` or `password` (whichever was last set t
 
 **A deliberate delta, codepoet's decision, 2026-11-07.** On webOS a first sync showed "Syncing account..." in its banner and dashboard until the whole account was done (SystemUI's `SyncUI.syncDashboard`, measured on the reference TouchPad with an Exchange account). A large account can take minutes, and codepoet wanted the person to see what is happening. Lunacy's Sync Status (`CoreApps/org.webosarchive.lunacy.syncstatus`) names the capabilities whose first sync is still running, from the same `com.palm.account.syncstate:1` records: "Syncing contacts and calendars...", then "Syncing calendars..." once the contacts are in, and for three or more "Syncing email, contacts and calendars...". The opening banner says the same; nothing more is announced as each part ends, and the end is webOS's "Sync completed". The layout, icons, removal and login dashboards are webOS's. An account with a part it can't name (a capability not in its list) keeps webOS's text. The words are English only for now.
 
+### A29. Location: Android's permission, and Always Ask from the start
+
+**A deliberate delta, codepoet's decision, 2026-11-07.** On webOS the location service owned the sources and only its own question was put to the owner. Here Android owns them, so Lunacy as a whole needs Android's location permission as well: First Use asks for it on its Location page, explained, and if it was never given, the first webOS app the owner allows brings Android's question once, after webOS's. A new install starts with "Always Ask" for applications, where Palm's code started a device on Auto Locate (the reference TouchPad itself was on Always Ask); websites start on Always Ask, as Palm's did. Palm's Google terms of use never show, and its "Background data collection" switch is hidden: both were for Palm's Google location service, long gone, and Android's network location has its own consent. Everything else (the settings, the alert, its words and buttons, an app's answer lasting its session) is webOS's.
+
 ## B. The shell
 
 ### B1. Card view: stacks, reorder, dimming, the angry card

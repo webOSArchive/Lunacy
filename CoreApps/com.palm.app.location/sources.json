@@ -1,0 +1,23 @@
+[
+	{
+    	"source": "app/models/location-service.js"
+  	},
+  	{
+    	"source": "app/controllers/app-assistant.js"
+  	},
+	{
+		"source": "app/controllers/main-assistant.js"
+	},
+	{
+		"source": "app/controllers/preterms-assistant.js"
+	},	
+	{
+		"source": "app/controllers/terms-assistant.js"
+	},
+	{
+		"source": "app/controllers/gpsoff-assistant.js"
+	},
+	{
+		"source": "app/controllers/autolocate-assistant.js"
+	}	
+]

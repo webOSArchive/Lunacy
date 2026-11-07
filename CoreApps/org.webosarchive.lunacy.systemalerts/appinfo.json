@@ -1,0 +1,11 @@
+{
+	"id": "org.webosarchive.lunacy.systemalerts",
+	"version": "1.0.0",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "System Alerts",
+	"noWindow": true,
+	"visible": false,
+	"uiRevision": 2
+}

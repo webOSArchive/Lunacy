@@ -4,7 +4,8 @@
  * webOS put a First Use app in front of a new device - language, Wi-Fi, terms, the Palm
  * profile, one page at a time on the blue First Use background - and nothing else was
  * reachable until it was done. Lunacy's First Use asks for what Lunacy needs from Android
- * in the same way: the shared storage that stands in for /media/internal, and the system
+ * in the same way: the shared storage that stands in for /media/internal, location (the
+ * System menu's Wi-Fi list, and webOS apps the owner allows), the system
  * settings that Screen & Lock's brightness and screen-off time really set, and leave from
  * Android's battery optimisation to keep running in the background. The pages that
  * don't apply on this Android version are skipped: Android 5 granted both at install, so
@@ -33,8 +34,8 @@ enyo.kind({
 			{name: "storage", kind: "VFlexBox", className: "page", align: "center", pack: "center", components: [
 				{content: $L("Your Files"), className: "title"},
 				{kind: "VFlexBox", className: "contentDefaults box", components: [
-					{content: $L("On webOS, your photos, music, videos and documents lived in /media/internal, and every app could read and write them there."), className: "text"},
-					{content: $L("Lunacy keeps that folder in this device's shared storage, which Android lets an app use only once you allow it."), className: "text"},
+					{content: $L("On webOS, your photos, music, videos and documents lived in /media/internal, and every app could access them."), className: "text"},
+					{content: $L("Lunacy keeps that folder in this device's shared storage, an Android permission is required."), className: "text"},
 					{name: "storageOk", className: "ok", showing: false},
 					{name: "storageMessage", className: "message", showing: false}
 				]},
@@ -43,11 +44,27 @@ enyo.kind({
 					{kind: "Button", name: "storageNext", caption: $L("Next"), onclick: "next"}
 				]}
 			]},
+			// Android names the Wi-Fi networks around only to an app it lets see the location, and
+			// webOS apps get positions through it (LocationService); asked here, explained, rather
+			// than out of nowhere by the System menu or an app (codepoet, 2026-11-07).
+			{name: "location", kind: "VFlexBox", className: "page", align: "center", pack: "center", components: [
+				{content: $L("Location"), className: "title"},
+				{kind: "VFlexBox", className: "contentDefaults box", components: [
+					{content: $L("The System menu lists the Wi-Fi networks around you, and webOS apps can ask where you are."), className: "text"},
+					{content: $L("Android shares both with apps allowed to see your location. Each webOS app still asks you first; Location Services sets how."), className: "text"},
+					{name: "locationOk", className: "ok", showing: false},
+					{name: "locationMessage", className: "message", showing: false}
+				]},
+				{kind: "HFlexBox", className: "buttons", pack: "center", components: [
+					{kind: "Button", name: "locationAllow", caption: $L("Allow"), className: "enyo-button-affirmative", onclick: "allowLocation"},
+					{kind: "Button", name: "locationNext", caption: $L("Next"), onclick: "next"}
+				]}
+			]},
 			{name: "settings", kind: "VFlexBox", className: "page", align: "center", pack: "center", components: [
 				{content: $L("Screen & Lock"), className: "title"},
 				{kind: "VFlexBox", className: "contentDefaults box", components: [
 					{content: $L("Screen & Lock sets the brightness and how long the screen stays on. On this device those are Android's settings."), className: "text"},
-					{content: $L("Android allows that on a screen of its own: turn on \"Allow modifying system settings\" for Lunacy there, then come back here."), className: "text"},
+					{content: $L("To use: turn on \"Allow modifying system settings\" for Lunacy there, then come back here."), className: "text"},
 					{name: "settingsOk", className: "ok", showing: false},
 					{name: "settingsMessage", className: "message", showing: false}
 				]},
@@ -61,8 +78,8 @@ enyo.kind({
 			{name: "background", kind: "VFlexBox", className: "page", align: "center", pack: "center", components: [
 				{content: $L("Running in the Background"), className: "title"},
 				{kind: "VFlexBox", className: "contentDefaults box", components: [
-					{content: $L("On webOS, mail, calendars and messages kept working with the screen off and other apps open."), className: "text"},
-					{content: $L("Android holds back apps it thinks are idle, to save battery. Let Lunacy run in the background; without it some things may misbehave: mail and messages can arrive late, reminders can be missed, and apps can be slow to open."), className: "text"},
+					{content: $L("On webOS, Synergy services kept working with the screen off and other apps open."), className: "text"},
+					{content: $L("Lunacy needs background permissions or mail and messages can arrive late, reminders can be missed, and apps can be slow to open."), className: "text"},
 					{name: "backgroundOk", className: "ok", showing: false},
 					{name: "backgroundMessage", className: "message", showing: false}
 				]},
@@ -75,7 +92,7 @@ enyo.kind({
 				{content: $L("Home Screen"), className: "title"},
 				{kind: "VFlexBox", className: "contentDefaults box", components: [
 					{content: $L("On a TouchPad, webOS was the whole device: the card view was the home screen."), className: "text"},
-					{content: $L("Android can start Lunacy the same way, in place of its own home screen, with Android's apps in Lunacy's launcher. You can change this later in Android's settings."), className: "text"},
+					{content: $L("Android can start Lunacy the same way, with Android's apps in Lunacy's launcher. You can change this later in Android's settings."), className: "text"},
 					{name: "homeOk", className: "ok", showing: false},
 					{name: "homeMessage", className: "message", showing: false}
 				]},
@@ -126,6 +143,7 @@ enyo.kind({
 		this.permissions = inResponse;
 		var steps = ["welcome"];
 		if (inResponse.storage && inResponse.storage.asked) { steps.push("storage"); }
+		if (inResponse.location && inResponse.location.asked) { steps.push("location"); }
 		if (inResponse.systemSettings && inResponse.systemSettings.asked) { steps.push("settings"); }
 		if (inResponse.background && inResponse.background.asked) { steps.push("background"); }
 		if (inResponse.homeLauncher && inResponse.homeLauncher.asked) { steps.push("home"); }
@@ -170,6 +188,14 @@ enyo.kind({
 		this.$.storageNext.setCaption(s ? $L("Next") : $L("Skip"));
 		this.$.storageNext.addRemoveClass("enyo-button-affirmative", !!s);
 		if (s) { this.$.storageMessage.setShowing(false); }
+		var l = p.location && p.location.granted;
+		if (l && this.steps[this.step] == "location") { this.watchStatus(false); }
+		this.$.locationOk.setContent(l ? $L("Allowed.") : "");
+		this.$.locationOk.setShowing(!!l);
+		this.$.locationAllow.setShowing(!l);
+		this.$.locationNext.setCaption(l ? $L("Next") : $L("Skip"));
+		this.$.locationNext.addRemoveClass("enyo-button-affirmative", !!l);
+		if (l) { this.$.locationMessage.setShowing(false); }
 		var w = p.systemSettings && p.systemSettings.granted;
 		if (w && this.steps[this.step] == "settings") { this.watchStatus(false); }
 		this.$.settingsOk.setContent(w ? $L("Allowed.") : "");
@@ -216,6 +242,9 @@ enyo.kind({
 		// explains it, as a webOS page put its question up at once. Not when Android has
 		// refused for good; then the button is the way, and it says where.
 		if (page == "storage" && !storageGranted && !this.storageViaSettings) { this.allowStorage(); }
+		// Location the same way, once: the explanation first, Android's question over it.
+		var locationGranted = p && p.location && p.location.granted;
+		if (page == "location" && !locationGranted && !this.locationViaSettings && !this.locationAsked) { this.locationAsked = true; this.allowLocation(); }
 	},
 	confirmStartOver: function() {
 		this.$.confirmDialog.openAtCenter();
@@ -226,6 +255,7 @@ enyo.kind({
 	startOver: function() {
 		this.$.confirmDialog.close();
 		this.step = 0;
+		this.locationAsked = false;
 		this.showPage("welcome");
 	},
 	/** Android won't put its storage question again once it has been refused twice; then the button opens Android's settings for Lunacy instead. */
@@ -234,6 +264,13 @@ enyo.kind({
 		this.$.storageAllow.setDisabled(true);
 		this.$.request.call({permission: "storage", viaSettings: this.storageViaSettings});
 		if (this.storageViaSettings) { this.watchStatus(true); }
+	},
+	/** As storage: once Android won't ask again, the button opens Android's settings for Lunacy. */
+	locationViaSettings: false,
+	allowLocation: function() {
+		this.$.locationAllow.setDisabled(true);
+		this.$.request.call({permission: "location", viaSettings: this.locationViaSettings});
+		if (this.locationViaSettings) { this.watchStatus(true); }
 	},
 	setHome: function() {
 		this.$.request.call({permission: "homeLauncher"});
@@ -260,13 +297,28 @@ enyo.kind({
 				this.$.storageMessage.setShowing(true);
 			}
 		}
+		if (inResponse.permission == "location") {
+			this.$.locationAllow.setDisabled(false);
+			if (!inResponse.granted && !inResponse.opened) {
+				if (inResponse.askAgain === false) {
+					this.locationViaSettings = true;
+					this.$.locationAllow.setCaption($L("Open Android Settings"));
+					this.$.locationMessage.setContent($L("Not allowed, and Android won't ask again. The System menu can't list Wi-Fi networks, and webOS apps can't find you, unless Location is allowed under Permissions in Android's settings for Lunacy."));
+				} else {
+					this.$.locationMessage.setContent($L("Not allowed. The System menu can't list Wi-Fi networks, and webOS apps can't find you, until it is allowed."));
+				}
+				this.$.locationMessage.setShowing(true);
+			}
+		}
 		this.$.status.call({});
 	},
 	requestFailed: function(inSender, inResponse) {
 		var text = (inResponse && inResponse.errorText) || $L("Android didn't answer.");
 		var which = inSender && inSender.params && inSender.params.permission;
-		var where = which == "systemSettings" ? this.$.settingsMessage : which == "background" ? this.$.backgroundMessage : this.$.storageMessage;
+		var where = which == "systemSettings" ? this.$.settingsMessage : which == "background" ? this.$.backgroundMessage :
+			which == "location" ? this.$.locationMessage : this.$.storageMessage;
 		this.$.storageAllow.setDisabled(false);
+		this.$.locationAllow.setDisabled(false);
 		where.setContent(text);
 		where.setShowing(true);
 	},

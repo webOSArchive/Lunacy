@@ -906,6 +906,40 @@ parameters in the query string and takes the result back through `postMessage`
 behind it (the TouchPad's `luna-systemui` FilePicker, unchanged; its NOTICE lists the files), so
 the control works in every app without any app being changed.
 
+- **Location** (2026-11-07, codepoet). webOS's location service, `palm://com.palm.location`,
+  owned the device's sources (GPS and Palm's Google location service) and decided which app got
+  a position; Palm's Location Services app set how: for applications "Auto Locate" or "Always
+  Ask", for websites "Always Ask" or "Never Share Location" with "Clear My Location Data", and
+  from its menu which sources to use. Asking was SystemUI's popup `LocationAlert` ("Allow the
+  following application to use your location for this session?", Allow Once and Don't Allow; a
+  website gets Always Allow too), whose answer went back to the service. Lunacy had no location
+  service at all ("Service does not exist"), and its Location Services was a shortcut to
+  Android's settings. Now:
+  - `card/LocationService.kt` answers `com.palm.location` from Android's `LocationManager`:
+    `getCurrentPosition` (accuracy, maximumAge, responseTime), `startTracking` (a subscription
+    that delivers every fix), the settings' getters and setters, and the alert's answers. Its
+    replies are the reference TouchPad's, measured: a getter a bare object, a setter
+    `{"returnValue":true}`, a request that can't be answered `{"errorCode":N}` (5, every source or
+    Android's location off; 6, not allowed; 7, already waiting on the owner; 1, no fix in time).
+    "GPS" is Android's GPS provider (needs precise location), "Google Services" its network
+    provider. Only Location Services (or the system, or Lunacy's own apps) may change a setting,
+    and only the alert may answer one, so an app can't answer for itself.
+  - An app is asked before its first position, and the answer lasts while it runs
+    (`AppLifecycle.onAppEnded`). Lunacy ships "Always Ask" for applications, where Palm's code
+    started a device on Auto Locate (codepoet; luna-deltas A29). A web page asks as its site
+    (`BrowserViews`), an app's own page as the app (`AppWindow`), through
+    `onGeolocationPermissionsShowPrompt`; a site's Always Allow is remembered until Clear My
+    Location Data.
+  - The alert is SystemUI's own page, served unchanged at its webOS path (`assets/luna-systemui/
+    SystemManagerAlerts`, with SystemUI's `stylesheets/` and `images/`, routed by `AppServer`),
+    opened by the hidden System Alerts app (`org.webosarchive.lunacy.systemalerts`) as SystemUI's
+    `showLocationServiceAlert` did: one at a time, the next when it is answered.
+  - Android's permission is Lunacy's as a whole: First Use's Location page explains it and asks
+    (precise with approximate; approximate alone is enough, for the network provider). If it was
+    never given, the first app the owner allows brings Android's question once.
+  - Palm's Location Services app is bundled (abandonware, NOTICE) with one change: the hidden
+    "Background data collection" switch, Palm's Google service's. Its Google terms never show (the
+    service reports them accepted) and Geotag Photos stays hidden (no camera reported).
 - **Accounts syncing: Sync Status** (2026-11-07). SystemUI ran Enyo's `SyncUI.syncDashboard`
   (`framework/lib/syncui`) from ten seconds after boot. It watches `com.palm.account.syncstate:1`
   in tempdb, which the transports (mojomail, EAS, IM, the JS transport framework) and the

@@ -7,7 +7,7 @@ with other webOS platforms, LuneOS among them. The build copies this folder into
 
 Every app carries a NOTICE: where it came from, its licence or abandonware status, and any
 change Lunacy made to it. Rule 5 in [CLAUDE.md](../CLAUDE.md) keeps installed apps as packaged.
-The only exceptions are Email, Screen & Lock, Web's narrow layout, Contacts' narrow layout, Calendar's Android reminders switch, Calendar's Pre3 layout and Help's tablet test, which codepoet approved,
+The only exceptions are Email, Screen & Lock, Web's narrow layout, Contacts' narrow layout, Calendar's Android reminders switch, Calendar's Pre3 layout, Help's tablet test and Location Services' hidden data-collection switch, which codepoet approved,
 and each of those changes is marked `[Lunacy]` in its source.
 
 | App | Id | Version | From |
@@ -29,7 +29,8 @@ and each of those changes is marked `[Lunacy]` in its source.
 | Exhibition | `com.palm.app.exhibitionpreferences` | 1.0.0 | Palm, HP webOS 3.x (abandonware) |
 | Help | `com.palm.app.help` | 2.0.0 | Palm, HP webOS 3.x, content host moved to help.webosarchive.org |
 | Messaging | `com.palm.app.messaging` | 3.2.0 | Palm, HP webOS 3.0.5 (abandonware), with the webOS CE project's changes |
-| Location Services | `com.palm.app.location` | 1.0.0 | Lunacy's shortcut to Android's location settings |
+| Location Services | `com.palm.app.location` | (none in its appinfo) | Palm, from the reference TouchPad (abandonware), with Lunacy's change; sets what webOS apps and sites get from Lunacy's location service |
+| System Alerts | `org.webosarchive.lunacy.systemalerts` | 1.0.0 | Lunacy's own: hidden and headless, opens webOS SystemUI's popup alerts (the location question) |
 | Memos | `com.palm.app.notes` | 3.0.20 | Palm, HP webOS 3.x (abandonware) |
 | Photos & Videos | `com.palm.app.photos` | 3.2.0 | webOS Archive's modernized Photos & Videos (rotate and crop), from the webOS CE tree |
 | Regional Settings | `com.palm.app.languagepicker` | 1.0.0 | Lunacy's shortcut to Android's language settings |

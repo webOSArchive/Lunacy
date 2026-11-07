@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+	"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+<head>
+	<title>App Revokation Alert</title>
+	<script src="/usr/palm/frameworks/enyo/0.10/framework/enyo.js" type="text/javascript"></script>
+</head>
+
+<body>
+	<script type="text/javascript">
+		var view;
+		var wName = window.name;
+		if(wName == "BackupDashboard")
+			view = new BackupDashboard();
+		else if(wName == "LocationAlert")
+			view = new LocationAlert();
+		else if(wName == "DataImportDashboard")
+			view = new DataImportDash();
+		else if(wName == "DataSyncDashboard")
+			view = new DataSyncDash();
+		else if(wName == "OpenSearchDashboard")
+			view = new OpenSearchDash();
+		else if(wName == "CriticalResourceAlert")
+			view = new CriticalResourceAlert();
+		else if(wName == "AppMigrationFailureAlert")
+			view = new AppMigrationFailureAlert();
+		else if(wName == "AppQuitAlert")
+			view = new AppQuitAlert();
+		else if(wName == "AppRestoreAlert")
+			view = new AppRestoreAlert();
+		else if(wName == "RecordDashboard")
+			view = new RecordDashboard();
+		else if(wName == "ShareContentAlert")
+			view = new ShareContentAlert();
+		else if(wName == "ShareContentPairingAlert")
+			view = new ShareContentPairingAlert();
+		else if(wName == "ShareContentConnectionAlert")
+			view = new ShareContentConnectionAlert();
+		else if(wName == "AccountServiceAlert")
+			view = new AccountServiceAlert();
+		else if(wName == "MediaFilePermissionRequestAlert")
+			view = new MediaFilePermissionRequestAlert();
+		else if(wName == "DiskSpaceAlert")
+			view = new DiskSpaceAlert();
+		
+		view && view.renderInto(document.body);
+	</script>
+</body>
+</html>

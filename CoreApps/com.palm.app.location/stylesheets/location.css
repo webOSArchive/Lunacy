@@ -1,0 +1,138 @@
+/* Copyright 2009 Palm, Inc.  All rights reserved. */
+
+.prefs-location-main .palm-page-header {
+	padding-bottom: 2px;
+}
+.prefs-location-main .palm-page-header .header-icon.location {
+	width: 33px;
+	height: 32px;
+	background: url(../images/header-icon-location.png) center center no-repeat;
+}
+
+.prefs-location-preterms .palm-page-header .header-icon.location {
+	width: 33px;
+	height: 32px;
+	background: url(../images/header-icon-location.png) center center no-repeat;
+}
+.prefs-location-autolocate .palm-page-header .header-icon.location{
+	width: 33px;
+	height: 32px;
+	background: url(../images/header-icon-location.png) center center no-repeat;
+}
+
+.prefs-location-main .terms-box {
+		width: auto;
+		height: 167px;
+		background: none;
+		margin: 6px 10px 0px 10px;
+		padding: 0;
+		border-width: 10px;
+		-webkit-border-image: url(../images/glass-text-field.png) 10 10 10 10 stretch stretch;
+		-webkit-box-sizing: border-box;
+		overflow: hidden;
+		position: relative;
+}
+
+.prefs-location-main .terms-box.expanded {
+		height: auto;
+}
+
+.prefs-location-main .terms-box-margin {
+		width: 280px;
+		margin: 10px 0px 0px 5px;
+		padding: 0;
+		color: #000;
+		font-size: 14px;
+}
+
+.preterms-text, .autolocate-text {
+	color: #444;
+	font-size: 16px;
+	padding: 0px 15px 0px 15px;
+	margin-top: -11px;
+}
+
+.terms-title {
+	 font-weight: bold;
+	 font-size: 14px;
+	 text-align: center;
+	 padding: 10px 0px 10px 0px;
+}
+
+.terms-text {
+	padding-top: 0px;
+	margin: 0px 5px 5px 5px;
+	font-size: 14px;
+}
+
+.section {
+	margin: 10px 5px 15px 0px;
+}
+
+.terms-text ol li {
+	margin-left: -23px;
+	margin-bottom: 10px;
+	font-size: 14px;
+}
+
+.terms-text ul li {
+	margin-left: -23px;
+	margin-bottom: 10px;
+	font-size: 14px;
+}
+
+.terms-optin {
+	margin: 10px 10px 10px 10px;
+	display:table;
+	
+}
+
+.terms-optin-text {
+	color: #444;
+	font-size: 16px;
+	vertical-align: top;
+	display:table-cell;
+}
+
+.checkbox .nowrap{
+	display:table-cell;
+}
+
+.explanation-text {
+	margin: 0px 23px 22px 23px;
+	font-size: 14px;
+	color: #666;
+}
+
+.terms-expand-icon {
+  width: 32px;
+  height: 32px;
+  background: url(../images/terms-expand-icon.png) top left no-repeat;
+  position: absolute;
+  bottom: 0;
+  right: 0;
+}
+
+.terms-expand-icon:active {
+  background: url(../images/terms-expand-icon.png) bottom left no-repeat;  
+}
+
+.scene-footer-spacer {
+	padding-bottom:65px;
+}
+
+.scene-footer {
+	position:fixed; 
+	bottom:0px; 
+	left:0px; 
+	right:0px;
+	border-width: 35px 0px 0px 0px;
+	-webkit-palm-mouse-target: ignore;
+}
+.scene-footer-wrapper {
+	margin-top:-10px;
+}
+.div-500 {
+	width: 500px;
+	margin: 10px auto 0 auto;
+}

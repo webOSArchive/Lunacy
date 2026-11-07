@@ -1,18 +1,10 @@
 {
-	"id": "com.palm.app.location",
-	"version": "1.0.0",
-	"vendor": "webOS Archive",
+	"title": "Location Services",
 	"type": "web",
 	"main": "index.html",
-	"title": "Location Services",
+	"id": "com.palm.app.location",
 	"icon": "icon.png",
 	"splashicon": "icon-256x256.png",
-	"uiRevision": 2,
-	"keywords": [
-		"Settings",
-		"Preferences",
-		"Location",
-		"GPS"
-	],
-	"lunacyAndroidSettings": "location"
+	"keywords": ["Settings","Preferences"],
+	"uiRevision": 2
 }

@@ -10,6 +10,7 @@ import org.json.JSONObject
 import org.webosarchive.lunacy.card.AppFiles
 import org.webosarchive.lunacy.card.AppInfo
 import org.webosarchive.lunacy.card.AppRegistry
+import org.webosarchive.lunacy.card.LocationService
 import org.webosarchive.lunacy.card.jsString
 import org.webosarchive.lunacy.card.AppServer
 import org.webosarchive.lunacy.card.AppWindow
@@ -739,6 +740,12 @@ class ShellActivity : Activity(), WindowHost {
         if (!LunacyService.backgroundAsked(this) && !LunacyService.backgroundAllowed(this)) {
             LunacyService.setBackgroundAsked(this)
             launch(LunacyService.FIRST_USE_APP, JSONObject().put("only", "background"))
+        } else if (android.os.Build.VERSION.SDK_INT >= 23 && !LunacyService.locationAsked(this) &&
+            checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            // Likewise its Wi-Fi Networks page, which explains the location question before the
+            // System menu would put it up unexplained (codepoet, 2026-11-07). The page asks, and
+            // that marks it asked; one page per start, so after the background page if both.
+            launch(LunacyService.FIRST_USE_APP, JSONObject().put("only", "location"))
         }
         val prefs = java.io.File(webos.root, "var/luna/preferences")
         runCatching { prefs.mkdirs(); java.io.File(prefs, "ran-first-use").createNewFile() }
@@ -1236,6 +1243,13 @@ class ShellActivity : Activity(), WindowHost {
             applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0).register(bus)
         DeviceProfileService(this) { profile }.register(bus)
         NetTools(this).register(bus)
+        // webOS's location service, over Android's: each webOS app and site is asked first, as on
+        // webOS, by SystemUI's own Location alert (LocationService, Lunacy's System Alerts app).
+        val location = LocationService(this, { id -> registry.get(id)?.title }, { type, id, name ->
+            if (registry.get(LocationService.ALERTS_APP) == null) false
+            else { launch(LocationService.ALERTS_APP, JSONObject().put("alert", "LocationAlert").put("type", type).put("appId", id).put("appName", name), Placement.NO_CARD); true }
+        }, ::askPermissions).also { it.register(bus); closeOnDestroy += it::close }
+        lifecycle.onAppEnded = { id -> location.appEnded(id) }
         // webOS's downloader, which apps hand every file fetch to: drPodder's episodes and
         // album art, MeTube's "download first". It writes into the webOS tree.
         DownloadManager(jsServices.root).register(bus)

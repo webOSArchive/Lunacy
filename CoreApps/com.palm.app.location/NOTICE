@@ -1,12 +1,22 @@
-A shortcut, not Palm's app.
+Palm's Location Services app.
 
-Palm's Location Services app turns webOS's location sources on and off. Lunacy doesn't own
-them - Android does, so a copy of that UI here could only pretend. This app is an icon that
-opens Android's location settings instead (appinfo.json's lunacyAndroidSettings, a Lunacy
-extension), and it holds no code of its own. Its id and title are the reference TouchPad's
-(webOS CE 3.1.0).
+com.palm.app.location as it is on the reference TouchPad (webOS CE 3.1.0), copied from
+/usr/palm/applications on 2026-11-07. Copyright Palm, Inc. / Hewlett-Packard; never released
+under an open licence; distributed by Lunacy as abandonware, like Mojo and the Prelude fonts.
+codepoet approved bundling it with Lunacy's changes, 2026-11-07.
 
-icon.png and icon-256x256.png are Palm's, from com.palm.app.location on the reference
-TouchPad, so the icon looks like the one webOS users know. Copyright Palm, Inc. / Hewlett-
-Packard; never released under an open licence; distributed by Lunacy as abandonware, like
-Mojo and the Prelude fonts.
+It sets how webOS apps and websites get the device's location from Lunacy's location service
+(palm://com.palm.location, AndroidLuna's LocationService.kt), which answers from Android's
+location: "GPS" is Android's GPS, "Google Services" its network location. Android's own
+location switch and its permission for Lunacy are Android's; Lunacy's First Use asks for the
+permission.
+
+Lunacy's change, marked [Lunacy] in the source:
+
+- app/controllers/main-assistant.js (two places): the "Background data collection" switch, which let Google
+  collect location data through Palm's long-gone Google location service, stays hidden.
+
+What needs no change, because the service answers as Lunacy is: Palm's Google terms of use
+never show (the service reports them accepted; Android's network location has its own
+consent), and Geotag Photos, the TouchPad Camera's, stays hidden (the service reports no
+camera, as Palm's app expects on a device without one).

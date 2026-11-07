@@ -1,0 +1,106 @@
+<div class="prefs-location-main on">
+	<div class="palm-page-header">
+		<div class="header-icon location"></div>
+		<div class="header-text">
+			<span>Service de position</span>
+		</div>
+	</div>
+	<div id='siteLocatePrefs' class="palm-group">
+		<div class="palm-group-title">
+			Pour les sites Web
+		</div>
+		<div class="palm-list">
+			<div class="palm-row first" x-mojo-touch-feedback="momentary">
+				<div class="palm-row-wrapper">
+					<div id="siteLocatePrefSelector" x-mojo-element="ListSelector"></div>
+				</div>
+			</div>
+			<div class="palm-row last" x-mojo-touch-feedback="momentary">
+				<div class="palm-row-wrapper">
+					<div id="clearSitePrefs" class="title">Effacer mes données de positionnement</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div id="sitelocationOffMessage" class="explanation-text" style="display:none;">
+			Votre positionnement ne sera jamais fourni automatiquement aux sites Web qui le demandent.
+	</div>
+	<div id="sitelocationOnMessage" class="explanation-text" style="display:none;">
+			Vous devrez donner votre autorisation chaque fois qu’un site Web désirera connaître votre positionnement.
+	</div>		
+	<div id='autoLocatePrefs' class="palm-group">
+		<div class="palm-group-title">
+      Pour les applications
+		</div>
+		<div class="palm-list">
+			<div class="palm-row single" x-mojo-touch-feedback="momentary">
+				<div class="palm-row-wrapper">
+					<div id="autoLocatePrefSelector" x-mojo-element="ListSelector"></div>
+				</div>
+			</div>
+		</div>
+
+	</div>
+	<div id="locationOnMessage" class="explanation-text" style="display:none;">
+			Votre positionnement sera automatiquement fourni aux applications qui le demandent.
+	</div>
+	<div id="locationOffMessage" class="explanation-text" style="display:none;">
+			Vous devrez donner votre autorisation chaque fois qu’une application désirera connaître votre positionnement.
+	</div>		
+	<!--<div id="autoLocatePrefs">
+		<div class="palm-group unlabeled">
+			<div class="palm-list">
+				<div class="palm-row single" id="autoLocateOnRow">
+					<div class="palm-row-wrapper">
+						<div x-mojo-element="ToggleButton" id="autoLocatePreference"></div>
+						<div x-mojo-loc="" class="title capitalize">
+							Auto Locate
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		
+		<div id="locationOnMessage" class="explanation-text" x-mojo-loc="" style="display:none;">
+			Your location will be automatically provided to applications that request it.
+		</div>
+		<div id="locationOffMessage" class="explanation-text" x-mojo-loc="" style="display:none;">
+			You will be asked for authorization when an application requests your location.
+		</div>		
+	</div>	
+	-->
+	<div id="geotagPhotosPrefs" style="display:none;">
+		<div class="palm-group unlabeled">
+			<div class="palm-list">
+				<div class="palm-row single" id="geotagPhotosOnRow">
+					<div class="palm-row-wrapper">
+						<div id="geotagPhotosPreference" x-mojo-element="ToggleButton"></div>
+						<div class="title capitalize">
+							Photos Geotag
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div class="explanation-text">
+			Stocke les coordonnées GPS de votre positionnement lorsque vous utilisez l’appareil photo.
+		</div>
+	</div>	
+	
+	<div id="dataPrefs">
+		<div class="palm-group unlabeled">
+			<div class="palm-list">
+				<div class="palm-row single" id="dataOnRow">
+					<div class="palm-row-wrapper">
+						<div id="dataPreference" x-mojo-element="ToggleButton"></div>
+						<div class="title capitalize">
+							Récupération des données contextuelles
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div class="explanation-text">
+			Permet à Google de recueillir automatiquement les données de positionnement anonymes afin d’améliorer la qualité des services de positionnement.</div>
+	</div>
+</div>

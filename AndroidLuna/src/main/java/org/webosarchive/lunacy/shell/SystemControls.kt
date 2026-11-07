@@ -77,22 +77,23 @@ class SystemControls(
         onChange()
     }
 
-    private val locationPermissions = listOf(android.Manifest.permission.ACCESS_COARSE_LOCATION)
-    private var askedLocation = false
+    private val locationPermissions = org.webosarchive.lunacy.card.LunacyService.LOCATION
+    private val locationEnough = org.webosarchive.lunacy.card.LunacyService.LOCATION_ANY
 
     /**
      * The networks around: the drawer opening asks for them, as SystemMenu::slotWifiMenuOpened
-     * did. Android only names them to an app with location access, asked for once, the first
-     * time it is needed.
+     * did. Android only names them to an app with location access. First Use explains that and
+     * asks; an install that never went through that page is asked here, once ever, and after a
+     * refusal the list stays empty until location is allowed in Android's settings for Lunacy.
      */
     fun scan() {
         if (!wifiOn) return
-        val granted = locationPermissions.all { context.checkSelfPermissionCompat(it) }
+        val granted = locationEnough.all { context.checkSelfPermissionCompat(it) }
         if (!granted) {
-            if (askedLocation) return
-            askedLocation = true
+            if (org.webosarchive.lunacy.card.LunacyService.locationAsked(context)) return
+            org.webosarchive.lunacy.card.LunacyService.setLocationAsked(context)
             scanning = true; onChange()
-            askPermissions(locationPermissions) { ok, _ -> if (ok) scan() else { scanning = false; onChange() } }
+            askPermissions(locationPermissions) { _, _ -> if (locationEnough.all { context.checkSelfPermissionCompat(it) }) scan() else { scanning = false; onChange() } }
             return
         }
         scanning = true

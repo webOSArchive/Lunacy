@@ -1,0 +1,9 @@
+webOS SystemUI's popup alerts.
+
+Palm's files from the reference TouchPad's /usr/lib/luna/system/luna-systemui (webOS CE 3.1.0),
+copied unchanged on 2026-11-07: app/SystemManagerAlerts/ (systemmanageralerts.html,
+SystemManagerAlerts.js, depends.js) here, and stylesheets/dashboard.css,
+stylesheets/notifications.css and the images they name (images/, beside this folder; five the
+stylesheets name aren't on the device either). Abandonware, like the rest of luna-systemui.
+Lunacy serves them at their webOS paths and opens the location alert from its System Alerts
+app (CoreApps/org.webosarchive.lunacy.systemalerts).

@@ -317,10 +317,14 @@ class AppLifecycle(
         if (cardHost.cards.cards.isEmpty() && !host.exhibitions.exhibitionOn) host.onCardView()
     }
 
+    /** An app has ended (its last window closed): what lasted for its session ends with it. */
+    var onAppEnded: (String) -> Unit = {}
+
     private fun endApp(appId: String, list: MutableList<AppWindow>) {
         list.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.close() }
         running.remove(appId)
         endAppActivity(appId)
+        onAppEnded(appId)
     }
 
     /**

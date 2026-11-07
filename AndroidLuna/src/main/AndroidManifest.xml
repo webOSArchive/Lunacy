@@ -36,9 +36,12 @@
          network (SystemControls). Normal permissions, granted at install. -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-    <!-- Android names the Wi-Fi networks around only to an app with location access. Asked
-         for the first time the system menu's Wi-Fi drawer opens, from Android 6. -->
+    <!-- Location: Android names the Wi-Fi networks around only to an app with location access
+         (the System menu's list), and webOS apps the owner allows get their position from it
+         (LocationService; each is asked first, as on webOS). Asked for by First Use, from
+         Android 6; precise for GPS, approximate alone is enough. Never in the background. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- Mute Sound sets the ringer to silent on a device without a vibrator, which is Do Not
          Disturb's from Android 7; the user allows it on Android's own screen. -->
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />

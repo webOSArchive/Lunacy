@@ -825,6 +825,10 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         }
 
         inner class Chrome : WebChromeClient() {
+            // A web page's navigator.geolocation: asked as its site, under Location Services' "For Websites" (LocationService).
+            override fun onGeolocationPermissionsShowPrompt(origin: String, callback: android.webkit.GeolocationPermissions.Callback) {
+                LocationService.current?.pageRequest("web", origin, origin, callback) ?: callback.invoke(origin, false, false)
+            }
             override fun onProgressChanged(view: WebView, progress: Int) = owner.send(id, "loadProgressChanged", progress)
             override fun onReceivedTitle(view: WebView, title: String?) = titleChanged()
             // Drawn natively, not by the app's popups: see PageDialog.

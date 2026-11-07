@@ -105,6 +105,9 @@ class AppServer(
          */
         const val SYSTEM_UI = "usr/lib/luna/system/luna-systemui/app/"
         const val SYSTEM_UI_UTILS = "usr/lib/luna/system/luna-systemui/utils/"
+        /** Its stylesheets and images, which its alerts load from app/ as ../../stylesheets and ../images (SystemManagerAlerts). */
+        const val SYSTEM_UI_STYLES = "usr/lib/luna/system/luna-systemui/stylesheets/"
+        const val SYSTEM_UI_IMAGES = "usr/lib/luna/system/luna-systemui/images/"
         /** Just Type's search engine icons, which com.palm.universalsearch names (UniversalSearch). */
         const val SEARCH_ICONS = "usr/lib/luna/system/luna-applauncher/images/"
         /** The Web app's bookmark thumbnails and icons, which its WebView writes (BrowserViews). */
@@ -216,6 +219,8 @@ class AppServer(
             path.startsWith(SYSTEM_UI) -> Routed(asset("luna-systemui/" + path.removePrefix(SYSTEM_UI), path, resource))
             // The system UI's shared scripts, beside its app/ folder (the file picker loads ../../utils).
             path.startsWith(SYSTEM_UI_UTILS) -> Routed(asset("luna-systemui/utils/" + path.removePrefix(SYSTEM_UI_UTILS), path, resource))
+            path.startsWith(SYSTEM_UI_STYLES) -> Routed(asset("luna-systemui/stylesheets/" + path.removePrefix(SYSTEM_UI_STYLES), path, resource))
+            path.startsWith(SYSTEM_UI_IMAGES) -> Routed(asset("luna-systemui/images/" + path.removePrefix(SYSTEM_UI_IMAGES), path, resource))
             path.startsWith(SEARCH_ICONS) -> Routed(asset("luna-applauncher/images/" + path.removePrefix(SEARCH_ICONS), path, resource))
             else -> null
         }

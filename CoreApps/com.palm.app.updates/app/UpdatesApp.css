@@ -1,0 +1,71 @@
+html {
+	width: 100%;
+	
+}
+body, html {
+	margin: 0;
+	padding: 0;
+	height: 100%;
+	
+}
+body, input, button {
+	font-family: Prelude Medium, Segoe UI, Arial, Verdana, Helvetica;
+}
+body {
+	background-color: #d7d7d7;
+	color:#555555;
+}
+
+.page-header {
+  height: 58px;
+}
+.header-icon {
+  width: 48px;
+  height: 48px;
+  background: url(../images/header-icon-updates.png);
+  margin-top: -9px;
+}
+
+.title {
+	font-size:24px;
+	text-align:center;
+	margin:50px 0 15px;
+}
+.subtitle {
+	font-size: 20px;
+	color:#666;
+	margin:0 20px 18px;
+}
+.enyo-popup .title {
+	font-size:22px;
+	margin:0;
+	text-align:left;
+}
+.enyo-popup .text {
+	font-size:18px;
+	padding:15px 0;
+}
+.box {
+	width:500px;
+	text-align:left;
+	font-size:18px;
+	color:#333;
+	-webkit-border-image: url(../images/bg_box.png) 12 repeat;
+	-webkit-box-sizing:border-box;
+	margin:0 auto 15px;
+	padding:1px;
+	border-width:12px;
+}
+
+.box-center {
+	width:500px;
+	margin:0 auto;
+}
+
+/* Custom FadeScroller for box */
+.box .enyo-scrollfades-top {
+	background-image: url('../images/box-fade-top.png');
+}
+.box .enyo-scrollfades-bottom {
+	background-image: url('../images/box-fade-bottom.png');
+}

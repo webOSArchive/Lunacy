@@ -1,0 +1,22 @@
+HP's System Updates app.
+
+com.palm.app.updates 1.1.0 as it is on the reference TouchPad (webOS CE 3.1.0), copied from
+/usr/palm/applications on 2026-11-07. Copyright Palm, Inc. / Hewlett-Packard; never released
+under an open licence; distributed by Lunacy as abandonware, like Mojo and the Prelude fonts.
+codepoet asked for it, 2026-11-07, with GitHub's releases as the source of updates.
+
+It talks to Lunacy's update service (palm://com.palm.update, AndroidLuna's UpdateService.kt),
+which checks webOSArchive/Lunacy's releases on GitHub: "Your device is up to date.", or
+"Lunacy 0.9.4 is now available. It's about 85MB." with Learn More, which opens the release
+page in Android's browser. Lunacy never downloads or installs itself.
+
+Lunacy's changes, marked [Lunacy] in the source:
+
+- app/UpdateStatus.js: for a Lunacy release, the note under the version says Learn More
+  opens its release page, in place of Palm's notes about downloading over the next few days.
+- app/UpdateProgress.js: for a Lunacy release the button says Learn More, not Download Now,
+  since it opens the release page (codepoet).
+- app/UpdatesApp.js: the button and pill are no wider than a phone's card, less the
+  column's margins.
+- app/UpdateWebView.js: the release notes are the GitHub release's own (as plain text), not
+  pages on help.palm.com, which is gone.

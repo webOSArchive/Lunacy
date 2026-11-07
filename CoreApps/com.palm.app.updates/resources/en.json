@@ -1,0 +1,4 @@
+{
+	"#{version} is currently validating. You'll be notified when the update is ready to install.": "#{version} is currently validating. You will be notified when the update is ready to install.",
+	"<b>There was and error in Data Migration</b> Please collect logs and file a bug <br> #{errorCode}: #{errorText}<br>": "<b>There was an error in Data Migration</b> Please collect logs and file a bug <br> #{errorCode}: #{errorText}<br>"
+}

@@ -369,6 +369,10 @@ reports `none` when it hasn't, and `pin` or `password` (whichever was last set t
 
 **A deliberate delta, codepoet's decision, 2026-11-07.** On webOS the location service owned the sources and only its own question was put to the owner. Here Android owns them, so Lunacy as a whole needs Android's location permission as well: First Use asks for it on its Location page, explained, and if it was never given, the first webOS app the owner allows brings Android's question once, after webOS's. A new install starts with "Always Ask" for applications, where Palm's code started a device on Auto Locate (the reference TouchPad itself was on Always Ask); websites start on Always Ask, as Palm's did. Palm's Google terms of use never show, and its "Background data collection" switch is hidden: both were for Palm's Google location service, long gone, and Android's network location has its own consent. Everything else (the settings, the alert, its words and buttons, an app's answer lasting its session) is webOS's.
 
+### A30. System updates are Lunacy's releases on GitHub, checked daily
+
+**A deliberate delta, codepoet's decision, 2026-11-07.** webOS's update daemon checked Palm's servers weekly, downloaded an update itself and installed it; System Updates and SystemUI showed its progress. Lunacy's update service checks the newest release of webOSArchive/Lunacy on GitHub, daily rather than weekly, and an update found there waits for the person: System Updates says "Lunacy 0.9.4 is now available. It's about 90MB." with the release's own notes and a Learn More button (Palm's said Download Now), which opens the release page in Android's browser, from which Android installs the APK. A version found in the background is announced once, with a banner and the "Update available" dashboard. The app's look, words and states, and the dashboard, are webOS's; the note under the version and the notes' source are Lunacy's (marked in its source).
+
 ## B. The shell
 
 ### B1. Card view: stacks, reorder, dimming, the angry card

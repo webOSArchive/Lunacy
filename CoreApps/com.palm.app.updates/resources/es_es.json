@@ -1,0 +1,9 @@
+{
+	"#{version} is currently downloading. When the download is complete, we'll restart your device.": "#{version} se está descargando. Cuando se complete la descarga, se reiniciará el dispositivo.",
+	"<b>There was and error in Data Migration</b> Please collect logs and file a bug <br> #{errorCode}: #{errorText}<br>": "<b>Se ha producido un error durante la migración de datos</b>. Recopila los registros y envía un informe de error.<br> #{errorCode}: #{errorText}<br>",
+	"A system update is now available, but there's not enough free memory on your device to store it.  Free up at least #{spaceNeeded}MB of memory to download the update.": "Hay una actualización del sistema, pero no hay suficiente memoria en tu dispositivo para almacenarla.  Libera por lo menos #{spaceNeeded} MB de memoria para descargar la actualización.",
+	"Installation of #{version} will take about #{installTime} minutes. Your device cannot be used during the updates.": "La instalación de #{version} tardará unos #{installTime} minutos. No podrás usar el dispositivo durante las actualizaciones.",
+	"The update failed to properly validate. This problem can usually be fixed if you wait a little while, then try again.  Alternatively, on your desktop computer, visit palm.com/rom to install the update using webOS Doctor.": "La actualización no se ha validado correctamente. Este problema generalmente se soluciona esperando un poco e intentándolo de nuevo.  Como alternativa, visita palm.com/rom desde tu ordenador para instalar la actualización mediante webOS Doctor.",
+	"Unable to connect.  Try again later.": "No se puede conectar.  Inténtalo de nuevo más tarde.",
+	"Unable to connect. Try again later.": "No se puede conectar.  Inténtalo de nuevo más tarde."
+}

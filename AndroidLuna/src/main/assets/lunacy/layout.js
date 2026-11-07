@@ -458,7 +458,11 @@
 // same rule. On a TouchPad that is a column in the middle of a 1024 px card; on a 360 px
 // phone card it runs off the side and the page scrolls sideways. Under 540 px the column takes
 // the card's width less 12 px each side, as Lunacy's own Screen & Lock and Sounds & Alerts do
-// (codepoet, 2026-10-03). Nothing changes on a tablet, where no card is that narrow. `html`
+// (codepoet, 2026-10-03). The width is the card's less the margins, said outright with border-box
+// sizing, which is what `auto` came to where the column's parent stretched it; where the parent
+// centres it instead (System Updates' status box, in a VFlexBox with align: "center"), `auto`
+// shrank the column to its content, and an Enyo Scroller has none: 25 px of border on a 384 px
+// card (2026-11-07). Nothing changes on a tablet, where no card is that narrow. `html`
 // lifts the rule above every app's own `.box-center`, whichever loads last; an inline style
 // still wins, as it would have on the device.
 //
@@ -473,7 +477,7 @@ window.__lunacyStyle = function (css) {
 	(document.head || document.documentElement).appendChild(l);
 	return l;
 };
-__lunacyStyle("@media (max-width: 540px) { html .box-center { width: auto; margin-left: 12px; margin-right: 12px; } }");
+__lunacyStyle("@media (max-width: 540px) { html .box-center { width: calc(100% - 24px); -webkit-box-sizing: border-box; box-sizing: border-box; margin-left: 12px; margin-right: 12px; } }");
 // On a wider card, a column that names only a max-width (max-width: 500px; margin: 0 auto)
 // is as wide as the card allows, up to that, and centred, as on the TouchPad: its old WebKit
 // stretched a vertical -webkit-box's child to the box's width whatever its margins. Newer

@@ -10,3 +10,8 @@ SystemUI's, which Lunacy serves at its webOS path from AndroidLuna/src/main/asse
 (SystemManagerAlerts/, stylesheets/ and images/): Palm's files from the reference TouchPad's
 /usr/lib/luna/system/luna-systemui (webOS CE 3.1.0), copied unchanged on 2026-11-07,
 abandonware like the rest of that folder (see its FilePicker NOTICE).
+
+It also announces a new Lunacy release found by the daily update check (UpdateService.kt) as
+SystemUI announced a waiting system update: a banner and an "Update available" dashboard with
+the version, which opens System Updates. Its icons are SystemUI's notification-small-update.png
+and notification-large-update.png, served from the same folder.

@@ -1,0 +1,22 @@
+﻿<!doctype html>
+<html>
+<head>
+    <title>System Updates</title>
+    <script src="/usr/palm/frameworks/enyo/0.10/framework/enyo.js" type="text/javascript"></script>
+</head>
+<body>
+<script type="text/javascript">
+	
+	enyo.application = {
+		applicationRelaunchHandler: function(params){
+			if ( params.locale ){
+				enyo.application.localeOverride = params.locale;
+				$L._resources = new enyo.g11n.Resources({locale: params.locale});
+			}
+		}
+	}
+	
+    enyo.create({kind: "UpdatesApp"}).renderInto(document.body);
+</script>
+</body>
+</html>

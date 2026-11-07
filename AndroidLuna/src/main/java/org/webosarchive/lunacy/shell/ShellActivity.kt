@@ -11,6 +11,7 @@ import org.webosarchive.lunacy.card.AppFiles
 import org.webosarchive.lunacy.card.AppInfo
 import org.webosarchive.lunacy.card.AppRegistry
 import org.webosarchive.lunacy.card.LocationService
+import org.webosarchive.lunacy.card.UpdateService
 import org.webosarchive.lunacy.card.jsString
 import org.webosarchive.lunacy.card.AppServer
 import org.webosarchive.lunacy.card.AppWindow
@@ -1270,6 +1271,17 @@ class ShellActivity : Activity(), WindowHost {
         // After db8: it reads its persisted activities back as it registers.
         power.register()
         activityManager.register(bus)
+        // webOS's update daemon, for Lunacy's releases on GitHub: System Updates asks it, and a
+        // daily check announces a new release once (UpdateService, System Alerts). After the
+        // activity manager, which keeps its daily activity.
+        val version = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull().orEmpty()
+        // This build's own APK on a release page: its flavour (arm64 if its native code is) and type.
+        val flavour = if (applicationInfo.nativeLibraryDir.orEmpty().contains("arm64")) "arm64" else "arm32"
+        val type = if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) "debug" else "release"
+        UpdateService(this, bus, version, "AndroidLuna-$flavour-$type.apk") { found ->
+            if (registry.get(LocationService.ALERTS_APP) == null || !LunacyService.firstUseDone(this)) false
+            else { launch(LocationService.ALERTS_APP, JSONObject().put("alert", "UpdateAvailable").put("version", found), Placement.NO_CARD); true }
+        }.also { it.register(); closeOnDestroy += it::close }
         powerService.register(bus)
         sleepWake.start()
         configurator = Configurator(files, db8, tempdb, webos.root, bus)

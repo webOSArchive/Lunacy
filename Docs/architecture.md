@@ -940,6 +940,31 @@ the control works in every app without any app being changed.
   - Palm's Location Services app is bundled (abandonware, NOTICE) with one change: the hidden
     "Background data collection" switch, Palm's Google service's. Its Google terms never show (the
     service reports them accepted) and Geotag Photos stays hidden (no camera reported).
+- **System updates** (2026-11-07, codepoet). webOS's UpdateDaemon (`palm://com.palm.update`)
+  checked Palm's servers weekly (the persistent activity `weeklyUpdateCheck`, interval 7d, calling
+  `TaskCheck`; measured on the reference TouchPad) and when System Updates opened
+  (`CheckForUpdate`), and reported a status that System Updates and SystemUI followed: Checking,
+  then UpToDate, or Waiting with the version and size. A waiting update brought SystemUI's
+  "Update available" dashboard with the version, which opened System Updates. Lunacy now checks
+  its own releases on GitHub (`card/UpdateService.kt`): the newest release of
+  webOSArchive/Lunacy that isn't a draft (every release is marked pre-release, so GitHub's
+  "latest" finds none), its tag compared number by number with this build's versionName.
+  - Newer, it is Waiting: "Lunacy 0.9.4", the size of the release's APK that matches this build
+    (arm32 or arm64, release or debug), and the release's notes as plain text. Its button, Learn
+    More where Palm's said Download Now (codepoet), opens the release page in Android's browser;
+    Lunacy never downloads or installs itself.
+  - `CheckForUpdate` answers when the check ends, with its status: System Updates takes its state
+    from that reply, as it did from the daemon's.
+  - The background check is the persistent activity `dailyUpdateCheck` (interval 1d, internet
+    required; codepoet chose daily over webOS's weekly), created once after the activity manager
+    is up, plus a check two minutes after start-up when the last was more than a day ago. A
+    version found there is announced once, by the System Alerts app: a banner and the "Update
+    available" dashboard with SystemUI's update icons, which opens System Updates.
+  - HP's System Updates app is bundled (abandonware, NOTICE) with two changes: the note under a
+    Lunacy release says Download Now opens its release page, and the release notes are
+    GitHub's, not help.palm.com's. Luna-deltas A30. It fits a phone's card at its own scale: its
+    column is layout.js's `.box-center` rule, and its button and pill, a fixed 500 px inline, are
+    capped at the card's width (marked).
 - **Accounts syncing: Sync Status** (2026-11-07). SystemUI ran Enyo's `SyncUI.syncDashboard`
   (`framework/lib/syncui`) from ten seconds after boot. It watches `com.palm.account.syncstate:1`
   in tempdb, which the transports (mojomail, EAS, IM, the JS transport framework) and the

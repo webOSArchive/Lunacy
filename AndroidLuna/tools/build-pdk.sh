@@ -405,9 +405,9 @@ $CC -O2 -funroll-loops -fomit-frame-pointer -DNDEBUG -D_GNU_SOURCE=1 -DAL_BUILD_
   $A/Alc/alcThread.c $A/Alc/bs2b.c $A/Alc/wave.c $A/Alc/sdl.c \
   -o "$OUT/lib/libopenal.so.1" -lrt -ldl -lm
 
-# libSDL_cinema: Palm's video player for a game's movies. No player: every movie ends at once,
-# with the end-of-stream event the real one sends.
-$CC -O2 -shared -fPIC -Wl,-soname,libSDL_cinema.so -I$WORK/sdl-out/include/SDL "$SRC/libcinema/cinema.c" \
+# libSDL_cinema: Palm's video player for a game's movies, asking the shell to play them with
+# Android's player (PdkWindow); the end of a movie comes back as the event the real one sent.
+$CC -O2 -shared -fPIC -Wl,-soname,libSDL_cinema.so -I$WORK/sdl-out/include/SDL -I$SRC/sdl-lunacy "$SRC/libcinema/cinema.c" \
   -o "$OUT/lib/libSDL_cinema.so" -L"$OUT/lib" -l:libSDL-1.2.so.0
 
 # ---- the glibc runtime ----
@@ -499,7 +499,7 @@ The PDK runtime (Docs/pdk.md), built by tools/build-pdk.sh:
   GLES 1.1 headers (SGI Free Software License B); its shell-side half is liblunacygl.so in
   the APK's own libraries. libGLESv2.so likewise from the GLES 2 headers (liblunacygl2.so).
 - libEGL.so: Lunacy's own (LunaRuntimes/pdk/libegl).
-- libSDL_cinema.so: Lunacy's own stub (LunaRuntimes/pdk/libcinema).
+- libSDL_cinema.so: Lunacy's own (LunaRuntimes/pdk/libcinema): Palm's API, the shell plays the movie.
 - libopenal.so.1: OpenAL Soft $AL_VER (LGPL 2), the TouchPad's version, from
   https://github.com/kcat/openal-soft (tag openal-soft-$AL_VER), with Lunacy's SDL backend
   (LunaRuntimes/pdk/openal/sdl.c) in place of Palm's.

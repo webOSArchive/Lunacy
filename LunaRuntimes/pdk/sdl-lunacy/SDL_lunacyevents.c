@@ -28,6 +28,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stdint.h>
 
 #include "SDL.h"
 #include "../../events/SDL_sysevents.h"
@@ -148,6 +149,18 @@ static void handle(_THIS, uint32_t type, uint32_t a, const unsigned char *p, uin
 		memcpy(v, p, 12);
 		LUNACY_accel[0] = v[0]; LUNACY_accel[1] = v[1]; LUNACY_accel[2] = v[2];
 		LUNACY_accel_count++;   /* a new reading for libpdl's PDL_PollSensor */
+		break;
+	}
+	case LPDK_CINEMA: {
+		/* The movie libSDL_cinema asked the shell to play has ended or failed: Palm's event,
+		   SDL_USEREVENT with code SDL_CINEMAEVENT (0xE000) and data1 SDL_CINEMA_EOS (0) or
+		   SDL_CINEMA_ERR (1), as the TouchPad's library pushed it. */
+		SDL_Event e;
+		SDL_memset(&e, 0, sizeof e);
+		e.type = SDL_USEREVENT;
+		e.user.code = 0xE000;
+		e.user.data1 = (void *)(uintptr_t)(a ? 1 : 0);
+		SDL_PushEvent(&e);
 		break;
 	}
 	default:

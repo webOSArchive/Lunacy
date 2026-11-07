@@ -471,6 +471,9 @@ class PdkHost(
     /** An SDL keysym (SDLK_*), with its unicode if it has one. */
     fun key(down: Boolean, sym: Int, unicode: Int = 0) = send(KEY, if (down) 1 else 0, ints(sym, unicode))
     fun active(gained: Boolean) = send(ACTIVE, if (gained) 1 else 0)
+
+    /** The movie libSDL_cinema asked for has ended (or failed): the app pushes Palm's SDL_CINEMAEVENT. */
+    fun cinemaEnded(error: Boolean) = send(CINEMA, if (error) 1 else 0)
     /** The accelerometer, already as webOS's joystick axes (PdkWindow). */
     fun accel(x: Int, y: Int, z: Int) {
         if (accelLatest.getAndSet(intArrayOf(x, y, z)) != null) return   // one already waiting: it'll carry this
@@ -500,7 +503,7 @@ class PdkHost(
     companion object {
         const val VIDEO_MODE = 1; const val FRAME = 2; const val CAPTION = 3; const val PDL = 4; const val GL = 6
         const val AUDIO_OPEN = 10; const val AUDIO_DATA = 11; const val AUDIO_CLOSE = 12
-        const val TOUCH = 20; const val KEY = 21; const val QUIT = 22; const val ACTIVE = 23; const val PDL_REPLY = 24; const val ACCEL = 25
+        const val TOUCH = 20; const val KEY = 21; const val QUIT = 22; const val ACTIVE = 23; const val PDL_REPLY = 24; const val ACCEL = 25; const val CINEMA = 26
         const val JS_READY = 30; const val JS_CALL = 31; const val JS_REPLY = 32; const val CALL_JS = 33
         /** SDL 1.2 keysyms the shell sends. */
         const val SDLK_ESCAPE = 27

@@ -209,9 +209,10 @@ Exchange and Google mail. Everything since 0.8.4:
   email no longer crashes Lunacy; music files with "+" in their names play; a fold no longer
   loses pending shell actions; Android's backup leaves out saved passwords; the first unit
   tests.
-- **Known issues:** PDK games' intro movies are skipped (libSDL_cinema plays nothing yet);
-  Video Player's volume keys don't switch to media volume; NesEm HD quits on the Fold3's
-  cover screen.
+- **Known issues:** NesEm HD quits on the Fold3's cover screen. (PDK games' intro movies,
+  skipped until then, play from 2026-11-07: [pdk.md](pdk.md) §6j.) (Video Player's volume keys, listed here at
+  first, work: while a video plays Android points them at media, measured 2026-11-07 on the
+  Fold3, Android 15, and the HP 10 G2, Android 5; Lunacy's `media/lockVolumeKeys` came later.)
 
 **Next (codepoet, 2026-11-05):** 0.9.2 for others to bang on, then OAuth for Exchange and
 Google mail as 0.9.5, then preparing an F-Droid launch. Earlier plan (2026-11-03): 0.9.x point
@@ -376,18 +377,16 @@ starting; some may have been settled since without a note.
 - **Chat:** longevity on the devices; webOS CE's startup hang (PmLogLib's semaphore; take CE's
   fix if it lands in the transport); the Add Buddy invitation message, which the transport drops.
 - **Exchange:** a real server's policy, tasks, attachments.
-- **PDK intro movies, before 1.0 (codepoet, 2026-11-03):** Lunacy's libSDL_cinema is a
-  stand-in that answers every call with success and ends each movie at once, so games skip
-  their intros. That is not acceptable for 1.0: decode the game's movie with Android's media
-  player and draw it as Palm's library did, keeping its contract (CIN_Init, CIN_LoadCIN,
-  CIN_Play/Pause/Stop, the SDL_CINEMAEVENT end event; [pdk.md](pdk.md) §6i).
+- **PDK intro movies:** done 2026-11-07, Android's player behind Palm's API ([pdk.md](pdk.md)
+  §6j). Still to see: Oregon Trail, Asphalt 5 and Nova 2's movies, the end event's path on
+  each, and a movie on the 32-bit devices.
 - **Launching an app as the shell starts (0.9.0 sweep):** an `--es launch` of Calendar, Clock
   or Email in the intent that starts Lunacy can come up with no card (Calendar: "no card
   opened"; the Nexus 5 showed the launcher), seemingly racing the same app's own start at
   boot. A tap once the shell is up opens them (codepoet, HP 10 G2). Not compared with 0.8.4.
 - **Video Player:** `com.palm.filenotifyd`'s `state` (whether `/media/internal` is mounted and
-  scanned) and `com.palm.audio`'s `media/lockVolumeKeys` (the volume keys drive the media
-  stream while a video plays) aren't there; Photos asks for the second too.
+  scanned) isn't there. (`com.palm.audio`'s `media/lockVolumeKeys` is, since Music's port, and
+  while a video plays Android points the volume keys at media itself: measured 2026-11-07.)
 - **Email:** attachments; the Android 5 devices untried; PmLogLib's levels need PmLogDaemon's
   shared memory (only errors are logged unless a service is started with `files/pdk/args`).
 - **Photos & Videos 3.2.0:** the editor dragged with a finger, and on the 32-bit build's

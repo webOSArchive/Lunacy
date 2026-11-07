@@ -211,7 +211,7 @@ its intro movie) and 5 PDL calls (`SetOrientation`, `ScreenTimeoutEnable`, `Noti
   a GLES 1.1 context in the shell, on a `TextureView` in the card, that replays them. Indirect
   rendering, as GLX did it; 150-odd functions in the full API, 85 for this game. Readbacks
   (`glReadPixels`, `glGetError`, `glGetIntegerv`) are round trips.
-- `libSDL_cinema` as a stub that reports the movie as finished, until a player exists.
+- `libSDL_cinema`: Palm's API, the shell plays the movie with Android's player (§6j).
 
 **Stage one, done 2026-10-02 (evening):** Transformers runs to its render loop on the Nexus 5
 and under qemu on the desk, against a *logging* `libGLES_CM.so` generated from the PDK's
@@ -1047,3 +1047,32 @@ another sat in `sock_wait_for_wmem`, which here was only audio being paced.
   present; the banner says so where it isn't.
 - More of the TouchPad's SDL behaviours a game may depend on (which events `which`
   carried), with the probe approach above (`/tmp`, no install).
+
+## 6j. Movies play: libSDL_cinema over Android's player, 2026-11-07
+
+Until now `libSDL_cinema` was a stand-in that kept Palm's contract and played nothing: a game's
+intro ended at once (§6i). codepoet: not acceptable for 1.0. Lunacy's library (`libcinema/cinema.c`)
+now asks the shell to play the movie, and the shell plays it with Android's `MediaPlayer`.
+
+**Palm's library, read again.** The TouchPad's `/usr/lib/libSDL_cinema.so`, disassembled: a client
+of webOS's media player (`libmedia-api`, `media::MediaPlayer`), sized to the display
+(`SDL_WebOsHookGetDisplayRect`), paused while the app is in the background
+(`SDL_WebOsHookRegisterPausedCallback`). Only the player's end-of-stream and error callbacks push
+the SDL event (`PlaybackControlLogic::eosChanged`, `::errorChanged`), so `CIN_Stop` ends a movie
+with no event. `CIN_LoadCIN` checks its URL for `file://`.
+
+**How it goes here.** Each `CIN_*` call is a PDL request on the app's connection
+(`{"call":"cinema","op":"load"|"play"|"pause"|"stop","url":…}`). `PdkWindow` finds the file
+(a `file://` URL or a path: in the webOS root, `/media/internal` through `UserFiles`, or relative
+to the app's folder) and plays it on a `TextureView` over the card, on black, letterboxed, turned
+when its shape is the other one from the device's as a game's screen is (`orient`), from a file
+descriptor (the media server can't open a path in Lunacy's own storage). Touches go through to
+the game. It pauses while the card is behind (`setStageActive`). The end or an error comes back as
+`LPDK_CINEMA` (26), which the SDL event reader pushes as Palm's `SDL_USEREVENT`, code
+`SDL_CINEMAEVENT` (0xE000), data1 `SDL_CINEMA_EOS` (0) or `SDL_CINEMA_ERR` (1). A load before the
+app has a video mode, or a file that isn't there, fails as the real one would.
+
+The movies on the Fold3 are ordinary MP4 and MOV (H.264 or MPEG-4 video, AAC or PCM audio): H.A.W.X.'s
+480 x 320 intro, Oregon Trail's logo, Asphalt 5's clips, Nova 2's 1024 x 768. Checked: H.A.W.X.'s
+intro plays with its sound on the Fold3's cover screen (codepoet: "looks and sounds great").
+

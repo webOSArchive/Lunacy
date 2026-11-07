@@ -32,6 +32,7 @@
 #define LPDK_ACTIVE       23  /* a = 1 gained, 0 lost (SDL_ACTIVEEVENT, app + input focus) */
 #define LPDK_ACCEL        25  /* payload: int32 x, y, z, the accelerometer as webOS's joystick axes (1 g = 32768, the device's frame) */
 #define LPDK_PDL_REPLY    24  /* a = request id; payload: JSON */
+#define LPDK_CINEMA       26  /* a = 0 the movie ended (SDL_CINEMA_EOS), 1 it failed (SDL_CINEMA_ERR); libSDL_cinema's (libcinema/cinema.c) */
 
 /* A hybrid app's plugin (Docs/pdk.md, "Hybrid apps"): libpdl's JS link, greeting 'J'.
    Strings in a payload are each NUL-terminated, one after another. */

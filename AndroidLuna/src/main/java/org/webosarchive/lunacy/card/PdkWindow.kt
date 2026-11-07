@@ -49,6 +49,9 @@ class PdkWindow(
 
     /** The device's screen is landscape (the TouchPad's 1024 x 768) or portrait (the Pre3's). */
     private val landscapeDevice = runtime.screenWidth >= runtime.screenHeight
+    /** Where a movie's path is looked up (libSDL_cinema): the webOS root, and the installed apps' folder. */
+    private val runtimeWebosRoot: java.io.File? = runtime.webos?.root
+    private val appsRoot: java.io.File = runtime.appsRoot
 
     private val host = PdkHost(context, appId, app, runtime, this)
     private val frameView = FrameView(context)
@@ -209,6 +212,7 @@ class PdkWindow(
                 (context.getSystemService(Context.VIBRATOR_SERVICE) as? android.os.Vibrator)?.vibrate(request.optInt("duration", 50).toLong())
             }
             "screenTimeout" -> { timeoutAllowed = request.optBoolean("on", false); holdScreen() }
+            "cinema" -> cinema(request)
             "keyboard" -> {
                 keyboardOn = request.optBoolean("on")
                 if (keyboardOn) imm.restartInput(this)
@@ -316,6 +320,7 @@ class PdkWindow(
 
     override fun setStageActive(active: Boolean) {
         focused = active; holdScreen()
+        movie?.setActive(active)
         if (active) startAccel() else stopAccel()
         if (toldActive == null && !active) return
         if (toldActive == active) return
@@ -371,11 +376,128 @@ class PdkWindow(
     }
 
     override fun destroy() {
+        movie?.end(null)
         stopAccel()
         shell.blockScreenTimeout(this, false)
         glStream.destroy()
         host.stop()
         super.destroy()
+    }
+
+    // ---- movies: Palm's libSDL_cinema (LunaRuntimes/pdk/libcinema), played by Android ----
+
+    /** The movie the app loaded (CIN_LoadCIN), not yet played. */
+    private var movieFile: java.io.File? = null
+    private var movie: Movie? = null
+
+    /**
+     * libSDL_cinema's calls. On the TouchPad the media player drew the movie over the app at the
+     * display's size and paused it while the app was in the background; the end of the movie, or
+     * an error, became SDL_CINEMAEVENT in the app's queue, and CIN_Stop ended it with no event
+     * (its disassembly, 2026-11-07). Here Android's MediaPlayer plays it over the card, on black,
+     * letterboxed and turned as the card turns a game's screen of the other shape ([orient]);
+     * touches still reach the game, which may skip its movie on a tap.
+     */
+    private fun cinema(r: JSONObject) {
+        when (r.optString("op")) {
+            "load" -> { movie?.end(null); movieFile = cinemaFile(r.optString("url")) }
+            "play" -> {
+                val m = movie
+                if (m != null) { m.resume(); return }
+                val f = movieFile?.takeIf { it.isFile }
+                if (f == null) { Log.w(AppServer.TAG, "pdk [$appId] cinema: no movie to play (${movieFile?.path})"); host.cinemaEnded(true); return }
+                movie = Movie(f)
+            }
+            "pause" -> movie?.pause()
+            "stop" -> movie?.end(null)
+        }
+    }
+
+    /** A movie's URL, file:// or a path (one without a leading slash in the app's own folder), as a real file. */
+    private fun cinemaFile(url: String): java.io.File? {
+        val path = url.removePrefix("file://").takeIf { it.isNotEmpty() } ?: return null
+        val root = runtimeWebosRoot ?: return null
+        return when {
+            path.startsWith("/media/internal/") -> UserFiles.resolve(root, path.removePrefix("/media/internal/"))
+            path.startsWith("/") -> java.io.File(root, path.trimStart('/'))
+            else -> java.io.File(java.io.File(appsRoot, app.dir), path)
+        }
+    }
+
+    /** One movie playing over the card. Main thread. */
+    private inner class Movie(file: java.io.File) {
+        private val box = android.widget.FrameLayout(context).apply { setBackgroundColor(Color.BLACK) }
+        private val texture = TextureView(context)
+        private val player = android.media.MediaPlayer()
+        private val input = java.io.FileInputStream(file)
+        private var prepared = false
+        private var playing = true
+        private var stageActive = focused
+        private var ended = false
+
+        init {
+            box.addView(texture, android.widget.FrameLayout.LayoutParams(0, 0, android.view.Gravity.CENTER))
+            @Suppress("DEPRECATION")
+            addView(box, AbsoluteLayout.LayoutParams(AbsoluteLayout.LayoutParams.MATCH_PARENT, AbsoluteLayout.LayoutParams.MATCH_PARENT, 0, 0))
+            texture.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                override fun onSurfaceTextureAvailable(st: android.graphics.SurfaceTexture, w: Int, h: Int) {
+                    runCatching { player.setSurface(android.view.Surface(st)) }
+                }
+                override fun onSurfaceTextureSizeChanged(st: android.graphics.SurfaceTexture, w: Int, h: Int) {}
+                override fun onSurfaceTextureDestroyed(st: android.graphics.SurfaceTexture) = true
+                override fun onSurfaceTextureUpdated(st: android.graphics.SurfaceTexture) {}
+            }
+            box.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> fit() }
+            try {
+                // A descriptor, not the path: the media server can't open a file in Lunacy's own storage.
+                player.setDataSource(input.fd)
+                player.setOnPreparedListener { prepared = true; fit(); if (playing && stageActive) player.start() }
+                player.setOnCompletionListener { end(false) }
+                player.setOnErrorListener { _, what, extra -> Log.w(AppServer.TAG, "pdk [$appId] cinema: error $what/$extra"); end(true); true }
+                player.prepareAsync()
+                Log.i(AppServer.TAG, "pdk [$appId] cinema: playing ${file.name}")
+            } catch (e: Exception) {
+                Log.w(AppServer.TAG, "pdk [$appId] cinema: ${file.name}: ${e.javaClass.simpleName}")
+                post { end(true) }
+            }
+        }
+
+        /** Fits the picture in the card, letterboxed, turned when its shape is the other one from the device's (as [orient] turns a game). */
+        private fun fit() {
+            if (!prepared) return
+            val vw = player.videoWidth; val vh = player.videoHeight
+            val cw = box.width; val ch = box.height
+            if (vw <= 0 || vh <= 0 || cw <= 0 || ch <= 0) return
+            val turned = (vw >= vh) != landscapeDevice
+            val (sw, sh) = if (turned) vh to vw else vw to vh
+            val scale = minOf(cw.toFloat() / sw, ch.toFloat() / sh)
+            val w = Math.round(vw * scale); val h = Math.round(vh * scale)
+            texture.rotation = if (!turned) 0f else if (landscapeDevice) -90f else 90f
+            val lp = texture.layoutParams as android.widget.FrameLayout.LayoutParams
+            if (lp.width != w || lp.height != h) { lp.width = w; lp.height = h; texture.layoutParams = lp }
+        }
+
+        fun pause() { playing = false; if (prepared) runCatching { player.pause() } }
+        fun resume() { playing = true; if (prepared && stageActive) runCatching { player.start() } }
+
+        /** The app in front or behind: the movie waits behind, as Palm's PausedCallback had it. */
+        fun setActive(active: Boolean) {
+            stageActive = active
+            if (!prepared) return
+            if (!active) runCatching { player.pause() } else if (playing) runCatching { player.start() }
+        }
+
+        /** Ends the movie; [error] null is CIN_Stop's (or the card closing), with no event. */
+        fun end(error: Boolean?) {
+            if (ended) return
+            ended = true
+            runCatching { player.stop() }
+            player.release()
+            runCatching { input.close() }
+            removeView(box)
+            if (movie === this) movie = null
+            if (error != null) host.cinemaEnded(error)
+        }
     }
 
     /** Draws a 2D app's frames in place, and sends every app the fingers in its own px. */

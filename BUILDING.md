@@ -145,13 +145,17 @@ from the command line.
 
 ## The icon
 
-The launcher mipmaps are made from `Meta/Lunacy-512.png`:
+The launcher icon, the splash logo and the notification icon are made from codepoet's artwork in
+`Meta/` (needs Pillow):
 
 ```sh
-python3 -c 'from PIL import Image; src=Image.open("Meta/Lunacy-512.png").convert("RGBA")
-for d,s in [("mdpi",48),("hdpi",72),("xhdpi",96),("xxhdpi",144),("xxxhdpi",192)]:
-    src.resize((s,s), Image.LANCZOS).save("AndroidLuna/src/main/res/mipmap-%s/ic_launcher.png" % d)'
+python3 AndroidLuna/tools/make-icons.py
 ```
+
+The launcher icon is `Meta/LunacyRobot.png` in front of a patch of `Meta/LunaOnly.png`'s starry
+sky: an adaptive icon on Android 8 and later (with a one-colour layer for Android 13's themed
+icons), and the same picture in a rounded rectangle on Android 5 to 7. The notification icon is
+the crescent from `Meta/LunaRound.png`. LunaKeyboard keeps its own icon.
 
 ## Before changing anything
 

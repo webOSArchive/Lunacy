@@ -1,0 +1,10 @@
+Lunacy's artwork.
+
+LunacyRobot.png (the Android robot with a door open on the night sky and the moon) is Lunacy's
+icon; LunaOnly.png, LunaRound.png and LunaSquare.png are the moon on its own, kept in reserve as
+an alternative icon. codepoet had them made with ChatGPT for Lunacy, 2026-11-07.
+AndroidLuna/tools/make-icons.py makes the launcher icon, the splash logo and the notification
+icon from them.
+
+The Android robot is reproduced or modified from work created and shared by Google and used
+according to terms described in the Creative Commons 3.0 Attribution License.

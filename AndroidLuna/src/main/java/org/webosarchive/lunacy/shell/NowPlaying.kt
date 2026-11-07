@@ -127,7 +127,7 @@ class NowPlayingService : Service() {
         val open = PendingIntent.getActivity(this, 0, Intent(this, ShellActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         @Suppress("DEPRECATION")
-        return b.setSmallIcon(R.drawable.lunacy_logo).setContentTitle(NowPlaying.title).setContentText(NowPlaying.artist)
+        return b.setSmallIcon(R.drawable.ic_stat_lunacy).setContentTitle(NowPlaying.title).setContentText(NowPlaying.artist)
             .setContentIntent(open).setShowWhen(false).setOngoing(NowPlaying.playing).setVisibility(Notification.VISIBILITY_PUBLIC)
             .addAction(action(android.R.drawable.ic_media_previous, "Previous", ACTION_PREV))
             .addAction(if (NowPlaying.playing) action(android.R.drawable.ic_media_pause, "Pause", ACTION_TOGGLE)

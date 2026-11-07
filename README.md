@@ -3,7 +3,7 @@
 **Run legacy webOS apps on modern Android phones and tablets, inside a shell that looks and
 feels like webOS.**
 
-![Icon](Meta/Lunacy-64.png)
+<img src="Meta/LunacyRobot.png" alt="Lunacy's icon: the Android robot with a door open on the night sky and the moon" width="96">
 
 webOS apps were HTML and JavaScript. They loaded their framework (Enyo or Mojo) from the OS,
 ran as cards in the Luna system shell, and talked to the system over the Luna service bus
@@ -12,7 +12,6 @@ them never needed Palm's hardware. They needed Palm's *contract*.
 
 Lunacy provides that contract on Android.
 
-![Tablet Comparison](Meta/LunacyCompared.png)
 
 ## How it works
 

@@ -102,7 +102,7 @@ class BackgroundService : Service() {
         } else @Suppress("DEPRECATION") Notification.Builder(this).setPriority(Notification.PRIORITY_MIN)
         val open = PendingIntent.getActivity(this, 0, Intent(this, ShellActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        return b.setSmallIcon(R.drawable.lunacy_logo).setContentTitle("Lunacy")
+        return b.setSmallIcon(R.drawable.ic_stat_lunacy).setContentTitle("Lunacy")
             .setContentText("Keeping your mail up to date")
             .setContentIntent(open).setShowWhen(false).setOngoing(true).build()
     }

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The background the logo artwork is composed on (Meta/Lunacy-NoBorder.jpg), so the
-         square meets the screen without a seam. -->
-    <color name="splash_background">#161f28</color>
+    <!-- The night sky behind the robot in the launcher icon (Meta/LunaOnly.png's), so the
+         splash's robot stands on the same night. -->
+    <color name="splash_background">#01091a</color>
 </resources>

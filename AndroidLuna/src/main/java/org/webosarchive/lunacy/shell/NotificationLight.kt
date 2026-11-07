@@ -66,7 +66,7 @@ class NotificationLight(private val context: Context, private val enabled: () ->
                 @Suppress("DEPRECATION")
                 Notification.Builder(context).setDefaults(0).setLights(Color.WHITE, ON_MS, OFF_MS)
             }
-            nm.notify(ID, n.setSmallIcon(R.drawable.lunacy_logo).setContentTitle(title).setContentText(text)
+            nm.notify(ID, n.setSmallIcon(R.drawable.ic_stat_lunacy).setContentTitle(title).setContentText(text)
                 .setContentIntent(open).setAutoCancel(true).setOnlyAlertOnce(true).setShowWhen(false)
                 .setCategory(Notification.CATEGORY_STATUS).build())
             showing = true

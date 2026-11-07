@@ -24,6 +24,8 @@ class SmallFunctionsTest {
     @Test fun busRedactsSecrets() {
         assertEquals("""{"password":"…","user":"x"}""", Bus.redact("""{"password":"a\"b","user":"x"}"""))
         assertEquals("""{"accessToken" : "…"}""", Bus.redact("""{"accessToken" : "t"}"""))
+        assertEquals("""{"url":"https://x/nativeclient?code=…&state=ab"}""", Bus.redact("""{"url":"https://x/nativeclient?code=1.AR-x_y&state=ab"}"""))
+        assertEquals("""{"url":"http://127.0.0.1:5/#access_token=…&id_token=…"}""", Bus.redact("""{"url":"http://127.0.0.1:5/#access_token=a.b&id_token=c"}"""))
     }
 
     @Test fun busReplies() {

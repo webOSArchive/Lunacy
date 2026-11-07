@@ -236,7 +236,10 @@ class Bus {
          * account's password. Only the log line changes; the service gets the call as sent.
          */
         private val SECRET = Regex("""("(?:password|passwd|pin|secret|token|authToken|accessToken|refreshToken|client_secret)"\s*:\s*)"(?:[^"\\]|\\.)*"""", RegexOption.IGNORE_CASE)
-        fun redact(params: String): String = SECRET.replace(params) { it.groupValues[1] + "\"…\"" }
+        /** An OAuth redirect's code or token in an address (the sign-in page's `redirected` call). */
+        private val URL_SECRET = Regex("""([?&#](?:code|access_token|id_token|refresh_token)=)[^&#"\\\s]*""")
+        fun redact(params: String): String =
+            URL_SECRET.replace(SECRET.replace(params) { it.groupValues[1] + "\"…\"" }) { it.groupValues[1] + "…" }
 
         /**
          * Whether a call may carry people's details or plans, which the bus log leaves out: every

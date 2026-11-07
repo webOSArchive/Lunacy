@@ -394,7 +394,13 @@ class OAuth(
             val rs = runCatching { JSONObject(reply).optJSONArray("results") }.getOrNull()
             val account = rs?.let { (0 until it.length()).mapNotNull { i -> it.optJSONObject(i) } }?.firstOrNull {
                 it.optString("templateId") == templateId && !it.optBoolean("beingDeleted") && it.optString("username").equals(email, ignoreCase = true)
-            } ?: run { Log.w(AppServer.TAG, "oauth: ${p.id} signed in again, but its account wasn't found: ${reply.take(200)}"); return@call }
+            } ?: run {
+                // The usual case: an account removed and added again within the day prune()
+                // keeps its tokens, so the sign-in looks like a second one before Accounts has
+                // made the account. The sign-in page makes it, and its service is told then.
+                Log.i(AppServer.TAG, "oauth: no ${p.id} account for this sign-in yet; it is being added")
+                return@call
+            }
             // The template's hooks, as Accounts' modifyAccount finds them: its own, and each
             // enabled capability's.
             b.call(ACCOUNTS, "palm://com.palm.service.accounts/listAccountTemplates", "{}", privateBus = true) { t ->

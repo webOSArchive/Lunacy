@@ -19,6 +19,7 @@ and each of those changes is marked `[Lunacy]` in its source.
 | Calendar | `com.palm.app.calendar` | 3.2.0 | webOS Archive's modernized Calendar, from the webOS CE tree |
 | Clock | `com.palm.app.clock` | 3.1.1904 | Palm, HP webOS 3.x (abandonware) |
 | Android | `org.webosarchive.lunacy.androidaccount` | 1.0.0 | Lunacy's own: the hidden page and account type that mirror Android's contacts and calendars into Contacts and Calendar |
+| Sync Status | `org.webosarchive.lunacy.syncstatus` | 1.0.0 | Lunacy's own: hidden and headless, hosts Enyo's SyncUI sync dashboard as webOS's System UI did |
 | Sign In | `org.webosarchive.lunacy.signin` | 1.0.0 | Lunacy's own: the hidden page and account types that sign Google and Microsoft mail in with OAuth ([oauth.md](../Docs/oauth.md)) |
 | Contacts | `com.palm.app.contacts` | 3.2.0 | webOS Archive's modernized Contacts, from the webOS CE tree |
 | Date & Time | `com.palm.app.dateandtime` | 1.0.0 | Lunacy's shortcut to Android's date and time settings |

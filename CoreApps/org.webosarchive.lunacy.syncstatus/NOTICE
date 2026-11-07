@@ -1,0 +1,11 @@
+Lunacy's Sync Status.
+
+The part of webOS's System UI (luna-systemui) that showed accounts syncing and being removed:
+it hosts Enyo 1's SyncUI.syncDashboard (framework/lib/syncui), unchanged, as SystemUI's
+SystemUIApp did on the reference TouchPad (webOS CE 3.1.0). It has no window of its own;
+Lunacy starts it when an account's sync state calls for a dashboard, and it ends when the
+last one goes.
+
+The app's code is Lunacy's, under the same terms as the rest of Lunacy. Its banners,
+dashboards, strings and icon are Enyo's syncui library's, which ships with Lunacy's Enyo
+(see its NOTICE). It carries no art of its own.

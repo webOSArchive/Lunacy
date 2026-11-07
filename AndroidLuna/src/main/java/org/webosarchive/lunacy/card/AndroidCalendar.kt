@@ -45,8 +45,8 @@ import java.util.TimeZone
  * days in that zone, and a date matches whatever the clocks do, where its longer forms are
  * compared at the first occurrence's time of day. An all-day event's noon is the device's, so a change of zone runs a pass.
  */
-class AndroidCalendar(context: Context, private val db: Db8) : AndroidAccountSide(
-    context, "androidcalendar", Manifest.permission.READ_CALENDAR, CalendarContract.CONTENT_URI, START_DELAY_MS,
+class AndroidCalendar(context: Context, private val db: Db8, contacts: AndroidContacts) : AndroidAccountSide(
+    context, db, "androidcalendar", "org.webosarchive.lunacy.androidaccount.calendar", Manifest.permission.READ_CALENDAR, CalendarContract.CONTENT_URI, START_DELAY_MS, contacts,
 ) {
     private val mainHandler = Handler(android.os.Looper.getMainLooper())
     private val zoneChanged = object : BroadcastReceiver() {

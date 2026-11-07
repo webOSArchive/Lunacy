@@ -906,6 +906,22 @@ parameters in the query string and takes the result back through `postMessage`
 behind it (the TouchPad's `luna-systemui` FilePicker, unchanged; its NOTICE lists the files), so
 the control works in every app without any app being changed.
 
+- **Accounts syncing: Sync Status** (2026-11-07). SystemUI ran Enyo's `SyncUI.syncDashboard`
+  (`framework/lib/syncui`) from ten seconds after boot. It watches `com.palm.account.syncstate:1`
+  in tempdb, which the transports (mojomail, EAS, IM, the JS transport framework) and the
+  accounts service write. While an account syncs for the first time or is being removed it shows
+  a banner and a dashboard with the account's icon and name ("Syncing account...", "Removing
+  account..."), then a banner when that ends ("Sync completed", "Account removed"); a 401 gets a
+  "Check your login and password" dashboard that opens Accounts. Measured on the reference
+  TouchPad (codepoet removed and re-added an Exchange account, 2026-11-07: the banners, the
+  dashboard and the tempdb records match the code). Lunacy had nothing hosting it, so no sync
+  ever showed. The hidden core app `org.webosarchive.lunacy.syncstatus` hosts it, unchanged; the
+  shell starts it, headless, when a record that would put up a dashboard is written
+  (`ShellActivity.syncStateChanged`, through `Db8.onWrites`), and it closes itself five seconds
+  after its last dashboard goes, as Android Notifications does. It reads the accounts as
+  SystemUI did, so the shell grants it read on `com.palm.account:1` (SystemUI was
+  `com.palm.systemui`, which `com.palm.*` covered). Not yet: SystemUI's other half,
+  `SyncUI.missingCredentials` ("Accounts: Action Needed" at boot).
 - **Palm's picker reads the media index**, as on the TouchPad: photo albums
   (`com.palm.media.image.album:1`), their pictures (`com.palm.media.types:1`, once the photos
   service has made their grid thumbnails), videos, music (`com.palm.media.audio.file:1`) and
@@ -1716,6 +1732,25 @@ asking for an HP webOS account. Contacts are local only; nothing syncs. What it 
   that: it purges, and it would read Android every few seconds. If Android can't be read, the
   copy stays. The template sets `readOnlyData`, so an edit makes a linked contact in the default
   account.
+- **Every account's contacts, not only "visible" ones** (2026-11-07). The read first asked for
+  `Data.IN_VISIBLE_GROUP=1`. An Exchange account's contacts are in no group, so they count as
+  visible only if that account has an "ungrouped visible" setting, and nothing had written one:
+  on the Kyocera, Gmail's Exchange account, 31 of 5,717 contacts came through, though Android's
+  own Contacts app shows them all. It now reads every contact; a raw contact marked deleted
+  (its account hasn't synced the deletion yet) is left out, by its id, since the data table has
+  no column for that. Android's contacts there are themselves duplicated: 6,467 Exchange raw
+  contacts carry 237 server ids, 24 to 29 copies each, which Android keeps as contacts sharing a
+  lookup key; Lunacy keys by lookup key, so it copies the 455 distinct people.
+- **Contacts before calendars** (2026-11-07, codepoet). Each side reads on its own thread, and
+  db8 writes one pass at a time, so a calendar read that finished first held the contacts back
+  behind its writes. webOS's DAV sync had the same fault, calendars first. A Calendar pass now
+  waits while a Contacts pass is scheduled or running (two minutes at most), so the person sees
+  contacts arrive first; and when the account is added, Calendar's first pass waits the 3 s
+  settle time for Contacts' enable call (`AndroidAccountSide.after`).
+- **The first pass shows as a sync** (2026-11-07). When the owner turns a side on, it writes an
+  `INITIAL_SYNC` record to `com.palm.account.syncstate:1`, as webOS's transports did
+  (`SyncStatusManager`), and deletes it once that pass's records are written (`Db8.after`), so
+  Sync Status shows "Syncing account..." and then "Sync completed" ([System UI](#system-ui)).
 - **People's details stay out of the log.** The bus log, which runs on every build, shows only a
   call's size for Contacts, Calendar, their services and anything naming a contact, person or
   event, and those services' and apps' consoles show no text (`Bus.handlesPeople`).

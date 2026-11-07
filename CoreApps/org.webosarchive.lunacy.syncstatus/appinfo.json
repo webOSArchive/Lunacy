@@ -1,0 +1,11 @@
+{
+	"id": "org.webosarchive.lunacy.syncstatus",
+	"version": "1.0.0",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "Sync Status",
+	"noWindow": true,
+	"visible": false,
+	"uiRevision": 2
+}

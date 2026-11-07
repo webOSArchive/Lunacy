@@ -812,6 +812,28 @@ class ShellActivity : Activity(), WindowHost {
         launch(ANDROID_NOTIFICATIONS_APP, null, Placement.NO_CARD)
     }
 
+    /**
+     * An account's sync state was written (com.palm.account.syncstate:1, by a transport or the
+     * accounts service): if one would put up a dashboard (a first sync, a removal, a login
+     * that failed) and Sync Status isn't running, it is started, headless, to show it, as
+     * SystemUI did on webOS. It ends again once its last dashboard goes.
+     */
+    private fun syncStateChanged(tempdb: Db8) {
+        if (lifecycle.isRunning(SYNC_STATUS_APP)) return
+        tempdb.count(SYNC_STATE_KIND, { o ->
+            o.isNull("collectionId") && when (o.optString("syncState")) {
+                "INITIAL_SYNC", "DELETE" -> true
+                "ERROR" -> o.optString("errorCode") == "401_UNAUTHORIZED"
+                else -> false
+            }
+        }) { n ->
+            if (n == 0 || lifecycle.isRunning(SYNC_STATUS_APP)) return@count
+            if (!::webos.isInitialized || !LunacyService.firstUseDone(this)) return@count
+            if (registry.get(SYNC_STATUS_APP) == null) return@count
+            launch(SYNC_STATUS_APP, null, Placement.NO_CARD)
+        }
+    }
+
     override fun activityId(window: AppWindow): Int = lifecycle.activityId(window)
 
     /** Called on the bridge's thread, the first time the page embeds a plugin. */
@@ -1223,6 +1245,7 @@ class ShellActivity : Activity(), WindowHost {
         db8.registerPickerRelay(bus)
         val tempdb = Db8("com.palm.tempdb", null).also { it.register(bus) }
         closeOnDestroy += db8::close; closeOnDestroy += tempdb::close
+        tempdb.onWrites(SYNC_STATE_KIND) { syncStateChanged(tempdb) }
         // Not the home app, with mail: a foreground service keeps the system from being frozen (BackgroundWork).
         backgroundWork = BackgroundWork(this, db8) { homeScreenPins.lunacyIsHome() }.also { it.start(); closeOnDestroy += it::stop }
         // Documents', photos' and videos' indexes, answered from the folders themselves (FileIndex, MediaIndex).
@@ -1237,9 +1260,12 @@ class ShellActivity : Activity(), WindowHost {
         sleepWake.start()
         configurator = Configurator(files, db8, tempdb, webos.root, bus)
         configurator.run()
+        // Sync Status shows accounts syncing in SystemUI's place, and reads the accounts as it did.
+        db8.configure(emptyList(), listOf(org.json.JSONArray().put(org.json.JSONObject().put("type", "db.kind").put("object", "com.palm.account:1")
+            .put("caller", SYNC_STATUS_APP).put("operations", org.json.JSONObject().put("read", "allow")))))
         // Android's contacts and calendars, once the owner adds that account (AndroidContacts, AndroidCalendar).
-        AndroidContacts(this, jsServices.root, db8).also { it.attach(bus); closeOnDestroy += it::close }
-        AndroidCalendar(this, db8).also { it.attach(bus); closeOnDestroy += it::close }
+        val androidContacts = AndroidContacts(this, jsServices.root, db8).also { it.attach(bus); closeOnDestroy += it::close }
+        AndroidCalendar(this, db8, androidContacts).also { it.attach(bus); closeOnDestroy += it::close }
         // Exchange's security policies and the device lock, once the kinds are there (SecurityPolicy).
         securityPolicy = SecurityPolicy(bus, lockHost, java.io.File(filesDir, "securitypolicy.json"))
         securityPolicy.register()
@@ -1353,6 +1379,9 @@ class ShellActivity : Activity(), WindowHost {
         const val EXTRA_EXHIBITION = "exhibition"
         /** Lunacy's app that shows Android's notifications as dashboards. */
         const val ANDROID_NOTIFICATIONS_APP = "org.webosarchive.lunacy.notifications"
+        /** Lunacy's app that shows accounts syncing as dashboards, as SystemUI did (SyncUI.syncDashboard). */
+        const val SYNC_STATUS_APP = "org.webosarchive.lunacy.syncstatus"
+        const val SYNC_STATE_KIND = "com.palm.account.syncstate:1"
     }
 
     /** A keyboard's printable key may open Just Type (ShellChrome.typed). */

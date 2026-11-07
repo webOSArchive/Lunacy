@@ -899,6 +899,14 @@ class ShellChrome(
             }
             // A side the shell is kept off (the cutout's, turned) is clear of its corner.
             statusBar.corners = (if (l > 0) 0f else tl) to (if (r > 0) 0f else tr)
+            // The bottom corners, the same way, for a phone's notification bar along the bottom.
+            var bl = corner(android.view.RoundedCorner.POSITION_BOTTOM_LEFT)
+            var br = corner(android.view.RoundedCorner.POSITION_BOTTOM_RIGHT)
+            if (cut != null && bl == 0f && br == 0f) {
+                val dm = activity.realMetrics()
+                bl = minOf(dm.widthPixels, dm.heightPixels) * ASSUMED_CORNER; br = bl
+            }
+            notificationHost.area?.corners = if (b > 0) 0f to 0f else (if (l > 0) 0f else bl) to (if (r > 0) 0f else br)
             // The camera's span across the bar, in the bar's x, a 3 px margin either side.
             val bar = luna.px(StatusBar.HEIGHT)
             statusBar.cutout = cut?.boundingRects?.filter { it.top < bar && !it.isEmpty }

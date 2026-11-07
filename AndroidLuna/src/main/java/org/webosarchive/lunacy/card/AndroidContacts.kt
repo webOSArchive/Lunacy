@@ -37,7 +37,7 @@ import java.security.MessageDigest
  * copy stays as it is rather than being taken for an empty list.
  */
 class AndroidContacts(context: Context, webosRoot: File, private val db: Db8) : AndroidAccountSide(
-    context, "androidcontacts", Manifest.permission.READ_CONTACTS, ContactsContract.Contacts.CONTENT_URI, START_DELAY_MS,
+    context, db, "androidcontacts", "org.webosarchive.lunacy.androidaccount.contacts", Manifest.permission.READ_CONTACTS, ContactsContract.Contacts.CONTENT_URI, START_DELAY_MS,
 ) {
     private val photos = File(UserFiles.own(webosRoot), ".contactphotos")
 
@@ -81,13 +81,25 @@ class AndroidContacts(context: Context, webosRoot: File, private val db: Db8) : 
         fun add(to: JSONArray, what: String, value: JSONObject) { if (seen.add("$what|$value")) to.put(value) }
     }
 
-    /** Android's visible contacts, as com.palm.contact records. Null if Android gave no answer. */
+    /**
+     * Android's contacts, every account's, as com.palm.contact records. Null if Android gave no
+     * answer. Not only those Android calls visible (`IN_VISIBLE_GROUP`): an Exchange account's
+     * contacts are in no group, and its "ungrouped visible" setting is off unless something wrote
+     * one, so on the Kyocera 5,686 of 5,717 contacts were left out, though Android's own Contacts
+     * app shows them all. A raw contact marked deleted (waiting for its account to sync the
+     * deletion) is left out; the data table has no column for that, so its ids are read first.
+     */
     private fun read(wanted: MutableSet<String>): List<JSONObject>? {
-        val cursor = context.contentResolver.query(Data.CONTENT_URI, PROJECTION, "${Data.IN_VISIBLE_GROUP}=1", null,
+        val deleted = HashSet<Long>()
+        context.contentResolver.query(ContactsContract.RawContacts.CONTENT_URI, arrayOf(ContactsContract.RawContacts._ID),
+            "${ContactsContract.RawContacts.DELETED}=1", null, null)?.use { c -> while (c.moveToNext()) deleted += c.getLong(0) } ?: return null
+        val cursor = context.contentResolver.query(Data.CONTENT_URI, PROJECTION, null, null,
             "${Data.LOOKUP_KEY}, ${Data.IS_SUPER_PRIMARY} DESC, ${Data.IS_PRIMARY} DESC") ?: return null
         val out = LinkedHashMap<String, Entry>()
         cursor.use { c ->
+            val rawColumn = c.getColumnIndex(Data.RAW_CONTACT_ID)
             while (c.moveToNext()) {
+                if (deleted.isNotEmpty() && c.getLong(rawColumn) in deleted) continue
                 val key = c.text(Data.LOOKUP_KEY)
                 if (key.isEmpty()) continue
                 val e = out.getOrPut(key) { Entry(key, c.text(Data.DISPLAY_NAME)) }
@@ -232,7 +244,7 @@ class AndroidContacts(context: Context, webosRoot: File, private val db: Db8) : 
         private const val BIG = 196
         private const val SQUARE = 50
         private const val START_DELAY_MS = 5000L
-        private val PROJECTION = arrayOf(Data.LOOKUP_KEY, Data.DISPLAY_NAME, Data.MIMETYPE, Data.IS_PRIMARY, Data.IS_SUPER_PRIMARY, Data.PHOTO_URI, Data.PHOTO_ID,
+        private val PROJECTION = arrayOf(Data.LOOKUP_KEY, Data.RAW_CONTACT_ID, Data.DISPLAY_NAME, Data.MIMETYPE, Data.IS_PRIMARY, Data.IS_SUPER_PRIMARY, Data.PHOTO_URI, Data.PHOTO_ID,
             Data.DATA1, Data.DATA2, Data.DATA3, Data.DATA4, Data.DATA5, Data.DATA6, Data.DATA7, Data.DATA8, Data.DATA9, Data.DATA10)
         private val PHONE_TYPES = mapOf(Kinds.Phone.TYPE_MOBILE to "type_mobile", Kinds.Phone.TYPE_HOME to "type_home", Kinds.Phone.TYPE_WORK to "type_work",
             Kinds.Phone.TYPE_MAIN to "type_main", Kinds.Phone.TYPE_FAX_HOME to "type_personal_fax", Kinds.Phone.TYPE_FAX_WORK to "type_work_fax",

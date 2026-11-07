@@ -77,6 +77,21 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
     var suspended = false
         set(v) { if (v != field) { field = v; relayout(immediate = v) } }
 
+    /**
+     * The radii of the screen's bottom left and bottom right corners, where they are rounded
+     * (ShellChrome.fitCutout), else 0. The bar's banner and icons keep inside the curve, as the
+     * status bar's ends do at the top (luna-deltas A20); the Pre3's screen was square.
+     */
+    var corners = 0f to 0f
+        set(v) { if (v != field) { field = v; fitted = null; bar.invalidate() } }
+
+    /** How far a corner of radius [r] reaches in at [h], the bar's height, measured as the status bar does: about the top of its text, plus 2 px. */
+    private fun cornerInset(r: Float, h: Float): Float {
+        val y = h / 2f - luna.px(6f)
+        if (r <= 0f || y >= r) return 0f
+        return r - Math.sqrt((r * r - (r - y) * (r - y)).toDouble()).toFloat() + luna.px(2f)
+    }
+
     // ---- the closed bar: icons and banners ----
 
     private val icons = LinkedHashMap<Any, Bitmap?>()
@@ -106,7 +121,8 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
                 c.save(); c.clipRect(0f, 0f, width.toFloat(), h)
                 c.translate(0f, (1f - bannerProgress) * h)
                 val alpha = (bannerAlpha * 255).toInt()
-                var x = luna.px(TEXT_MARGIN)
+                val leftIn = cornerInset(corners.first, h); val rightIn = cornerInset(corners.second, h)
+                var x = maxOf(luna.px(TEXT_MARGIN), leftIn)
                 b.icon?.let {
                     val s = luna.px(BANNER_ICON)
                     drawRect.set(x, (h - s) / 2f, x + s, (h + s) / 2f)
@@ -114,7 +130,7 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
                     c.drawBitmap(it, null, drawRect, iconPaint)
                     x += s + luna.px(TEXT_MARGIN)
                 }
-                val room = width - x - luna.px(TEXT_MARGIN)
+                val room = width - x - maxOf(luna.px(TEXT_MARGIN), rightIn)
                 bannerText.alpha = 255
                 val text = fitted?.takeIf { it.first === b && it.second == room }?.third
                     ?: android.text.TextUtils.ellipsize(b.text, bannerText, room, android.text.TextUtils.TruncateAt.END).toString().also { fitted = Triple(b, room, it) }
@@ -126,7 +142,7 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
             if (fullScreen) return
             // The dashboards' icons from the right edge leftward, newest first, each at most
             // the bar's height and no gap between them.
-            var right = width.toFloat()
+            var right = width.toFloat() - cornerInset(corners.second, h)
             for (icon in icons.values.reversed()) {
                 val i = icon ?: continue
                 val ih = minOf(h, i.height.toFloat()); val iw = i.width * ih / i.height

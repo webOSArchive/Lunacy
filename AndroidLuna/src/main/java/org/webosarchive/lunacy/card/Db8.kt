@@ -958,6 +958,9 @@ class Db8(private val service: String, file: File?,
     /** [f], on the main thread, after each write to an object of [kind]: the shell's bookkeeping, not an app's watch. */
     fun onWrites(kind: String, f: () -> Unit) = work { kindListeners.getOrPut(kind) { ArrayList() } += f }
 
+    /** [f], on the main thread, once every write already asked of this database has been made (or failed). */
+    fun after(f: () -> Unit) = work { main.post(f) }
+
     /** How many live objects of [kind] pass [test], told on the main thread. */
     fun count(kind: String, test: (JSONObject) -> Boolean, done: (Int) -> Unit) = work {
         val n = try { objects(kind).values.count { !it.optBoolean("_del") && test(it) } } catch (e: Exception) { 0 }

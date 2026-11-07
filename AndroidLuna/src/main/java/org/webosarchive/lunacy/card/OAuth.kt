@@ -2,7 +2,9 @@ package org.webosarchive.lunacy.card
 
 import android.content.Context
 import android.content.Intent
+import android.app.Activity
 import android.net.Uri
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
@@ -34,7 +36,8 @@ import java.util.concurrent.Executors
  * - **On the device**: authorization code with PKCE. The sign-in page shows the provider's
  *   own page in its web view and catches the redirect (webOS's `redirects`, as webOS apps
  *   signed in to Facebook), or, for a provider that refuses web views (Google), Android's
- *   browser opens it and the redirect comes back to a listener on this device's loopback.
+ *   browser opens it, as a Custom Tab where the browser has them, and the redirect comes back
+ *   to a listener on this device's loopback.
  * - **Through the broker** (webOSArchive's oauth-broker-for-webos): for an engine too old for
  *   the provider's page. The page shows a short code and an address; the person signs in on
  *   any other device; this service polls the broker for the tokens, and refreshes through it,
@@ -201,7 +204,7 @@ class OAuth(
         if (browser) {
             listenForRedirect(listener!!, state)
             try {
-                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                context.startActivity(customTab(Uri.parse(url)))
             } catch (e: Exception) {
                 pending.remove(state); runCatching { listener.close() }
                 return call.reply(Bus.error("No browser to sign in with", -5))
@@ -210,6 +213,23 @@ class OAuth(
         } else {
             call.reply(Bus.ok(mapOf("step" to "page", "url" to url, "redirect" to redirectUri)))
         }
+    }
+
+    /**
+     * The browser's page for [uri], as a Custom Tab where the browser has them (Chrome,
+     * Firefox, Samsung Internet): the browser's own page, which a provider that refuses web
+     * views accepts, drawn over Lunacy in Lunacy's task, so the person is back in Lunacy when
+     * it closes. The protocol is only the session extra (androidx.browser's
+     * CustomTabsIntent writes the same), so no library is needed; a browser without Custom
+     * Tabs opens the page as usual.
+     */
+    private fun customTab(uri: Uri): Intent {
+        val i = Intent(Intent.ACTION_VIEW, uri)
+        i.putExtras(Bundle().apply { putBinder("android.support.customtabs.extra.SESSION", null) })
+        i.putExtra("androidx.browser.customtabs.extra.SHARE_STATE", 2)   // no share button: it's a sign-in
+        // In Lunacy's task only when started from the shell itself; otherwise a task of its own.
+        if (context !is Activity) i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return i
     }
 
     /** The loopback listener: the browser's one request with the code, answered with a page that says to go back. */
@@ -222,9 +242,14 @@ class OAuth(
             val query = parseQuery(target.substringAfter('?', ""))
             if (query["state"] != state) { runCatching { s.close() }; continue }   // a favicon, or someone else's
             val ok = query.containsKey("code")
+            // Android lets Lunacy come back over the browser only sometimes (not from behind
+            // on Android 10 and later, outside a Custom Tab): the page's button always can, a
+            // tap being the person's own (the shell's BROWSABLE filter for RETURN_URI).
             val page = "<!DOCTYPE html><html><head><meta name=viewport content=\"width=device-width\"><title>Lunacy</title></head>" +
                 "<body style=\"font-family:sans-serif;margin:2em\"><h2>" + (if (ok) "Signed in" else "Not signed in") +
-                "</h2><p>You can close this page and go back to Lunacy.</p></body></html>"
+                "</h2><p>You can close this page and go back to Lunacy.</p>" +
+                "<p><a href=\"$RETURN_URI\" style=\"display:inline-block;padding:.7em 1.4em;border-radius:.4em;" +
+                "background:#3a3a3a;color:#fff;text-decoration:none\">Back to Lunacy</a></p></body></html>"
             runCatching {
                 s.getOutputStream().write(("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n" +
                     "Content-Length: ${page.toByteArray().size}\r\n\r\n$page").toByteArray())
@@ -237,10 +262,14 @@ class OAuth(
         }
     }, "oauth-loopback").apply { isDaemon = true }.start()
 
-    /** Brings Lunacy back over the browser, where Android lets an app do that from behind. */
+    /**
+     * Brings Lunacy back over the browser, where Android lets an app do that from behind. The
+     * shell is singleTask: started again it is brought forward with what was above it in its
+     * task (the Custom Tab) closed.
+     */
     private fun backToLunacy() = runCatching {
         context.startActivity(Intent(context, org.webosarchive.lunacy.shell.ShellActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
     }
 
     private fun parseQuery(q: String): Map<String, String> = q.split('&').filter { it.contains('=') }.associate {
@@ -337,6 +366,7 @@ class OAuth(
         for (h in same) if (h != handle) accounts.put(h, JSONObject().put("provider", p.id).put("email", email).put("same", handle))
         save()
         Log.i(AppServer.TAG, "oauth: signed in to ${p.id}${if (viaBroker) " through the broker" else ""}")
+        if (existing != null) main.post { signedInAgain(p, email) }
         val config = p.j.optJSONObject("mail")?.let { JSONObject(it.toString()) } ?: JSONObject()
         config.put("email", email).put("username", email)
         config.optJSONObject("smtpConfig")?.put("username", email)
@@ -344,6 +374,48 @@ class OAuth(
             // Which mail service checks and keeps the account: IMAP, or Exchange ActiveSync.
             "validator" to p.j.optString("validator", "palm://com.palm.imap/validateAccount"),
             "templateId" to p.j.optString("templateId")))
+    }
+
+    /**
+     * The same account signed in again: its handle, which Accounts holds as its password, has
+     * working tokens behind it once more, so the account's mail services are told its
+     * credentials changed, as Accounts tells them when a password is saved. They log in at once
+     * and clear the sign-in error and its notification. The sign-in page saves the credentials
+     * too (modifyAccount), but only if it is still there when the browser hands back: a page
+     * gone by then (Lunacy restarted behind the browser) left the account asking for a sign-in
+     * it already had. Telling them twice is harmless: each is a login with good tokens. Main thread.
+     */
+    private fun signedInAgain(p: Provider, email: String) {
+        val b = bus ?: return
+        val templateId = p.j.optString("templateId").takeIf { it.isNotEmpty() } ?: return
+        // Every account, as prune reads them: the kind has no index on templateId to query by.
+        val q = JSONObject().put("from", "com.palm.account:1")
+        b.call(ACCOUNTS, "palm://com.palm.db/find", JSONObject().put("query", q).toString(), privateBus = true) { reply ->
+            val rs = runCatching { JSONObject(reply).optJSONArray("results") }.getOrNull()
+            val account = rs?.let { (0 until it.length()).mapNotNull { i -> it.optJSONObject(i) } }?.firstOrNull {
+                it.optString("templateId") == templateId && !it.optBoolean("beingDeleted") && it.optString("username").equals(email, ignoreCase = true)
+            } ?: run { Log.w(AppServer.TAG, "oauth: ${p.id} signed in again, but its account wasn't found: ${reply.take(200)}"); return@call }
+            // The template's hooks, as Accounts' modifyAccount finds them: its own, and each
+            // enabled capability's.
+            b.call(ACCOUNTS, "palm://com.palm.service.accounts/listAccountTemplates", "{}", privateBus = true) { t ->
+                val template = runCatching { JSONObject(t).optJSONArray("results") }.getOrNull()?.let { ts ->
+                    (0 until ts.length()).mapNotNull { ts.optJSONObject(it) }.firstOrNull { it.optString("templateId") == templateId }
+                } ?: return@call
+                val enabled = account.optJSONArray("capabilityProviders")?.let { a -> (0 until a.length()).map { a.optJSONObject(it)?.optString("id") } }.orEmpty()
+                val hooks = mutableListOf<String>()
+                template.optString("onCredentialsChanged").takeIf { it.isNotEmpty() }?.let { hooks += it }
+                template.optJSONArray("capabilityProviders")?.let { cps ->
+                    for (i in 0 until cps.length()) {
+                        val cp = cps.optJSONObject(i) ?: continue
+                        if (cp.optString("id") in enabled) cp.optString("onCredentialsChanged").takeIf { it.isNotEmpty() }?.let { hooks += it }
+                    }
+                }
+                val params = JSONObject().put("accountId", account.optString("_id")).toString()
+                for (h in hooks.distinct()) b.call(ACCOUNTS, h, params, privateBus = true) { r ->
+                    Log.i(AppServer.TAG, "oauth: ${p.id} signed in again; $h: $r")
+                }
+            }
+        }
     }
 
     /** The account's address, from the OpenID id_token both providers send with the tokens. */
@@ -359,9 +431,13 @@ class OAuth(
 
     /**
      * `{handle}` (private bus): the access token for a mail service's login, refreshed first
-     * when it has less than five minutes left. `{accessToken: ""}` when the account's sign-in
-     * no longer works (the refresh was refused): the login then fails as a wrong password,
-     * and Email asks for the account to be signed in again.
+     * when it has less than five minutes left; `fresh` when the provider issued it within the
+     * minute, so a refusal of it is the server's last word. `{accessToken: ""}` when the
+     * account's sign-in no longer works (the refresh was refused): the login then fails as a
+     * wrong password, and Email asks for the account to be signed in again. Error -12 when
+     * no working token can be had just now (the provider couldn't be reached to refresh it):
+     * the preload then fails the connection, which the service tries again later, rather
+     * than a login it would take as a wrong password (mailauth.h).
      */
     private fun token(c: Bus.Call) {
         val handle = c.params.optString("handle")
@@ -374,15 +450,22 @@ class OAuth(
             val stale = c.params.optBoolean("stale") && System.currentTimeMillis() - (a?.got ?: 0) > 60 * 1000
             val reply = when {
                 a == null -> Bus.error("Unknown handle", -11)
-                !stale && a.expires - System.currentTimeMillis() > 5 * 60 * 1000 -> Bus.ok(mapOf("accessToken" to a.access))
-                else -> Bus.ok(mapOf("accessToken" to refreshed(held, a)))
+                !stale && a.expires - System.currentTimeMillis() > 5 * 60 * 1000 -> given(a, a.access)
+                else -> refreshed(a, stale)?.let { given(a, it) } ?: Bus.error("Couldn't refresh the sign-in just now", -12)
             }
             main.post { c.reply(reply) }
         }
     }
 
-    /** The account's new access token, or "" when the provider refused the refresh. Worker thread. */
-    private fun refreshed(handle: String, a: Account): String {
+    private fun given(a: Account, token: String) =
+        Bus.ok(mapOf("accessToken" to token, "fresh" to (token.isNotEmpty() && System.currentTimeMillis() - a.got < 60 * 1000)))
+
+    /**
+     * The account's new access token; "" when the provider refused the refresh (the sign-in
+     * is over); null when it couldn't be asked and the token held won't do (expired, or the
+     * one the server just refused: [stale]). Worker thread.
+     */
+    private fun refreshed(a: Account, stale: Boolean): String? {
         val p = providers[a.provider]
         val refresh = a.refresh ?: return ""
         val r = runCatching {
@@ -401,14 +484,17 @@ class OAuth(
             return a.access
         }
         // Refused (a revoked or expired refresh token) is the end of this sign-in; a network
-        // failure isn't: the old token is tried, and the next login asks again.
+        // failure isn't: the old token while it lasts, and otherwise none just now, which
+        // the login takes as a connection failure and tries again (mailauth.h).
         if (t != null && (t.optString("error") == "invalid_grant" || t.optString("status") == "invalid_grant")) {
-            Log.w(AppServer.TAG, "oauth: ${a.provider} refused the refresh; the account needs signing in again")
+            // The provider's reason (Microsoft's AADSTS code: inactivity, a password change, a
+            // policy) says whether a sign-in was really needed, from a saved log.
+            Log.w(AppServer.TAG, "oauth: ${a.provider} refused the refresh; the account needs signing in again: ${t.optString("error_description").take(300)}")
             a.refresh = null; a.access = ""; save()
             return ""
         }
         Log.w(AppServer.TAG, "oauth: couldn't refresh a ${a.provider} token: ${r.exceptionOrNull()?.message ?: t}")
-        return a.access
+        return a.access.takeIf { !stale && it.isNotEmpty() && a.expires - System.currentTimeMillis() > 30 * 1000 }
     }
 
     private var bus: Bus? = null
@@ -481,6 +567,10 @@ class OAuth(
         /** Kept in mailauth.h too (MAILAUTH_HANDLE). */
         const val HANDLE = "oauth2:"
         const val DEFAULT_BROKER = "https://oauth.wosa.link"
+        /** The caller of the calls Accounts makes itself, when they are made for it here (prune, signedInAgain). */
+        private const val ACCOUNTS = "com.palm.service.accounts"
+        /** The sign-in's way back from the browser: the shell's BROWSABLE intent filter (AndroidManifest.xml). */
+        const val RETURN_URI = "org.webosarchive.lunacy://signed-in"
         /** The apps that add mail accounts: Email's own wizard, and Accounts in Settings. */
         private val PAGE_HOSTS = setOf("com.palm.app.email", "com.palm.app.accounts")
     }

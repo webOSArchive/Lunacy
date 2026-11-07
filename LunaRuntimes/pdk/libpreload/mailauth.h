@@ -22,6 +22,15 @@
  * that happens to look like one. Nothing else in the stream is changed or held longer than
  * it takes to see that a line isn't one of these.
  *
+ * A refusal is final for the service only when the sign-in is really over. The services take
+ * a refused login as a wrong password and stop trying until the credentials change, which
+ * left Gmail asking to be signed in again after one bad moment. So when no token can be had
+ * just now (the provider couldn't be reached to refresh it), and the first time a token that
+ * should have worked is refused (a provider can end one early), the connection is dropped
+ * instead: the service tries again later, as after a network failure, and that login asks for
+ * a fresh token. A token that was fresh or empty (the sign-in ended), or that a retry asked
+ * for, is refused to the service as it is.
+ *
  * Pure logic: the caller supplies how bytes reach the server and how a handle becomes a
  * token (mailauth_io), so the host test (tests/mailauth_test.c) drives it without sockets.
  */
@@ -42,7 +51,8 @@ struct mailauth_io {
 	/* Every byte to the server, sent in full; 0, or -1 when the connection failed. */
 	int (*send)(void *ctx, const char *p, size_t n);
 	/* The access token for user's handle into buf: 1 with the token (empty when the
-	   account's sign-in no longer works), 0 when the handle is unknown. stale: the server
+	   account's sign-in no longer works), 2 with one the provider has only just issued, 0
+	   when the handle is unknown, -1 when no token can be had just now. stale: the server
 	   refused the last token given for this handle, so a fresh one is wanted. */
 	int (*token)(void *ctx, const char *user, const char *handle, int stale, char *buf, size_t cap);
 	void *ctx;
@@ -69,6 +79,7 @@ struct mailauth {
 	int smtp_replay;                 /* AUTH LOGIN in place of PLAIN: 1 user next, 2 password next */
 	char replay_user[512], replay_pass[512];
 	char sent_handle[64];            /* the handle whose token went in the XOAUTH2 just sent */
+	int sent_final;                  /* a refusal of that token is the service's to see */
 	int off;                         /* COMPRESS sent: the rest of the connection is deflate's, not lines */
 };
 
@@ -76,17 +87,26 @@ struct mailauth {
    fresh one (the provider can end a token before its time, after a password change). */
 static char ma_refused[64];
 
+/* 1 with a token in buf, 0 for a handle the service doesn't know, -1 when none can be had now. */
 static int ma_get_token(struct mailauth *m, const struct mailauth_io *io, const char *user, const char *handle, char *buf, size_t cap)
 {
 	int stale = strcmp(ma_refused, handle) == 0;
 	int r = io->token(io->ctx, user, handle, stale, buf, cap);
-	if (r) { if (stale) ma_refused[0] = 0; snprintf(m->sent_handle, sizeof m->sent_handle, "%s", handle); }
-	return r;
+	if (r <= 0) return r;
+	if (stale) ma_refused[0] = 0;
+	snprintf(m->sent_handle, sizeof m->sent_handle, "%s", handle);
+	m->sent_final = stale || r == 2 || !buf[0];
+	return 1;
 }
 
-static void ma_was_refused(struct mailauth *m)
+/* The server refused the token just sent: the next login for its handle asks for a fresh one
+   (the provider can end a token before its time, after a password change). 1 when the
+   refusal is hidden from the service as a dropped connection, so it tries again. */
+static int ma_was_refused(struct mailauth *m)
 {
-	if (m->sent_handle[0]) snprintf(ma_refused, sizeof ma_refused, "%s", m->sent_handle);
+	if (!m->sent_handle[0]) return 0;
+	snprintf(ma_refused, sizeof ma_refused, "%s", m->sent_handle);
+	return !m->sent_final;
 }
 
 static void mailauth_init(struct mailauth *m) { memset(m, 0, sizeof *m); }
@@ -217,7 +237,9 @@ static int ma_line(struct mailauth *m, const struct mailauth_io *io, const char 
 			return io->send(io->ctx, s, n);
 		memcpy(user, z1 + 1, (size_t)(z2 - z1 - 1)); user[z2 - z1 - 1] = 0;
 		memcpy(pass, z2 + 1, (size_t)(raw + rn - z2 - 1)); pass[raw + rn - z2 - 1] = 0;
-		if (ma_is_handle(pass) && ma_get_token(m, io, user, pass, token, sizeof token)) {
+		int t = ma_is_handle(pass) ? ma_get_token(m, io, user, pass, token, sizeof token) : 0;
+		if (t < 0) return -1;   /* no token just now: the connection fails, and is tried again */
+		if (t) {
 			char *x = ma_xoauth2(user, token);
 			memset(token, 0, sizeof token);
 			if (!x) return -1;
@@ -245,8 +267,10 @@ static int ma_line(struct mailauth *m, const struct mailauth_io *io, const char 
 	}
 	if (sp && sp - s < 63 && ma_starts_ci(sp + 1, (size_t)(end - sp - 1), "LOGIN ")) {
 		const char *p = sp + 7;
-		if (ma_quoted(&p, end, user, sizeof user) && p < end && *p == ' ' && (p++, ma_quoted(&p, end, pass, sizeof pass))
-			&& ma_is_handle(pass) && ma_get_token(m, io, user, pass, token, sizeof token)) {
+		int t = ma_quoted(&p, end, user, sizeof user) && p < end && *p == ' ' && (p++, ma_quoted(&p, end, pass, sizeof pass))
+			&& ma_is_handle(pass) ? ma_get_token(m, io, user, pass, token, sizeof token) : 0;
+		if (t < 0) return -1;
+		if (t) {
 			char *x = ma_xoauth2(user, token);
 			memset(token, 0, sizeof token);
 			if (!x) return -1;
@@ -356,18 +380,19 @@ static int ma_in_line(struct mailauth *m, const struct mailauth_io *io, const ch
 {
 	char b64[700];
 	if (m->imap_await) {
-		if (n >= 1 && s[0] == '+') { ma_was_refused(m); return io->send(io->ctx, "\r\n", 2) < 0 ? -1 : 0; }
+		/* A challenge is the server's refusal; the tagged NO follows the empty answer. */
+		if (n >= 1 && s[0] == '+') return io->send(io->ctx, "\r\n", 2) < 0 ? -1 : 0;
 		size_t t = strlen(m->imap_tag);
 		if (n > t && strncmp(s, m->imap_tag, t) == 0 && s[t] == ' ') {
 			m->imap_await = 0;
-			if (n > t + 3 && strncasecmp(s + t + 1, "OK", 2) != 0) ma_was_refused(m);   /* a NO with no challenge (Microsoft) */
+			if (n > t + 3 && strncasecmp(s + t + 1, "OK", 2) != 0 && ma_was_refused(m)) return -1;
 		}
 		return ma_queue(m, s, n);
 	}
 	if (m->smtp_await) {
 		if (n >= 4 && strncmp(s, "334", 3) == 0) { ma_was_refused(m); return io->send(io->ctx, "\r\n", 2) < 0 ? -1 : 0; }
 		m->smtp_await = 0;
-		if (n >= 1 && s[0] == '5') ma_was_refused(m);
+		if (n >= 1 && s[0] == '5' && ma_was_refused(m)) return -1;
 		return ma_queue(m, s, n);
 	}
 	if (m->smtp_replay) {
@@ -398,7 +423,8 @@ static size_t mailauth_pending(struct mailauth *m, char *buf, size_t cap)
 /*
  * got bytes arrived from the server in buf (which holds cap). They are taken in, and buf is
  * filled with what the service should read now; returns that length (0: nothing yet - the
- * rest of a line, or a challenge answered here). -1 when answering a challenge failed.
+ * rest of a line, or a challenge answered here). -1 when answering a challenge failed, or
+ * when a refusal is to reach the service as a dropped connection (see the top).
  */
 static long mailauth_in(struct mailauth *m, const struct mailauth_io *io, char *buf, size_t got, size_t cap)
 {

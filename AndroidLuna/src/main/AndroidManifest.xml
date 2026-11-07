@@ -96,6 +96,15 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- The way back from a sign-in in the browser: the "Back to Lunacy" button on the
+                 page Lunacy's loopback shows when the provider hands back (OAuth.RETURN_URI).
+                 It only brings the shell forward. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="org.webosarchive.lunacy" android:host="signed-in" />
+            </intent-filter>
             <!-- Proof of concept: Lunacy as Android's home screen. Android offers it as a
                  launcher; Home then comes here (onNewIntent). -->
             <intent-filter>

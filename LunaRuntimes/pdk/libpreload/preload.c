@@ -1368,24 +1368,26 @@ static size_t ma_json(char *out, size_t cap, const char *s)
 	return o;
 }
 
-/* The access token for a handle, from palm://org.webosarchive.lunacy.oauth/token. */
+/* The access token for a handle, from palm://org.webosarchive.lunacy.oauth/token: mailauth_io's
+   token (1, or 2 for one just issued; 0 for a handle the service doesn't know; -1 when no
+   token can be had now - the service unreachable, or the provider for a refresh). */
 static int ma_token(void *ctx, const char *user, const char *handle, int stale, char *buf, size_t cap)
 {
 	(void)ctx;
 	const char *bus = getenv("LUNACY_BUS"), *caller = getenv("LUNACY_BUS_TOKEN");
-	if (!bus || !caller) return 0;
+	if (!bus || !caller) return 0;   /* not under Lunacy: no handle is one of ours */
 	char eu[1100], payload[1400], ep[3000], req[4000];
 	ma_json(eu, sizeof eu, user);
 	snprintf(payload, sizeof payload, "{\"handle\":\"%s\",\"user\":\"%s\"%s}", handle, eu, stale ? ",\"stale\":true" : "");
 	ma_json(ep, sizeof ep, payload);
 	int len = snprintf(req, sizeof req, "{\"token\":\"%s\",\"url\":\"palm://org.webosarchive.lunacy.oauth/token\",\"payload\":\"%s\"}\n", caller, ep);
 	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
-	if (fd < 0) return 0;
+	if (fd < 0) return -1;
 	struct sockaddr_un a = { .sun_family = AF_UNIX };
 	strncpy(a.sun_path, bus, sizeof a.sun_path - 1);
 	static char reply[MAILAUTH_TOKEN_MAX + 512];
 	size_t got = 0;
-	if (connect(fd, (struct sockaddr *)&a, sizeof a) != 0 || write(fd, req, (size_t)len) != len) { close(fd); return 0; }
+	if (connect(fd, (struct sockaddr *)&a, sizeof a) != 0 || write(fd, req, (size_t)len) != len) { close(fd); return -1; }
 	/* A refresh can take the service a few seconds; the service's own login waits 30. */
 	while (got < sizeof reply - 1) {
 		struct pollfd pf = { fd, POLLIN, 0 };
@@ -1397,9 +1399,11 @@ static int ma_token(void *ctx, const char *user, const char *handle, int stale, 
 	}
 	close(fd);
 	reply[got] = 0;
-	if (!strstr(reply, "\"returnValue\":true")) return 0;
+	/* -11: the service has no such handle. Any other error, or no answer, is for now. */
+	if (!strstr(reply, "\"returnValue\":true")) { int r = strstr(reply, "\"errorCode\":-11") ? 0 : -1; memset(reply, 0, got); return r; }
 	const char *t = strstr(reply, "\"accessToken\":\"");
-	if (!t) return 0;
+	if (!t) return -1;
+	int fresh = strstr(reply, "\"fresh\":true") != NULL;
 	size_t o = 0;
 	for (t += 15; *t && *t != '"' && o + 1 < cap; t++) {
 		if (*t == '\\' && t[1]) t++;   /* \/ and the like: tokens are printable ASCII */
@@ -1407,7 +1411,7 @@ static int ma_token(void *ctx, const char *user, const char *handle, int stale, 
 	}
 	buf[o] = 0;
 	memset(reply, 0, got);
-	return 1;
+	return fresh ? 2 : 1;
 }
 
 GIOStatus g_io_channel_write_chars(GIOChannel *ch, const char *buf, long count, size_t *written, GError **err)
@@ -1944,7 +1948,9 @@ int curl_easy_setopt(CURL *h, int option, ...)
 			struct lc_handle *e = lc_find(h, 1);
 			if (e) {
 				int stale = strcmp(ma_refused, colon + 1) == 0;
-				if (ma_token(NULL, user, colon + 1, stale, e->bearer, sizeof e->bearer)) {
+				/* No token just now (-1) still goes as the handle, refused as before: mojomail-eas
+				   has no dropped connection here to retry (Docs/oauth.md, Open). */
+				if (ma_token(NULL, user, colon + 1, stale, e->bearer, sizeof e->bearer) > 0) {
 					if (stale) ma_refused[0] = 0;
 					snprintf(e->handle, sizeof e->handle, "%s", colon + 1);
 					lc_real_setopt(h, LC_CURLOPT_USERPWD, (void *)NULL);

@@ -10,15 +10,15 @@ webOSArchive's broker for devices too old for the providers' pages); the work st
 ## How it fits together
 
 ```
- Email / Accounts ──Add Account──▶ "Google" / "Microsoft" template (validator.customUI)
+ Email / Accounts ──Add Account──▶ "Google" / "Microsoft Outlook" template (validator.customUI)
                                      │
                                      ▼
       org.webosarchive.lunacy.signin (the sign-in page, in a cross-app frame)
         │ signIn ─────────▶ palm://org.webosarchive.lunacy.oauth   (card/OAuth.kt)
         │                    ├ on the device: the provider's page in the frame's WebView
         │                    │   (its redirect caught with webOS's `redirects`), or Android's
-        │                    │   browser with a loopback listener (a provider that refuses
-        │                    │   web views: Google)
+        │                    │   browser, as a Custom Tab, with a loopback listener (a provider
+        │                    │   that refuses web views: Google)
         │                    └ broker: oauth.wosa.link's code; the person signs in elsewhere
         │ ◀── handle "oauth2:<32 hex>", email, the provider's server settings
         │
@@ -43,7 +43,7 @@ webOSArchive's broker for devices too old for the providers' pages); the work st
   in every native process, stands in front of both:
   - IMAP: `tag LOGIN "user" "oauth2:…"` becomes `tag AUTHENTICATE XOAUTH2 <payload>` (SASL-IR).
     A refused token draws a `+ <json>` challenge (Gmail); it is answered with an empty line and
-    hidden, so the service sees only the tagged NO it expects, and reports a wrong password.
+    hidden, so the service sees only the tagged NO it expects (but see "A refusal" below).
   - SMTP: mojomail prefers AUTH LOGIN, which sends the password last, in a line of its own.
     So when a server offers XOAUTH2, its EHLO is shown without LOGIN and with PLAIN, and
     `AUTH PLAIN <\0user\0oauth2:…>` becomes `AUTH XOAUTH2 <payload>`; a `334` challenge is
@@ -55,9 +55,25 @@ webOSArchive's broker for devices too old for the providers' pages); the work st
     every byte after it is deflate's. (Holding a compressed command, which has no newline, hung
     every Gmail sync and every other IMAP account that compresses, on the first Gmail test.) A refused token makes the next login for that handle ask for a fresh one
     (`stale`), since a provider can end a token early (a password change).
+  - **A refusal is final only when the sign-in is over (2026-11-07).** Palm's services take a
+    refused login as a wrong password and stop: no retry until the credentials change, and
+    Email's "Check your login and password" stays up. That turned one bad moment into a
+    sign-in prompt (Gmail on the Fold3, overnight 2026-11-06: most likely a refresh that
+    couldn't reach Google while the phone dozed, handing back the expired token). So when no
+    token can be had just now (`token` answers error -12), the login's write fails; and the
+    first refusal of a token that should have worked drops the connection instead of showing
+    the NO. The service takes either as a network failure and tries again (30 s, measured),
+    and that login asks for a fresh token. A refusal is shown as it is for a token the
+    provider issued within the minute (`fresh`), an empty one (the refresh was refused), and
+    one a retry asked for. IMAP and SMTP only: for Exchange (curl) no token just now still
+    goes as the handle and is refused as before (Open).
 - **The token** comes over the process's own luna-send link (`LUNACY_BUS` and the caller
   token Lunacy gave the process), so `oauth/token` is reachable on the private bus only, and
-  only from processes Lunacy started. It refreshes a token with under five minutes left.
+  only from processes Lunacy started. It refreshes a token with under five minutes left. Its
+  answer: the token, with `fresh` when it is under a minute old; `""` when the provider refused
+  the refresh (`invalid_grant`, logged with the provider's reason, Microsoft's AADSTS code); error
+  -12 when the provider couldn't be asked and the token held won't do (expired, or the one just
+  refused); error -11 for a handle it doesn't know.
 - **The sign-in page** asks the mail service to validate the account with the handle, as
   Email's wizard validates a password, so a new account is checked against the real server
   before it is made. Then Accounts' own Account Settings page and Create Account follow, as for
@@ -66,8 +82,12 @@ webOSArchive's broker for devices too old for the providers' pages); the work st
   wrong password and Email shows its "Check your login and password". The account's page in
   the Accounts app (Change Login Settings) offers Sign In Again: the same account signed in
   again keeps its handle, and the page saves the credentials (`modifyAccount`) so the mail
-  service hears `credentialsChanged` and logs in at once. Email's own Change login settings
-  opens Palm's password form instead (open question below).
+  service hears `credentialsChanged` and logs in at once. The OAuth service also sends the
+  template's `credentialsChanged` hooks itself as soon as it has the new tokens (as Accounts'
+  modifyAccount would): the page may be gone by the time the browser hands back, and on the
+  Fold3 (2026-11-07, 14:59) a sign-in saved good tokens while the account kept its error and
+  its notification, since nothing told the mail service. Twice is harmless. Email's own Change
+  login settings opens Palm's password form instead (open question below).
 - **Removing an account** takes its tokens at the next start of Lunacy (a day's grace for a
   sign-in whose account is still being made).
 
@@ -83,7 +103,7 @@ provider (the test setup below).
 |---|---|---|
 | Mail | IMAP imap.gmail.com:993 SSL, SMTP smtp.gmail.com:465 SSL | IMAP outlook.office365.com:993 SSL, SMTP smtp.office365.com:587 TLS |
 | Scopes | `https://mail.google.com/ openid email` | `https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access openid email` |
-| On the device | Android's browser and a loopback redirect (`http://127.0.0.1:<port>/`): Google refuses sign-in in a WebView (`disallowed_useragent`). Offered only where a browser is installed | The sign-in page's WebView; redirect `https://login.microsoftonline.com/common/oauth2/nativeclient` |
+| On the device | Android's browser, as a Custom Tab where the browser has them (Lunacy's task, so Lunacy is in front again when it closes), and a loopback redirect (`http://127.0.0.1:<port>/`): Google refuses sign-in in a WebView (`disallowed_useragent`). Offered only where a browser is installed. The loopback's "Signed in" page has a Back to Lunacy button (`org.webosarchive.lunacy://signed-in`, the shell's BROWSABLE filter) for when Android won't let Lunacy come forward itself | The sign-in page's WebView; redirect `https://login.microsoftonline.com/common/oauth2/nativeclient` |
 | Client | A "Desktop app" OAuth client (its secret ships with it, as Google intends for desktop clients) | A public client ("Mobile and desktop applications"), no secret |
 
 **The clients (2026-11-05).** Google: a Desktop app client, its id in `providers.json`. Its
@@ -223,7 +243,7 @@ provider. A development build is pointed at both by `files/oauth-providers.json`
 
 `LunaRuntimes/pdk/tests/mailauth_test.c` tests the translation on the build machine (it runs
 in every PDK build): the logins, the hidden challenges, the EHLO change and AUTH LOGIN replay,
-the stale-token retry, and a message body cut every which way going through byte for byte.
+the stale-token retry, the dropped first refusal and the failed write when no token can be had, and a message body cut every which way going through byte for byte.
 `wbxmlfilter_test.c` and `composemail_test.c` do the same for adapters 4 and 5: replies with the
 newer pages fed whole and in pieces, and the ComposeMail bytes Exchange Online accepted.
 
@@ -236,7 +256,28 @@ Accounts app (once on the page, once through the broker with the code entered on
 machine) brought the account back at once. The A7 has no web browser, so the Android-browser
 path (Google's) is not yet tried on a device: it needs one with a browser.
 
+**Checked on the Galaxy Z Fold3 (2026-11-07, Android 15, arm64 debug, Firefox), real Gmail:**
+- Before: Android blocked Lunacy coming forward from behind Firefox (`BAL_BLOCK`); the
+  person came back through the task switcher.
+- Google's page now opens as a Firefox Custom Tab in Lunacy's task. When Google hands back,
+  Android lets Lunacy forward (`BAL_ALLOW_FOREGROUND`), which closes the tab: back in Accounts
+  at once (twice).
+- Sign In Again: the OAuth service's own `credentialsChanged` reached mojomail-imap
+  (`returnValue: true`) 0.6 s before the page's modifyAccount.
+- An expired token whose refresh failed (the record pointed at the broker, which has no
+  Google app): no error on the account, no notification; mojomail-imap tried again in 30 s,
+  and once the refresh could reach Google, it refreshed and went back to push.
+- A token Gmail refused before its time: the connection dropped, the retry 0.4 s later asked
+  for a fresh token (`stale`), refreshed, push.
+- After a force-stop in the middle of those failures, mojomail-imap tried Gmail again only
+  when Email was opened (its syncFolder). Without the force-stop it retried by itself.
+
 ## Open
+
+- **Exchange and a token that can't be had just now:** the curl path still sends the handle,
+  which the server refuses, so a refresh that couldn't reach Microsoft can still end in a
+  sign-in prompt for an EAS account. It needs a way to fail the request as a network failure
+  that mojomail-eas retries.
 
 
 - **Microsoft 365 over Exchange:** mail and sending work (A7, 2026-11-06). Still to see: real

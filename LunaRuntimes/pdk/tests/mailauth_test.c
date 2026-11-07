@@ -20,6 +20,8 @@ static int failures;
 
 #define HANDLE "oauth2:0123456789abcdef0123456789abcdef"
 #define DEAD   "oauth2:ffffffffffffffffffffffffffffffff"
+#define FRESH  "oauth2:11111111111111111111111111111111"   /* a token the provider has just issued */
+#define LATER  "oauth2:22222222222222222222222222222222"   /* no token just now: the provider unreachable */
 
 static int fake_send(void *ctx, const char *p, size_t n) { (void)ctx; memcpy(sent + sent_len, p, n); sent_len += n; return 0; }
 static int stale_asks;
@@ -29,6 +31,8 @@ static int fake_token(void *ctx, const char *user, const char *handle, int stale
 	if (stale) stale_asks++;
 	if (!strcmp(handle, HANDLE)) { snprintf(buf, cap, "ya29.TOKEN-123"); return 1; }
 	if (!strcmp(handle, DEAD)) { buf[0] = 0; return 1; }
+	if (!strcmp(handle, FRESH)) { snprintf(buf, cap, "ya29.NEW"); return 2; }
+	if (!strcmp(handle, LATER)) return -1;
 	return 0;
 }
 static const struct mailauth_io io = { fake_send, fake_token, NULL };
@@ -72,6 +76,22 @@ static void read_as_service(struct mailauth *m, const char *s, size_t step)
 	}
 }
 
+/* The server's bytes in one piece: 1 when the connection is dropped (mailauth_in's -1). */
+static int read_drops(struct mailauth *m, const char *s)
+{
+	char buf[4096]; size_t n = strlen(s);
+	memcpy(buf, s, n);
+	long r = mailauth_in(m, &io, buf, n, sizeof buf);
+	if (r > 0) { memcpy(got + got_len, buf, (size_t)r); got_len += (size_t)r; }
+	return r < 0;
+}
+
+static void login(struct mailauth *m, const char *handle)
+{
+	char l[256]; snprintf(l, sizeof l, "a1 LOGIN \"u\" \"%s\"\r\n", handle);
+	write_as_service(m, l, strlen(l), 4096);
+}
+
 static void reset(struct mailauth *m) { mailauth_free(m); mailauth_init(m); sent_len = 0; got_len = 0; }
 
 static int sent_is(const char *want) { return sent_len == strlen(want) && !memcmp(sent, want, sent_len); }
@@ -110,9 +130,11 @@ int main(void)
 		check(sent_is(want), "IMAP LOGIN with a handle becomes AUTHENTICATE XOAUTH2");
 	}
 
-	/* A refused token's challenge is answered and hidden; the tagged NO arrives. */
+	/* A refused token's challenge is answered and hidden; the tagged NO arrives (for a token
+	   a retry asked for: see below for the first refusal). */
 	for (int i = 0; i < 4; i++) {
 		reset(&m);
+		snprintf(ma_refused, sizeof ma_refused, "%s", HANDLE);
 		const char *login = "~A3 LOGIN \"ada@example.org\" \"" HANDLE "\"\r\n";
 		write_as_service(&m, login, strlen(login), 4096);
 		sent_len = 0;
@@ -122,22 +144,66 @@ int main(void)
 		check(!mailauth_watching(&m), "IMAP: watching ends with the tagged reply");
 	}
 
-	/* After a refusal, the next login for that handle asks for a fresh token, once. */
+	/* The first refusal of a token that should have worked drops the connection, so the
+	   service tries again instead of taking a wrong password; the retry asks for a fresh
+	   token, and its refusal is the service's to see. */
 	ma_refused[0] = 0;   /* the challenge cases above left one */
 	reset(&m);
-	{ const char *l = "a1 LOGIN \"u\" \"" HANDLE "\"\r\n"; write_as_service(&m, l, strlen(l), 4096); }
+	login(&m, HANDLE);
 	read_as_service(&m, "a1 OK done\r\n", 4096);
 	stale_asks = 0;
 	reset(&m);
-	{ const char *l = "a1 LOGIN \"u\" \"" HANDLE "\"\r\n"; write_as_service(&m, l, strlen(l), 4096); }
-	read_as_service(&m, "a1 NO AUTHENTICATE failed.\r\n", 4096);
+	login(&m, HANDLE);
+	check(!read_drops(&m, "+ eyJzdGF0dXMiOiI0MDAifQ==\r\n"), "the challenge alone doesn't drop");
+	check(read_drops(&m, "a1 NO [AUTHENTICATIONFAILED] Invalid credentials (Failure)\r\n"), "a first refusal drops the connection");
+	check(got_len == 0, "a dropped refusal shows the service nothing");
 	reset(&m);
-	{ const char *l = "a1 LOGIN \"u\" \"" HANDLE "\"\r\n"; write_as_service(&m, l, strlen(l), 4096); }
+	login(&m, HANDLE);
 	check(stale_asks == 1, "a refused token makes the next login ask for a fresh one");
+	check(!read_drops(&m, "a1 NO AUTHENTICATE failed.\r\n"), "a retry's refusal isn't dropped");
+	check(got_is("a1 NO AUTHENTICATE failed.\r\n"), "a retry's refusal reaches the service");
+	reset(&m);
+	login(&m, HANDLE);
+	check(stale_asks == 2, "after a final refusal the next login asks afresh again");
 	read_as_service(&m, "a1 OK done\r\n", 4096);
 	reset(&m);
-	{ const char *l = "a1 LOGIN \"u\" \"" HANDLE "\"\r\n"; write_as_service(&m, l, strlen(l), 4096); }
-	check(stale_asks == 1, "a login after a success doesn't ask for a fresh token");
+	login(&m, HANDLE);
+	check(stale_asks == 2, "a login after a success doesn't ask for a fresh token");
+	reset(&m);
+	login(&m, HANDLE);
+	check(read_drops(&m, "a1 NO [AUTHENTICATIONFAILED] Invalid credentials (Failure)\r\n"), "a Microsoft-style NO without a challenge drops too");
+	ma_refused[0] = 0;
+
+	/* A token just issued, or an empty one (the sign-in ended): refused to the service at once. */
+	const char *final_handles[] = { FRESH, DEAD };
+	for (int i = 0; i < 2; i++) {
+		reset(&m);
+		login(&m, final_handles[i]);
+		check(!read_drops(&m, "a1 NO [AUTHENTICATIONFAILED] Invalid credentials (Failure)\r\n"), "a fresh or empty token's refusal isn't dropped");
+		check(got_is("a1 NO [AUTHENTICATIONFAILED] Invalid credentials (Failure)\r\n"), "a fresh or empty token's refusal reaches the service");
+		ma_refused[0] = 0;
+	}
+
+	/* No token just now: the login's write fails (a connection failure, tried again), and
+	   nothing reaches the server. */
+	for (int k = 0; k < 4; k++) {
+		reset(&m);
+		char l[256]; snprintf(l, sizeof l, "a1 LOGIN \"u\" \"%s\"\r\n", LATER);
+		size_t at = 0; long r = 0; int direct;
+		while (at < strlen(l) && (r = mailauth_out(&m, &io, l + at, (size_t)(k == 3 ? strlen(l) - at : 1 + (size_t)k), &direct)) > 0) at += (size_t)r;
+		check(r < 0, "IMAP: no token just now fails the write");
+		check(sent_len == 0, "IMAP: no token just now sends nothing");
+	}
+	reset(&m);
+	write_as_service(&m, "EHLO x\r\n", 8, 4096);
+	read_as_service(&m, "250-x\r\n250 AUTH LOGIN PLAIN XOAUTH2\r\n", 4096);
+	sent_len = 0;
+	{
+		int direct;
+		snprintf(line, sizeof line, "AUTH PLAIN %s\r\n", plain("u", LATER));
+		check(mailauth_out(&m, &io, line, strlen(line), &direct) < 0, "SMTP: no token just now fails the write");
+		check(sent_len == 0, "SMTP: no token just now sends nothing");
+	}
 
 	/* Success: capabilities and OK pass. */
 	reset(&m);
@@ -191,6 +257,7 @@ int main(void)
 		write_as_service(&m, "EHLO x\r\n", 8, 4096);
 		read_as_service(&m, ehlo[1][0], 4096);
 		sent_len = 0; got_len = 0;
+		snprintf(ma_refused, sizeof ma_refused, "%s", HANDLE);   /* a retry's token: its refusal is shown */
 		snprintf(line, sizeof line, "AUTH PLAIN %s\r\n", plain("ada@example.org", HANDLE));
 		write_as_service(&m, line, strlen(line), steps[k]);
 		snprintf(want, sizeof want, "AUTH XOAUTH2 %s\r\n", xoauth2("ada@example.org", "ya29.TOKEN-123"));
@@ -201,6 +268,18 @@ int main(void)
 		check(got_is("535 5.7.8 Username and Password not accepted\r\n"), "the SMTP challenge is hidden");
 		check(!mailauth_watching(&m), "SMTP: watching ends with the reply");
 	}
+	/* ...and the first refusal of one that should have worked drops the connection. */
+	ma_refused[0] = 0;
+	reset(&m);
+	write_as_service(&m, "EHLO x\r\n", 8, 4096);
+	read_as_service(&m, ehlo[1][0], 4096);
+	sent_len = 0; got_len = 0;
+	snprintf(line, sizeof line, "AUTH PLAIN %s\r\n", plain("ada@example.org", HANDLE));
+	write_as_service(&m, line, strlen(line), 4096);
+	check(!read_drops(&m, "334 eyJzdGF0dXMiOiI0MDAifQ==\r\n"), "SMTP: the challenge alone doesn't drop");
+	check(read_drops(&m, "535 5.7.8 Username and Password not accepted\r\n"), "SMTP: a first refusal drops the connection");
+	check(got_len == 0, "SMTP: a dropped refusal shows the service nothing");
+	ma_refused[0] = 0;
 
 	/* A real password where PLAIN was only shown because of the change: AUTH LOGIN for it. */
 	for (int k = 0; k < 4; k++) {

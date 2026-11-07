@@ -824,14 +824,18 @@ keeping CE's Enyo app rather than Palm's Mojo one, and codepoet decides each.** 
 and password (Palm's Google template; Microsoft through Exchange); both providers refuse that
 now ([oauth.md](oauth.md)). What a person sees instead:
 
-- **Add Account** lists Google (the TouchPad's Google icon) and Microsoft (an Outlook icon)
+- **Add Account** lists Google (the TouchPad's Google icon) and Microsoft Outlook (an Outlook icon; "Microsoft" until 2026-11-07)
   beside Palm's types, in Email and in Accounts.
 - **A sign-in page** in place of the username and password form, in the TouchPad's account-page
   look: a line on what happens, Sign In, and Sign In on Another Device (the broker's short code
   and address, for a device whose engine can't show the provider's page).
 - **The provider's own page** inside that page, for Microsoft. For Google, which refuses web
   views, Android's browser opens over Lunacy, and the person comes back to Lunacy when it says
-  they're signed in. That is the visible difference to decide on.
+  they're signed in. That is the visible difference to decide on. Since 2026-11-07 it is a
+  Custom Tab where the browser has them (the browser's page with its own toolbar and close
+  button, over Lunacy in Lunacy's task), and Lunacy comes forward by itself when the provider
+  hands back, closing it (Fold3, Firefox); a "Back to Lunacy" button on the "Signed in" page
+  covers an Android that won't allow that.
 - After that, Accounts' own Account Settings and Create Account, as for any account. A sign-in
   that stops working shows Email's own "Check your login and password"; the account's page in
   Accounts has Sign In Again. An Exchange server's security policy brings webOS's own "Device

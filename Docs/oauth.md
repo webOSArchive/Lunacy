@@ -10,7 +10,7 @@ webOSArchive's broker for devices too old for the providers' pages); the work st
 ## How it fits together
 
 ```
- Email / Accounts ──Add Account──▶ "Google" / "Microsoft Outlook" template (validator.customUI)
+ Email / Accounts ──Add Account──▶ "Google" / "Microsoft Outlook" / "Microsoft 365" template (validator.customUI)
                                      │
                                      ▼
       org.webosarchive.lunacy.signin (the sign-in page, in a cross-app frame)
@@ -200,6 +200,44 @@ to 16.1, with the binary unchanged:
    Palm's own read callback passing the message through unread; Content-Type and length follow.
    A reply with a ComposeMail status other than 1 is reported to the service as HTTP 500, so it
    retries rather than marking the mail sent.
+6. **Calendar items at 16.x** (`libpreload/calfilter.h`, 2026-11-08). Palm writes a calendar
+   item as 12.1 had it, and Exchange Online refuses it with status 6 ("couldn't be converted").
+   In a Sync request that goes out at 16.x (adapter 1 decides), the calendar elements are
+   rewritten, the rest byte for byte: `DtStamp`, `MeetingStatus`, `OrganizerName` and
+   `OrganizerEmail` go (the server sets them); `UID` becomes `ClientUid` in an Add and goes in a
+   Change (the item is the server's by then); the 12.1 `Location` string becomes AirSyncBase's
+   `Location` with it as `DisplayName`; a Body's `EstimatedDataSize` goes (the server's to say);
+   a `Recurrence` that doesn't name its first day of the week gets `FirstDayOfWeek` 0. Each was
+   found on the Fold3 against the test account by one event at a time: plain, with a location,
+   with a note, with a reminder, weekly; each refused before its rule and stored after it.
+
+Two more rules, not about the protocol version:
+
+- **The server's back-off** (`libpreload/backoff.h`, 2026-11-08). Exchange Online throttles a
+  device partnership and says so in a reply: `X-MS-BackOffDuration` (`L/<ms>`), or `Retry-After`
+  with a 503 or 429, with `X-MS-ASThrottle` naming the reason. Palm's service reads none of it,
+  and every request in a back-off lengthens it (the Fold3 was locked out for hours on 2026-11-06
+  by a crash loop). The preload reads those headers and keeps the host's "not before" time in
+  `/var/preferences/lunacy-eas-backoff` in the webOS root, so it outlives the service process,
+  which exits when idle and is a new process each time it crashes. Until then a request to that
+  host is pointed at a closed port on the device as it starts (`curl_multi_add_handle`) and fails
+  at once as a network failure, which the service retries later; the log says
+  `lunacy: <host> asks to be left alone for N s` and `a request to <host> waits`. A server that
+  sends none of these headers is never held back. A throttle reason with no duration counts as
+  15 minutes; any duration is capped at 6 hours.
+- **A token that can't be had just now, on the Exchange path** (2026-11-08), as IMAP's
+  (`mailauth.h`): when the OAuth service has no token just now (-12), the request goes without
+  the handle as a Basic password and fails locally as a network failure, rather than reaching
+  the server as a wrong password, after which Palm's service asks the person to sign in again.
+  A 401 to a token that should have worked (not fresh, not already a retry, not empty) is
+  reported to the service as HTTP 500, which it retries, and that retry asks for a fresh token.
+  A 401 to a fresh token, or to the retry, reaches the service as it is.
+
+**A request dump, for development.** With `/var/preferences/lunacy-eas-dump` in the webOS root
+holding one host name, the preload appends every request body sent to that host and every reply
+body from it to `/tmp/lunacy-eas-dump` (`> <url> <length>` or `< <length>`, then the bytes).
+Nothing is written without that file, and only for the host it names, so another account's mail
+isn't dumped. Bodies hold mail: use it with a test account, and remove both files after.
 
 Checked on the Galaxy Z Fold3 against `wosatester@jonandnic.onmicrosoft.com`: OAuth sign-in,
 validation, provisioning (policy fetched and acknowledged, a policy key), FolderSync (17 folders),
@@ -245,7 +283,8 @@ provider. A development build is pointed at both by `files/oauth-providers.json`
 in every PDK build): the logins, the hidden challenges, the EHLO change and AUTH LOGIN replay,
 the stale-token retry, the dropped first refusal and the failed write when no token can be had, and a message body cut every which way going through byte for byte.
 `wbxmlfilter_test.c` and `composemail_test.c` do the same for adapters 4 and 5: replies with the
-newer pages fed whole and in pieces, and the ComposeMail bytes Exchange Online accepted.
+newer pages fed whole and in pieces, and the ComposeMail bytes Exchange Online accepted. `calfilter_test.c` runs adapter 6 on Palm's own refused calendar Add, and
+`backoff_test.c` reads Exchange Online's throttle replies and keeps the store.
 
 **Checked on the Galaxy Tab A7 Lite (2026-11-05, arm32 debug), against the fake provider:**
 Email's welcome lists Google and Microsoft; sign-in in the page's WebView, Allow, validation
@@ -274,17 +313,15 @@ path (Google's) is not yet tried on a device: it needs one with a browser.
 
 ## Open
 
-- **Exchange and a token that can't be had just now:** the curl path still sends the handle,
-  which the server refuses, so a refresh that couldn't reach Microsoft can still end in a
-  sign-in prompt for an EAS account. It needs a way to fail the request as a network failure
-  that mojomail-eas retries.
+- **Exchange and a token that can't be had just now:** handled since 2026-11-08 (above), but
+  the failure paths haven't been made to happen on a device yet.
 
 
-- **Microsoft 365 over Exchange** (what's missing, in full: [outlook-eas.md](outlook-eas.md)): mail and sending work (A7, 2026-11-06). Still to see: real
-  contacts and calendar items through it, push arriving through Ping, the Fold3 on the new build,
-  and Palm's service ignoring Microsoft's back-off headers (one bad moment can lock a device out
-  for 15 minutes or more). Then choose the Microsoft account type: Exchange for work and school
-  accounts, with Outlook.com told plainly it can't be added (AADSTS70011).
+- **Microsoft 365 over Exchange** (in full: [outlook-eas.md](outlook-eas.md)): its own account
+  type, "Microsoft 365", works on the Fold3 (2026-11-08): mail, push, sending, contacts and
+  calendar from the device. Still to see: changes made in Outlook reaching the device, recurring
+  events with exceptions, invitations. Then choose how a person picks the account type, with
+  Outlook.com told plainly it can't use Exchange (AADSTS70011).
 - **Gmail's verification** for public use: Google's restricted-scope review (started
   2026-11-05). Whether it also asks for a security assessment turns on servers: none in the
   on-device path; decide whether Google goes through the broker at all.

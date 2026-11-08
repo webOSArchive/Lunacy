@@ -1272,6 +1272,8 @@ out:
 #include "mailauth.h"
 #include "wbxmlfilter.h"
 #include "composemail.h"
+#include "backoff.h"
+#include "calfilter.h"
 
 typedef int GIOStatus;   /* G_IO_STATUS_ERROR 0, NORMAL 1, EOF 2, AGAIN 3 */
 enum { MA_G_ERROR = 0, MA_G_NORMAL = 1, MA_G_AGAIN = 3 };
@@ -1518,6 +1520,13 @@ static struct lc_handle {
 	size_t cm_pre_len, cm_pos;     /* and how far into the prefix or suffix */
 	int cm_phase;                  /* 0 prefix, 1 the caller's message, 2 suffix, 3 done */
 	int send_status;               /* the reply's ComposeMail status */
+	struct bo_reply bo;            /* what this reply's headers say about backing off (backoff.h) */
+	char url[1024];                /* the request's own URL, while one held back stands in for it */
+	int held;                      /* the URL set is the stand-in: the host's back-off hadn't passed */
+	int no_token;                  /* an OAuth handle with no token to be had just now: the request fails locally */
+	int token_final;               /* the token sent was fresh, or a retry's: a 401 to it is the server's last word */
+	const void *post_ptr;          /* the request body being sent (the caller's, or ours in its place) */
+	int post_fresh;                /* post_ptr was set for the request now being made, not an earlier one */
 } lc_handles[LC_HANDLES];
 static pthread_mutex_t lc_lock = PTHREAD_MUTEX_INITIALIZER;
 static int lc_version(const char *host, const char *asked, char *out, size_t cap);
@@ -1623,6 +1632,125 @@ static int lc_version(const char *host, const char *asked, char *out, size_t cap
 	return 1;
 }
 
+/*
+ * The server's back-off (backoff.h). Kept in the webOS root, so every service process and every
+ * restart sees it; while it hasn't passed, a request to that host is pointed at a closed port on
+ * this device instead (lc_hold), and fails at once as a network failure, which the service
+ * retries later. Nothing reaches the server until the time it asked for.
+ */
+/*
+ * Development only: when /var/preferences/lunacy-eas-dump names a host (one line), every
+ * request body sent to it and every reply body from it is appended to /tmp/lunacy-eas-dump, as
+ * "> <url> <length>\n" or "< <length>\n" and the bytes, for decoding on a desk. No file, no
+ * dump. Bodies hold mail, so the file is for a test account (Docs/outlook-eas.md).
+ */
+static int lc_dump_wanted(const char *host)
+{
+	size_t root_len;
+	const char *root = webos_root(&root_len);
+	char path[PATH_MAX], want[128] = "";
+	if (!root || !host[0] || snprintf(path, sizeof path, "%s/var/preferences/lunacy-eas-dump", root) >= (int)sizeof path) return 0;
+	FILE *f = fopen(path, "r");
+	if (!f) return 0;
+	if (!fgets(want, sizeof want, f)) want[0] = 0;
+	fclose(f);
+	want[strcspn(want, "\r\n ")] = 0;
+	return want[0] && strcmp(want, host) == 0;
+}
+
+static void lc_dump(const char *host, const char *head, const void *bytes, size_t n)
+{
+	if (!lc_dump_wanted(host)) return;
+	size_t root_len;
+	const char *root = webos_root(&root_len);
+	char path[PATH_MAX];
+	if (snprintf(path, sizeof path, "%s/tmp/lunacy-eas-dump", root) >= (int)sizeof path) return;
+	FILE *f = fopen(path, "a");
+	if (!f) return;
+	fprintf(f, "%s %lu\n", head, (unsigned long)n);
+	if (n) fwrite(bytes, 1, n, f);
+	fputc('\n', f);
+	fclose(f);
+}
+
+#define LC_BACKOFF_FILE "/var/preferences/lunacy-eas-backoff"
+#define LC_HELD_URL "http://127.0.0.1:1/"
+
+static int lc_backoff_path(char *out, size_t cap)
+{
+	size_t root_len;
+	const char *root = webos_root(&root_len);
+	return root && snprintf(out, cap, "%s%s", root, LC_BACKOFF_FILE) < (int)cap;
+}
+
+/* One header line of a reply; at the blank line that ends them, a back-off asked for is kept. */
+static void lc_backoff_header(void *data, const char *buf, size_t len)
+{
+	char host[128] = "", throttle[64] = "";
+	long seconds = 0;
+	pthread_mutex_lock(&lc_lock);
+	for (int i = 0; i < LC_HANDLES; i++) {
+		struct lc_handle *e = &lc_handles[i];
+		if (!e->h || e->header_data != data || !e->host[0]) continue;
+		if (len <= 2 && (len == 0 || buf[0] == '\r' || buf[0] == '\n')) {
+			seconds = bo_seconds(&e->bo);
+			if (seconds > 0) { snprintf(host, sizeof host, "%s", e->host); snprintf(throttle, sizeof throttle, "%s", e->bo.throttle); }
+			bo_reset(&e->bo);
+		} else bo_header(&e->bo, buf, len);
+		break;
+	}
+	pthread_mutex_unlock(&lc_lock);
+	if (seconds <= 0) return;
+	char path[PATH_MAX];
+	if (!lc_backoff_path(path, sizeof path)) { fprintf(stderr, "lunacy: %s asks to be left alone for %ld s; no webOS root to keep it in\n", host, seconds); return; }
+	long now = (long)time(NULL), until = bo_until(path, host);
+	if (until < now + seconds) until = now + seconds;
+	int kept = bo_set(path, host, until, now) == 0;
+	fprintf(stderr, "lunacy: %s asks to be left alone for %ld s%s%s; %s\n", host, seconds,
+		throttle[0] ? ", throttled: " : "", throttle, kept ? "nothing goes to it until then" : "couldn't keep it");
+}
+
+/* Whether a request to this handle's host must wait out a back-off; points it elsewhere if so (lock held). */
+static void lc_hold(CURL *h, struct lc_handle *e)
+{
+	char path[PATH_MAX];
+	long now = (long)time(NULL);
+	long until = e->host[0] && lc_backoff_path(path, sizeof path) ? bo_until(path, e->host) : 0;
+	if (e->no_token) {
+		/* No token to send (the sign-in couldn't be refreshed just now): fails as a network
+		   failure, which the service tries again later, rather than a login refused. */
+		if (!e->held) lc_real_setopt(h, 10002, (void *)LC_HELD_URL);
+		e->held = 1;
+		fprintf(stderr, "lunacy: no token for %s just now; the request waits for a later try\n", e->host);
+	} else if (until > now) {
+		if (!e->held) lc_real_setopt(h, 10002, (void *)LC_HELD_URL);
+		e->held = 1;
+		fprintf(stderr, "lunacy: a request to %s waits: %ld s of its back-off left\n", e->host, until - now);
+	} else if (e->held) {
+		/* The same request again after the back-off: its own URL back. */
+		lc_real_setopt(h, 10002, (void *)e->url);
+		e->held = 0;
+	}
+}
+
+int curl_multi_add_handle(void *multi, CURL *h)
+{
+	static int (*real)(void *, CURL *);
+	if (!real) real = ma_next("curl_multi_add_handle");
+	lc_init();
+	pthread_mutex_lock(&lc_lock);
+	struct lc_handle *e = lc_find(h, 0);
+	if (e) lc_hold(h, e);
+	if (e && !e->held) {
+		char head[1100];
+		snprintf(head, sizeof head, "> %s", e->url);
+		lc_dump(e->host, head, e->post_ptr, e->post_fresh && e->post_ptr && e->post_size > 0 ? (size_t)e->post_size : 0);
+	}
+	if (e) e->post_fresh = 0;   /* the next request says its own body */
+	pthread_mutex_unlock(&lc_lock);
+	return real(multi, h);
+}
+
 /* The caller's header callback for the request whose header data is this (lock taken here). */
 static lc_header_fn lc_their_header(void *data)
 {
@@ -1639,6 +1767,7 @@ static size_t lc_header(char *buf, size_t size, size_t n, void *data)
 	lc_header_fn theirs = lc_their_header(data);
 	if (!theirs) return size * n;   /* can't happen: set together with the callback */
 	size_t len = size * n;
+	lc_backoff_header(data, buf, len);
 	static const char name[] = "MS-ASProtocolVersions:";
 	if (len > sizeof name && len < 512 && strncasecmp(buf, name, sizeof name - 1) == 0) {
 		/* The server's list, for the requests that follow to it (lc_version). */
@@ -1700,6 +1829,7 @@ static size_t lc_write(char *buf, size_t size, size_t n, void *data)
 	pthread_mutex_lock(&lc_lock);
 	struct lc_handle *e = lc_by_write_data(data);
 	lc_header_fn theirs = e ? e->their_write : NULL;
+	if (e) lc_dump(e->host, "<", buf, size * n);
 	if (e && e->body_seen == 0) {
 		/* A WBXML reply from a server the version adapter speaks 16.1 to: newer code pages out. */
 		char ver[16];
@@ -1893,6 +2023,7 @@ int curl_easy_setopt(CURL *h, int option, ...)
 		pthread_mutex_lock(&lc_lock);
 		struct lc_handle *e = lc_find(h, 1);
 		if (e && option == LC_CURLOPT_POSTFIELDSIZE) e->post_size = (long)v;
+		if (e && option == LC_CURLOPT_POSTFIELDS) { e->post_ptr = v; e->post_fresh = v != NULL; }
 		/* Palm sets the body before the URL: it is marked here and swapped once the server is known. */
 		if (e && option == LC_CURLOPT_POSTFIELDS)
 			e->initial_provision = v && e->post_size == (long)(sizeof lc_provision_head + sizeof lc_provision_rest)
@@ -1908,19 +2039,32 @@ int curl_easy_setopt(CURL *h, int option, ...)
 			else if (option == LC_CURLOPT_WRITEFUNCTION) e->their_write = (lc_header_fn)v;
 			else {
 				e->body_seen = 0; e->provision = 0; e->filtering = 0; e->host[0] = 0;
+				e->held = 0; bo_reset(&e->bo);
 				const char *u = v, *hs = u ? strstr(u, "://") : NULL;
+				snprintf(e->url, sizeof e->url, "%s", u ? u : "");
 				if (hs) { hs += 3; size_t n = strcspn(hs, "/:?"); if (n < sizeof e->host) { memcpy(e->host, hs, n); e->host[n] = 0; } }
 				char ver[16];
 				if (e->initial_provision && lc_version(e->host, "12.1", ver, sizeof ver)) {
 					size_t len;
 					unsigned char *b = lc_with_device_info(&len);
 					if (b) {
-						free(e->post); e->post = b;
+						free(e->post); e->post = b; e->post_ptr = b; e->post_size = (long)len;
 						lc_real_setopt(h, LC_CURLOPT_POSTFIELDSIZE, (long)len);
 						lc_real_setopt(h, LC_CURLOPT_POSTFIELDS, (void *)b);
 					}
 				}
 				e->initial_provision = 0;
+				/* A Sync going out at 16.x: its calendar items as such a server takes them (calfilter.h). */
+				if (u && strstr(u, "Cmd=Sync") && e->post_fresh && e->post_ptr && e->post_size > 0 && lc_version(e->host, "12.1", ver, sizeof ver) && atof(ver) >= 16.0 - 1e-6) {
+					unsigned char *b = malloc(CALF_OUT_CAP((size_t)e->post_size));
+					size_t len = b ? calf_rewrite(e->post_ptr, (size_t)e->post_size, b) : 0;
+					if (len && len != (size_t)-1) {
+						free(e->post); e->post = b; e->post_ptr = b; e->post_size = (long)len;
+						lc_real_setopt(h, LC_CURLOPT_POSTFIELDSIZE, (long)len);
+						lc_real_setopt(h, LC_CURLOPT_POSTFIELDS, (void *)b);
+						fprintf(stderr, "lunacy: calendar items in a Sync to %s rewritten for %s\n", e->host, ver);
+					} else free(b);
+				}
 				if (e->sending && e->their_read) lc_real_setopt(h, LC_CURLOPT_READFUNCTION, (void *)e->their_read);   /* the last request's */
 				lc_send_setup(h, e, u);
 			}
@@ -1943,6 +2087,7 @@ int curl_easy_setopt(CURL *h, int option, ...)
 		pthread_mutex_lock(&lc_lock);
 		struct lc_handle *was = lc_find(h, 0);
 		if (was && was->handle[0]) { was->handle[0] = 0; memset(was->bearer, 0, sizeof was->bearer); lc_real_setopt(h, LC_CURLOPT_HTTPHEADER, was->theirs); }
+		if (was) { was->no_token = 0; was->token_final = 0; }
 		pthread_mutex_unlock(&lc_lock);
 	}
 	if (option == LC_CURLOPT_USERPWD && v) {
@@ -1955,9 +2100,24 @@ int curl_easy_setopt(CURL *h, int option, ...)
 			struct lc_handle *e = lc_find(h, 1);
 			if (e) {
 				int stale = strcmp(ma_refused, colon + 1) == 0;
-				/* No token just now (-1) still goes as the handle, refused as before: mojomail-eas
-				   has no dropped connection here to retry (Docs/oauth.md, Open). */
-				if (ma_token(NULL, user, colon + 1, stale, e->bearer, sizeof e->bearer) > 0) {
+				int t = ma_token(NULL, user, colon + 1, stale, e->bearer, sizeof e->bearer);
+				if (t < 0) {
+					/* No token just now: no Basic password with the handle either. The request goes
+					   nowhere when it starts (lc_hold) and the service tries again later, as IMAP's
+					   connection is dropped (mailauth.h). */
+					snprintf(e->handle, sizeof e->handle, "%s", colon + 1);
+					memset(e->bearer, 0, sizeof e->bearer);
+					e->no_token = 1;
+					lc_real_setopt(h, LC_CURLOPT_USERPWD, (void *)NULL);
+					lc_real_setopt(h, LC_CURLOPT_HTTPAUTH, 0L);
+					int r = lc_apply_headers(e);
+					pthread_mutex_unlock(&lc_lock);
+					return r;
+				}
+				if (t > 0) {
+					/* A refusal of this one is final: it is fresh (2), a retry's, or empty (the sign-in
+					   is over, and Email is to ask for it again). */
+					e->token_final = t == 2 || stale || !e->bearer[0];
 					if (stale) ma_refused[0] = 0;
 					snprintf(e->handle, sizeof e->handle, "%s", colon + 1);
 					lc_real_setopt(h, LC_CURLOPT_USERPWD, (void *)NULL);
@@ -2007,7 +2167,13 @@ int curl_easy_getinfo(CURL *h, int info, ...)
 	if (r == 0 && info == LC_CURLINFO_RESPONSE_CODE && out && *(long *)out == 401) {
 		pthread_mutex_lock(&lc_lock);
 		struct lc_handle *e = lc_find(h, 0);
-		if (e && e->handle[0]) snprintf(ma_refused, sizeof ma_refused, "%s", e->handle);
+		if (e && e->handle[0]) {
+			snprintf(ma_refused, sizeof ma_refused, "%s", e->handle);
+			/* The first refusal of a token that should have worked (the provider ended it early):
+			   a server error to the service, which tries again, and that try asks for a fresh
+			   one. Mojomail-eas takes a 401 as a wrong password and asks for a new sign-in. */
+			if (!e->token_final) *(long *)out = 500;
+		}
 		pthread_mutex_unlock(&lc_lock);
 	}
 	return r;

@@ -1,8 +1,8 @@
 # Microsoft 365 over Exchange ActiveSync: what's missing
 
-Written 2026-11-07. What it would take to offer modern Microsoft 365 (work and school) accounts
-over Exchange ActiveSync with OAuth, so they get mail, contacts and calendar, not only the mail
-that IMAP gives. None of this has shipped. The background is in [oauth.md](oauth.md) (sign-in,
+Written 2026-11-07, brought up to date 2026-11-08. What it takes to offer modern Microsoft 365
+(work and school) accounts over Exchange ActiveSync with OAuth, so they get mail, contacts and
+calendar, not only the mail that IMAP gives. Nothing of it has shipped yet. The background is in [oauth.md](oauth.md) (sign-in,
 the five adapters) and [eas.md](eas.md) (Palm's mojomail-eas on Lunacy).
 
 ## Two things this work must never break
@@ -33,66 +33,69 @@ XOAUTH2. It must keep working, and keep being what Outlook.com and other persona
 - Before anything here ships: a Microsoft account over IMAP still signs in, syncs, sends, and
   survives a refresh failure without a sign-in prompt, as checked on the Fold3 on 2026-11-07.
 
-## Where it stands
+## Where it stands (2026-11-08)
 
-- **Mail works over Exchange in local test setups.** Palm's mojomail-eas reaches Exchange
-  Online through the five preload adapters in [oauth.md](oauth.md): version, provisioning
-  status, DeviceInformation, replies cut to 12.1, and sends in ComposeMail form. On the A7
-  Lite (2026-11-06), mail arrived and opened, the calendar and contact collections synced
-  (nearly empty), and a new message, a reply and a forward were delivered.
-- **That only ever ran as a local setup:** a development build reading
-  `files/oauth-providers.json` (the Microsoft provider's EAS scope and the `com.palm.eas`
-  validator), plus an Exchange copy of the Microsoft template in `local-assets`. The repository
-  has neither.
-- **Half of that setup breaks the account.** On 2026-11-07 the Fold3 had the override but the
-  repository's IMAP template. The account validated through Exchange, then was created as an
-  IMAP account with Exchange's settings, and failed to fetch mail ("internal error"). The
-  Exchange path needs its own template. The override is now set aside on the Fold3
-  (`files/oauth-providers.json.eas-test`, [android5-setup.md](android5-setup.md)).
+**A "Microsoft 365" account type works end to end on the Fold3** (arm64 debug, Android 15,
+against `wosatester@jonandnic.onmicrosoft.com`):
+
+- **The account type** is `org.webosarchive.lunacy.microsoft365`, a template of its own in the
+  sign-in app (`CoreApps/org.webosarchive.lunacy.signin/accounts/`), listed in Add Account as
+  "Microsoft 365" (Email, Contacts, Calendar) beside "Microsoft Exchange" and "Microsoft
+  Outlook", neither of which changed. Its capabilities are Palm's Exchange ones, with the same
+  ids (`com.palm.eas.mail`, `.contacts`, `.remotecontacts`, `.calendar`, `.tasks`): mojomail-eas
+  looks for those ids, and the accounts service only ever looks a capability up inside an
+  account's own template, so two templates sharing them is safe. Its provider in
+  `providers.json` is `microsoft365`: the same Entra app, the EAS scope, `scopeOnToken`, and
+  `com.palm.eas/validateAccount`.
+- **Seen working:** sign-in (Microsoft's page in the sign-in page's web view), validation with
+  provisioning (the 449 adapter; the tenant's policy needs no screen lock), FolderSync (17
+  folders), mail (17 messages), a message sent to itself and **pushed back through Ping about
+  5 s later** without a manual sync, the account's two contacts and three events arriving, a
+  contact added and edited on the device and stored by Microsoft (a server id given, status 1),
+  events added on the device with a location, a note, a reminder and a weekly recurrence, an
+  event renamed and one deleted.
+- **What it took, besides the five adapters in [oauth.md](oauth.md):** a sixth, which rewrites
+  calendar items in Sync requests sent at 16.x (`libpreload/calfilter.h`), since Exchange Online
+  refuses Palm's 12.1 items with status 6; the back-off (`libpreload/backoff.h`); and the
+  token rules of IMAP carried over to the Exchange path. All three are in [oauth.md](oauth.md).
+- **Legacy Exchange unchanged:** the Fold3's own "Microsoft Exchange" account (a Zoho server
+  offering 14.1) pinged, synced and answered 200 throughout, on every build of the day. None of
+  the new code acts for it: the calendar rewrite needs the version adapter at 16.x, the
+  back-off needs Microsoft's headers, and the token rules need an `oauth2:` handle.
+- **How a person picks it** is still codepoet's call (below). A second Add Account entry was
+  the reversible way to test.
 
 ## What's missing
 
-1. **An account type of its own.** A new template, not a change to either of the two above,
-   for example `org.webosarchive.lunacy.microsoft365` ("Microsoft 365"):
-   - its MAIL, CONTACTS and CALENDAR capability providers implemented by `palm://com.palm.eas/`;
-   - the sign-in page as its `customUI`;
-   - a provider entry in `providers.json` with the EAS scope
-     (`https://outlook.office.com/EAS.AccessAsUser.All offline_access openid email`,
-     `scopeOnToken`) and the `com.palm.eas/validateAccount` validator.
-
-   Then decide how a person picks it:
-   - A second entry in Add Account ("Microsoft 365 (work or school)" beside "Microsoft
-     Outlook").
-   - Or one Microsoft entry that chooses after sign-in. The id_token says which kind of
-     account it is: personal Microsoft accounts carry the consumer tenant id
-     `9188040d-6c67-4c5b-b112-36a304b66dad` in `tid`.
-
+1. **How a person picks it.** Today: a second entry, "Microsoft 365", beside "Microsoft
+   Outlook". The other way is one Microsoft entry that chooses after sign-in: personal accounts
+   carry the consumer tenant id `9188040d-6c67-4c5b-b112-36a304b66dad` in the id_token's `tid`.
    Choosing after sign-in means scopes for both, or a second consent. codepoet's call, and a
    look-and-feel question (luna-deltas B23).
-2. **Contacts and calendar with real data.** Only near-empty collections have been seen.
-   Still to check:
-   - contacts and events created on each side showing up on the other;
-   - edits and deletions;
-   - recurring events and time zones;
-   - meeting invitations from someone else (`respondToMeetingInvitations`, untried in
-     [eas.md](eas.md)).
-3. **Push.** Ping requests go out and are answered, but new mail arriving by push without a
-   manual sync hasn't been seen yet.
-4. **Microsoft's back-off.** Palm's service ignores `X-MS-BackOffDuration` and `Retry-After`.
-   Exchange Online throttles per device partnership (`X-MS-ASThrottle: RecentCommands`), so
-   one crash loop or retry storm locks a device out for 15 minutes or more (seen on the
-   Fold3). This needs an adapter that holds a host's requests until the back-off has passed,
-   scoped to hosts that send it, as above.
-5. **A token that can't be had just now, on the curl path.** IMAP and SMTP got this fix on
-   2026-11-07 (`mailauth.h`): no token just now fails the connection, and the first refusal
-   of a good-looking token is retried with a fresh one. In the Exchange glue (`preload.c`,
-   `CURLOPT_USERPWD`), no token still sends the handle as a Basic password, which the server
-   refuses, and Palm's service then asks the person to sign in again. It needs to fail as a
-   network error that mojomail-eas retries, and to treat a first 401 for a Bearer token like
-   IMAP's first refusal.
-6. **Palm's debug log aborts the service** while printing a contacts Sync against Microsoft
-   365 (`com.palm.eas` at debug level; info level is fine). It was adapter 4's case at the
-   time. Recheck at debug level with adapter 4 in place before relying on debug logs.
+2. **Server-made changes reaching the device.** Items already on the server arrived at the first
+   sync. Still to see: a contact and an event created, edited and deleted in Outlook on the web
+   reaching the device; recurring events with exceptions (16.x names an exception by
+   `InstanceId` where Palm sends `ExceptionStartTime`, and `calfilter.h` doesn't touch
+   exceptions yet); time zones other than the device's; meeting invitations from someone else
+   (`respondToMeetingInvitations`, untried in [eas.md](eas.md)).
+3. **A conflict after a refused edit.** An edit refused before the calendar rewrite existed left
+   the device's copy behind the server's; the next edit got status 7 (the server won) and the one
+   after went through. Palm keeps its own copy after a 7, so a device edit can be lost that way.
+   Seen once, after a failure that can no longer happen.
+4. **Back-off: seen against a stand-in, not yet against Microsoft.** A local server answering as
+   Exchange Online throttles (503, `Retry-After`, `X-MS-ASThrottle`, `X-MS-BackOffDuration`)
+   got one request; the next, 20 s later, never left the device (it failed at once as
+   `CONNECTION_FAILED`); after the 120 s it asked for, requests went out again. Microsoft
+   hasn't throttled the account since, so its real headers haven't been seen through it.
+   Palm's validator reports a 503 as `401_UNAUTHORIZED` ("check your login"), which is
+   misleading while adding an account during a throttle.
+5. **The token rules on the Exchange path** follow IMAP's (no token just now: a network failure
+   the service retries; the first 401 of a token that should have worked: a server error, and the
+   retry asks for a fresh token). The normal path was seen working; the two failure paths
+   haven't been made to happen on a device yet.
+6. **Palm's debug log** aborted the service while printing a contacts Sync against Microsoft 365
+   (`com.palm.eas` at debug level) before adapter 4 existed. Not rechecked: the preload's own
+   request dump (oauth.md) was used instead, which logs only the test host.
 7. **Security policies against Exchange Online.** The sign-in page handles a policy as Email's
    wizard does, and Android's screen lock meets it (luna-deltas A21). Still open: remote wipe
    (`com.palm.storage`, not answered), and the policy's inactivity timeout and attempt limit,
@@ -104,9 +107,9 @@ XOAUTH2. It must keep working, and keep being what Outlook.com and other persona
 9. **Outlook.com and other personal accounts can't use it.** Microsoft refuses the EAS scope
    for them (AADSTS70011). They stay on the IMAP account type. (Microsoft's IMAP has its own
    bug for personal accounts, [oauth.md](oauth.md).)
-10. **Throttled test devices.** The Fold3's Exchange partnership was throttled after the
-    2026-11-06 crash loop. Palm's EAS device id is per device, not per account, so removing
-    and adding the account again doesn't clear it. Wait the throttle out before testing there.
+10. **Throttled test devices.** Palm's EAS device id is per device, not per account, so removing
+    and adding an account again doesn't clear a throttle. The back-off now keeps a device from
+    deepening one.
 
 ## Before it ships
 
@@ -118,4 +121,4 @@ XOAUTH2. It must keep working, and keep being what Outlook.com and other persona
   - push;
   - a day left alone, then a refresh, with no sign-in prompt.
 - `LunaRuntimes/pdk/tests` extended for any new adapter, run in every PDK build as the
-  others are.
+  others are (`backoff_test.c` and `calfilter_test.c` are, the second on Palm's own refused Add).

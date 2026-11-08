@@ -106,7 +106,16 @@ enyo.kind({
 			this.$.hereButton.setCaption($L("Sign In Again"));
 		} else {
 			this.$.title.setContent(new enyo.g11n.Template($L("Sign in to #{name}")).evaluate({name: name}));
-			this.$.text.setContent(new enyo.g11n.Template($L("#{name} asks you to sign in on its own page. Your password goes to #{name} only, never to Lunacy; Email is given permission to read and send your mail.")).evaluate({name: name}));
+			// An Exchange account (Microsoft 365) brings contacts and calendar as well as mail.
+			var cps = (this.params && this.params.template && this.params.template.capabilityProviders) || [], more = false;
+			for (i = 0; i < cps.length; i++) {
+				if (cps[i].capability === "CONTACTS" || cps[i].capability === "CALENDAR") {
+					more = true;
+				}
+			}
+			this.$.text.setContent(new enyo.g11n.Template(more
+				? $L("#{name} asks you to sign in on its own page. Your password goes to #{name} only, never to Lunacy; Lunacy is given permission to keep your mail, contacts and calendar.")
+				: $L("#{name} asks you to sign in on its own page. Your password goes to #{name} only, never to Lunacy; Email is given permission to read and send your mail.")).evaluate({name: name}));
 		}
 		this.$.hereButton.setShowing(Boolean(this.provider.onDevice));
 		this.$.brokerButton.setShowing(Boolean(this.provider.broker));

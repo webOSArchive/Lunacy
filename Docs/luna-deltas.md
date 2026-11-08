@@ -825,7 +825,11 @@ and password (Palm's Google template; Microsoft through Exchange); both provider
 now ([oauth.md](oauth.md)). What a person sees instead:
 
 - **Add Account** lists Google (the TouchPad's Google icon) and Microsoft Outlook (an Outlook icon; "Microsoft" until 2026-11-07)
-  beside Palm's types, in Email and in Accounts.
+  beside Palm's types, in Email and in Accounts. Since 2026-11-08 also Microsoft 365 (the same
+  icon; Email, Contacts, Calendar), a work or school account over Exchange ActiveSync
+  ([outlook-eas.md](outlook-eas.md)); whether it stays a second entry is codepoet's call. Its
+  sign-in page says Lunacy keeps the mail, contacts and calendar, where the IMAP types' says
+  Email reads and sends the mail.
 - **A sign-in page** in place of the username and password form, in the TouchPad's account-page
   look: a line on what happens, Sign In, and Sign In on Another Device (the broker's short code
   and address, for a device whose engine can't show the provider's page).

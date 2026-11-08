@@ -17,7 +17,11 @@ broker, with Palm's mail services logging in with XOAUTH2 under them, unchanged
 - **Microsoft 365:** IMAP and SMTP work (Fold3). Exchange ActiveSync through Palm's own
   mojomail-eas reaches Exchange Online through five adapters in the preload (16.1 version,
   status 142 as 449, DeviceInformation, newer code pages dropped from replies, sends as
-  ComposeMail): mail arrives and sends (new, reply, forward) on the A7 (2026-11-06). Real
+  ComposeMail): mail arrives and sends (new, reply, forward) on the A7 (2026-11-06). Since
+  2026-11-08 an account type of its own, "Microsoft 365", works on the Fold3: mail, push through
+  Ping, sending, contacts and calendar from the device (a sixth adapter rewrites calendar items
+  for 16.x), with Microsoft's back-off kept and no-token failures retried
+  ([outlook-eas.md](outlook-eas.md)). Earlier:
   contacts and calendar items and the Fold3 are still to see. The account type stays IMAP in
   the repository until it's chosen.
 - **Outlook.com (personal):** Microsoft's own bug: its IMAP refuses OAuth logins for personal

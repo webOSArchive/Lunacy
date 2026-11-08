@@ -162,7 +162,7 @@ static int calf_fix_change(unsigned char *st, long year, long local_minus_utc)
 	if (calf_u16(st) != 0 || month < 1 || month > 12 || dow > 6 || week < 1 || week > 5 || h > 23 || mi > 59) return 0;
 	long first = calf_days(year, month, 1);
 	int day = 1 + (dow - calf_dow(first) + 7) % 7 + 7 * (week - 1);
-	if (day > calf_month_days(year, month)) day -= 7;                 /* "5": the last */
+	if (day > calf_month_days(year, month)) return 0;                 /* no such day this year: not Palm's */
 	long minutes = (calf_days(year, month, day) * 1440L) + h * 60 + mi + local_minus_utc;
 	long z = minutes >= 0 ? minutes / 1440 : -((-minutes + 1439) / 1440);
 	long rest = minutes - z * 1440, ly; int lm, ld;
@@ -173,6 +173,26 @@ static int calf_fix_change(unsigned char *st, long year, long local_minus_utc)
 	calf_put16(st + 8, (int)(rest / 60)); calf_put16(st + 10, (int)(rest % 60));
 	calf_put16(st + 12, 0); calf_put16(st + 14, 0);
 	return memcmp(was, st, 16) != 0;
+}
+
+/*
+ * Whether a change (SYSTEMTIME at st) can be Palm's: read as Palm writes it (year's nth weekday,
+ * which must exist, at a UTC time), it falls between midnight and 4:00 local time, as every
+ * zone's changes but three (Nuuk, Scoresbysund, Easter Island, near 22:00) do. Windows' form
+ * read that way lands at hours no zone changes at (Los Angeles' "2:00" on Saturday at 18:00) or
+ * names a 5th weekday the year doesn't have. Measured over every IANA zone with two changes,
+ * 2026 to 2030: Palm's form recognised for 146 of 149; Windows' form never taken for Palm's,
+ * but for Cairo's in 2027 (midnight changes, both months with a 5th Friday).
+ */
+static int calf_palm_change(const unsigned char *st, long year, long local_minus_utc)
+{
+	int month = calf_u16(st + 2), dow = calf_u16(st + 4), week = calf_u16(st + 6), h = calf_u16(st + 8), mi = calf_u16(st + 10);
+	if (calf_u16(st) != 0 || month < 1 || month > 12 || dow > 6 || week < 1 || week > 5 || h > 23 || mi > 59) return 0;
+	int day = 1 + (dow - calf_dow(calf_days(year, month, 1)) + 7) % 7 + 7 * (week - 1);
+	if (day > calf_month_days(year, month)) return 0;
+	long local = ((long)h * 60 + mi + local_minus_utc) % 1440;
+	if (local < 0) local += 1440;
+	return local <= 240;
 }
 
 /* A TimeZone's base64 (232 characters at s) rewritten in place for year; 1 when it changed. */
@@ -186,6 +206,9 @@ static int calf_fix_tz(unsigned char *s, size_t len, long year)
 	   Time" or "Customized Time Zone") is in Windows' form already, and Palm sends it back. */
 	for (int k = 4; k < 68; k++) if (tz[k]) return 0;
 	for (int k = 88; k < 152; k++) if (tz[k]) return 0;
+	/* And only what reads as Palm's form: a server's unnamed zone (Z-Push writes none) is
+	   already in Windows' form, and Palm sends it back as it got it. */
+	if (!calf_palm_change(tz + 68, year, -(bias + daylight_bias)) || !calf_palm_change(tz + 152, year, -bias)) return 0;
 	int changed = calf_fix_change(tz + 68, year, -(bias + daylight_bias))   /* back to standard: read in daylight time */
 		| calf_fix_change(tz + 152, year, -bias);                         /* into daylight: read in standard time */
 	if (!changed) return 0;
@@ -201,6 +224,44 @@ static long calf_this_year(void)
 }
 
 static long calf_year;                  /* the year Palm's changes are in; 0: this one (tests set it) */
+
+/*
+ * For a server below 16.0 (the legacy Exchange account type): only the TimeZone strings of a
+ * request, every other byte as it was (none of the 16.x rewrites, which an older server would
+ * refuse). out has room for n bytes; 1 when a zone was rewritten (out is then the request to
+ * send), 0 when nothing changed or the request isn't WBXML this reads.
+ */
+static int calf_fix_zones(const unsigned char *in, size_t n, unsigned char *out)
+{
+	size_t i = 1; unsigned long v;
+	int page = 0, tz_open = 0, changed = 0;
+	if (n < 4 || in[0] != 0x03) return 0;
+	if (calf_mb(in, n, &i, &v) || calf_mb(in, n, &i, &v)) return 0;
+	if (calf_mb(in, n, &i, &v) || v > n - i) return 0;
+	i += v;
+	memcpy(out, in, n);
+	while (i < n) {
+		unsigned char c = in[i++];
+		if (c == 0x00) { if (i >= n) return 0; page = in[i++]; tz_open = 0; continue; }
+		if (c == 0x01) { tz_open = 0; continue; }
+		if (c == 0x03) {
+			const unsigned char *z = memchr(in + i, 0, n - i);
+			if (!z) return 0;
+			size_t len = (size_t)(z - (in + i));
+			if (tz_open && calf_fix_tz(out + i, len, calf_year ? calf_year : calf_this_year())) changed = 1;
+			i += len + 1; tz_open = 0;
+			continue;
+		}
+		if (c == 0xc3) {
+			if (calf_mb(in, n, &i, &v) || v > n - i) return 0;
+			i += v; tz_open = 0;
+			continue;
+		}
+		if ((c & 0x3f) < 5 || (c & 0x80)) return 0;                      /* nothing EAS sends */
+		tz_open = page == CALF_PAGE && (c & 0x3f) == CALF_TIME_ZONE && (c & 0x40);
+	}
+	return changed;
+}
 
 static int calf_dropped(int page, int tag)
 {

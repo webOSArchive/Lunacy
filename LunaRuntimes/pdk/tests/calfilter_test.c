@@ -218,6 +218,36 @@ int main(void)
 			&& memcmp(o2 + 240, req + 240, k - 240) == 0, "a request's TimeZone rewritten in place");
 	}
 
+	/* Unnamed zones already in Windows' form (Z-Push writes no names): left alone. */
+	{
+		const char *win[] = {
+			"4AEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAsAAAABAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAACAAIAAAAAAAAAxP///w==",
+			"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAoAAAAFAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAAFAAEAAAAAAAAAxP///w==",
+		};
+		for (int k = 0; k < 2; k++) {
+			unsigned char b[233]; memcpy(b, win[k], 233);
+			check(calf_fix_tz(b, 232, 2026) == 0 && memcmp(b, win[k], 232) == 0, k ? "London in Windows' form, unnamed: left alone" : "Los Angeles in Windows' form, unnamed: left alone");
+		}
+	}
+	/* The legacy pass (a server below 16.0): Palm's zone in Windows' form, every other byte as
+	   it was, the UID included; nothing to change, nothing changed. */
+	{
+		const char *la = zones[0].in;
+		unsigned char req[300], o3[300];
+		size_t k = 0;
+		memcpy(req, (unsigned char[]){ 0x03, 0x01, 0x6a, 0x00, 0x00, 0x04, 0x45, 0x03 }, 8); k = 8;
+		memcpy(req + k, la, 232); k += 232; req[k++] = 0x00; req[k++] = 0x01;
+		req[k++] = 0x68; req[k++] = 0x03; req[k++] = 'u'; req[k++] = 0x00; req[k++] = 0x01;      /* UID */
+		req[k++] = 0x51; req[k++] = 0x03; req[k++] = '0'; req[k++] = 0x00; req[k++] = 0x01;      /* DtStamp */
+		check(calf_fix_zones(req, k, o3) == 1 && memcmp(o3, req, 8) == 0 && memcmp(o3 + 8, la, 232) != 0
+			&& memcmp(o3 + 240, req + 240, k - 240) == 0, "legacy: only the zone rewritten");
+		unsigned char tz[172];
+		check(calf_tz_decode(o3 + 8, 232, tz) == 0 && calf_u16(tz + 68 + 8) == 2 && calf_u16(tz + 152 + 8) == 2, "legacy: the zone in Windows' form");
+		check(calf_fix_zones(o3, k, req) == 0, "legacy: a zone in Windows' form is left alone the second time");
+		check(calf_fix_zones(notwbxml, sizeof notwbxml, o3) == 0, "legacy: not WBXML, left alone");
+		check(calf_fix_zones(req, 20, o3) == 0, "legacy: a truncated request, left alone");
+	}
+
 	if (failures) { printf("calfilter: %d failed\n", failures); return 1; }
 	printf("calfilter: all passed\n");
 	return 0;

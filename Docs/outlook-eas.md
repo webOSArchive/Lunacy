@@ -170,11 +170,26 @@ kept Palm's zone as a "Customized Time Zone" with those rules, so a London serie
 hour early in the week before the real change (Oct 24 to 31, 2027). A real TouchPad sends the
 same.
 
-**The fix** (adapter 6, `calf_fix_tz` in `calfilter.h`): in a request, a TimeZone with no names
-(Palm's own) has each change put back on this year's calendar and written as Windows writes it.
-A named zone, one Exchange made and Palm keeps and sends back, is left alone. Checked against
-every IANA zone with two changes in 2026 (149), built as Palm builds them, all as Windows writes
-them; the Southern Hemisphere's change the day after its UTC date included.
+**The fix** (`calf_fix_tz` in `calfilter.h`): in a request, a TimeZone that is Palm's own has
+each change put back on this year's calendar and written as Windows writes it. Palm's own means
+two things, since Palm sends back the zone a server gave an event as it got it:
+- no names: Exchange (and Zoho) name every zone, "Pacific Standard Time", "Customized Time
+  Zone", "Eastern Standard Time";
+- and it reads as Palm's form: each change, taken as Palm writes it (this year's nth weekday,
+  which must exist, at a UTC time), falls between midnight and 4:00 local time. A server's
+  unnamed zone in Windows' form (Z-Push writes no names) reads as a change at an hour no zone
+  uses (Los Angeles' "2:00" lands on a Saturday at 18:00) or a 5th weekday the year doesn't have.
+
+Measured over every IANA zone with two changes, 2026 to 2030 (745 zone-years): Palm's form fixed
+in 730, all as Windows writes them; left as Palm sent it in 15 (Nuuk, Scoresbysund and Easter
+Island, whose changes fall near 22:00 local); Windows' form never rewritten but once: Cairo in
+2027, whose midnight changes in two months that both have a 5th Friday read as Palm's (its
+changes would move to 3:00 and 2:00; only for a server that sends Cairo unnamed).
+
+**Both account types.** For Microsoft 365 it runs inside adapter 6. For the legacy "Microsoft
+Exchange" type (a server below 16.0, Zoho the one tested) `calf_fix_zones` rewrites only the zone
+strings of a Sync request, every other byte as it was: none of the 16.x rewrites reach an older
+server.
 
 **Seen working:** a London weekly series crossing both springs' changes (March 14 and 28, 2027)
 and a Los Angeles event sent from the device: Exchange took London as its own "GMT Standard
@@ -183,7 +198,13 @@ Time", Los Angeles with the right rules (still "Customized Time Zone"). Events m
 "Pacific Standard Time", "GMT Standard Time", "US Mountain Standard Time" (no changes), and
 became America/Los_Angeles, Europe/London and America/Phoenix (`getTimeZoneFromEasData`'s
 months rule; not Denver). Calendar's week of March 15, 2027 (the US changed, the UK not yet)
-shows both London series at 6 AM and Arizona's at 11 AM.
+shows both London series at 6 AM and Arizona's at 11 AM. On the legacy type, with the Zoho test
+account (`testuser@jonandnic.com`, added to the Fold3 for it): a London weekly series across
+the UK's October 31, 2027 change and a Los Angeles event, made on the device, went up with
+their zones rewritten and were taken (server ids given); the rewrite ran only for those Syncs,
+never for the Fold3's other Zoho account, and both accounts kept pinging. Zoho doesn't send a
+device's change back, so its reading of the zone wasn't seen; the request dump can't be used
+there, as it selects by host and the other account shares it.
 
 ## One entry (2026-11-08)
 

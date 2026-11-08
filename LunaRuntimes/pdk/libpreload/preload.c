@@ -2074,6 +2074,17 @@ int curl_easy_setopt(CURL *h, int option, ...)
 						fprintf(stderr, "lunacy: a series' exceptions in a Sync to %s sent as their own occurrences\n", e->host);
 					}
 				}
+				/* A Sync to any other EAS server (the legacy Exchange account type): only the zones
+				   Palm builds, in Windows' form (calfilter.h, calf_fix_zones); nothing else changes. */
+				else if (u && strstr(u, "Cmd=Sync") && e->post_fresh && e->post_ptr && e->post_size > 0) {
+					unsigned char *b = malloc((size_t)e->post_size);
+					if (b && calf_fix_zones(e->post_ptr, (size_t)e->post_size, b)) {
+						free(e->post); e->post = b; e->post_ptr = b;
+						lc_real_setopt(h, LC_CURLOPT_POSTFIELDSIZE, e->post_size);
+						lc_real_setopt(h, LC_CURLOPT_POSTFIELDS, (void *)b);
+						fprintf(stderr, "lunacy: an event's time zone in a Sync to %s written in Windows' form\n", e->host);
+					} else free(b);
+				}
 				if (e->sending && e->their_read) lc_real_setopt(h, LC_CURLOPT_READFUNCTION, (void *)e->their_read);   /* the last request's */
 				lc_send_setup(h, e, u);
 			}

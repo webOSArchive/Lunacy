@@ -12,6 +12,10 @@ in mail/source/MailApp.js, a tapped folder brings its messages over the folders 
 message brings it over the list, a swipe in from the right edge brings the next panel over,
 and the message panel's 448 px minimum applies only side by side; in
 mail/source/MessageDisplay.js, the message view is no taller than its room, so it no longer
-covers the toolbar and its grab handle. A tablet's layout is unchanged. The build scripts and specs that shipped beside it
+covers the toolbar and its grab handle. A tablet's layout is unchanged. Also marked [Lunacy],
+on codepoet's word (2026-11-08, "scrub that signature"): in data/AccountPreferences.js and
+mail/source/settings/AccountSettings.js, the built-in signature is "-- Sent from Lunacy"
+(and its translations in resources/), and Palm's "Sent from my HP TouchPad" saved on an
+account is treated as the default. The build scripts and specs that shipped beside it
 (Rakefile, Gemfile, Gemfile.lock, ci_build.sh, build-ignore, jasminerunner.html, spec/) are
 left out; nothing else is.

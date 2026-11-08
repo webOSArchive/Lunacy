@@ -1632,7 +1632,8 @@ the TouchPad's own mail services. What it uses, and where Lunacy answers:
   family, and Prelude for a name the device didn't have (Fastmail's mail is Prelude there).
 - **Composing.** The default signature is Lunacy's ("-- Sent from Lunacy", codepoet's rule 0
   exception): the configurator writes Email's carrier-defaults record, as webOS's
-  customization service did for a carrier (luna-deltas A14).
+  customization service did for a carrier (luna-deltas A14). Email's own built-in default says
+  Lunacy too, and Palm's signature saved on an account counts as the default.
 - **Sending.** The compose window saves the message to the outbox; mojomail-smtp's outbox watch
   fires, it sends (TLS, `AUTH LOGIN`) and moves the message to Sent, and mojomail-imap appends
   it on the server.

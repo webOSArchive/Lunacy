@@ -1,6 +1,6 @@
 {
 	"#{name} <#{addr}> wrote: ": "#{name} <#{addr}> a écrit : ",
-	"-- Sent from my HP TouchPad": "-- Envoyé depuis mon HP TouchPad",
+	"-- Sent from Lunacy": "-- Envoyé depuis Lunacy",
 	"0#Select Items...|1#1 item selected...|1>##{num} items selected...": "0#Sélectionner des éléments...|1#1 élément sélectionné...|1>##{num} éléments sélectionnés...",
 	"1 Hour": "1 heure",
 	"1 day": "1 jour",

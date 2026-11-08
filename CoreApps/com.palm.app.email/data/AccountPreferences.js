@@ -74,7 +74,9 @@ AccountPreferences._correctSignature = function(signature) {
 	signature = signature || AccountPreferences.NO_SIGNATURE_BY_USER;
 	// passed gatekeeper, so we're cool to blank out
 	var carrierDefs = enyo.application.carrierDefaults; 
-	if (carrierDefs && signature === carrierDefs.defaultSignature) {
+	// [Lunacy] The default in any form (styled, as Account Settings shows it), and Palm's
+	// own signature, are never saved: an account keeps a signature only when one was typed.
+	if ((carrierDefs && signature === carrierDefs.defaultSignature) || AccountPreferences.isDefaultSig(signature)) {
 		// default signature should never be saved to the database. Different
 		// for each device. 
 		signature = "";
@@ -108,9 +110,7 @@ AccountPreferences.addStylingToSig = function(signature){
  * displayed in the compose view's from dropdown
  */
 AccountPreferences.getSignature = function(accountId) {
-	var carrierDefs =  enyo.application.carrierDefaults;
-	var defSig = AccountPreferences.addStylingToSig((carrierDefs && carrierDefs.defaultSignature) ||
-														AccountPreferences.DEFAULT_SIG);
+	var defSig = AccountPreferences.defaultSignature();
 
 	// DFISH-28123: fix default signature being used when sending from a
 	// synthetic folder (and a custom signature is set on the default account)
@@ -126,7 +126,32 @@ AccountPreferences.getSignature = function(accountId) {
 	if (!account) {
 		return defSig;
 	}
-	return account.getSignature() || defSig;
+	// [Lunacy] An account that saved Palm's signature (Account Settings showed it in an empty
+	// field and saved it) gets the default instead.
+	var sig = account.getSignature();
+	return (sig && !AccountPreferences.isDefaultSig(sig)) ? sig : defSig;
+};
+
+/** [Lunacy] The default signature, styled: the carrier defaults' when there are some. */
+AccountPreferences.defaultSignature = function() {
+	var carrierDefs = enyo.application.carrierDefaults;
+	return AccountPreferences.addStylingToSig((carrierDefs && carrierDefs.defaultSignature) ||
+		AccountPreferences.DEFAULT_SIG);
+};
+
+/**
+ * [Lunacy] Whether a signature is a default rather than one the user typed: the current
+ * default, or Palm's "Sent from my HP TouchPad" in any language Email shipped, styled or not.
+ */
+AccountPreferences.isDefaultSig = function(signature) {
+	if (!signature || typeof signature !== "string") {
+		return false;
+	}
+	var text = AccountPreferences.sanitizeStr(signature).trim();
+	var carrierDefs = enyo.application.carrierDefaults;
+	var defaults = AccountPreferences.PALM_SIGS.concat([AccountPreferences.DEFAULT_SIG,
+		AccountPreferences.sanitizeStr((carrierDefs && carrierDefs.defaultSignature) || "").trim()]);
+	return defaults.indexOf(text) >= 0;
 };
 
 
@@ -151,7 +176,11 @@ AccountPreferences.LOOKBACK_1_MONTH = 30;
 AccountPreferences.LOOKBACK_FOREVER = 0;
 
 AccountPreferences.NO_SIGNATURE_BY_USER = '<div id="no_signature" style="overflow:hidden;"></div>';
-AccountPreferences.DEFAULT_SIG = $L("-- Sent from my HP TouchPad");
+// [Lunacy] Lunacy's signature, where Palm's said "-- Sent from my HP TouchPad" (codepoet,
+// luna-deltas.md A14). Palm's, as Email shipped it in each language, is still recognised.
+AccountPreferences.DEFAULT_SIG = $L("-- Sent from Lunacy");
+AccountPreferences.PALM_SIGS = ["-- Sent from my HP TouchPad", "-- Gesendet von meinem HP TouchPad",
+	"-- Enviado desde mi HP TouchPad", "-- Envoyé depuis mon HP TouchPad", "-- Inviato da HP TouchPad"];
 
 AccountPreferences.NOTIFICATION_MUTE = "mute";
 AccountPreferences.NOTIFICATION_SYSTEM = "system";

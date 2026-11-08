@@ -1,6 +1,6 @@
 {
 	"templateId": "org.webosarchive.lunacy.microsoft365",
-	"loc_name": "Microsoft",
+	"loc_name": "Microsoft Outlook",
 	"loc_subtitle": "Email (Calendar and Contacts, if available)",
 	"icon": {
 		"loc_32x32": "images/microsoft-32x32.png",

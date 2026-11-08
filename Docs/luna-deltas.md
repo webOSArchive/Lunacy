@@ -826,7 +826,7 @@ now ([oauth.md](oauth.md)). What a person sees instead:
 
 - **Add Account** lists Google (the TouchPad's Google icon) and Microsoft Outlook (an Outlook icon; "Microsoft" until 2026-11-07)
   beside Palm's types, in Email and in Accounts. Since 2026-11-08 (codepoet's call) that is one
-  entry, "Microsoft", its line reading "Email (Calendar and Contacts, if available)" (the
+  entry, still "Microsoft Outlook" but now the Exchange type, its line reading "Email (Calendar and Contacts, if available)" (the
   template's `loc_subtitle`, which CE's Add Account list shows in place of the capabilities it
   would list; LunaRuntimes/enyo-accounts): a work or school account over Exchange
   ActiveSync, a personal one, which Microsoft refuses Exchange, over IMAP with mail only

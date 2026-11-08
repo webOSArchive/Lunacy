@@ -1,6 +1,6 @@
 {
 	"templateId": "org.webosarchive.lunacy.microsoft",
-	"loc_name": "Microsoft",
+	"loc_name": "Microsoft Outlook",
 	"hidden": true,
 	"icon": {
 		"loc_32x32": "images/microsoft-32x32.png",

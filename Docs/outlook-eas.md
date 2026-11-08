@@ -23,7 +23,7 @@ own, Zoho) and must stay exactly as it is:
   the one tested in [eas.md](eas.md)) still adds, syncs mail, contacts and calendar, and sends.
 
 **2. IMAP after OAuth (the "Microsoft Outlook" account, `org.webosarchive.lunacy.microsoft`; since
-2026-11-08 hidden from Add Account and reached through the one "Microsoft" entry's fallback).**
+2026-11-08 hidden from Add Account and reached through the one "Microsoft Outlook" entry's fallback).**
 This is what 0.9.3 ships and what works now: Microsoft sign-in, then Palm's IMAP and SMTP with
 XOAUTH2. It must keep working, and keep being what Outlook.com and other personal accounts use:
 
@@ -41,7 +41,7 @@ against `wosatester@jonandnic.onmicrosoft.com`):
 
 - **The account type** is `org.webosarchive.lunacy.microsoft365`, a template of its own in the
   sign-in app (`CoreApps/org.webosarchive.lunacy.signin/accounts/`), listed in Add Account as
-  "Microsoft" (Email, Contacts, Calendar) beside Palm's "Microsoft Exchange", which didn't
+  "Microsoft Outlook" (Email, Contacts, Calendar) beside Palm's "Microsoft Exchange", which didn't
   change. It is the only Microsoft entry: the IMAP type is hidden (below, "One entry"). Its capabilities are Palm's Exchange ones, with the same
   ids (`com.palm.eas.mail`, `.contacts`, `.remotecontacts`, `.calendar`, `.tasks`): mojomail-eas
   looks for those ids, and the accounts service only ever looks a capability up inside an
@@ -114,8 +114,8 @@ against `wosatester@jonandnic.onmicrosoft.com`):
 ## One entry (2026-11-08)
 
 codepoet: "merge them into one Microsoft entry with IMAP fallback. Microsoft is so schizo about
-what 'Outlook' is, so a fallback makes sense." Add Account shows one **Microsoft** entry (the
-Exchange template, now named "Microsoft", its line "Email (Calendar and Contacts, if
+what 'Outlook' is, so a fallback makes sense." Add Account shows one **Microsoft Outlook** entry (the
+Exchange template, now named "Microsoft Outlook" as the IMAP one was, its line "Email (Calendar and Contacts, if
 available)"); the IMAP template is `hidden` (Enyo's accounts library
 and Email both leave hidden templates out of Add, while accounts already made with it are listed
 and work as before). Signing in:

@@ -23,7 +23,7 @@ broker, with Palm's mail services logging in with XOAUTH2 under them, unchanged
   for 16.x), with Microsoft's back-off kept and no-token failures retried
   ([outlook-eas.md](outlook-eas.md)). Earlier:
   contacts and calendar items and the Fold3 are still to see. Since 2026-11-08 Add Account has
-  one "Microsoft" entry (codepoet): Exchange, with personal accounts falling back to IMAP.
+  one "Microsoft Outlook" entry (codepoet): Exchange, with personal accounts falling back to IMAP.
 - **Outlook.com (personal):** Microsoft's own bug: its IMAP refuses OAuth logins for personal
   accounts ("authenticated but not connected"), reproduced outside Lunacy; the EAS scope is
   refused for them too.

@@ -71,7 +71,12 @@ int main(void)
 	const unsigned char cu[] = { 0x7c, 0x03, '1', '7', '9', '4' };
 	check(memmem(out, o, cu, sizeof cu) != NULL, "UID now ClientUid");
 	unsigned char again[CALF_OUT_CAP(sizeof palm_add)];
-	check(calf_rewrite(out, o, again) == 0, "nothing left to change the second time");
+	/* A second pass changes nothing but the TimeZone (Palm's form isn't told from Windows' by
+	   the bytes: the rewrite runs once, on what Palm sent). */
+	size_t ag = calf_rewrite(out, o, again);
+	size_t diff = 0;
+	if (ag == o) for (size_t q = 0; q < o; q++) diff += again[q] != out[q];
+	check(ag == 0 || (ag == o && diff <= 232), "nothing but the zone left to change the second time");
 	/* MeetingStatus (0x58 with content in page 4) gone: Palm's sends "0". */
 	const unsigned char ms[] = { 0x58, 0x03, '0', 0x00, 0x01 };
 	check(memmem(out, o, ms, sizeof ms) == NULL, "MeetingStatus gone");
@@ -163,6 +168,55 @@ int main(void)
 	check(calf_split(want_add, sizeof want_add, &sl) == NULL, "nothing to split: left alone");
 	check(calf_split(notwbxml, sizeof notwbxml, &sl) == NULL, "not WBXML: left alone");
 	check(calf_split(series, 40, &sl) == NULL, "a truncated request: left alone");
+
+	/* TimeZone: Palm's changes (this year's instants broken down in UTC, as sent on
+	   2026-11-08) as Windows writes them; Exchange's own zones, and one without daylight
+	   saving, left alone. */
+	calf_year = 2026;
+	struct { const char *in; int std[4], dst[4]; const char *what; } zones[] = {
+		{ "4AEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAsAAAABAAkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAACAAoAAAAAAAAAxP///w==",
+		  { 11, 0, 1, 2 }, { 3, 0, 2, 2 }, "Los Angeles: 2:00 on the 1st Sunday of November and the 2nd of March" },
+		{ "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAoAAAAEAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAAFAAEAAAAAAAAAxP///w==",
+		  { 10, 0, 5, 2 }, { 3, 0, 5, 1 }, "London: the last Sunday of October at 2:00, of March at 1:00" },
+		{ "qP3//wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQABgABABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAoABgABABAAAAAAAAAAxP///w==",
+		  { 4, 0, 1, 3 }, { 10, 0, 1, 2 }, "Sydney: the 1st Sunday of April at 3:00, of October at 2:00, a day after the UTC date" },
+	};
+	for (size_t z = 0; z < sizeof zones / sizeof zones[0]; z++) {
+		unsigned char b[233], tz[172]; memcpy(b, zones[z].in, 233);
+		int ok = calf_fix_tz(b, 232, 2026) && calf_tz_decode(b, 232, tz) == 0;
+		const int *w[2] = { zones[z].std, zones[z].dst };
+		for (int k = 0; ok && k < 2; k++) {
+			const unsigned char *st = tz + (k ? 152 : 68);
+			ok = calf_u16(st) == 0 && calf_u16(st + 2) == w[k][0] && calf_u16(st + 4) == w[k][1] && calf_u16(st + 6) == w[k][2]
+				&& calf_u16(st + 8) == w[k][3] && calf_u16(st + 10) == 0;
+		}
+		check(ok, zones[z].what);
+	}
+	{
+		/* Exchange's "Customized Time Zone" (named): left alone. */
+		unsigned char b[233];
+		memcpy(b, "LAEAAEMAdQBzAHQAbwBtAGkAegBlAGQAIABUAGkAbQBlACAAWgBvAG4AZQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAsAAAABAAYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAACAAcAAAAAAAAAxP///w==", 233);
+		check(calf_fix_tz(b, 232, 2026) == 0, "a zone Exchange named is left alone");
+		/* No daylight saving (Arizona, bias 420): left alone. */
+		unsigned char tz[172] = { 0 }, enc[233] = { 0 };
+		tz[0] = 0xa4; tz[1] = 0x01;
+		calf_tz_encode(tz, enc);
+		check(calf_fix_tz(enc, 232, 2026) == 0, "a zone without daylight saving is left alone");
+		check(calf_fix_tz((unsigned char *)"short", 5, 2026) == 0, "not a TimeZone: left alone");
+	}
+	/* In a request: the Add's TimeZone rewritten, everything else byte for byte. */
+	{
+		const char *la = zones[0].in;
+		unsigned char req[300], o2[CALF_OUT_CAP(300)];
+		size_t k = 0;
+		memcpy(req, (unsigned char[]){ 0x03, 0x01, 0x6a, 0x00, 0x00, 0x04, 0x45, 0x03 }, 8); k = 8;
+		memcpy(req + k, la, 232); k += 232; req[k++] = 0x00; req[k++] = 0x01;
+		req[k++] = 0x66; req[k++] = 0x03; req[k++] = 's'; req[k++] = 0x00; req[k++] = 0x01;
+		size_t ol = calf_rewrite(req, k, o2);
+		unsigned char tz[172];
+		check(ol == k && memcmp(o2 + 8, la, 232) != 0 && calf_tz_decode(o2 + 8, 232, tz) == 0 && calf_u16(tz + 68 + 8) == 2
+			&& memcmp(o2 + 240, req + 240, k - 240) == 0, "a request's TimeZone rewritten in place");
+	}
 
 	if (failures) { printf("calfilter: %d failed\n", failures); return 1; }
 	printf("calfilter: all passed\n");

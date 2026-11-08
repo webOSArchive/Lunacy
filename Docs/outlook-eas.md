@@ -74,8 +74,8 @@ against `wosatester@jonandnic.onmicrosoft.com`):
    then ask for the password again; `domain_hint` only narrows the picker).
 2. **Server-made changes reaching the device.** A contact and events created, edited and
    deleted in Outlook on the web reached the device by Ping (2026-11-08), and recurring events
-   with exceptions work both ways (below, "Recurring exceptions"). Still to see: time zones other
-   than the device's; meeting invitations from someone else (`respondToMeetingInvitations`,
+   with exceptions work both ways (below, "Recurring exceptions"), and so do events in zones
+   other than the device's (below, "Time zones"). Still to see: meeting invitations from someone else (`respondToMeetingInvitations`,
    untried in [eas.md](eas.md)); a series created on the device with an exception before its
    first sync (its Exceptions go with the Add, see below, and reach the server with the
    series' next Change).
@@ -154,6 +154,36 @@ one, which Palm can't read, and isn't handled.
 given, which fills every missing property with its default before the merge. Given only `_id`
 and one property, it blanks the rest (subject, repeat rule, time zone). Calendar always passes
 the whole event; a test must do the same.
+
+## Time zones (2026-11-08)
+
+Events in a zone other than the device's (Eastern), both ways, measured on the Fold3 against
+Exchange Online.
+
+**Palm's zones were wrong on the way up.** Palm sends an event's zone as Windows'
+TIME_ZONE_INFORMATION (base64), built from `getTimeZoneRules`, which answers this year's two
+changes as instants (the TouchPad's shape; Lunacy answers it the same). Palm breaks those
+instants down in UTC and counts the weekday's week from the date: Los Angeles went "at 09:00
+and 10:00", London "on the 4th Sunday of October at 01:00" (the last Sunday in 2026 is the 25th,
+the 4th). Windows wants the local wall-clock time and the nth weekday, 5 for the last. Exchange
+kept Palm's zone as a "Customized Time Zone" with those rules, so a London series would move an
+hour early in the week before the real change (Oct 24 to 31, 2027). A real TouchPad sends the
+same.
+
+**The fix** (adapter 6, `calf_fix_tz` in `calfilter.h`): in a request, a TimeZone with no names
+(Palm's own) has each change put back on this year's calendar and written as Windows writes it.
+A named zone, one Exchange made and Palm keeps and sends back, is left alone. Checked against
+every IANA zone with two changes in 2026 (149), built as Palm builds them, all as Windows writes
+them; the Southern Hemisphere's change the day after its UTC date included.
+
+**Seen working:** a London weekly series crossing both springs' changes (March 14 and 28, 2027)
+and a Los Angeles event sent from the device: Exchange took London as its own "GMT Standard
+Time", Los Angeles with the right rules (still "Customized Time Zone"). Events made in Outlook
+(Pacific, a London weekly series, an Arizona weekly series) came down with Windows' zones,
+"Pacific Standard Time", "GMT Standard Time", "US Mountain Standard Time" (no changes), and
+became America/Los_Angeles, Europe/London and America/Phoenix (`getTimeZoneFromEasData`'s
+months rule; not Denver). Calendar's week of March 15, 2027 (the US changed, the UK not yet)
+shows both London series at 6 AM and Arizona's at 11 AM.
 
 ## One entry (2026-11-08)
 

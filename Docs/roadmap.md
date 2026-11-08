@@ -11,7 +11,8 @@ after 1.0.
 - **Exchange (Microsoft Outlook over EAS):**
   - ~~recurring events with exceptions~~ done 2026-11-08: both ways, on the Fold3
     ([outlook-eas.md](outlook-eas.md), "Recurring exceptions");
-  - a time zone other than the device's;
+  - ~~a time zone other than the device's~~ done 2026-11-08 ([outlook-eas.md](outlook-eas.md),
+    "Time zones");
   - the validator reporting a throttle (a 503) as a bad login ("check your login");
   - telling a person plainly when their organisation's admin has to approve the app, in place
     of Microsoft's raw error ([outlook-eas.md](outlook-eas.md), "What's missing").

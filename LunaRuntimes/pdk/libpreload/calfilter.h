@@ -20,6 +20,14 @@
  * - An Exception's ExceptionStartTime becomes AirSyncBase's InstanceId, the same compact
  *   date (16.0 names the occurrence that way).
  *
+ * - The TimeZone's two changes, as Palm writes them, are this year's instants broken down in
+ *   UTC: Los Angeles changes "at 09:00 and 10:00", London "on the 4th Sunday of October" (the
+ *   last Sunday in 2026). Windows' form (TIME_ZONE_INFORMATION) wants the local wall-clock time
+ *   and the nth weekday, 5 for the last; Exchange keeps the zone as Palm sent it ("Customized
+ *   Time Zone"), so a series would move an hour early in the wrong week. Each change is put
+ *   back on this year's calendar and written as Windows writes it (calf_fix_tz). Only a zone
+ *   with no names is Palm's own; one Exchange made, which Palm keeps and sends back, is left.
+ *
  * Then calf_split: from 16.0 a client MUST NOT send Exceptions in a Sync request (MS-ASCAL,
  * Exceptions); an occurrence is changed by a Change of its own, naming the series by ServerId
  * and the occurrence by InstanceId, or deleted by such a Delete (MS-ASCMD, Change and Delete).
@@ -42,8 +50,10 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define CALF_PAGE 4                 /* the Calendar code page */
+#define CALF_TIME_ZONE 0x05
 #define CALF_UID 0x28
 #define CALF_CLIENT_UID 0x3c
 #define CALF_DTSTAMP 0x11
@@ -77,6 +87,121 @@ static int calf_mb(const unsigned char *in, size_t n, size_t *i, unsigned long *
 	return -1;
 }
 
+/* ---- the TimeZone (base64 of Windows' TIME_ZONE_INFORMATION, 172 bytes) ---- */
+
+static const char calf_b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static int calf_b64v(unsigned char c)
+{
+	const char *p = c ? strchr(calf_b64, c) : NULL;
+	return p ? (int)(p - calf_b64) : -1;
+}
+
+/* Base64 of exactly 172 bytes (232 characters) into tz; 0 on success. */
+static int calf_tz_decode(const unsigned char *s, size_t len, unsigned char *tz)
+{
+	if (len != 232 || s[230] != '=' || s[231] != '=') return -1;
+	size_t o = 0;
+	for (size_t i = 0; i < 232; i += 4) {
+		int a = calf_b64v(s[i]), b = calf_b64v(s[i + 1]);
+		int c = s[i + 2] == '=' ? 0 : calf_b64v(s[i + 2]), d = s[i + 3] == '=' ? 0 : calf_b64v(s[i + 3]);
+		if (a < 0 || b < 0 || c < 0 || d < 0) return -1;
+		unsigned long v = ((unsigned long)a << 18) | ((unsigned long)b << 12) | ((unsigned long)c << 6) | (unsigned long)d;
+		if (o < 172) tz[o++] = (unsigned char)(v >> 16);
+		if (o < 172) tz[o++] = (unsigned char)(v >> 8);
+		if (o < 172) tz[o++] = (unsigned char)v;
+	}
+	return 0;
+}
+
+static void calf_tz_encode(const unsigned char *tz, unsigned char *s)
+{
+	size_t o = 0;
+	for (size_t i = 0; i < 172; i += 3) {
+		unsigned long v = (unsigned long)tz[i] << 16 | (i + 1 < 172 ? (unsigned long)tz[i + 1] << 8 : 0) | (i + 2 < 172 ? tz[i + 2] : 0);
+		s[o++] = (unsigned char)calf_b64[(v >> 18) & 63]; s[o++] = (unsigned char)calf_b64[(v >> 12) & 63];
+		s[o++] = i + 1 < 172 ? (unsigned char)calf_b64[(v >> 6) & 63] : '=';
+		s[o++] = i + 2 < 172 ? (unsigned char)calf_b64[v & 63] : '=';
+	}
+}
+
+static int calf_u16(const unsigned char *p) { return p[0] | p[1] << 8; }
+static void calf_put16(unsigned char *p, int v) { p[0] = (unsigned char)v; p[1] = (unsigned char)(v >> 8); }
+static long calf_s32(const unsigned char *p) { return (long)(int)((unsigned)p[0] | (unsigned)p[1] << 8 | (unsigned)p[2] << 16 | (unsigned)p[3] << 24); }
+
+/* Days since the epoch of a civil date (proleptic Gregorian), and back. */
+static long calf_days(long y, int m, int d)
+{
+	y -= m <= 2;
+	long era = (y >= 0 ? y : y - 399) / 400, yoe = y - era * 400;
+	long doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1, doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+	return era * 146097 + doe - 719468;
+}
+
+static void calf_civil(long z, long *y, int *m, int *d)
+{
+	z += 719468;
+	long era = (z >= 0 ? z : z - 146096) / 146097, doe = z - era * 146097;
+	long yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365, doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+	long mp = (5 * doy + 2) / 153;
+	*d = (int)(doy - (153 * mp + 2) / 5 + 1); *m = (int)(mp < 10 ? mp + 3 : mp - 9); *y = yoe + era * 400 + (*m <= 2);
+}
+
+static int calf_month_days(long y, int m) { return (int)(calf_days(m == 12 ? y + 1 : y, m == 12 ? 1 : m + 1, 1) - calf_days(y, m, 1)); }
+
+static int calf_dow(long z) { return (int)(((z % 7) + 7 + 4) % 7); }   /* 1970-01-01 was a Thursday */
+
+/*
+ * One change (a SYSTEMTIME at st) as Palm wrote it, year's nth weekday at a UTC time, rewritten
+ * as Windows writes it: the local wall-clock time, local_minus_utc minutes ahead of UTC, and the
+ * nth weekday of its month, 5 for the last. 1 when it changed.
+ */
+static int calf_fix_change(unsigned char *st, long year, long local_minus_utc)
+{
+	int month = calf_u16(st + 2), dow = calf_u16(st + 4), week = calf_u16(st + 6), h = calf_u16(st + 8), mi = calf_u16(st + 10);
+	if (calf_u16(st) != 0 || month < 1 || month > 12 || dow > 6 || week < 1 || week > 5 || h > 23 || mi > 59) return 0;
+	long first = calf_days(year, month, 1);
+	int day = 1 + (dow - calf_dow(first) + 7) % 7 + 7 * (week - 1);
+	if (day > calf_month_days(year, month)) day -= 7;                 /* "5": the last */
+	long minutes = (calf_days(year, month, day) * 1440L) + h * 60 + mi + local_minus_utc;
+	long z = minutes >= 0 ? minutes / 1440 : -((-minutes + 1439) / 1440);
+	long rest = minutes - z * 1440, ly; int lm, ld;
+	calf_civil(z, &ly, &lm, &ld);
+	int lweek = ld + 7 > calf_month_days(ly, lm) ? 5 : (ld + 6) / 7;
+	unsigned char was[16]; memcpy(was, st, 16);
+	calf_put16(st + 2, lm); calf_put16(st + 4, calf_dow(z)); calf_put16(st + 6, lweek);
+	calf_put16(st + 8, (int)(rest / 60)); calf_put16(st + 10, (int)(rest % 60));
+	calf_put16(st + 12, 0); calf_put16(st + 14, 0);
+	return memcmp(was, st, 16) != 0;
+}
+
+/* A TimeZone's base64 (232 characters at s) rewritten in place for year; 1 when it changed. */
+static int calf_fix_tz(unsigned char *s, size_t len, long year)
+{
+	unsigned char tz[172], back[232];
+	if (calf_tz_decode(s, len, tz)) return 0;
+	long bias = calf_s32(tz), daylight_bias = calf_s32(tz + 168);
+	if (calf_u16(tz + 152 + 2) == 0 || calf_u16(tz + 68 + 2) == 0) return 0;   /* no daylight saving */
+	/* Only Palm's own: it names neither part. A zone Exchange made (named, "Pacific Standard
+	   Time" or "Customized Time Zone") is in Windows' form already, and Palm sends it back. */
+	for (int k = 4; k < 68; k++) if (tz[k]) return 0;
+	for (int k = 88; k < 152; k++) if (tz[k]) return 0;
+	int changed = calf_fix_change(tz + 68, year, -(bias + daylight_bias))   /* back to standard: read in daylight time */
+		| calf_fix_change(tz + 152, year, -bias);                         /* into daylight: read in standard time */
+	if (!changed) return 0;
+	calf_tz_encode(tz, back);
+	memcpy(s, back, 232);
+	return 1;
+}
+
+static long calf_this_year(void)
+{
+	time_t t = time(NULL); struct tm tm;
+	return gmtime_r(&t, &tm) ? tm.tm_year + 1900L : 2026;
+}
+
+static long calf_year;                  /* the year Palm's changes are in; 0: this one (tests set it) */
+
 static int calf_dropped(int page, int tag)
 {
 	return (page == CALF_PAGE && (tag == CALF_DTSTAMP || tag == CALF_ORGANIZER_EMAIL || tag == CALF_ORGANIZER_NAME || tag == CALF_MEETING_STATUS))
@@ -95,6 +220,7 @@ static size_t calf_rewrite(const unsigned char *in, size_t n, unsigned char *out
 	int page = 0, out_page = 0, skip = 0, changed = 0, depth = 0, fdow = 0;
 	unsigned char recurrence[CALF_MAX_DEPTH] = { 0 };   /* the element open at each depth is a Recurrence */
 	int change_depth = 0;                               /* > 0: inside a Change, opened at that depth */
+	int in_tz = 0;                                      /* the last tag written is an open TimeZone */
 	if (n < 4 || in[0] != 0x03) return (size_t)-1;
 	i = 1;
 	if (calf_mb(in, n, &i, &v) || calf_mb(in, n, &i, &v)) return (size_t)-1;   /* public id, charset */
@@ -122,13 +248,18 @@ static size_t calf_rewrite(const unsigned char *in, size_t n, unsigned char *out
 				}
 			}
 			if (depth > 0) depth--;
+			in_tz = 0;
 			if (change_depth && depth < change_depth) change_depth = 0;
 			out[o++] = c; continue;
 		case 0x03: {                                       /* STR_I */
 			const unsigned char *z = memchr(in + i, 0, n - i);
 			if (!z) return (size_t)-1;
 			size_t len = (size_t)(z - (in + i)) + 1;
-			if (!skip) { out[o++] = c; memcpy(out + o, in + i, len); o += len; }
+			if (!skip) {
+				out[o++] = c; memcpy(out + o, in + i, len);
+				if (in_tz && calf_fix_tz(out + o, len - 1, calf_year ? calf_year : calf_this_year())) changed = 1;
+				o += len;
+			}
 			i += len;
 			continue;
 		}
@@ -180,6 +311,7 @@ static size_t calf_rewrite(const unsigned char *in, size_t n, unsigned char *out
 				depth++;
 				if (page == 0 && tag == CALF_AIRSYNC_CHANGE) change_depth = depth;
 			}
+			in_tz = content && page == CALF_PAGE && tag == CALF_TIME_ZONE;
 			out[o++] = c;
 		}
 		}

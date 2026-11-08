@@ -94,6 +94,9 @@ class NativeServices(private val bus: Bus, private val webos: WebosRoot, private
             else { remove("LD_LIBRARY_PATH"); put(if (enosys != null) "LUNACY_PDK_PRELOAD" else "LD_PRELOAD", preload) }
             put("LUNACY_PDK_EXE", binary.path)
             put("LUNACY_PDK_ROOT", root.path)
+            // /media/internal's folders that are Android's (UserFiles), for the preload, as PDK
+            // apps and JS services get them: an attachment shared from Photos is in camera/.
+            put("LUNACY_PDK_MEDIA", UserFiles.mappedFolders().joinToString(":") { (name, dir) -> "$name=${dir.path}" })
             // liblunaservice takes stdin and stdout as the bus link.
             put("LUNACY_BUS_STDIO", "1")
         }

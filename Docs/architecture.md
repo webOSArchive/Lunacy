@@ -1497,6 +1497,8 @@ with webOS Chat's AIM plugin ([messaging.md](messaging.md)).
   root as it stands before the configurator runs, as ls-hubd knew every service file at
   boot. The loader's own variables (`LD_LIBRARY_PATH`, `LD_PRELOAD`) are looked up in the
   webOS root; every other webOS path the service opens goes through the runtime's preload.
+  That includes `/media/internal`'s mapped folders (`LUNACY_PDK_MEDIA`, as PDK apps get
+  them), so a photo shared to Email from `camera/` is attached from Android's DCIM.
   A service exits on its own idle timer, and the next call starts it again.
 - **The bus.** Lunacy's `liblunaservice.so` (`LunaRuntimes/pdk/liblunaservice`) stands in for
   the device's, which spoke to ls-hubd. It has the LS2 calls libmojoluna and filecache use

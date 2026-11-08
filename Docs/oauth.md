@@ -331,9 +331,13 @@ path (Google's) is not yet tried on a device: it needs one with a browser.
   2026-11-05). Whether it also asks for a security assessment turns on servers: none in the
   on-device path; decide whether Google goes through the broker at all.
 - **The broker's apps** on oauth.wosa.link for Google and Microsoft (a Web client and secret each).
-- **Email's own "Change login settings"** opens Palm's password form for these accounts too,
-  which can't sign them in. The Accounts app's page can. Email checking the template's
-  `customUI` there would be a change to Email (rule 5's exceptions are codepoet's).
+- ~~**Email's own "Change login settings"**~~ done 2026-11-08 (codepoet approved changing
+  Email): for an account type with its own sign-in page (`validator.customUI`) Email's
+  `MasterSettings.showEditMode` opens that page in modify mode, through Accounts' library
+  (`Accounts.crossAppUI`), as the Accounts app does, and comes back to the account's settings;
+  Palm's form, which showed the handle as a password and Manual Setup, stays for every other
+  type. Seen on the Fold3: Sign In Again from Email's settings signed the IMAP test account in
+  again, saved it, and told mojomail-imap and -smtp (`credentialsChanged`).
 - The browser path's look: Android's browser appearing mid-sign-in is a visible difference
   (luna-deltas B23).
 - Yahoo (app passwords already work with plain IMAP).

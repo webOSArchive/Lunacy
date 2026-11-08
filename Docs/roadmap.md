@@ -18,9 +18,9 @@ after 1.0.
   - ~~telling a person plainly when their organisation's admin has to approve the app~~ done
     2026-11-08 ([outlook-eas.md](outlook-eas.md), "Sign-in messages"); to be seen against a
     tenant that forbids user consent.
-- **Email's "Change login settings"** for Google and Microsoft accounts: it opens Palm's password
-  form, which can't sign them in (the Accounts app's page can). A change to Email, which
-  codepoet approved as a rule 5 exception (2026-11-08).
+- ~~**Email's "Change login settings"** for Google and Microsoft accounts~~ done 2026-11-08:
+  Email opens the account type's own sign-in page there ([oauth.md](oauth.md), Open); a change
+  to Email, which codepoet approved as a rule 5 exception.
 - **The code review's "before 1.0"** ([code-review-2026-11-03.md](code-review-2026-11-03.md)):
   the TouchPad measurements (B4, B5, B6, S5, S7/S8, S14, §4.3) were made on 2026-11-03 and acted
   on 2026-11-04, and `compat.js` was split the same day. Left: the rest of §3.1 (`animateValue`

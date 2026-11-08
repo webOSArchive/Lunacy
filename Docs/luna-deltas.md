@@ -833,6 +833,10 @@ now ([oauth.md](oauth.md)). What a person sees instead:
   ([outlook-eas.md](outlook-eas.md)). The sign-in page says Lunacy keeps the mail, contacts and
   calendar; for a personal account its "Checking your account" line says it gets mail only.
   Microsoft accounts made with the earlier "Microsoft Outlook" entry keep their name.
+- **Email's "Change login settings"** for these accounts opens the same page (Sign In Again,
+  Remove Account), as the Accounts app's account page does, in place of Palm's password form
+  with its Manual Setup, which can't sign them in. A change to Email, marked [Lunacy]
+  (`MasterSettings.js`), codepoet's call (2026-11-08); every other account type keeps Palm's form.
 - **A sign-in page** in place of the username and password form, in the TouchPad's account-page
   look: a line on what happens, Sign In, and Sign In on Another Device (the broker's short code
   and address, for a device whose engine can't show the provider's page).

@@ -13,7 +13,8 @@ after 1.0.
     ([outlook-eas.md](outlook-eas.md), "Recurring exceptions");
   - ~~a time zone other than the device's~~ done 2026-11-08 ([outlook-eas.md](outlook-eas.md),
     "Time zones");
-  - the validator reporting a throttle (a 503) as a bad login ("check your login");
+  - ~~the validator reporting a throttle (a 503) as a bad login~~ done 2026-11-08
+    ([outlook-eas.md](outlook-eas.md), "Sign-in messages");
   - telling a person plainly when their organisation's admin has to approve the app, in place
     of Microsoft's raw error ([outlook-eas.md](outlook-eas.md), "What's missing").
 - **Email's "Change login settings"** for Google and Microsoft accounts: it opens Palm's password

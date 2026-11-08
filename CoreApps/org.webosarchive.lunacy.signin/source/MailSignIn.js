@@ -218,6 +218,13 @@ enyo.kind({
 			this.$.getPolicy.call({});
 			return;
 		}
+		// 1110 (ACCOUNT_UNAVAILABLE): the server asked to be left alone for a while (a throttled
+		// Exchange; the preload's easerr.h), which is no fault of the sign-in.
+		if (r && !r.returnValue && (r.mailErrorCode === 1110 || r.errorCode === "503_SERVICE_UNAVAILABLE")) {
+			this.failed(new enyo.g11n.Template($L("#{email} signed in, but its mail server is busy and asked to be left alone for a while. Try again in a few minutes.")).evaluate({email: this.email}));
+			this.forgetHandle();
+			return;
+		}
 		if (!r || !r.returnValue) {
 			this.failed(new enyo.g11n.Template($L("#{email} signed in, but its mail server didn't take the sign-in. #{why}")).evaluate({
 				email: this.email, why: (r && r.errorText) || ""}));

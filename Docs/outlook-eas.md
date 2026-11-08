@@ -155,6 +155,24 @@ given, which fills every missing property with its default before the merge. Giv
 and one property, it blanks the rest (subject, repeat rule, time zone). Calendar always passes
 the whole event; a test must do the same.
 
+## Sign-in messages (2026-11-08)
+
+**A throttle read as a bad login.** Palm's Exchange validator turns almost every HTTP error
+into one: measured against a stand-in server, 400, 403, 429, 451, 500, 503 and 507 all came
+back `{"errorCode":"401_UNAUTHORIZED","errorText":"http error: <status>","mailErrorCode":1000}`;
+only 404 differed (`412_PRECONDITION_FAILED`, 9810). So a throttled Exchange Online (503) told
+the person to check the login. webOS has the words for it: Accounts' library shows
+`503_SERVICE_UNAVAILABLE` as "Server unavailable", and Email shows `mailErrorCode` 1110
+(`ACCOUNT_UNAVAILABLE`) as "The account is temporarily unavailable. Please try again in a few
+minutes." The preload stands in front of the native services' `LSMessageRespond` and answers a
+validator reply that says `401_UNAUTHORIZED` for "http error: 503" or "429" with those
+(`easerr.h`); a 503 or 429 is never a wrong password. Every other reply passes as it was (a real
+401 stays a bad login; a 500 stays as Palm says it). Both account types: Accounts' Microsoft
+Exchange form showed Palm's "temporarily unavailable" against the stand-in, and Lunacy's
+Microsoft sign-in page says the mail server is busy and to try again in a few minutes. Not
+handled: a throttle met while syncing an account already made (Palm's own account error); the
+back-off keeps such a device from deepening it.
+
 ## Time zones (2026-11-08)
 
 Events in a zone other than the device's (Eastern), both ways, measured on the Fold3 against

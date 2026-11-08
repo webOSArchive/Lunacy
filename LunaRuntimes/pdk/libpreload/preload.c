@@ -1274,6 +1274,29 @@ out:
 #include "composemail.h"
 #include "backoff.h"
 #include "calfilter.h"
+#include "easerr.h"
+#include <stdbool.h>
+
+/*
+ * The replies of the native services' bus (Lunacy's liblunaservice): the Exchange validator's
+ * answer to a throttling server said as webOS words it (easerr.h); every other reply passes as
+ * it was. The services call LSMessageRespond through the dynamic linker, so this stands in
+ * front of it; a process without the library never calls it.
+ */
+typedef struct LSMessage LSMessage;
+typedef struct LSError LSError;
+bool LSMessageRespond(LSMessage *m, const char *payload, LSError *e)
+{
+	static bool (*real)(LSMessage *, const char *, LSError *);
+	if (!real) real = (bool (*)(LSMessage *, const char *, LSError *))dlsym(RTLD_NEXT, "LSMessageRespond");
+	if (!real) return false;
+	char *again = ee_reply(payload);
+	if (!again) return real(m, payload, e);
+	fprintf(stderr, "lunacy: a throttled server's sign-in answered as unavailable, not as a bad login\n");
+	bool r = real(m, again, e);
+	free(again);
+	return r;
+}
 
 typedef int GIOStatus;   /* G_IO_STATUS_ERROR 0, NORMAL 1, EOF 2, AGAIN 3 */
 enum { MA_G_ERROR = 0, MA_G_NORMAL = 1, MA_G_AGAIN = 3 };

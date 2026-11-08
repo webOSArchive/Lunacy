@@ -69,6 +69,12 @@ class OAuth(
         /** The scope, sent again with the token requests where the provider wants it (Microsoft, for Exchange's). */
         val tokenScope: String? get() = j.optString("scope").takeIf { j.optBoolean("scopeOnToken") && it.isNotEmpty() }
         val canSignInHere get() = clientId != null && j.has("authorizeUrl") && j.has("tokenUrl")
+        /**
+         * The provider to sign in with instead when this one's scope is refused for the account
+         * (Microsoft: Exchange for work and school accounts, IMAP for personal ones, which
+         * Microsoft refuses Exchange's scope with AADSTS70011).
+         */
+        val fallback: String? = j.optString("fallback").takeIf { it.isNotEmpty() }
         val canUseBroker get() = brokerApp != null
     }
 
@@ -92,7 +98,7 @@ class OAuth(
     private val pending = HashMap<String, Pending>()
     private val broker: String
 
-    private class Pending(val call: Bus.Call, val provider: Provider, val verifier: String, val redirectUri: String) {
+    private class Pending(val call: Bus.Call, val provider: Provider, val verifier: String, val redirectUri: String, val again: Boolean) {
         var listener: ServerSocket? = null
     }
 
@@ -161,6 +167,10 @@ class OAuth(
 
     /**
      * `{provider, way: "device"|"broker"}`, a subscription. Its replies, in turn:
+     * `{provider, way: "device"|"broker", fallback}`: with `fallback`, a provider whose scope the
+     * account is refused (its `fallback`) signs in with that one instead, in the same call: a
+     * second `page` step, then `done` with that provider's templateId and validator.
+     *
      * `{step: "page", url, redirect}` (load url in a web view, send `redirected` the address
      * that starts with redirect), or `{step: "browser"}` (Android's browser has it), or
      * `{step: "code", code, url}` (the broker's: show both); then `{step: "done", handle,
@@ -179,7 +189,12 @@ class OAuth(
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
     private fun form(vararg kv: Pair<String, String?>) = kv.filter { it.second != null }.joinToString("&") { "${enc(it.first)}=${enc(it.second!!)}" }
 
-    private fun onDevice(call: Bus.Call, p: Provider) {
+    /**
+     * [again]: the fallback's sign-in, after the first was refused; the person has just chosen
+     * their account, and [hint] (the refused provider's `fallbackParams`) tells the provider's
+     * page which kind it was, so that it doesn't ask again.
+     */
+    private fun onDevice(call: Bus.Call, p: Provider, again: Boolean = false, hint: JSONObject? = null) {
         val verifier = b64url(ByteArray(32).also { random.nextBytes(it) })
         val challenge = b64url(MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray()))
         val state = hex(16)
@@ -195,10 +210,12 @@ class OAuth(
         val extra = p.j.optJSONObject("authorizeParams")
         val q = mutableListOf("response_type" to "code", "client_id" to p.clientId!!, "redirect_uri" to redirectUri,
             "scope" to p.j.optString("scope"), "state" to state, "code_challenge" to challenge, "code_challenge_method" to "S256")
-        extra?.keys()?.forEach { k -> q += k to extra.optString(k) }
+        // Not "choose an account" again: the provider's page still knows the one just chosen.
+        extra?.keys()?.forEach { k -> if (!(again && k == "prompt")) q += k to extra.optString(k) }
+        hint?.keys()?.forEach { k -> q += k to hint.optString(k) }
         call.params.optString("hint").takeIf { it.isNotEmpty() }?.let { q += "login_hint" to it }
         val url = p.j.getString("authorizeUrl") + "?" + form(*q.toTypedArray())
-        val waiting = Pending(call, p, verifier, redirectUri).also { it.listener = listener }
+        val waiting = Pending(call, p, verifier, redirectUri, again).also { it.listener = listener }
         pending[state] = waiting
         call.onCancel { main.post { pending.remove(state)?.listener?.let { runCatching { it.close() } } } }
         if (browser) {
@@ -291,6 +308,7 @@ class OAuth(
         val code = query["code"]
         if (code == null) {
             val why = query["error_description"] ?: query["error"] ?: "no code"
+            if (fellBack(w, query)) return
             return w.call.reply(Bus.error("Sign-in didn't finish: $why", -7))
         }
         worker.execute {
@@ -298,11 +316,36 @@ class OAuth(
                 val tokens = post(w.provider.j.getString("tokenUrl"), form("grant_type" to "authorization_code", "code" to code,
                     "redirect_uri" to w.redirectUri, "client_id" to w.provider.clientId, "client_secret" to w.provider.clientSecret,
                     "code_verifier" to w.verifier, "scope" to w.provider.tokenScope))
+                // Microsoft takes a personal account through its page with Exchange's scope and
+                // refuses the scope only here, at the code (AADSTS70011, measured 2026-11-08).
+                if (!tokens.has("access_token") && scopeRefused(mapOf("error" to tokens.optString("error"),
+                        "error_description" to tokens.optString("error_description")))) return@runCatching null
                 done(w.provider, tokens, viaBroker = false)
             }
-            main.post { w.call.reply(r.getOrElse { Bus.error("Sign-in failed: ${it.message}", -8) }) }
+            main.post {
+                val reply = r.getOrElse { Bus.error("Sign-in failed: ${it.message}", -8) }
+                if (reply == null && !fellBack(w, mapOf("error" to "invalid_scope"))) w.call.reply(Bus.error("Sign-in failed: ${w.provider.title} refused this account", -8))
+                else if (reply != null) w.call.reply(reply)
+            }
         }
     }
+
+    /** A sign-in whose scope the account was refused, started again with the provider's fallback where it has one. Main thread. */
+    private fun fellBack(w: Pending, query: Map<String, String>): Boolean {
+        val fb = w.provider.fallback?.let { providers[it] } ?: return false
+        if (w.again || !w.call.params.optBoolean("fallback") || !scopeRefused(query) || !fb.canSignInHere) return false
+        Log.i(AppServer.TAG, "oauth: ${w.provider.id} refused for this account; signing in to ${fb.id} instead")
+        onDevice(w.call, fb, again = true, hint = w.provider.j.optJSONObject("fallbackParams"))
+        return true
+    }
+
+    /**
+     * The provider refused the scope for the account signed in, not the sign-in itself: Microsoft
+     * answers a personal account's request for Exchange's with AADSTS70011 ("the provided value
+     * for the input parameter 'scope' is not valid"), as `invalid_scope` or `invalid_request`.
+     */
+    private fun scopeRefused(query: Map<String, String>) =
+        query["error"] == "invalid_scope" || query["error_description"].orEmpty().contains("AADSTS70011")
 
     private fun viaBroker(call: Bus.Call, p: Provider) {
         val app = p.brokerApp!!

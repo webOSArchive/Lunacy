@@ -13,6 +13,12 @@
  * Either way the service answers with a handle for the account's tokens, which goes to Palm's
  * IMAP service as the password: it checks the account against the server, as Email's wizard
  * checks one, and the page hands Accounts the account to make.
+ *
+ * Microsoft has one entry for every kind of account: Exchange ActiveSync for work and school
+ * accounts, and, for a personal account (Outlook.com), which Microsoft refuses Exchange's
+ * permission, IMAP. The service signs a refused account in again with the IMAP provider (its
+ * `fallback`) and says so with that provider's account type, which this page hands Accounts in
+ * place of the one tapped (Docs/outlook-eas.md).
  */
 enyo.kind({
 	name: "MailSignIn",
@@ -61,6 +67,8 @@ enyo.kind({
 		{name: "signIn", kind: "PalmService", service: "palm://org.webosarchive.lunacy.oauth/", method: "signIn", subscribe: true, onResponse: "signInStep"},
 		{name: "redirected", kind: "PalmService", service: "palm://org.webosarchive.lunacy.oauth/", method: "redirected"},
 		{name: "forget", kind: "PalmService", service: "palm://org.webosarchive.lunacy.oauth/", method: "forget"},
+		// The account type a fallback sign-in made the account (hidden from Add Account, so not in params).
+		{name: "templates", kind: "PalmService", service: "palm://com.palm.service.accounts/", method: "listAccountTemplates", onResponse: "gotTemplates"},
 		{name: "validate", kind: "PalmService", service: "palm://com.palm.imap/", method: "validateAccount", onResponse: "validated"},
 		{name: "modifyAccount", kind: "PalmService", service: "palm://com.palm.service.accounts/", method: "modifyAccount", onResponse: "modified"},
 		// An Exchange server's security policy, as Email's wizard handles one (CRUDAccounts.handlePasswordPolicy):
@@ -133,7 +141,11 @@ enyo.kind({
 		this.way = way;
 		this.forgetHandle();
 		this.$.signIn.cancel();
-		this.$.signIn.call({provider: this.provider.id, way: way});
+		// A new account may become another type than the one tapped (Microsoft's personal accounts);
+		// signing an account in again keeps its type.
+		this.templateId = this.firstTemplateId || this.templateId;
+		this.firstTemplateId = this.templateId;
+		this.$.signIn.call({provider: this.provider.id, way: way, fallback: !this.modifying});
 		(way === "broker" ? this.$.brokerButton : this.$.hereButton).setActive(true);
 	},
 
@@ -160,7 +172,14 @@ enyo.kind({
 			this.signedIn = r.handle;
 			this.email = r.email;
 			this.config = r.config;
-			this.showWaiting($L("Checking your account"), r.email);
+			// Signed in with the fallback provider: the account is of its type.
+			this.fellBack = Boolean(r.templateId && r.templateId !== this.templateId && !this.modifying);
+			if (this.fellBack) {
+				this.templateId = r.templateId;
+			}
+			this.showWaiting($L("Checking your account"), this.fellBack
+				? new enyo.g11n.Template($L("#{email} is a personal Microsoft account. Microsoft gives Email its mail, but not its contacts or calendar.")).evaluate({email: r.email})
+				: r.email);
 			this.$.address.hide();
 			this.$.code.hide();
 			if (this.modifying && this.modifying.username && r.email.toLowerCase() !== this.modifying.username.toLowerCase()) {
@@ -213,10 +232,32 @@ enyo.kind({
 			this.handle = null;
 			return;
 		}
-		// Accounts' own pages take the template back with the account (entry-first-launch.js).
+		this.validConfig = config;
+		if (this.fellBack) {
+			this.$.templates.call({});
+			return;
+		}
+		this.made((this.params || {}).template);
+	},
+
+	gotTemplates: function (inSender, r) {
+		var list = (r && r.results) || [], i;
+		for (i = 0; i < list.length; i++) {
+			if (list[i].templateId === this.templateId) {
+				this.made(list[i]);
+				return;
+			}
+		}
+		this.failed($L("Signed in, but the account couldn't be saved.") + " " + this.templateId);
+		this.forgetHandle();
+	},
+
+	// Accounts' own pages take the template back with the account (entry-first-launch.js).
+	made: function (template) {
+		var config = this.validConfig;
 		this.$.crossAppResult.sendResult({
 			returnValue: true,
-			template: (this.params || {}).template,
+			template: template,
 			templateId: this.templateId,
 			username: this.email,
 			alias: this.$.header.getContent(),

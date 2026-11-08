@@ -22,13 +22,12 @@ broker, with Palm's mail services logging in with XOAUTH2 under them, unchanged
   Ping, sending, contacts and calendar from the device (a sixth adapter rewrites calendar items
   for 16.x), with Microsoft's back-off kept and no-token failures retried
   ([outlook-eas.md](outlook-eas.md)). Earlier:
-  contacts and calendar items and the Fold3 are still to see. The account type stays IMAP in
-  the repository until it's chosen.
+  contacts and calendar items and the Fold3 are still to see. Since 2026-11-08 Add Account has
+  one "Microsoft" entry (codepoet): Exchange, with personal accounts falling back to IMAP.
 - **Outlook.com (personal):** Microsoft's own bug: its IMAP refuses OAuth logins for personal
   accounts ("authenticated but not connected"), reproduced outside Lunacy; the EAS scope is
   refused for them too.
-- **Next:** finish EAS for Microsoft 365 (real contacts and calendar items, the Fold3);
-  choose the Microsoft account type (Exchange for work and school accounts); the broker's
+- **Next:** EAS for Microsoft 365: recurring exceptions and invitations; the broker's
   `google` and `microsoft` apps on oauth.wosa.link; codepoet's call on Email's "Change login
   settings"; luna-deltas B23. Herrie's mojomail-legacy-eas rewrite was looked at and isn't usable
   yet (a skeleton: no password sent, blocking network calls, stubbed sends); it builds here with

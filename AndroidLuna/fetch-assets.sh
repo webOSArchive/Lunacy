@@ -486,8 +486,9 @@ cp -r $M/usr/palm/frameworks/messaging.library $M/usr/palm/frameworks/contacts.p
 # The Android account type, Lunacy's own: its page is the core app beside it.
 cp -r ../CoreApps/org.webosarchive.lunacy.androidaccount/account $R/usr/palm/public/accounts/org.webosarchive.lunacy.androidaccount
 # Google and Microsoft mail, signed in with OAuth (Docs/oauth.md): their page is the core app
-# org.webosarchive.lunacy.signin, and Palm's IMAP service is their mail, or for Microsoft 365
-# its Exchange ActiveSync service (Docs/outlook-eas.md). Each brings its icons.
+# org.webosarchive.lunacy.signin, and Palm's IMAP service is their mail, or for Microsoft's work
+# and school accounts its Exchange ActiveSync service (Docs/outlook-eas.md); Microsoft's IMAP
+# type is hidden, reached as the fallback for personal accounts. Each brings its icons.
 for t in ../CoreApps/org.webosarchive.lunacy.signin/accounts/*; do
   rm -rf $R/usr/palm/public/accounts/${t##*/}; cp -r $t $R/usr/palm/public/accounts/
 done

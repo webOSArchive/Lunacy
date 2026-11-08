@@ -31,14 +31,14 @@
 			"onDevice": "page",
 			"redirectUri": "https://login.microsoftonline.com/common/oauth2/nativeclient",
 			"brokerApp": "",
-			"_mail": "IMAP and SMTP. Not Exchange ActiveSync: Exchange Online refuses EAS older than 16.1 since 2026-03-01, and Palm's mojomail-eas speaks up to 14.1 (Docs/oauth.md).",
+			"_mail": "IMAP and SMTP, for personal accounts (Outlook.com) and the Microsoft accounts made before Exchange worked: the account type is hidden from Add Account, and the Exchange provider below falls back to this one (Docs/outlook-eas.md).",
 			"mail": {
 				"server": "outlook.office365.com", "port": 993, "encryption": "ssl",
 				"smtpConfig": { "server": "smtp.office365.com", "port": 587, "encryption": "tls", "useSmtpAuth": true }
 			}
 		},
 		"microsoft365": {
-			"title": "Microsoft 365",
+			"title": "Microsoft",
 			"templateId": "org.webosarchive.lunacy.microsoft365",
 			"clientId": "95d7ba4d-1ae2-44d2-a8ef-3b06a31345f6",
 			"authorizeUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
@@ -49,7 +49,9 @@
 			"onDevice": "page",
 			"redirectUri": "https://login.microsoftonline.com/common/oauth2/nativeclient",
 			"brokerApp": "",
-			"_mail": "Exchange ActiveSync, on Palm's mojomail-eas through the preload's adapters (Docs/outlook-eas.md). Work and school accounts only: Microsoft refuses this scope for personal ones (AADSTS70011), which use the IMAP provider above.",
+			"_mail": "Exchange ActiveSync, on Palm's mojomail-eas through the preload's adapters (Docs/outlook-eas.md). Work and school accounts only: Microsoft refuses this scope for personal ones (AADSTS70011), which sign in again with the IMAP provider above (fallback) and get mail only.",
+			"fallback": "microsoft",
+			"fallbackParams": { "domain_hint": "consumers" },
 			"validator": "palm://com.palm.eas/validateAccount",
 			"mail": { "server": "https://outlook.office365.com", "domain": "", "port": 0, "encryption": "none" }
 		}

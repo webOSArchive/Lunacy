@@ -22,7 +22,8 @@ own, Zoho) and must stay exactly as it is:
 - Before anything here ships: a legacy Exchange account against a stand-alone server (Zoho is
   the one tested in [eas.md](eas.md)) still adds, syncs mail, contacts and calendar, and sends.
 
-**2. IMAP after OAuth (the "Microsoft Outlook" account, `org.webosarchive.lunacy.microsoft`).**
+**2. IMAP after OAuth (the "Microsoft Outlook" account, `org.webosarchive.lunacy.microsoft`; since
+2026-11-08 hidden from Add Account and reached through the one "Microsoft" entry's fallback).**
 This is what 0.9.3 ships and what works now: Microsoft sign-in, then Palm's IMAP and SMTP with
 XOAUTH2. It must keep working, and keep being what Outlook.com and other personal accounts use:
 
@@ -40,8 +41,8 @@ against `wosatester@jonandnic.onmicrosoft.com`):
 
 - **The account type** is `org.webosarchive.lunacy.microsoft365`, a template of its own in the
   sign-in app (`CoreApps/org.webosarchive.lunacy.signin/accounts/`), listed in Add Account as
-  "Microsoft 365" (Email, Contacts, Calendar) beside "Microsoft Exchange" and "Microsoft
-  Outlook", neither of which changed. Its capabilities are Palm's Exchange ones, with the same
+  "Microsoft" (Email, Contacts, Calendar) beside Palm's "Microsoft Exchange", which didn't
+  change. It is the only Microsoft entry: the IMAP type is hidden (below, "One entry"). Its capabilities are Palm's Exchange ones, with the same
   ids (`com.palm.eas.mail`, `.contacts`, `.remotecontacts`, `.calendar`, `.tasks`): mojomail-eas
   looks for those ids, and the accounts service only ever looks a capability up inside an
   account's own template, so two templates sharing them is safe. Its provider in
@@ -67,11 +68,10 @@ against `wosatester@jonandnic.onmicrosoft.com`):
 
 ## What's missing
 
-1. **How a person picks it.** Today: a second entry, "Microsoft 365", beside "Microsoft
-   Outlook". The other way is one Microsoft entry that chooses after sign-in: personal accounts
-   carry the consumer tenant id `9188040d-6c67-4c5b-b112-36a304b66dad` in the id_token's `tid`.
-   Choosing after sign-in means scopes for both, or a second consent. codepoet's call, and a
-   look-and-feel question (luna-deltas B23).
+1. **One entry: done (2026-11-08, codepoet's call).** See "One entry" below. Not yet seen: a
+   personal account made that way, since Outlook.com's IMAP still refuses the test account
+   (item 9), and a person with no Microsoft sign-in in the web view yet (the retry's page may
+   then ask for the password again; `domain_hint` only narrows the picker).
 2. **Server-made changes reaching the device.** Items already on the server arrived at the first
    sync. Still to see: a contact and an event created, edited and deleted in Outlook on the web
    reaching the device; recurring events with exceptions (16.x names an exception by
@@ -105,11 +105,40 @@ against `wosatester@jonandnic.onmicrosoft.com`):
    grant it. The sign-in page should tell the person that plainly rather than show Microsoft's
    raw error.
 9. **Outlook.com and other personal accounts can't use it.** Microsoft refuses the EAS scope
-   for them (AADSTS70011). They stay on the IMAP account type. (Microsoft's IMAP has its own
+   for them (AADSTS70011). They get the IMAP account type through the fallback (mail only). (Microsoft's IMAP has its own
    bug for personal accounts, [oauth.md](oauth.md).)
 10. **Throttled test devices.** Palm's EAS device id is per device, not per account, so removing
     and adding an account again doesn't clear a throttle. The back-off now keeps a device from
     deepening one.
+
+## One entry (2026-11-08)
+
+codepoet: "merge them into one Microsoft entry with IMAP fallback. Microsoft is so schizo about
+what 'Outlook' is, so a fallback makes sense." Add Account shows one **Microsoft** entry (the
+Exchange template, now named "Microsoft"); the IMAP template is `hidden` (Enyo's accounts library
+and Email both leave hidden templates out of Add, while accounts already made with it are listed
+and work as before). Signing in:
+
+1. The sign-in page asks the OAuth service for the `microsoft365` provider with `fallback: true`
+   (not when signing an existing account in again: an account keeps its type).
+2. Microsoft's page takes a personal account through with Exchange's scope and hands back a
+   code; the **token request** then answers AADSTS70011 (measured on the Fold3 with
+   `wosatester@outlook.com`; the authorize redirect carries no error). The service, seeing the
+   scope refused (`invalid_scope`, or AADSTS70011 in the description, at either step), starts
+   the `microsoft` (IMAP) provider's sign-in in the same call: a second page step. That one goes
+   without `prompt=select_account` and with the refused provider's `fallbackParams`
+   (`domain_hint=consumers`), so Microsoft's page, still signed in, hands back at once (0.5 s,
+   no second account picker; without the hint it asked to pick again).
+3. The `done` step names the IMAP provider's template and validator; the page checks the account
+   with Palm's IMAP service, says the account is personal and gets mail only, and hands Accounts
+   the hidden template (from `listAccountTemplates`) in place of the one tapped, which
+   `entry-add.js`/`entry-first-launch.js` take (`msg.template`).
+
+Work and school accounts never reach the fallback. Seen on the Fold3: one Microsoft entry in
+Add Account; the personal test account refused for Exchange, signed in again for IMAP with no
+second pick, validated by Palm's IMAP service, which got Outlook.com's "User is authenticated
+but not connected" (item 9, Microsoft's side), and its handle forgotten; the hidden template
+listed for the page; the existing Exchange accounts (Microsoft 365 and Zoho) syncing as before.
 
 ## Before it ships
 

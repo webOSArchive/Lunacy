@@ -1,6 +1,6 @@
 Lunacy's own: the page that signs Google and Microsoft mail accounts in with OAuth, and their
-account types (accounts/), whose mail is Palm's IMAP service, or for Microsoft 365 its
-Exchange ActiveSync service (Docs/oauth.md, Docs/outlook-eas.md; the sign-in service is
+account types (accounts/), whose mail is Palm's IMAP service, or for Microsoft's work and
+school accounts its Exchange ActiveSync service (personal ones fall back to the hidden IMAP type) (Docs/oauth.md, Docs/outlook-eas.md; the sign-in service is
 AndroidLuna/src/main/java/org/webosarchive/lunacy/card/OAuth.kt).
 
 Images:

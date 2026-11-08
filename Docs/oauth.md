@@ -10,7 +10,7 @@ webOSArchive's broker for devices too old for the providers' pages); the work st
 ## How it fits together
 
 ```
- Email / Accounts ──Add Account──▶ "Google" / "Microsoft Outlook" / "Microsoft 365" template (validator.customUI)
+ Email / Accounts ──Add Account──▶ "Google" / "Microsoft" template (validator.customUI; Microsoft's IMAP type is hidden, its fallback)
                                      │
                                      ▼
       org.webosarchive.lunacy.signin (the sign-in page, in a cross-app frame)
@@ -317,11 +317,13 @@ path (Google's) is not yet tried on a device: it needs one with a browser.
   the failure paths haven't been made to happen on a device yet.
 
 
-- **Microsoft 365 over Exchange** (in full: [outlook-eas.md](outlook-eas.md)): its own account
-  type, "Microsoft 365", works on the Fold3 (2026-11-08): mail, push, sending, contacts and
-  calendar from the device. Still to see: changes made in Outlook reaching the device, recurring
-  events with exceptions, invitations. Then choose how a person picks the account type, with
-  Outlook.com told plainly it can't use Exchange (AADSTS70011).
+- **Microsoft over Exchange** (in full: [outlook-eas.md](outlook-eas.md)): works on the Fold3
+  (2026-11-08): mail, push, sending, contacts and calendar both ways (changes made in Outlook
+  reach the device by Ping). One "Microsoft" entry since 2026-11-08: a personal account, whose
+  Exchange scope Microsoft refuses (AADSTS70011, at the token request), is signed in again for
+  IMAP in the same sign-in (a provider's `fallback` and `fallbackParams`) and gets mail only.
+  Still to see: recurring events with exceptions, invitations, a personal account actually made
+  (Outlook.com's IMAP bug, above).
 - **Gmail's verification** for public use: Google's restricted-scope review (started
   2026-11-05). Whether it also asks for a security assessment turns on servers: none in the
   on-device path; decide whether Google goes through the broker at all.

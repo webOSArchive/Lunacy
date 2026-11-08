@@ -3,6 +3,32 @@
 Priority order: Enyo 1 → Mojo → JS services → PDK native. Each phase has an exit criterion,
 and a phase is finished when its criterion is met, not when its task list runs out.
 
+## Before 1.0 (codepoet, 2026-11-08)
+
+The only items before 1.0. Everything else on this page, the open items below included, comes
+after 1.0.
+
+- **Exchange (Microsoft Outlook over EAS):**
+  - recurring events with exceptions (16.x names an exception by `InstanceId`, where Palm sends
+    `ExceptionStartTime`; `calfilter.h` doesn't touch exceptions yet);
+  - a time zone other than the device's;
+  - the validator reporting a throttle (a 503) as a bad login ("check your login");
+  - telling a person plainly when their organisation's admin has to approve the app, in place
+    of Microsoft's raw error ([outlook-eas.md](outlook-eas.md), "What's missing").
+- **Email's "Change login settings"** for Google and Microsoft accounts: it opens Palm's password
+  form, which can't sign them in (the Accounts app's page can). A change to Email, which
+  codepoet approved as a rule 5 exception (2026-11-08).
+- **The code review's "before 1.0"** ([code-review-2026-11-03.md](code-review-2026-11-03.md)):
+  the TouchPad measurements (B4, B5, B6, S5, S7/S8, S14, §4.3) were made on 2026-11-03 and acted
+  on 2026-11-04, and `compat.js` was split the same day. Left: the rest of §3.1 (`animateValue`
+  at 6 of its 24 sites; the scroll masks, drawers and dashboard rows, each against its own
+  measured numbers).
+- **Exhibition:** a button in its settings that opens Android's Screen Saver settings, so a
+  person can set Lunacy as the screen saver.
+
+Before shipping 1.0, as for every release: the latest App Catalog bundled (6.2.2931 as of
+2026-11-08, the same as the Museum's).
+
 ## Where things stand (2026-11-06)
 
 **OAuth for mail, for 0.9.5 (started 2026-11-05, pushed through 25d82d7; b64149a local):**
@@ -27,7 +53,7 @@ broker, with Palm's mail services logging in with XOAUTH2 under them, unchanged
 - **Outlook.com (personal):** Microsoft's own bug: its IMAP refuses OAuth logins for personal
   accounts ("authenticated but not connected"), reproduced outside Lunacy; the EAS scope is
   refused for them too.
-- **Next:** EAS for Microsoft 365: recurring exceptions and invitations; the broker's
+- **Next:** the "Before 1.0" list above. After 1.0: invitations; the broker's
   `google` and `microsoft` apps on oauth.wosa.link; codepoet's call on Email's "Change login
   settings"; luna-deltas B23. Herrie's mojomail-legacy-eas rewrite was looked at and isn't usable
   yet (a skeleton: no password sent, blocking network calls, stubbed sends); it builds here with
@@ -372,10 +398,11 @@ One line per milestone; the detail is in [fix-log.md](fix-log.md), the topic doc
   that stay dismissed, Blink Notifications, Messaging on a phone, the BlueBubbles connector,
   shared wallpapers, Palm's file picker, smooth scrolling at 120 Hz, the keyboard's Text Assist.
 
-## Open, carried forward
+## Open, carried forward (after 1.0)
 
 Gathered from the dated notes this section replaced (git has them in full). Check each before
-starting; some may have been settled since without a note.
+starting; some may have been settled since without a note. All of it comes after 1.0
+(codepoet, 2026-11-08), except what "Before 1.0" at the top lists.
 
 - **Chat:** longevity on the devices; webOS CE's startup hang (PmLogLib's semaphore; take CE's
   fix if it lands in the transport); the Add Buddy invitation message, which the transport drops.
@@ -423,8 +450,6 @@ starting; some may have been settled since without a note.
   cookies are shared between apps' origins (`.media.cryptofs.apps`); an app a package script put
   in the rootfs can't be removed from the launcher; Enyo's libraries other than `networkproxy`
   are upstream's, not the TouchPad's newer ones.
-- **Exhibition settings:** a button that opens Android's Screen Saver settings, so a person can
-  set Lunacy as the screen saver from there (codepoet, 2026-11-07; not a blocker).
 - **PDK (2026-11-07, [pdk.md](pdk.md) §6k):** N.O.V.A. 2 crashes as a mission starts, on every
   device: a menu sprite or font the game looks up by name isn't there (a null from its lookup
   at 0xc0f70); next is gdb through qemu on the desk. Why Asphalt 5's own PVRTC decoder gives

@@ -1,0 +1,13 @@
+--- a/source/add-account.js
++++ b/source/add-account.js
+@@ -151,6 +151,10 @@
+ 		return this.otherLabel;
+ 	},
+ 	subtitleFor: function(t) {
++		// [Lunacy] A template may say what it brings in its own words (loc_subtitle), where
++		// its capabilities alone would promise too much: Lunacy's Microsoft type has contacts
++		// and calendar only for work and school accounts.
++		if (t && t.loc_subtitle) { return t.loc_subtitle; }
+ 		var caps = this.capsOf(t), seen = {}, parts = [];
+ 		for (var i = 0; i < this.subtitleOrder.length && parts.length < 3; i++) {
+ 			var lbl = this.capLabels[this.subtitleOrder[i]];

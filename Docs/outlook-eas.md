@@ -115,7 +115,8 @@ against `wosatester@jonandnic.onmicrosoft.com`):
 
 codepoet: "merge them into one Microsoft entry with IMAP fallback. Microsoft is so schizo about
 what 'Outlook' is, so a fallback makes sense." Add Account shows one **Microsoft** entry (the
-Exchange template, now named "Microsoft"); the IMAP template is `hidden` (Enyo's accounts library
+Exchange template, now named "Microsoft", its line "Email (Calendar and Contacts, if
+available)"); the IMAP template is `hidden` (Enyo's accounts library
 and Email both leave hidden templates out of Add, while accounts already made with it are listed
 and work as before). Signing in:
 

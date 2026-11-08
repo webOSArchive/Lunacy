@@ -29,13 +29,22 @@ done
 # and the webOS App Catalog's icon for the HP shopping bag (appcatalog-32x32/48x48), from the
 # webOS CE project's system/ (Workbench/vendor/webos-ce).
 cp -r $V/webos-ce/system/usr/palm/frameworks/enyo/0.10/framework/lib/accounts/. $L/fw/enyo/1.0/framework/lib/accounts/
+# Lunacy's changes to CE's accounts library (LunaRuntimes/enyo-accounts/CHANGES.md): its own
+# series, since the SDK takes the TouchPad's library and not this one.
+for patch in ../LunaRuntimes/enyo-accounts/patches/*.patch; do
+    [ -e "$patch" ] || continue
+    (cd $L/fw/enyo/1.0/framework/lib/accounts && patch -p1 --forward --silent --fuzz=0 < "$HERE/$patch") ||
+        { echo "fetch-assets: $patch does not apply to webOS CE's accounts library" >&2; exit 1; }
+    echo "enyo accounts: applied $(basename "$patch")"
+done
 cat > $L/fw/enyo/1.0/NOTICE <<'NOTICE'
 Enyo 1.0 as it is on the reference TouchPad (webOS CE 3.1.0), /usr/palm/frameworks/enyo/0.10,
 with Lunacy's patches (LunaRuntimes/enyo-1.0/patches in the Lunacy repository). Enyo itself is
 Apache 2.0 (Hewlett-Packard; github.com/enyojs/enyo-1.0). The libraries and localized
 resources HP shipped on the device and never released with the source (lib/networkproxy among
 them) are Palm/HP's, distributed by Lunacy as abandonware, like Mojo. lib/accounts is the
-webOS CE project's (the community enyo-accounts 1.1.1.1, with CE's strings and App Catalog icon).
+webOS CE project's (the community enyo-accounts 1.1.1.1, with CE's strings and App Catalog icon),
+with Lunacy's patches (LunaRuntimes/enyo-accounts/patches).
 NOTICE
 cp -r ../Workbench/apps-src/com.ingloriousapps.glimpse/usr/palm/applications/com.ingloriousapps.glimpse $T/apps/
 # Palm's own settings apps that Lunacy ships (Screen & Lock, Help) are committed under

@@ -113,6 +113,34 @@ int main(void)
 	static const unsigned char want_bd[] = { 0x03, 0x01, 0x6a, 0x00, 0x45, 0x4e, 0x01 };
 	same_every_way(bigdrop, dn, want_bd, sizeof want_bd, "opaque data inside a dropped element goes, END-like bytes and all");
 
+	/* 16.x calendar exceptions (2026-11-08): an Exception's InstanceId reaches Palm as
+	   ExceptionStartTime, and a page-17 tag after it gets its page switch back. */
+	static const unsigned char exc16[] = { HDR, 0x45, 0x00, 0x04, 0x54, 0x53, 0x55, 0x03, '1', 0x00, 0x01,
+		0x00, 0x11, 0x6d, 0x03, 'D', 0x00, 0x01, 0x01, 0x01, 0x56, 0x03, '1', 0x00, 0x01, 0x01 };
+	static const unsigned char exc12[] = { HDR, 0x45, 0x00, 0x04, 0x54, 0x53, 0x55, 0x03, '1', 0x00, 0x01,
+		0x56, 0x03, 'D', 0x00, 0x01, 0x01, 0x01, 0x00, 0x11, 0x56, 0x03, '1', 0x00, 0x01, 0x01 };
+	same_every_way(exc16, sizeof exc16, exc12, sizeof exc12, "an Exception's InstanceId as ExceptionStartTime");
+	/* Outside an Exception, InstanceId stays as it is. */
+	static const unsigned char iid[] = { HDR, 0x45, 0x00, 0x11, 0x6d, 0x03, 'D', 0x00, 0x01, 0x01 };
+	same_every_way(iid, sizeof iid, iid, sizeof iid, "InstanceId elsewhere left alone");
+	/* Responses: a Delete naming an occurrence (status 5, a repeated delete) goes; a Change
+	   Palm sent stays. */
+	static const unsigned char resp16[] = { HDR, 0x45, 0x46,
+		0x49, 0x4d, 0x03, 'S', 0x00, 0x01, 0x00, 0x11, 0x6d, 0x03, 'I', 0x00, 0x01, 0x00, 0x00, 0x4e, 0x03, '5', 0x00, 0x01, 0x01,
+		0x48, 0x4d, 0x03, 'T', 0x00, 0x01, 0x4e, 0x03, '6', 0x00, 0x01, 0x01,
+		0x01, 0x01 };
+	static const unsigned char resp12[] = { HDR, 0x45, 0x46,
+		0x48, 0x4d, 0x03, 'T', 0x00, 0x01, 0x4e, 0x03, '6', 0x00, 0x01, 0x01,
+		0x01, 0x01 };
+	same_every_way(resp16, sizeof resp16, resp12, sizeof resp12, "a Responses entry naming an occurrence goes");
+	/* A Responses entry too long to hold passes as it is. */
+	static unsigned char longresp[4 + 3 + 3 + 6000 + 2 + 1 + 3];
+	size_t ln = 0;
+	memcpy(longresp, (unsigned char[]){ HDR, 0x45, 0x46, 0x47, 0x4d, 0x03 }, 9); ln = 9;
+	memset(longresp + ln, 'x', 6000); ln += 6000;
+	longresp[ln++] = 0x00; longresp[ln++] = 0x01; longresp[ln++] = 0x01; longresp[ln++] = 0x01; longresp[ln++] = 0x01;
+	same_every_way(longresp, ln, longresp, ln, "a long Responses entry passes whole");
+
 	if (failures) { fprintf(stderr, "wbxmlfilter_test: %d failed\n", failures); return 1; }
 	printf("wbxmlfilter_test: ok\n");
 	return 0;

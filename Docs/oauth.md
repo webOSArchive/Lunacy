@@ -283,7 +283,8 @@ provider. A development build is pointed at both by `files/oauth-providers.json`
 in every PDK build): the logins, the hidden challenges, the EHLO change and AUTH LOGIN replay,
 the stale-token retry, the dropped first refusal and the failed write when no token can be had, and a message body cut every which way going through byte for byte.
 `wbxmlfilter_test.c` and `composemail_test.c` do the same for adapters 4 and 5: replies with the
-newer pages fed whole and in pieces, and the ComposeMail bytes Exchange Online accepted. `calfilter_test.c` runs adapter 6 on Palm's own refused calendar Add, and
+newer pages fed whole and in pieces, and the ComposeMail bytes Exchange Online accepted. `calfilter_test.c` runs adapter 6 on Palm's own refused calendar Add and on a series' exceptions
+(as their own Change and Delete, prefixes of real requests also run under AddressSanitizer), and
 `backoff_test.c` reads Exchange Online's throttle replies and keeps the store.
 
 **Checked on the Galaxy Tab A7 Lite (2026-11-05, arm32 debug), against the fake provider:**

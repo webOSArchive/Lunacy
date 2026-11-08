@@ -9,8 +9,8 @@ The only items before 1.0. Everything else on this page, the open items below in
 after 1.0.
 
 - **Exchange (Microsoft Outlook over EAS):**
-  - recurring events with exceptions (16.x names an exception by `InstanceId`, where Palm sends
-    `ExceptionStartTime`; `calfilter.h` doesn't touch exceptions yet);
+  - ~~recurring events with exceptions~~ done 2026-11-08: both ways, on the Fold3
+    ([outlook-eas.md](outlook-eas.md), "Recurring exceptions");
   - a time zone other than the device's;
   - the validator reporting a throttle (a 503) as a bad login ("check your login");
   - telling a person plainly when their organisation's admin has to approve the app, in place

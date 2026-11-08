@@ -72,12 +72,13 @@ against `wosatester@jonandnic.onmicrosoft.com`):
    personal account made that way, since Outlook.com's IMAP still refuses the test account
    (item 9), and a person with no Microsoft sign-in in the web view yet (the retry's page may
    then ask for the password again; `domain_hint` only narrows the picker).
-2. **Server-made changes reaching the device.** Items already on the server arrived at the first
-   sync. Still to see: a contact and an event created, edited and deleted in Outlook on the web
-   reaching the device; recurring events with exceptions (16.x names an exception by
-   `InstanceId` where Palm sends `ExceptionStartTime`, and `calfilter.h` doesn't touch
-   exceptions yet); time zones other than the device's; meeting invitations from someone else
-   (`respondToMeetingInvitations`, untried in [eas.md](eas.md)).
+2. **Server-made changes reaching the device.** A contact and events created, edited and
+   deleted in Outlook on the web reached the device by Ping (2026-11-08), and recurring events
+   with exceptions work both ways (below, "Recurring exceptions"). Still to see: time zones other
+   than the device's; meeting invitations from someone else (`respondToMeetingInvitations`,
+   untried in [eas.md](eas.md)); a series created on the device with an exception before its
+   first sync (its Exceptions go with the Add, see below, and reach the server with the
+   series' next Change).
 3. **A conflict after a refused edit.** An edit refused before the calendar rewrite existed left
    the device's copy behind the server's; the next edit got status 7 (the server won) and the one
    after went through. Palm keeps its own copy after a 7, so a device edit can be lost that way.
@@ -110,6 +111,49 @@ against `wosatester@jonandnic.onmicrosoft.com`):
 10. **Throttled test devices.** Palm's EAS device id is per device, not per account, so removing
     and adding an account again doesn't clear a throttle. The back-off now keeps a device from
     deepening one.
+
+## Recurring exceptions (2026-11-08)
+
+One occurrence of a series moved or deleted, on the device or in Outlook. Measured on the Fold3
+against Exchange Online with a weekly test series, through the preload's request dump.
+
+**What 16.x wants.** A client MUST NOT send `Exceptions` in a Sync request at 16.0 or 16.1
+(MS-ASCAL, Exceptions); it changes an occurrence with a `Change` of its own that names the
+series by `ServerId` and the occurrence by `airsyncbase:InstanceId` (a compact date, the
+occurrence's original UTC start), or deletes it with such a `Delete` (MS-ASCMD, Change and
+Delete). A property a 16.x Change leaves out stays as it was on the server. Exchange sends a
+series down whole, each `Exception` named by `InstanceId` in place of `ExceptionStartTime`.
+
+**What Palm does.** Palm keeps a moved occurrence as an event of its own (`parentId`,
+`recurrenceId`) and a deleted one as an `exdate` of the series, and sends the series' Change with
+`Exceptions/Exception` and `ExceptionStartTime`, the 12.1 form. Exchange Online refused it with
+status 6, whether the occurrence was named by `ExceptionStartTime` or by `InstanceId`, compact
+or dashed. Reading a series, Palm took an `Exception` without `ExceptionStartTime` as an empty
+`exdate` and an event of its own without a `recurrenceId`.
+
+**What the preload does** (adapter 6, `calfilter.h`, and the reply filter, `wbxmlfilter.h`):
+- In a request: an `Exception`'s `ExceptionStartTime` becomes `InstanceId`; then `calf_split`
+  takes the `Exceptions` out of the series' Change and sends each after it as a `Change`
+  (`ServerId`, `InstanceId`, the occurrence's own fields) or, for a deleted one, a `Delete`
+  (`ServerId`, `InstanceId`). An Add can't name occurrences yet: its `Exceptions` go, and the
+  series' next Change sends them.
+- In a reply: inside an `Exception`, `InstanceId` reaches Palm as `ExceptionStartTime`. A
+  `Responses` entry carrying an `InstanceId` answers a command Palm never sent: Palm resends its
+  exceptions with every Change of the series, and Exchange answers an occurrence deleted again
+  with status 5. Such an entry is held back to its end and dropped.
+
+**Seen working:** an occurrence moved and renamed on the device, and one deleted, both on the
+server (codepoet checked in Outlook); a series renamed on the device and sent back by Exchange
+with both exceptions read right; an occurrence moved and one deleted in Outlook arriving by
+Ping as the series, with the moved occurrence an event of its own at its new time and both
+deleted dates in `exdates`. Exchange sent no Change or Delete naming a single occurrence for
+these; a series it keeps as a lone occurrence (an "orphan instance", MS-ASAIRS) would come as
+one, which Palm can't read, and isn't handled.
+
+**A test pitfall:** Calendar's `DatabaseManager.updateEvent` makes a `CalendarEvent` of what it is
+given, which fills every missing property with its default before the merge. Given only `_id`
+and one property, it blanks the rest (subject, repeat rule, time zone). Calendar always passes
+the whole event; a test must do the same.
 
 ## One entry (2026-11-08)
 

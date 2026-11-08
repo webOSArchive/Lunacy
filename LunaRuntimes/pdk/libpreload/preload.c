@@ -1852,7 +1852,7 @@ static size_t lc_write(char *buf, size_t size, size_t n, void *data)
 	}
 	if (e && e->filtering && theirs) {
 		size_t len = size * n;
-		unsigned char *out = malloc(len + 16);
+		unsigned char *out = malloc(len + 16 + WBXF_HOLD);
 		size_t o = out ? wbxf_feed(&e->wbxf, (unsigned char *)buf, len, out) : 0;
 		pthread_mutex_unlock(&lc_lock);
 		if (!out) return 0;
@@ -2064,6 +2064,15 @@ int curl_easy_setopt(CURL *h, int option, ...)
 						lc_real_setopt(h, LC_CURLOPT_POSTFIELDS, (void *)b);
 						fprintf(stderr, "lunacy: calendar items in a Sync to %s rewritten for %s\n", e->host, ver);
 					} else free(b);
+					/* A series' Exceptions as Changes and Deletes of their own occurrences. */
+					size_t slen = 0;
+					unsigned char *sb = calf_split(e->post_ptr, (size_t)e->post_size, &slen);
+					if (sb) {
+						free(e->post); e->post = sb; e->post_ptr = sb; e->post_size = (long)slen;
+						lc_real_setopt(h, LC_CURLOPT_POSTFIELDSIZE, (long)slen);
+						lc_real_setopt(h, LC_CURLOPT_POSTFIELDS, (void *)sb);
+						fprintf(stderr, "lunacy: a series' exceptions in a Sync to %s sent as their own occurrences\n", e->host);
+					}
 				}
 				if (e->sending && e->their_read) lc_real_setopt(h, LC_CURLOPT_READFUNCTION, (void *)e->their_read);   /* the last request's */
 				lc_send_setup(h, e, u);

@@ -139,7 +139,7 @@ class ShellChrome(
     private fun buildLauncher(root: FrameLayout) {
         // Overlays, bottom to top as in LunaCE's OverlayWindowManager: launcher, pill, dock.
         // The icon glows first; the launch follows a frame later, so the glow is seen.
-        launcher = Launcher(activity, luna) { app -> launcher.postDelayed({ lifecycle.launch(app.id); closeLauncher() }, LAUNCH_DELAY_MS) }
+        launcher = Launcher(activity, luna) { app -> launcher.postDelayed({ launchFromLauncher(app) }, LAUNCH_DELAY_MS) }
         launcher.onRemove = { app -> host.remove(app) }
         launcher.appTitle = { id -> host.registry.get(id)?.title }
         setLauncherApps()
@@ -150,7 +150,7 @@ class ShellChrome(
         groupOverlay = GroupOverlay(activity, luna)
         root.addView(groupOverlay, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { topMargin = luna.px(StatusBar.HEIGHT) })
         launcher.onOpenGroup = { g, from -> groupOverlay.show(g, from) }
-        groupOverlay.onLaunch = { app -> launcher.postDelayed({ lifecycle.launch(app.id); closeLauncher() }, LAUNCH_DELAY_MS) }
+        groupOverlay.onLaunch = { app -> launcher.postDelayed({ launchFromLauncher(app) }, LAUNCH_DELAY_MS) }
         // [LunaCE] The group's glow stays while one of its members launches, and goes when
         // the panel is simply dismissed.
         groupOverlay.onDismissed = { g, launched -> if (launched) launcher.showLaunchFeedback(g.id) else launcher.cancelLaunchFeedback() }
@@ -831,6 +831,17 @@ class ShellChrome(
         launcher.animate().translationY(0f).setDuration(LAUNCHER_MS).setInterpolator(Easing.InOutQuint)
             .withEndAction { if (launcherOpen) cards.visibility = View.INVISIBLE }.start()
         fade(justType, false)
+    }
+
+    /**
+     * An app tapped in the launcher (or an open group). A webOS app's card comes up and the
+     * launcher closes. An Android app opens over Lunacy and the launcher stays as it is, its
+     * tab, scroll and open group kept: Home from the Android app comes back to it as it was
+     * left, as webOS's Home came back to the launcher (codepoet, 2026-11-08).
+     */
+    private fun launchFromLauncher(app: AppInfo) {
+        lifecycle.launch(app.id)
+        if (app.androidComponent == null) closeLauncher()
     }
 
     fun closeLauncher() {

@@ -703,7 +703,9 @@ corpus survey says how many apps this phase can reach, and whether it is worth d
   37. A way to run it again from Device Info.
 - Launcher mode: Lunacy as the Android home screen, with Android apps shown alongside webOS
   cards. A proof of concept is in (`shell/AndroidApps.kt`): Android's apps in the launcher,
-  the dock and Just Type, launched and uninstalled through Android. Reviewed 2026-09-26; what
+  the dock and Just Type, launched and uninstalled through Android. An Android app opened
+  from the launcher leaves it open behind it, so Home comes back to the launcher as it was
+  (`ShellChrome.launchFromLauncher`, codepoet 2026-11-08). Reviewed 2026-09-26; what
   it still lacks, none of it started:
   - **Running Android apps have no cards.** Switching between them is Android's Recents,
     so "alongside webOS cards" isn't met. This is the largest gap.

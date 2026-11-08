@@ -148,8 +148,14 @@ class ShellActivity : Activity(), WindowHost {
     private val homeScreenPins by lazy { HomeScreenPins(this) }
     /** Shortcuts other apps pinned to the home screen, among Android's tiles. */
     private val pinned by lazy { PinnedShortcuts(this, files, luna.px(Launcher.Params.ICON.toInt())) }
-    /** Whether the shell is on screen (between onStart and onStop): a Home press then is Lunacy's own. */
+    /** Whether the shell is on screen (between onStart and onStop). */
     private var started = false
+    /**
+     * Whether the shell has been out of sight since it was last in front (onStop to onResume).
+     * Android brings it back from another app with onStart before onNewIntent, so [started]
+     * can't tell that Home from a Home press with the shell up: this can.
+     */
+    private var covered = false
     /** Keeps a stand-alone Lunacy with mail running in the background; made with db8. */
     private var backgroundWork: BackgroundWork? = null
     override fun onStart() {
@@ -171,7 +177,7 @@ class ShellActivity : Activity(), WindowHost {
         if (interactive) exhibitions.cardArrivedInExhibition()
         if (interactive && cardHost.built) cards.maximized?.window?.let { it.setStageActive(false); coveredCard = it }
         if (::chrome.isInitialized) chrome.covered()
-        started = false; super.onStop()
+        started = false; covered = true; super.onStop()
     }
     /** The maximized card that another Android app covered, to be activated again ([onStop]). */
     private var coveredCard: AppWindow? = null
@@ -549,8 +555,10 @@ class ShellActivity : Activity(), WindowHost {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         // As the home screen: Home while the shell is up is Lunacy's own Home button. From
-        // an Android app it only brings the shell back, as it was.
-        if (intent.action == android.content.Intent.ACTION_MAIN && intent.hasCategory(android.content.Intent.CATEGORY_HOME) && started) chrome.homePressed()
+        // an Android app it only brings the shell back, as it was: the launcher still open if
+        // the app was opened from it, a card still up if one was (webOS's Home came back to
+        // what was there; codepoet, 2026-11-08). onResume, which clears [covered], comes after.
+        if (intent.action == android.content.Intent.ACTION_MAIN && intent.hasCategory(android.content.Intent.CATEGORY_HOME) && started && !covered) chrome.homePressed()
         handleIntent(intent)
     }
 
@@ -624,7 +632,7 @@ class ShellActivity : Activity(), WindowHost {
     private val shellHandler = android.os.Handler(android.os.Looper.getMainLooper())
 
     override fun onResume() {
-        super.onResume(); inFront = true
+        super.onResume(); inFront = true; covered = false
         // Also here: Home pressed with the shell up comes back through onNewIntent and onResume,
         // and is how a shell just made the home app hears it is one.
         backgroundWork?.check()

@@ -103,8 +103,8 @@ against `wosatester@jonandnic.onmicrosoft.com`):
    which Android doesn't enforce ([eas.md](eas.md), Open).
 8. **Tenant consent.** The Entra app ("webOS Email", publisher-verified) must list
    `EAS.AccessAsUser.All`. A tenant that doesn't let users consent to apps needs its admin to
-   grant it. The sign-in page should tell the person that plainly rather than show Microsoft's
-   raw error.
+   grant it; the sign-in page says so plainly since 2026-11-08 ("Sign-in messages"), still to be
+   seen against such a tenant.
 9. **Outlook.com and other personal accounts can't use it.** Microsoft refuses the EAS scope
    for them (AADSTS70011). They get the IMAP account type through the fallback (mail only). (Microsoft's IMAP has its own
    bug for personal accounts, [oauth.md](oauth.md).)
@@ -172,6 +172,19 @@ Exchange form showed Palm's "temporarily unavailable" against the stand-in, and 
 Microsoft sign-in page says the mail server is busy and to try again in a few minutes. Not
 handled: a throttle met while syncing an account already made (Palm's own account error); the
 back-off keeps such a device from deepening it.
+
+**An organisation's approval, said plainly.** A refused Microsoft sign-in showed Microsoft's raw
+text ("Sign-in didn't finish: AADSTS…"). The OAuth service now passes the provider's `error`
+and the AADSTS number with it (`providerError`, `aadsts`), and the sign-in page words the cases
+Microsoft documents, keeping the code for whoever helps: 65001, 90094 and 90095 (an
+administrator's consent needed) say the organization's administrator has to approve the app
+"webOS Email"; 65004 or `access_denied` (the person declined, which Microsoft's "Need admin
+approval" page also leads to) says so, and that a work or school account may need that
+approval; 50105 (not assigned to the app) and 53003 (Conditional Access) say to ask the
+administrator. Anything else keeps Microsoft's text. Seen on the Fold3 with a real sign-in
+handed Microsoft's documented 65004 refusal; which code a tenant that forbids user consent
+actually sends was last seen on 2026-11-05 only as `access_denied` (before admin consent was
+granted to the test tenant), so it is to be measured again with such a tenant.
 
 ## Time zones (2026-11-08)
 

@@ -151,7 +151,7 @@ enyo.kind({
 
 	signInStep: function (inSender, r) {
 		if (!r || !r.returnValue) {
-			this.failed((r && r.errorText) || $L("Signing in didn't work."));
+			this.failed(this.refusal(r) || (r && r.errorText) || $L("Signing in didn't work."));
 			return;
 		}
 		if (r.step === "page") {
@@ -193,6 +193,31 @@ enyo.kind({
 			this.$.validate.setMethod(v[2]);
 			this.$.validate.call({username: r.email, password: r.handle, templateId: this.templateId, config: r.config});
 		}
+	},
+
+	/*
+	 * A refusal the provider explained (the OAuth service passes its error and, for Microsoft,
+	 * the AADSTS number), in plain words, with Microsoft's code kept for whoever helps. Microsoft's
+	 * codes: 65001, 90094, 90095 an administrator's consent needed; 65004 the person declined
+	 * (Microsoft's "Need admin approval" page leads there too: access_denied); 50105 the person
+	 * isn't assigned to the app; 53003 the organisation's sign-in rules (Conditional Access)
+	 * blocked it. Null for anything else: the service's own text says it.
+	 */
+	refusal: function (r) {
+		var code = r && r.aadsts, error = r && r.providerError, name = (this.provider && this.provider.title) || "";
+		var t;
+		if (code === 65001 || code === 90094 || code === 90095 || error === "consent_required") {
+			t = $L("Your organization's administrator has to approve the app \"webOS Email\" before Lunacy can reach this account. Ask them to approve it, then sign in again.");
+		} else if (code === 65004 || error === "access_denied") {
+			t = new enyo.g11n.Template($L("#{name} didn't give Lunacy permission to reach this account. Sign in again and accept; if the account belongs to work or school and #{name} asks for an administrator's approval, your organization's administrator has to approve the app \"webOS Email\" first.")).evaluate({name: name});
+		} else if (code === 50105) {
+			t = $L("Your organization hasn't given you access to the app \"webOS Email\". Ask its administrator to allow it, then sign in again.");
+		} else if (code === 53003) {
+			t = $L("Your organization's sign-in rules don't allow this device or app. Ask its administrator.");
+		} else {
+			return null;
+		}
+		return code ? t + " (AADSTS" + code + ")" : t;
 	},
 
 	showWaiting: function (title, text) {

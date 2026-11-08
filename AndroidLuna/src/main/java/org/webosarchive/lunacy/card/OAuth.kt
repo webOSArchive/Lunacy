@@ -309,7 +309,7 @@ class OAuth(
         if (code == null) {
             val why = query["error_description"] ?: query["error"] ?: "no code"
             if (fellBack(w, query)) return
-            return w.call.reply(Bus.error("Sign-in didn't finish: $why", -7))
+            return w.call.reply(refused("Sign-in didn't finish: $why", -7, query["error"], why))
         }
         worker.execute {
             val r = runCatching {
@@ -323,11 +323,24 @@ class OAuth(
                 done(w.provider, tokens, viaBroker = false)
             }
             main.post {
-                val reply = r.getOrElse { Bus.error("Sign-in failed: ${it.message}", -8) }
+                val reply = r.getOrElse { refused("Sign-in failed: ${it.message}", -8, null, it.message) }
                 if (reply == null && !fellBack(w, mapOf("error" to "invalid_scope"))) w.call.reply(Bus.error("Sign-in failed: ${w.provider.title} refused this account", -8))
                 else if (reply != null) w.call.reply(reply)
             }
         }
+    }
+
+    /**
+     * A refused sign-in, with what the provider said as well as the text: `providerError` (OAuth's
+     * `error`: access_denied, consent_required, …) and, for Microsoft, `aadsts`, the number of its
+     * AADSTS code, which says why (an administrator's approval needed, a user not assigned, the
+     * organisation's sign-in rules). The sign-in page words those plainly.
+     */
+    private fun refused(text: String, code: Int, error: String?, description: String?): String {
+        val j = JSONObject(Bus.error(text, code))
+        error?.takeIf { it.isNotEmpty() }?.let { j.put("providerError", it) }
+        Regex("AADSTS(\\d+)").find(description.orEmpty())?.let { j.put("aadsts", it.groupValues[1].toInt()) }
+        return j.toString()
     }
 
     /** A sign-in whose scope the account was refused, started again with the provider's fallback where it has one. Main thread. */

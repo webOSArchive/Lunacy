@@ -15,8 +15,9 @@ after 1.0.
     "Time zones");
   - ~~the validator reporting a throttle (a 503) as a bad login~~ done 2026-11-08
     ([outlook-eas.md](outlook-eas.md), "Sign-in messages");
-  - telling a person plainly when their organisation's admin has to approve the app, in place
-    of Microsoft's raw error ([outlook-eas.md](outlook-eas.md), "What's missing").
+  - ~~telling a person plainly when their organisation's admin has to approve the app~~ done
+    2026-11-08 ([outlook-eas.md](outlook-eas.md), "Sign-in messages"); to be seen against a
+    tenant that forbids user consent.
 - **Email's "Change login settings"** for Google and Microsoft accounts: it opens Palm's password
   form, which can't sign them in (the Accounts app's page can). A change to Email, which
   codepoet approved as a rule 5 exception (2026-11-08).

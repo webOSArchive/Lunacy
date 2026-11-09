@@ -24,3 +24,11 @@ A second change, codepoet's, 2026-11-04, for CE to take too (docs/messaging.md, 
 to take"): app/buddies/BuddyService.js, marked [Lunacy], finds the conversation of a buddy
 that has no contacts person by its address, rather than matching it to every conversation
 that has no person and showing one of their unread counts.
+
+A third, 2026-11-09, for CE to take too: app/conversations/ConversationList.js, marked
+[Lunacy], keeps the open chat's avatar when its thread record is replaced (gotChatThread). The
+first message from someone new replaced it once the transport had made their contact, and each
+message then showed a broken image until the chat was opened again. The same change makes
+every chat row fall back to the generic avatar, when the chat has none yet
+(ConversationList.listSetupRow) and when its photo doesn't decode, such as a buddy icon a chat
+server sent that isn't an image (ConversationItem.contactImageError, on Enyo's Image error event).

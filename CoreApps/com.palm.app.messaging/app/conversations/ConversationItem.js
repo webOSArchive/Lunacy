@@ -24,7 +24,7 @@ enyo.kind({
 	components: [
 		{name: "imageContainer", className:"conversationContactImage", components: [
 			{className: "contact-image-border"},
-			{name: "contactImage", kind: "Image", className: "contact-image"}
+			{name: "contactImage", kind: "Image", className: "contact-image", onerror: "contactImageError"}
 		]},
 		{name: "messageContainer", flex: 1, components:[
 			{name: "message", components:[
@@ -560,7 +560,20 @@ enyo.kind({
 		return false;
 	},
 	updateContactImage: function(personImage) {
-		this.$.contactImage.setAttribute("src", personImage);
+		// [Lunacy] Never an empty src: a row drawn before the chat has its avatar showed
+		// "undefined", a broken image.
+		this.$.contactImage.setAttribute("src", personImage || this.defaultAvatar);
+	},
+	defaultAvatar: "images/list-avatar-default.png",
+	// [Lunacy] A photo that doesn't decode (a buddy icon a chat server sent that isn't an image)
+	// falls back to the generic avatar. Enyo's Image passes the img's error event on (enyo.bubbler);
+	// the rows are the virtual list's HTML, so this sets the src on the row's own node.
+	contactImageError: function(inSender, inEvent) {
+		var node = inEvent && inEvent.target;
+		if (node && node.getAttribute("src") !== this.defaultAvatar) {
+			node.setAttribute("src", this.defaultAvatar);
+		}
+		return true;
 	},
 	updateTime: function(localTimestamp) {
 		this.$.messageTime.setContent(this.formatTime(new Date(localTimestamp)));

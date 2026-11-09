@@ -564,6 +564,15 @@ enyo.kind({
 	gotChatThread: function(inSender, inResponse){
 		if (inResponse.returnValue && inResponse.results && inResponse.results.length > 0 && inResponse.results[0]._id === this.chatThread._id) {
 			if (inResponse.results[0].personId !== this.chatThread.personId || inResponse.results[0].flags.locked !== this.chatThread.flags.locked) {
+				// [Lunacy] The new record is a fresh object, without the avatar the open chat shows
+				// (personImage, set when the chat opened); and chatThreadChanged, handed the same
+				// thread, sets none. The first message from someone new is that case: the thread gets
+				// its personId once the transport has made the contact, and every row then drew
+				// src="undefined", a broken image, until the chat was opened again. Keep the one it
+				// has; gotPerson replaces it with the person's own as before.
+				if (!inResponse.results[0].personImage && this.chatThread.personImage) {
+					inResponse.results[0].personImage = this.chatThread.personImage;
+				}
 				this.chatThread = inResponse.results[0];
 				this.chatThreadChanged(this.chatThread);
 			}
@@ -798,9 +807,9 @@ enyo.kind({
 		enyo.log("Timing - ConversationList - listSetupRow() - It took", (Date.now() - this.chatThreadChangeTime), "ms to render this message since the chat thread changed.");
 		this.setupDivider(inMessage, inIndex);
 		//todo: for groupchat, each message could associate with different person, so can't use chatThread.personImage for this.Will we show different iamge for different buddy or use default for all?
-		if (this.chatThread.personImage) {
-			inMessage.personImage = this.chatThread.personImage;
-		}
+		// [Lunacy] Every row gets an avatar: the chat's, or the generic one until the chat has one
+		// (a thread record replaced in place came without it, and its rows drew a broken image).
+		inMessage.personImage = this.chatThread.personImage || enyo.messaging.person.getDisplayImage();
 		this.$.conversationItem.setMessage(inMessage);
 		this.$.listButtons.canGenerate = false;
 		if (!inSender.fetch(inIndex+1)) {

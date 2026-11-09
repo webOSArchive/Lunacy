@@ -32,6 +32,8 @@ GPL and LGPL programs and libraries, shipped beside Lunacy, not linked into its 
 - libpurple and its plugins, among them the webOS Chat project's AIM plugin (GPL 2 or later).
 - The GNU C Library, SMPEG, OpenAL Soft and GLib (LGPL), in the PDK and mail runtimes.
 - Calendar's webcal importer (CoreApps/com.palm.app.calendar/app/import/webcal, GPL 3).
+The source of BusyBox, QEMU and the libraries it loads, libpurple and its plugins, with the
+scripts that built them, is attached to each release as Lunacy-<version>-gpl-sources.tar (AndroidLuna/tools/gather-gpl-sources.py).
 
 Other open licences
 - Node.js through nodejs-mobile (MIT, with Node's bundled components under their own terms).

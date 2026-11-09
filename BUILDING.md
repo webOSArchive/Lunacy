@@ -62,7 +62,14 @@ A release has more rules. It refuses:
   ([Docs/test-plan.md](Docs/test-plan.md)); `./build.sh debug --test` runs them too.
 
 A release also runs `fetch-assets.sh` (`--no-fetch` skips that), builds from clean, runs lint,
-and checks every signature with `apksigner`. The APKs are reproducible because AGP's encrypted
+and checks every signature with `apksigner`.
+
+A release ships the source of the GPL programs in its APKs beside them (QEMU and the
+libraries it loads, libpurple and its plugins, the AIM plugin, BusyBox; see [NOTICE](NOTICE)).
+After the release and debug builds, `AndroidLuna/tools/gather-gpl-sources.py` gathers them
+into `out/Lunacy-<version>-gpl-sources.tar` and adds it to `out/SHA256SUMS`; it is attached to
+the GitHub release with the APKs. It checks every download against its SHA-256, and stops if
+a Termux package Lunacy ships no longer matches the termux-packages recipe it bundles. The APKs are reproducible because AGP's encrypted
 dependency block is left out of them (it was new bytes on every build); app bundles keep it for
 Google Play. The Gradle tasks underneath still work alone:
 

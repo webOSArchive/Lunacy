@@ -70,6 +70,33 @@ broker, with Palm's mail services logging in with XOAUTH2 under them, unchanged
   yet (a skeleton: no password sent, blocking network calls, stubbed sends); it builds here with
   the PDK's GCC 4.3.3 and HP's CE build-support headers.
 
+**0.9.5** (2026-11-09), modern mail accounts: Microsoft and Google sign in with OAuth, and work
+and school Microsoft accounts get mail, contacts and calendar over Exchange. Everything since 0.9.4:
+
+- **One "Microsoft Outlook" entry** in Add Account, "Email (Calendar and Contacts, if
+  available)". A work or school account (Microsoft 365) gets Exchange ActiveSync: mail with
+  push, contacts and calendar both ways, sending, replies and forwards. A personal account,
+  which Microsoft keeps off Exchange, signs in for IMAP mail in the same sign-in. Palm's own
+  mail service runs it unchanged, carried to Exchange Online's ActiveSync 16.1 by Lunacy's
+  adapters ([oauth.md](oauth.md), [outlook-eas.md](outlook-eas.md)). The legacy "Microsoft
+  Exchange" type is as it was.
+- **Calendars over Exchange:** a repeating event with one occurrence moved or deleted goes both
+  ways; an event in another time zone keeps its time, for the legacy Exchange type too (webOS
+  sent its zones an hour off in the week before a change).
+- **Plain words when a sign-in fails:** a busy or throttled server is "temporarily
+  unavailable", not a wrong password; Exchange's back-off is honoured; an organisation whose
+  administrator has to approve the app says so.
+- **Email's "Change login settings"** opens a Google or Microsoft account's own sign-in page.
+- **Email no longer flashes** as it opens with several accounts (db8 woke every watcher on an
+  update that changed nothing; 16 reloads became 1).
+- **Messaging:** a chat's avatar is never a broken image.
+- **Exhibition:** a button to Android's screen saver settings; its app list no longer doubled.
+- **Fixes:** a photo shared from Photos is attached to the mail; Home from an Android app comes
+  back to Lunacy as it was; Email's signature; Device Info's dialog titles.
+- **Under the hood:** a release test plan, after webOS CE's ([test-plan.md](test-plan.md)):
+  `./test.sh` before every release build, `Workbench/device-test.sh` on every device, and the
+  PDK sweep as scenarios and a random sample.
+
 **0.9.3** (2026-11-06), a point release for testers, for the problems 0.9.2's testers met
 running Lunacy as an ordinary app rather than the home screen. Everything since 0.9.2:
 

@@ -1,0 +1,27 @@
+# The PDK sweep's fixed scenarios (Workbench/pdk-sweep.sh, Docs/test-plan.md section 12): one
+# app for each way a PDK or hybrid app has needed something of its own from Lunacy, chosen from
+# Docs/pdk.md. Each round runs these and a random sample of the rest. A new kind of fix adds a
+# line here, with the app it was found on.
+#
+# app id | scenario | what to look at in the screenshot (pdk.md section) [| launch params]
+# Launch params are JSON; $DOC is a small text document the sweep puts in Android's Download
+# folder for the run (Workbench/pdk-sweep.txt) and takes away after.
+org.scummvm.scummvm | starts with a shell script (main "start", busybox) | ScummVM's launcher (6d)
+com.ea.app.worms.pre.na.efigs | a start.sh script; Palm's SDL calls | Worms' title, not a black card (6g)
+com.cmdrkeen.game | classic SDL 1.2, the first PDK app | Keen's title screen (6)
+com.subatomicstudios.fieldrunners | OpenAL sound | the menu; listen for music (6a)
+com.bigfishgames.app.atlantisskypatrolhd | OpenSSL; /proc/meminfo | past its "start" screen (6g)
+com.hyperdevbox.exzeus | portability: libraries the device lacks | its "online network" question, or the menu (6f)
+com.explusalpha.snes9x | an emulator: exec family, uname, file modes | the file picker (6h)
+com.apkenv.wheresmywater | an Android port through apkenv: EGL | the title, drawn (6b)
+com.apkenv.fruitninja | an Android port native on 64-bit; the PDK lock per socket | the first frame shows (6e, 0.9.2)
+com.glu.app.ghero5 | a phone game: touches scaled, its menu answers | the first menu (6i)
+com.gameloft.app.hawx | two GL apps; a movie through libSDL_cinema | the intro movie or the menu after it (6i, 6j)
+com.quickoffice.webos | a hybrid: a web page with a PDK plug-in, which starts when a document opens | the test document's one line of text (6c) | {"target":"$DOC"}
+
+# Never in the sample: these never worked, staged for later (codepoet, 2026-11-01).
+skip | com.gameloft.app.nova2 | crashes as a mission starts
+skip | com.gameloft.app.asphalt5 | a white screen; takes well over 16 s
+skip | com.gameloft.app.oregontrail | never worked
+# Dead Space (com.apkenv.deadspace) makes a horrible noise on every build since 335: it may be
+# sampled, and judged only on whether it starts.

@@ -73,8 +73,10 @@ phone mode the Pre3.
 # Tier 2, on each device, the candidate installed and First Use done
 Workbench/device-test.sh 192.168.10.36:5555 NNN Docs/test-results/NNN/hp10g2.txt
 
-# PDK games, on the A7 Lite and the HP 10 G2 (screenshots are judged by eye)
-Workbench/pdk-sweep.sh <device> <list> Workbench/results/pdk-NNN 30
+# PDK and hybrid apps: the scenarios and a random sample (section 12)
+Workbench/pdk-sweep.sh 192.168.10.175:5555 scenarios Workbench/results/pdk-NNN-fold3 16
+cp Workbench/results/pdk-NNN-fold3/summary.txt Docs/test-results/NNN/pdk-fold3.txt
+#   (only the summary is kept: the folder's logcats and screenshots may show mail)
 ```
 
 `device-test.sh` restarts Lunacy twice and opens every bundled app; it reads no mail or
@@ -171,10 +173,25 @@ Test accounts only, never codepoet's personal ones.
 - [ ] Import a calendar and a vCard file; the Android account's one-way contacts and calendars.
 - [ ] Photos shows the device's pictures; Music plays from the library.
 
-## 12. PDK and hybrid apps — [Human], with the sweep
+## 12. PDK and hybrid apps — *automated start*, [Human] screenshots
 
-- [ ] `pdk-sweep.sh` on the A7 Lite and the HP 10 G2: every game starts; screenshots judged.
-- [ ] A PDK movie plays; Quick Office and Adobe Reader open their types.
+Not every game: one app for each way a PDK or hybrid app has needed something of its own
+([Workbench/pdk-scenarios.txt](../Workbench/pdk-scenarios.txt), from [pdk.md](pdk.md)), and a
+random sample of the rest (4 by default; `pdk-sweep.sh` lists the device's PDK and hybrid apps
+over the SDK relay and draws from them). The scenarios: start scripts (ScummVM, Worms), classic
+SDL 1.2 (Keen), OpenAL, OpenSSL, a library the device lacks (ExZeus), an emulator, Android
+ports through apkenv (EGL; native on 64-bit), a phone game's touches, a movie through
+libSDL_cinema, and a hybrid's plug-in. No app in the corpus uses SDL 2: the PDK shipped 1.2.
+
+- [ ] Every scenario and every sampled app starts and is still running after the wait, with no
+      crash (`summary.txt`). The sample is printed, so a failure can be run again by name.
+- [ ] Its screenshot shows what `pdk-scenarios.txt` says to look for. Fieldrunners: listen.
+- [ ] On the Fold3 (arm64, native) and the HP 10 G2 or A7 Lite (arm32, 30 s); on the Pixel
+      Tablet (64-bit only, qemu) when codepoet opens it.
+- [ ] After a change to the PDK runtime, the whole corpus as well (`pdk-sweep.sh <device> <list>`).
+      Never sampled: N.O.V.A. 2, Asphalt 5 and Oregon Trail, which never worked.
+- [ ] A PDK movie plays to its end; Quick Office and Adobe Reader open their types.
+- A new kind of fix adds its app to `pdk-scenarios.txt`.
 
 ## 13. Install paths — [Human]
 

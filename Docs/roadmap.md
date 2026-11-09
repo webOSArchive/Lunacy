@@ -110,7 +110,7 @@ results in [test-results/578](test-results/578):
 Every sweep screenshot showed its expected screen. Caught by the round, in the tools: the HP's
 log buffer turned over before the sweep read it (now streamed), and it logs no native-service
 list (now counted from the starts). Open: ExZeus's first-run message sits left of centre on both
-tablets, not compared with a TouchPad. Not run: the HP's device pass on the A7 Lite, Nexus 5 and
+tablets, not compared with a TouchPad. Not run: the A7 Lite, Nexus 5 and
 Nexus 7 (off the network that day); the [Human] sections 7 to 14.
 
 **0.9.3** (2026-11-06), a point release for testers, for the problems 0.9.2's testers met

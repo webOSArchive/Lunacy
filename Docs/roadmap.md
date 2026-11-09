@@ -34,7 +34,11 @@ after 1.0.
 Before shipping 1.0, as for every release: the latest App Catalog bundled (6.2.2931 as of
 2026-11-08, the same as the Museum's).
 
-## Where things stand (2026-11-06)
+## Where things stand (2026-11-09)
+
+**Feature freeze (codepoet, 2026-11-09, at 0.9.5).** Until 1.0, Lunacy itself takes bug fixes
+only; the one exception is a change F-Droid needs. A new idea goes on the post-1.0 list.
+LunaKeyboard is separate: it needs work, and that work isn't part of 1.0's stabilisation.
 
 **Tests (2026-11-09):** the release test plan ([test-plan.md](test-plan.md)), after webOS CE's:
 `./test.sh` runs everything that needs no device (and `build.sh release` stops on a failure),

@@ -41,6 +41,7 @@ bytes each time:
 ./build.sh debug --fetch         # the same, after running fetch-assets.sh
 ./build.sh debug --test-apps     # a development build, with the test apps
 ./build.sh release               # signed with codepoet's key: fresh assets, clean build, lint
+./build.sh publish               # a significant release: release, debug and the GPL source
 ```
 
 It checks the toolchain first (JDK 17, the SDK in `local.properties`, `local-assets/`
@@ -66,9 +67,10 @@ and checks every signature with `apksigner`.
 
 A release ships the source of the GPL programs in its APKs beside them (QEMU and the
 libraries it loads, libpurple and its plugins, the AIM plugin, BusyBox; see [NOTICE](NOTICE)).
-After the release and debug builds, `AndroidLuna/tools/gather-gpl-sources.py` gathers them
+`./build.sh publish` builds a significant release ready to upload: the release build, the
+debug build, and then `AndroidLuna/tools/gather-gpl-sources.py`, which gathers that source
 into `out/Lunacy-<version>-gpl-sources.tar` and adds it to `out/SHA256SUMS`; it is attached to
-the GitHub release with the APKs. It checks every download against its SHA-256, and stops if
+the GitHub release with the APKs. Its options go to the release build. It checks every download against its SHA-256, and stops if
 a Termux package Lunacy ships no longer matches the termux-packages recipe it bundles. The APKs are reproducible because AGP's encrypted
 dependency block is left out of them (it was new bytes on every build); app bundles keep it for
 Google Play. The Gradle tasks underneath still work alone:

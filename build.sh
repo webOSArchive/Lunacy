@@ -3,6 +3,9 @@
 #
 #   ./build.sh debug     the shell (arm32 + arm64) and the keyboard, debug-signed
 #   ./build.sh release   the same, signed with codepoet's key, from a clean committed tree
+#   ./build.sh publish   a significant release, ready to upload: release, then debug, then the
+#                        source of the GPL programs the APKs ship (gather-gpl-sources.py),
+#                        out/Lunacy-<version>-gpl-sources.tar; options go to the release build
 #
 # Options:
 #   --fetch        run AndroidLuna/fetch-assets.sh first (release does by default)
@@ -25,7 +28,7 @@ usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' 
 type=""; fetch=""; test_apps=0; lint=0; tests=0; allow_dirty=0
 for a in "$@"; do
     case "$a" in
-        debug|release) [ -z "$type" ] || die "one build type at a time"; type=$a ;;
+        debug|release|publish) [ -z "$type" ] || die "one build type at a time"; type=$a ;;
         --fetch) fetch=1 ;;
         --no-fetch) fetch=0 ;;
         --test-apps) test_apps=1 ;;
@@ -37,6 +40,18 @@ for a in "$@"; do
     esac
 done
 [ -n "$type" ] || usage 1
+
+# publish: the six APKs and the GPL source, from one commit. Each step is this script again.
+if [ "$type" = publish ]; then
+    args=(); for a in "$@"; do [ "$a" = publish ] || args+=("$a"); done
+    "$0" release "${args[@]}"
+    "$0" debug
+    echo "== gather-gpl-sources"
+    python3 -I AndroidLuna/tools/gather-gpl-sources.py
+    echo
+    echo "Ready to upload: out/*.apk, out/Lunacy-$(sed -n 's/^versionName=//p' gradle.properties)-gpl-sources.tar and out/SHA256SUMS"
+    exit 0
+fi
 Type=$(tr '[:lower:]' '[:upper:]' <<<"${type:0:1}")${type:1}
 
 if [ "$type" = release ]; then
@@ -77,6 +92,8 @@ gradle=(./gradlew --no-daemon --no-build-cache --console=plain)
 # for this build's.
 expected=(AndroidLuna-arm32-$type.apk AndroidLuna-arm64-$type.apk LunaKeyboard-$type.apk)
 for f in "${expected[@]}"; do rm -f "out/$f"; done
+# A release's GPL source belongs to the APKs it was gathered with; a new release drops it.
+[ "$type" = release ] && rm -f out/*-gpl-sources.tar
 
 tasks=()
 [ "$type" = release ] && tasks+=(clean)
@@ -100,7 +117,7 @@ if [ "$type" = release ]; then
 fi
 
 # Checksums of every APK in out/, so a debug and a release build can sit side by side.
-(cd out && sha256sum -- *.apk > SHA256SUMS)
+(cd out && sha256sum -- *.apk $(ls -- *-gpl-sources.tar 2>/dev/null) > SHA256SUMS)
 
 version=$(sed -n 's/^versionName=//p' gradle.properties)
 build=$(git rev-list --count HEAD 2>/dev/null || echo 1)

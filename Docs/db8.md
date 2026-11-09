@@ -73,6 +73,17 @@ apart from ids, revisions and page tokens.
 
 From Open webOS's db8 source (LG's release of HP's), and measured where marked:
 
+- **A put or merge that changes nothing is no update** (`MojDb::putObj`: "if nothing changed,
+  don't do the update"): the object keeps its revision, nothing is written, and no watch fires;
+  the reply carries the unchanged revision, and a query merge still counts it. Equality is
+  db8's (`MojObject` ==): a null is not a missing key, so the first merge of `"error": null`
+  into an object without `error` is a change (db8 keeps the null; `mergeInto` deletes nothing)
+  and the next one isn't. Lunacy took a revision for every put and merge until 2026-11-09, and
+  Palm's mail services clear an account's `error` or `retry` each time Email opens, so Email's
+  account watch fired once per account and rebuilt its whole account list each time: a flash
+  per account on the Fold3. (The reference TouchPad's bus didn't answer that day, so this is
+  from the source, not measured there.)
+
 - **Every kind has db8's own `_id` index** (`MojDbKind::IdIndexJson`, `incDel`), so a query on
   `_id` is always served.
 - **`incDel` indexes** lead with `_del`, and a query that doesn't name `_del` is served by

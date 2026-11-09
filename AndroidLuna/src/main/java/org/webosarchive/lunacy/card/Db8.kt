@@ -266,6 +266,22 @@ class Db8(private val service: String, file: File?,
     }
 
     /** Equal as a source says it: the _ids db8 gave objects inside a record aren't the source's. */
+    /**
+     * Whether two values are the same as db8 compares objects (MojObject's ==): the same keys
+     * (a null is not a missing key), the same types, the same values.
+     */
+    private fun identical(a: Any?, b: Any?): Boolean = when {
+        a is JSONObject && b is JSONObject ->
+            a.length() == b.length() && a.keys().asSequence().all { b.has(it) && identical(a.opt(it), b.opt(it)) }
+        a is JSONArray && b is JSONArray -> a.length() == b.length() && (0 until a.length()).all { identical(a.opt(it), b.opt(it)) }
+        a is Number && b is Number -> {
+            val ai = a is Int || a is Long || a is Short || a is Byte
+            val bi = b is Int || b is Long || b is Short || b is Byte
+            if (ai && bi) a.toLong() == b.toLong() else !ai && !bi && a.toDouble() == b.toDouble()
+        }
+        else -> a == b
+    }
+
     private fun same(a: Any?, b: Any?): Boolean = when {
         a is JSONObject && b is JSONObject -> {
             val ka = a.keys().asSequence().filter { it != "_id" }.toSet()
@@ -606,6 +622,8 @@ class Db8(private val service: String, file: File?,
         transaction {
             for ((old, o) in prepared) {
                 if (!o.has("_id")) o.put("_id", newId())
+                // The same object put again is no update (MojDb::putObj): it keeps its revision.
+                if (old != null && identical(o, old)) { results.put(idRev(old)); continue }
                 o.put("_rev", nextRev())
                 if (old != null && old.optString("_kind") != o.optString("_kind")) erase(old)
                 write(old, o)
@@ -667,11 +685,20 @@ class Db8(private val service: String, file: File?,
         return JSONObject().put("returnValue", true).put("results", results).toString()
     }
 
-    /** Merges props into an object: objects merge recursively, anything else replaces. */
+    /**
+     * Merges props into an object: objects merge recursively, anything else replaces. A merge
+     * that changes nothing leaves the object as it was, its revision too, and wakes no watch:
+     * db8 skips such an update (MojDb::putObj, "if nothing changed, don't do the update").
+     * Palm's mail services clear an account's error or retry this way each time Email opens,
+     * and every revision woke Email's account watch, which rebuilds its whole account list
+     * (a flash per account, Fold3, 2026-11-09).
+     */
     private fun mergeOne(old: JSONObject, props: JSONObject): JSONObject {
         val o = JSONObject(old.toString())
         deepMerge(o, props)
-        o.put("_id", old.getString("_id")).put("_kind", old.getString("_kind")).put("_rev", nextRev())
+        o.put("_id", old.getString("_id")).put("_kind", old.getString("_kind")).put("_rev", old.opt("_rev"))
+        if (identical(o, old)) return old
+        o.put("_rev", nextRev())
         write(old, o)
         return o
     }

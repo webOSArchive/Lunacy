@@ -79,6 +79,41 @@ class Db8Test {
         assertEquals(listOf("apricot", "banana", "cherry"), names(find(JSONObject().put("orderBy", "name"))))
     }
 
+    /** A merge or put that changes nothing keeps the revision and wakes no watch (MojDb::putObj). */
+    @Test fun nothingChangedIsNoUpdate() {
+        val apple = names(find(JSONObject())).indexOf("apple").let { find(JSONObject()).getJSONArray("results").getJSONObject(it) }
+        val id = apple.getString("_id"); val rev = apple.getLong("_rev")
+        var woke = 0
+        bus.call(app, "palm://com.palm.db/watch", JSONObject().put("query", JSONObject().put("from", kind)
+            .put("where", JSONArray().put(JSONObject().put("prop", "name").put("op", "=").put("val", "apple")))).toString()) { r ->
+            if (JSONObject(r).optBoolean("fired")) woke++
+        }
+        fun revNow() = call("get", JSONObject().put("ids", JSONArray().put(id)).toString()).getJSONArray("results").getJSONObject(0)
+        // The same value merged again: nothing.
+        val m = call("merge", JSONObject().put("objects", JSONArray().put(JSONObject().put("_id", id).put("size", 3))).toString())
+        assertEquals(rev, m.getJSONArray("results").getJSONObject(0).getLong("rev"))
+        assertEquals(rev, revNow().getLong("_rev"))
+        // A null for a field it doesn't have is a change (db8 keeps the null), the second isn't.
+        call("merge", JSONObject().put("query", JSONObject().put("from", kind).put("where", JSONArray()
+            .put(JSONObject().put("prop", "name").put("op", "=").put("val", "apple")))).put("props", JSONObject().put("error", JSONObject.NULL)).toString())
+        val withNull = revNow()
+        assertTrue(withNull.has("error") && withNull.isNull("error"))
+        assertTrue(withNull.getLong("_rev") > rev)
+        val q = call("merge", JSONObject().put("query", JSONObject().put("from", kind).put("where", JSONArray()
+            .put(JSONObject().put("prop", "name").put("op", "=").put("val", "apple")))).put("props", JSONObject().put("error", JSONObject.NULL)).toString())
+        assertEquals(1, q.getInt("count"))
+        assertEquals(withNull.getLong("_rev"), revNow().getLong("_rev"))
+        // The same object put again: nothing.
+        val p = call("put", JSONObject().put("objects", JSONArray().put(JSONObject(withNull.toString()))).toString())
+        assertEquals(withNull.getLong("_rev"), p.getJSONArray("results").getJSONObject(0).getLong("rev"))
+        assertEquals(withNull.getLong("_rev"), revNow().getLong("_rev"))
+        // A real change still takes a revision.
+        call("merge", JSONObject().put("objects", JSONArray().put(JSONObject().put("_id", id).put("size", 7))).toString())
+        assertTrue(revNow().getLong("_rev") > withNull.getLong("_rev"))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("one watch fire, for the first change", true, woke <= 1)
+    }
+
     @Test fun errorsAsTheTouchPadAnswers() {
         val unknown = call("find", JSONObject().put("query", JSONObject().put("from", "com.example.nope:1")).toString())
         assertFalse(unknown.getBoolean("returnValue")); assertEquals(-3970, unknown.getInt("errorCode"))

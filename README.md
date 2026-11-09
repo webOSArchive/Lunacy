@@ -39,6 +39,8 @@ moves, what a loading card does, where every pixel of the shell sits. Fidelity i
 project's first rule, ahead of speed or simplicity, and every difference the engine forces is
 measured and written down ([Docs/luna-deltas.md](Docs/luna-deltas.md)).
 
+<a href="https://www.webosarchive.org/lunacy/LunacyScreenshot.jpg"><img src="https://www.webosarchive.org/lunacy/LunacyScreenshot.jpg" height="280" width="350" style="height:280px;width:350px"></a>
+
 ## What it is not
 
 - **Not a TouchPad emulator.** There is no system image and no virtual device: web apps run in

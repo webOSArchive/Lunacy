@@ -9,6 +9,7 @@
 #   --no-fetch     use AndroidLuna/local-assets/ as it is (release only)
 #   --test-apps    include the test apps (debug only; a release never carries them)
 #   --lint         run lint too (release always does: NewApi is fatal, minSdk 21 must hold)
+#   --test         run ./test.sh first, and stop on a failure (release always does)
 #   --allow-dirty  build a release from a tree with uncommitted changes
 #
 # What makes it repeatable: one JDK (17) and the Gradle wrapper's pinned Gradle, no daemon
@@ -21,7 +22,7 @@ die() { echo "build.sh: $*" >&2; exit 1; }
 # The header comment, all of it, whatever its length.
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; exit "${1:-0}"; }
 
-type=""; fetch=""; test_apps=0; lint=0; allow_dirty=0
+type=""; fetch=""; test_apps=0; lint=0; tests=0; allow_dirty=0
 for a in "$@"; do
     case "$a" in
         debug|release) [ -z "$type" ] || die "one build type at a time"; type=$a ;;
@@ -29,6 +30,7 @@ for a in "$@"; do
         --no-fetch) fetch=0 ;;
         --test-apps) test_apps=1 ;;
         --lint) lint=1 ;;
+        --test) tests=1 ;;
         --allow-dirty) allow_dirty=1 ;;
         -h|--help) usage ;;
         *) echo "build.sh: unknown argument: $a" >&2; usage 1 ;;
@@ -40,6 +42,7 @@ Type=$(tr '[:lower:]' '[:upper:]' <<<"${type:0:1}")${type:1}
 if [ "$type" = release ]; then
     [ "$test_apps" = 0 ] || die "a release never carries the test apps"
     lint=1
+    tests=1
     fetch=${fetch:-1}
     [ -f keystore.properties ] || die "a release needs keystore.properties (its format is in build.gradle.kts); without it the APKs would be unsigned"
     if [ "$allow_dirty" = 0 ] && [ -n "$(git status --porcelain 2>/dev/null)" ]; then
@@ -60,6 +63,12 @@ if [ "$fetch" = 1 ]; then
     AndroidLuna/fetch-assets.sh
 fi
 [ -d AndroidLuna/local-assets/fw ] || die "AndroidLuna/local-assets/ is empty: run with --fetch (it needs Workbench/vendor/ and the NDK)"
+
+# The build machine's tests (Docs/test-plan.md, tier 1): a release is not built on a failure.
+if [ "$tests" = 1 ]; then
+    echo "== test.sh"
+    ./test.sh || die "test.sh failed; a release is not built on a failing test"
+fi
 
 gradle=(./gradlew --no-daemon --no-build-cache --console=plain)
 [ "$test_apps" = 1 ] && gradle+=(-PtestApps)

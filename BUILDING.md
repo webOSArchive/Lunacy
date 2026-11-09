@@ -57,7 +57,9 @@ A release has more rules. It refuses:
 - a tree with uncommitted changes, because the build number is the last commit's;
   `--allow-dirty` overrides this;
 - a missing `keystore.properties`;
-- `--test-apps`.
+- `--test-apps`;
+- a failure in `./test.sh`, the build machine's tests, which it runs first
+  ([Docs/test-plan.md](Docs/test-plan.md)); `./build.sh debug --test` runs them too.
 
 A release also runs `fetch-assets.sh` (`--no-fetch` skips that), builds from clean, runs lint,
 and checks every signature with `apksigner`. The APKs are reproducible because AGP's encrypted

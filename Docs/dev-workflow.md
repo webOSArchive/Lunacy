@@ -347,6 +347,10 @@ service.
 
 ## How changes are checked
 
+Before a commit that touches what they cover, `./test.sh` (the build machine's tests); before a
+release or a test round, the whole of [test-plan.md](test-plan.md): `./test.sh`,
+`Workbench/device-test.sh` on every device, then the checks by hand.
+
 Every visual change is compared with the TouchPad at the same scale. On the HP 10 G2 one
 TouchPad px is one device px, so screenshots compare 1:1. Crop and zoom the area (PIL,
 nearest-neighbour), and put the two devices side by side. codepoet judges feel; the

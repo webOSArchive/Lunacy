@@ -12,8 +12,8 @@ enyo.kind({
     label_status_noNetwork: $L("Waiting for the network..."),
     label_status_failedNetwork: $L("Unable to connect.  Try again later."),
 
-    info_failure: $L("The update failed to properly validate.  This problem can usually be fixed if you wait a little while, then try again.  We'll try again for you in about a day."),
-    info_download: $L("#{version} is now available. It's about #{size}MB."),
+    info_failure: $L("The update failed to properly validate. This problem can usually be fixed if you wait a little while, then try again. We'll try again for you in about a day."),
+    info_download: $L("#{version} is now available. Approx size: #{size}MB."),
      info_failedconnection: $L("Unable to connect. Try again later."),
      info_nohighspeedblockedvoice: $L("No high speed data connection is available. We'll continue to wait for a high speed connection to download or you can start the download now. This download will take much longer over a low speed connection and will block incoming calls. "),
      info_nohighspeed: $L("No high speed data connection is available. We'll continue to wait for a high speed connection to download or you can start the download now. This download will take much longer over a low speed connection."),
@@ -168,7 +168,7 @@ enyo.kind({
                 if (this.payload.releasePage) {
                     // [Lunacy] Lunacy's releases come from GitHub, and the person installs them:
                     // Learn More opens the release page. None of Palm's download notes apply.
-                    this.setInfo($L("Learn More opens its release page, where you can download it. Android asks before installing it."));
+                    this.setInfo($L("Press Learn More to open the Release page, for details and downloads."));
                 } else if (this.payload.roaming === true) {
                    this.setInfo(this.info_roaming);
                 } else if (this.payload.networkAvailable === false) {

@@ -140,6 +140,13 @@ Left by judgment, each for a reason found in the code:
   (each site picks its half its own way), `ScrollMasks` (a shared class would change how one
   of the two is driven, against its measured fade) and the drawer's animator (its height is
   worked out per frame so a resize can retarget it mid-way; the timing is Drawer.qml's).
+- §3.1's `animateValue` finished 2026-11-08 at 21 sites, with an `onFinished` for the
+  "only if not cancelled" ends the table proposed: the card moves (`CardLayer.animateMoves`),
+  a card thrown away, the group overlay and the notification area's snap (whole pixels, cut
+  toward zero as `ofInt` gave them). Three stay as they are: `KineticScroll`'s two flicks cancel
+  themselves from their own update (one is physics on its own clock), and `CardSplash`'s pulse
+  repeats after a start delay. Seen on the Fold3: cards laid out, one thrown away, the next
+  centred; the group overlay and the phone's notification snap were not driven by hand.
 - The two-line labels stay apart (codepoet, 2026-11-04): the launcher elides each word on a
   phone and a group's panel doesn't, and the panel keeps drawing as it does.
 

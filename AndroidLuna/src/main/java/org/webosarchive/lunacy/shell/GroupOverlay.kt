@@ -180,16 +180,7 @@ class GroupOverlay(context: Context, private val luna: Luna) : FrameLayout(conte
 
     private fun animateTo(to: Float, ms: Long, easing: android.animation.TimeInterpolator, done: () -> Unit = {}) {
         anim?.cancel()
-        anim = ValueAnimator.ofFloat(progress, to).apply {
-            duration = ms; interpolator = easing
-            addUpdateListener { progress = it.animatedValue as Float; invalidate() }
-            addListener(object : android.animation.AnimatorListenerAdapter() {
-                var cancelled = false
-                override fun onAnimationCancel(a: android.animation.Animator) { cancelled = true }
-                override fun onAnimationEnd(a: android.animation.Animator) { if (!cancelled) done() }
-            })
-            start()
-        }
+        anim = animateValue(progress, to, ms, easing, onFinished = done) { progress = it; invalidate() }
     }
 
     // ---- layout (relayoutMembers) ----

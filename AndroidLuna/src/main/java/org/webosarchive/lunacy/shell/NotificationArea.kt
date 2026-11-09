@@ -190,11 +190,8 @@ class NotificationArea(context: Context, private val luna: Luna, private val onD
             val row = luna.px(ROW_H)
             val target = (bottom - Math.round((bottom - scrollY).toFloat() / row) * row).coerceIn(0, bottom)
             snapping?.cancel()
-            snapping = ValueAnimator.ofInt(scrollY, target).apply {
-                duration = SNAP_MS; interpolator = Easing.OutCubic
-                addUpdateListener { scrollTo(0, it.animatedValue as Int) }
-                start()
-            }
+            // Whole pixels, cut toward zero as ValueAnimator.ofInt's IntEvaluator gives them.
+            snapping = animateValue(scrollY.toFloat(), target.toFloat(), SNAP_MS, Easing.OutCubic) { scrollTo(0, it.toInt()) }
         }
     }.apply { isVerticalScrollBarEnabled = false; overScrollMode = OVER_SCROLL_NEVER }
 

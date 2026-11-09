@@ -678,12 +678,11 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         val total = moves.maxOfOrNull { max(it.groupMs, it.cardMs) } ?: 0L
         if (total <= 0L) { moves.forEach { m -> place(mapOf(m.card to m.to)) }; done(); return }
         val from = moves.map { m -> m.card.let { floatArrayOf(it.gx, it.rx, it.cy, it.scale, it.rot, it.lift) } }
-        var cancelled = false
         settled = done
-        anim = ValueAnimator.ofFloat(0f, total.toFloat()).apply {
-            duration = total; interpolator = Easing.Linear
-            addUpdateListener { a ->
-                val t = a.animatedValue as Float
+        var moving: ValueAnimator? = null
+        moving = animateValue(0f, total.toFloat(), total, Easing.Linear,
+            onEnd = { if (anim === moving) { anim = null; settled = null } },
+            onFinished = { restack(); done() }) { t ->
                 moves.forEachIndexed { k, m ->
                     val f = from[k]; val c = m.card; val to = m.to
                     val fg = m.groupEase.getInterpolation(if (m.groupMs <= 0) 1f else min(1f, t / m.groupMs))
@@ -697,15 +696,7 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
                 }
                 applyTransforms()
             }
-            addListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationCancel(a: Animator) { cancelled = true }
-                override fun onAnimationEnd(a: Animator) {
-                    if (anim === a) { anim = null; settled = null }
-                    if (!cancelled) { restack(); done() }
-                }
-            })
-            start()
-        }
+        anim = moving
     }
 
     /**
@@ -943,19 +934,15 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         val start = card.lift
         val end = inset - card.height * card.scale / 2f - card.cy
         anim?.cancel(); anim = null; settled = null
-        anim = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = Params.DELETE_MS; interpolator = Easing.OutCubic
-            addUpdateListener { a -> val f = a.animatedValue as Float; card.lift = start + (end - start) * f; applyTransforms() }
-            addListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationEnd(a: Animator) {
-                    if (anim === a) anim = null
-                    if (card.group == null) return
-                    remove(card)
-                    listener.onThrownAway(card)
-                }
-            })
-            start()
-        }
+        var thrown: ValueAnimator? = null
+        thrown = animateValue(0f, 1f, Params.DELETE_MS, Easing.OutCubic, onEnd = {
+            if (anim === thrown) anim = null
+            if (card.group != null) {
+                remove(card)
+                listener.onThrownAway(card)
+            }
+        }) { f -> card.lift = start + (end - start) * f; applyTransforms() }
+        anim = thrown
     }
 
     // ---- reorder (reference §2.7) ----

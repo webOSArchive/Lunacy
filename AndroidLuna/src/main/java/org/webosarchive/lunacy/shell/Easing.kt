@@ -17,14 +17,21 @@ object Easing {
 /**
  * A float animated from [from] to [to] over [ms] with [easing], handed to [set] at each frame,
  * and started: the cancel-then-animate every view wrote out for itself. [onEnd] runs when it
- * ends, after a cancel too (as ValueAnimator's onAnimationEnd does).
+ * ends, after a cancel too (as ValueAnimator's onAnimationEnd does); [onFinished] only when it
+ * ran to its end, not after a cancel.
  */
-fun animateValue(from: Float, to: Float, ms: Long, easing: TimeInterpolator, onEnd: (() -> Unit)? = null, set: (Float) -> Unit): android.animation.ValueAnimator =
+fun animateValue(from: Float, to: Float, ms: Long, easing: TimeInterpolator, onEnd: (() -> Unit)? = null,
+                 onFinished: (() -> Unit)? = null, set: (Float) -> Unit): android.animation.ValueAnimator =
     android.animation.ValueAnimator.ofFloat(from, to).apply {
         duration = ms; interpolator = easing
         addUpdateListener { set(it.animatedValue as Float) }
-        if (onEnd != null) addListener(object : android.animation.AnimatorListenerAdapter() {
-            override fun onAnimationEnd(a: android.animation.Animator) = onEnd()
+        if (onEnd != null || onFinished != null) addListener(object : android.animation.AnimatorListenerAdapter() {
+            var cancelled = false
+            override fun onAnimationCancel(a: android.animation.Animator) { cancelled = true }
+            override fun onAnimationEnd(a: android.animation.Animator) {
+                onEnd?.invoke()
+                if (!cancelled) onFinished?.invoke()
+            }
         })
         start()
     }

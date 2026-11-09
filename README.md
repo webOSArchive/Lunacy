@@ -182,4 +182,10 @@ Building from source is [BUILDING.md](BUILDING.md).
   like the TouchPad's keyboard, scroll ball and all. A separate APK that shares nothing with
   Lunacy and works in any Android app.
 
+## Licence
+
+Lunacy's own code is licensed under the [Apache License 2.0](LICENSE). The webOS frameworks,
+apps, fonts and libraries it carries stay under their own terms, which [NOTICE](NOTICE)
+outlines and the NOTICE file beside each one states.
+
 A project of [webOS Archive](https://www.webosarchive.org).

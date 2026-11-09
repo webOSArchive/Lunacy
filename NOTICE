@@ -1,0 +1,63 @@
+Lunacy
+Copyright 2026 codepoet and Lunacy's contributors
+
+Lunacy's own code, documentation and build scripts are licensed under the Apache License,
+Version 2.0 (see LICENSE). That covers the shell (AndroidLuna/), the companion keyboard
+(LunaKeyboard/), Lunacy's own apps in CoreApps/ (the org.webosarchive.lunacy.* apps, and the
+apps whose NOTICE says their code is Lunacy's), the patch series in LunaRuntimes/, and the
+PDK runtime libraries Lunacy wrote, except where named below.
+
+Lunacy also carries, and its APKs ship, work that is not Lunacy's. Each piece stays under its
+own terms, and each has a NOTICE (or LICENSE) beside it that names its source and status.
+Lunacy's licence does not apply to any of it. In outline:
+
+Apache License 2.0, from Hewlett-Packard, LG Electronics (Open webOS) and the webOS community
+- Enyo 1.0 (github.com/enyojs/enyo-1.0), which apps load from the OS; Lunacy's changes are
+  LunaRuntimes/enyo-1.0/patches.
+- LunaCE (github.com/webOSArchive/LunaCE): the shell's images and sounds, and the keyboard's
+  art, layout, alternate characters and timings.
+- Open webOS and webOS CE apps and libraries: Accounts, Contacts, Music, the enyo-accounts
+  library, the IM transport (imlibpurpleservice), and luna-service2's header, which
+  liblunaservice follows.
+- Pre Keyboard's matcher, which LunaKeyboard's Corrector.kt adapts.
+- Google Caja's HTML sanitizer, which Email's compose window loads.
+
+LGPL, where Lunacy's code is built into an LGPL library
+- LunaRuntimes/pdk/sdl-lunacy: Lunacy's SDL 1.2 drivers, part of libSDL (LGPL 2.1).
+- LunaRuntimes/pdk/openal/sdl.c: Lunacy's SDL backend for OpenAL Soft (LGPL 2 or later).
+
+GPL and LGPL programs and libraries, shipped beside Lunacy, not linked into its code
+- BusyBox 1.37.0 (GPL 2), built unmodified by AndroidLuna/tools/build-busybox.sh.
+- QEMU user mode and the libraries it loads (GPL 2 and LGPL), in the 64-bit builds.
+- libpurple and its plugins, among them the webOS Chat project's AIM plugin (GPL 2 or later).
+- The GNU C Library, SMPEG, OpenAL Soft and GLib (LGPL), in the PDK and mail runtimes.
+- Calendar's webcal importer (CoreApps/com.palm.app.calendar/app/import/webcal, GPL 3).
+
+Other open licences
+- Node.js through nodejs-mobile (MIT, with Node's bundled components under their own terms).
+- SDL_mixer, SDL_image, SDL_ttf, SDL_net and zlib (zlib licence); libpng; FreeType; libjpeg-
+  turbo; Ogg and Vorbis (BSD); OpenSSL 0.9.8 and 1.1 (OpenSSL and SSLeay licences; this
+  product includes software developed by the OpenSSL Project for use in the OpenSSL Toolkit,
+  http://www.openssl.org/, and cryptographic software written by Eric Young); curl; ICU;
+  Boost; libxml2, c-ares and cJSON (MIT); Prototype and underscore (MIT); the GCC runtime
+  (GPL 3 with the GCC Runtime Library Exception).
+- The Mozilla CA certificates (MPL 2.0).
+- OpenMoji's emoji, in LunaKeyboard (CC BY-SA 4.0).
+- Lunacy's icon, made from the Android robot (Google, CC BY 3.0).
+
+Palm and HP's webOS, distributed as abandonware
+- Mojo and Palm's other frameworks, Palm's bundled apps (Email, Calendar, Clock, Memos, Web,
+  Photos, Messaging and the rest, as each app's NOTICE says), the Prelude fonts, the TouchPad
+  wallpapers and ringtones, and the system UI, images and libraries copied from the
+  reference TouchPad. Copyright Palm, Inc. / Hewlett-Packard. Never released under an open
+  licence; no owner has asserted rights since webOS was discontinued. The webOS Archive and
+  webOS CE changes to these apps are their authors'.
+
+Where to find each NOTICE
+- AndroidLuna/src/main/assets/ (fonts, images, sounds, ringtones, wallpapers, system UI,
+  certificates, services), CoreApps/<app id>/, LunaKeyboard/ and its assets/, and Meta/.
+- The frameworks and native runtimes are fetched or built at build time
+  (AndroidLuna/fetch-assets.sh, AndroidLuna/tools/build-pdk.sh, build-busybox.sh), which
+  write their NOTICEs into the APK's assets beside them: the frameworks (fw/enyo, fw/mojo,
+  fw/frameworks), the PDK runtime (pdk/NOTICE, pdk/LICENSE.openssl) and the webOS root
+  filesystem (rootfs/NOTICE.*).

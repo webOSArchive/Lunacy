@@ -1390,6 +1390,10 @@ no `openDatabase` at all, and Lunacy provides it in JS instead:
 3. **Every framework change is traceable.** The Enyo (and later Mojo) forks keep a change log
    against their upstream.
 4. **Licensing.**
+   - Lunacy's own code is Apache 2.0 (codepoet, 2026-11-09; [LICENSE](../LICENSE)), which
+     fits the Apache 2.0 code it adapts and rules out GPL 2 only. The root
+     [NOTICE](../NOTICE) indexes everything else Lunacy carries; Lunacy's code built into an
+     LGPL library (sdl-lunacy, the OpenAL SDL backend) stays LGPL.
    - Enyo 1.0 is Apache 2.0.
    - LunaCE, and so the shell images, is Apache 2.0 (see the NOTICE file next to the images).
    - Mojo, the Prelude fonts and the TouchPad wallpapers are treated as abandonware (no owner

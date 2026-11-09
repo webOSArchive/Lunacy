@@ -1,0 +1,39 @@
+===== Lunacy device pass on 192.168.10.153:5555 — Pixel Tablet (Android 17) — Mon Nov  9 10:32:19 AM EST 2026 =====
+[PASS] 1 id  build 0.9.5 (578), debug, arm64-v8a
+[PASS] 2 start  shell up, activities running in 3 s
+[INFO] 2 start  native service com.palm.eas not started (on demand)
+[PASS] 2 start  native service com.palm.filecache ready
+[INFO] 2 start  native service com.palm.imap not started (on demand)
+[INFO] 2 start  native service com.palm.imlibpurple not started (on demand)
+[INFO] 2 start  native service com.palm.smtp not started (on demand)
+[PASS] 2 start  Email loaded headless at boot
+[PASS] 2 bus  systemservice answers the time (SDK relay)
+[PASS] 2 bus  applicationManager lists 61 apps
+[PASS] 2 bus  an unknown service answers an error (rule 2)
+[PASS] 2 bus  db8 refuses a caller without rights
+[INFO] 3 mail  no mail accounts
+[PASS] 4 apps  com.palm.app.accounts: card in 2 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.browser: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.calculator: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.calendar: card in 1 s (running app), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.clock: card in 0 s (running app), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.contacts: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.deviceinfo: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.email: card in 1 s (running app), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.enyo-findapps: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.exhibitionpreferences: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.help: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.location: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.messaging: card in 1 s (running app), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.musicplayer: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.notes: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.photos: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.screenlock: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.searchpreferences: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.soundsandalerts: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.swmanager: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.updates: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 5 regr  Email queried its accounts 1 time(s) from start to card (22fa049)
+[PASS] 6 crash  no Java crash, native signal or ANR
+[PASS] 6 crash  no service died
+===== 32 passed, 0 failed, 0 skipped =====

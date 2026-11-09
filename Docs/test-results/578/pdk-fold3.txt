@@ -1,0 +1,18 @@
+[INFO] sample of 4 from 13 other PDK apps: com.apkenv.amazingalex com.apkenv.templerun2 org.webosarchive.lunecast com.kalemsoft.nesemhd 
+[PASS] org.scummvm.scummvm: started (.lunacy.start through libbusybox.so and libenosys.so and libld-linux.s), still running after 16 s
+[PASS] com.ea.app.worms.pre.na.efigs: started (.lunacy.start.sh through libbusybox.so and libenosys.so and libld-linu), still running after 16 s
+[PASS] com.cmdrkeen.game: started (clonekeen through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.subatomicstudios.fieldrunners: started (fieldrunners through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.bigfishgames.app.atlantisskypatrolhd: started (atlantisskypatrolhd through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.hyperdevbox.exzeus: started (exzeus through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.explusalpha.snes9x: started (s9x through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.apkenv.wheresmywater: started (apkenv through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.apkenv.fruitninja: started (apkenv through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.glu.app.ghero5: started (ghero5.exe through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.gameloft.app.hawx: started (hawx through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.quickoffice.webos: started (qoservice through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.apkenv.amazingalex: started (apkenv through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.apkenv.templerun2: started (apkenv through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] org.webosarchive.lunecast: started (lunecast through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.kalemsoft.nesemhd: started (nesem through libenosys.so and libld-linux.so), still running after 16 s
+===== 16 started, 0 failed; judge the screenshots in Workbench/results/pdk-578-fold3 against pdk-scenarios.txt =====

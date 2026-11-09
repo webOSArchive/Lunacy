@@ -1,0 +1,17 @@
+[INFO] sample of 4 from 3 other PDK apps: com.gameloft.app.asphalt6 com.apkenv.deadspace com.emu7800.touchpad 
+[PASS] org.scummvm.scummvm: started (.lunacy.start through libbusybox.so and libld-linux.so), still running after 30 s
+[PASS] com.ea.app.worms.pre.na.efigs: started (.lunacy.start.sh through libbusybox.so and libld-linux.so), still running after 30 s
+[PASS] com.cmdrkeen.game: started (clonekeen through libld-linux.so), still running after 30 s
+[PASS] com.subatomicstudios.fieldrunners: started (fieldrunners through libld-linux.so), still running after 30 s
+[PASS] com.bigfishgames.app.atlantisskypatrolhd: started (atlantisskypatrolhd through libld-linux.so), still running after 30 s
+[PASS] com.hyperdevbox.exzeus: started (exzeus through libld-linux.so), still running after 30 s
+[PASS] com.explusalpha.snes9x: started (s9x through libld-linux.so), still running after 30 s
+[PASS] com.apkenv.wheresmywater: started (apkenv through libld-linux.so), still running after 30 s
+[PASS] com.apkenv.fruitninja: started (apkenv through libld-linux.so), still running after 30 s
+[PASS] com.glu.app.ghero5: started (ghero5.exe through libld-linux.so), still running after 30 s
+[PASS] com.gameloft.app.hawx: started (hawx through libld-linux.so), still running after 30 s
+[PASS] com.quickoffice.webos: started (qoservice through libld-linux.so), still running after 30 s
+[PASS] com.gameloft.app.asphalt6: started (Asphalt6 through libld-linux.so), still running after 30 s
+[PASS] com.apkenv.deadspace: started (apkenv through libld-linux.so), still running after 30 s
+[PASS] com.emu7800.touchpad: started (emu7800.arm through libld-linux.so), still running after 30 s
+===== 15 started, 0 failed, 0 not installed; judge the screenshots in Workbench/results/pdk-578-hp10g2 against pdk-scenarios.txt =====

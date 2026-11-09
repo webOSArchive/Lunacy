@@ -97,6 +97,22 @@ and school Microsoft accounts get mail, contacts and calendar over Exchange. Eve
   `./test.sh` before every release build, `Workbench/device-test.sh` on every device, and the
   PDK sweep as scenarios and a random sample.
 
+**0.9.5 test round (2026-11-09), build 578 (c922796)**, the first under [test-plan.md](test-plan.md):
+`./test.sh` 8 passed, 0 failed (in `build.sh release`); six APKs in `out/SHA256SUMS`. Automated
+results in [test-results/578](test-results/578):
+
+| Device | Device pass | PDK sweep |
+|---|---|---|
+| Galaxy Z Fold3 (Android 15, arm64) | 43 passed, 0 failed | 16 of 16 started |
+| Pixel Tablet (Android 17, arm64 only, qemu) | 32 passed, 0 failed | 16 of 16 started |
+| HP 10 G2 (Android 5.0.1, arm32) | 32 passed, 0 failed | 15 of 15 started |
+
+Every sweep screenshot showed its expected screen. Caught by the round, in the tools: the HP's
+log buffer turned over before the sweep read it (now streamed), and it logs no native-service
+list (now counted from the starts). Open: ExZeus's first-run message sits left of centre on both
+tablets, not compared with a TouchPad. Not run: the HP's device pass on the A7 Lite, Nexus 5 and
+Nexus 7 (off the network that day); the [Human] sections 7 to 14.
+
 **0.9.3** (2026-11-06), a point release for testers, for the problems 0.9.2's testers met
 running Lunacy as an ordinary app rather than the home screen. Everything since 0.9.2:
 

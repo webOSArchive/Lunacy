@@ -65,7 +65,11 @@ t0=$(date +%s)
 if fresh; then P "2 start  shell up, activities running in $(( $(date +%s) - t0 - 20 )) s"
 else F "2 start  no 'activities: running' within 120 s"; fi
 L=$(lunalog)
-natives=$(echo "$L" | sed -n 's/.*native services: \[\(.*\)\].*/\1/p' | head -1 | tr -d ' ' | tr ',' ' ')
+# The shell's list of native services, and any it is seen starting (the HP 10 G2 doesn't log
+# the list on every start).
+natives=$( { echo "$L" | sed -n 's/.*native services: \[\(.*\)\].*/\1/p' | head -1 | tr -d ' ' | tr ',' '\n'
+             echo "$L" | sed -n 's/.*native service \([a-z.]*\) started.*/\1/p'; } | grep . | sort -u | tr '\n' ' ')
+[ -n "$natives" ] || I "2 start  no native service started yet (the HP 10 G2 starts its mail service later)"
 for s in $natives; do
   if echo "$L" | grep -q "native service $s ready"; then P "2 start  native service $s ready"
   elif echo "$L" | grep -q "native service $s started"; then F "2 start  native service $s started but never ready"

@@ -1,0 +1,18 @@
+[INFO] sample of 4 from 9 other PDK apps: com.apkenv.cuttherope com.apkenv.deadspace com.gameloft.app.asphalt6 org.webosarchive.sdlquakehd 
+[PASS] org.scummvm.scummvm: started (.lunacy.start through libbusybox.so and libqemu-arm.so), still running after 16 s
+[PASS] com.ea.app.worms.pre.na.efigs: started (.lunacy.start.sh through libbusybox.so and libqemu-arm.so), still running after 16 s
+[PASS] com.cmdrkeen.game: started (clonekeen through libqemu-arm.so), still running after 16 s
+[PASS] com.subatomicstudios.fieldrunners: started (fieldrunners through libqemu-arm.so), still running after 16 s
+[PASS] com.bigfishgames.app.atlantisskypatrolhd: started (atlantisskypatrolhd through libqemu-arm.so), still running after 16 s
+[PASS] com.hyperdevbox.exzeus: started (exzeus through libqemu-arm.so), still running after 16 s
+[PASS] com.explusalpha.snes9x: started (s9x through libqemu-arm.so), still running after 16 s
+[PASS] com.apkenv.wheresmywater: started (apkenv through libqemu-arm.so), still running after 16 s
+[PASS] com.apkenv.fruitninja: started (apkenv through libqemu-arm.so), still running after 16 s
+[PASS] com.glu.app.ghero5: started (ghero5.exe through libqemu-arm.so), still running after 16 s
+[PASS] com.gameloft.app.hawx: started (hawx through libqemu-arm.so), still running after 16 s
+[PASS] com.quickoffice.webos: started (qoservice through libqemu-arm.so), still running after 16 s
+[PASS] com.apkenv.cuttherope: started (apkenv through libqemu-arm.so), still running after 16 s
+[PASS] com.apkenv.deadspace: started (apkenv through libqemu-arm.so), still running after 16 s
+[PASS] com.gameloft.app.asphalt6: started (Asphalt6 through libqemu-arm.so), still running after 16 s
+[PASS] org.webosarchive.sdlquakehd: started (quakehd through libqemu-arm.so), still running after 16 s
+===== 16 started, 0 failed, 0 not installed; judge the screenshots in Workbench/results/pdk-578-pixel-tablet against pdk-scenarios.txt =====

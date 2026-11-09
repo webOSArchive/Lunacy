@@ -185,6 +185,9 @@ libSDL_cinema, and a hybrid's plug-in. No app in the corpus uses SDL 2: the PDK 
 
 - [ ] Every scenario and every sampled app starts and is still running after the wait, with no
       crash (`summary.txt`). The sample is printed, so a failure can be run again by name.
+      A scenario the device lacks is SKIP: install it (codepoet's games folder and the App
+      Catalog mirror have them all) and run the sweep again, so every device covers every
+      scenario. The sweep closes the games when it is done (Lunacy restarted, at its launcher).
 - [ ] Its screenshot shows what `pdk-scenarios.txt` says to look for. Fieldrunners: listen.
 - [ ] On the Fold3 (arm64, native) and the HP 10 G2 or A7 Lite (arm32, 30 s); on the Pixel
       Tablet (64-bit only, qemu) when codepoet opens it.

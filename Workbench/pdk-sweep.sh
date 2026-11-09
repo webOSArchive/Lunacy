@@ -62,25 +62,37 @@ for id in $LIST; do
   $A shell input keyevent KEYCODE_WAKEUP </dev/null; $A shell wm dismiss-keyguard </dev/null >/dev/null 2>&1
   # Android 5 has no dismiss-keyguard: a swipe lock goes with a swipe up (the HP 10 G2's).
   $A shell dumpsys window policy </dev/null | grep -q "mShowingLockscreen=true" && { $A shell input swipe 400 1150 400 300 300 </dev/null; sleep 1; }
+  # Installed? (asked over the relay when there is one; a scenario a device lacks is skipped)
+  if [ -n "$NOVA" ] && ! timeout 20 novacom -d "$NOVA" run file:///bin/ls -- "/media/cryptofs/apps/usr/palm/applications/$id/appinfo.json" </dev/null >/dev/null 2>&1; then
+    out "[SKIP] $id: not installed on this device"; continue
+  fi
   $A shell am force-stop org.webosarchive.lunacy </dev/null; $A logcat -c </dev/null
+  # Lunacy's own lines streamed to a file as they come: a device whose system logs heavily (the
+  # HP 10 G2's audio and hwcomposer) turns its log buffer over within the wait, and a "started"
+  # line read back afterwards was gone (2026-11-09).
+  $A logcat -v brief Lunacy:V AndroidRuntime:V DEBUG:V '*:S' </dev/null > "$OUT/$id.log" 2>/dev/null &
+  LOGPID=$!
   $A shell am start -n org.webosarchive.lunacy/.shell.ShellActivity </dev/null >/dev/null 2>&1; sleep 10
   P=$(params_for "$id")
   if [ -n "$P" ]; then $A shell "am start -n org.webosarchive.lunacy/.shell.ShellActivity --es launch $id --es params '$P'" </dev/null >/dev/null 2>&1
   else $A shell am start -n org.webosarchive.lunacy/.shell.ShellActivity --es launch "$id" </dev/null >/dev/null 2>&1; fi
   sleep "$WAIT"
   $A exec-out screencap -p </dev/null | perl -0777 -pe 's/^.*?(?=\x89PNG)//s' > "$OUT/$id.png"
-  $A logcat -d </dev/null > "$OUT/$id.log"
+  kill $LOGPID 2>/dev/null; wait $LOGPID 2>/dev/null
   # A PDK app logs "pdk [id]: started"; a hybrid app's plug-in "[id] plugin <exe> started".
   started=$(grep -cE "pdk \[$id\]: started|\[$id\] plugin .* started" "$OUT/$id.log")
   how=$(grep -E "pdk \[$id\]: started" "$OUT/$id.log" | head -1 | sed 's/.*: started //' | cut -c1-70)
-  exited=$(grep -E "pdk \[$id\].*(exited|exit code|died)|\[$id\] plugin .* ended" "$OUT/$id.log" | head -1 | sed 's/.*Lunacy *: //' | cut -c1-100)
+  exited=$(grep -E "pdk \[$id\].*(exited|exit code|died)|\[$id\] plugin .* ended" "$OUT/$id.log" | head -1 | sed 's/^.*Lunacy *([ 0-9]*): //' | cut -c1-100)
   crash=$(grep -E 'FATAL EXCEPTION|Fatal signal' "$OUT/$id.log" | head -1 | cut -c1-120)
   if [ "$started" = 0 ]; then out "[FAIL] $id: never started${exited:+ ($exited)}${crash:+ CRASH: $crash}"; fail=$((fail+1))
   elif [ -n "$crash" ]; then out "[FAIL] $id: started, then $crash"; fail=$((fail+1))
   elif [ -n "$exited" ]; then out "[FAIL] $id: started, then within $WAIT s: $exited"; fail=$((fail+1))
   else out "[PASS] $id: started${how:+ ($how)}, still running after $WAIT s"; fi
 done
+# The games closed (they're noisy, codepoet): Lunacy started again, at its launcher.
+$A shell am force-stop org.webosarchive.lunacy </dev/null
+$A shell am start -n org.webosarchive.lunacy/.shell.ShellActivity </dev/null >/dev/null 2>&1
 $A shell svc power stayon false </dev/null
 $A shell rm -f /sdcard/Download/lunacy-sweep.txt </dev/null
-out "===== $(grep -c '^\[PASS\]' "$OUT/summary.txt") started, $fail failed; judge the screenshots in $OUT against pdk-scenarios.txt ====="
+out "===== $(grep -c '^\[PASS\]' "$OUT/summary.txt") started, $fail failed, $(grep -c '^\[SKIP\]' "$OUT/summary.txt") not installed; judge the screenshots in $OUT against pdk-scenarios.txt ====="
 [ "$fail" = 0 ]

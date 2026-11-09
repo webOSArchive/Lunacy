@@ -73,9 +73,13 @@ body {
 	   then scrolled sideways too. It breaks where it has to instead. */
 	word-wrap: break-word;
 }
+/* Centred, as Enyo's own modal dialog titles are (.enyo-modaldialog-title), with the notes'
+   side padding: the dialog's inner box cancels its border, so without it the title sat
+   against the screen's edge (seen on the Fold3, 2026-11-09). */
 .dialog-title {
 	font-size: 20px;
-	padding-bottom: 8px;
+	text-align: center;
+	padding: 0 12px 8px 12px;
 }
 .id-input {
 	width: 100%;

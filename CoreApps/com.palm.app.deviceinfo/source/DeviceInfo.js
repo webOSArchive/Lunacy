@@ -107,7 +107,7 @@ enyo.kind({
 		// Testers mostly have no adb, so this is how what went wrong reaches a developer.
 		{kind: "Dialog", name: "logDialog", lazy: false, components: [
 			{content: $L("Save a Log"), className: "dialog-title"},
-			{name: "logSaving", layoutKind: "HFlexLayout", align: "center", components: [
+			{name: "logSaving", layoutKind: "HFlexLayout", align: "center", pack: "center", components: [
 				{kind: "Spinner", name: "logSpinner"},
 				{content: $L("Saving..."), style: "padding-left: 10px;"}
 			]},

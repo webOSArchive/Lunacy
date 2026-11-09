@@ -14,6 +14,10 @@ enyo.kind({
                     {content:$L("Find More...")}
                 ]},
 				{content: $L("Tap to find other applications that support Exhibition Mode."), className:"accounts-body-text"},
+				// [Lunacy] Exhibition as Android's screen saver (shell/ExhibitionDream), chosen in
+				// Android's own settings: codepoet, 2026-11-07. Styled as the TouchPad's buttons here.
+				{kind: "Button", className: "accounts-btn", style: "margin-top: 16px;", caption: $L("Android Screen Saver Settings"), onclick: "openScreenSaver"},
+				{name: "screenSaverText", content: $L("Choose Lunacy Exhibition as Android's screen saver to show Exhibition while the device charges or sits in its dock."), className: "accounts-body-text"},
      	     ]}
      	]},
 		{kind:"Toolbar", className:"enyo-toolbar-light", components:[
@@ -27,7 +31,9 @@ enyo.kind({
 			{name:"setDockEnabled"},
 			{name:"appLaunch", method:"open"}
 		]},
-		{kind:"PalmService", name:"startExhitbitionMode", service:"palm://com.palm.display/control/", method:"setState"}        
+		{kind:"PalmService", name:"startExhitbitionMode", service:"palm://com.palm.display/control/", method:"setState"},
+		// [Lunacy] Android's screen saver settings.
+		{kind:"PalmService", name:"openSettings", service:"palm://org.webosarchive.lunacy/", method:"android/openSettings", onResponse:"openedScreenSaver"}
 	],
 	create:function() {
 		this.inherited(arguments);
@@ -65,6 +71,16 @@ enyo.kind({
 			return;
 		var methodName = item.enabled ? "addDockModeLaunchPoint" : "removeDockModeLaunchPoint";
 		this.$.setDockEnabled.call({appId:item.appId}, {method:methodName});
+	},
+	// [Lunacy] Android's screen saver settings; if the device has none, the line under the
+	// button says so.
+	openScreenSaver: function() {
+		this.$.openSettings.call({panel: "screensaver"});
+	},
+	openedScreenSaver: function(inSender, r) {
+		if (!r || !r.returnValue) {
+			this.$.screenSaverText.setContent($L("This device has no screen saver settings."));
+		}
 	},
 	enterExhibitionMode : function(inSender, inEvent) {
 		this.$.startExhitbitionMode.call({state:"dock"});

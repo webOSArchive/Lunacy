@@ -22,6 +22,7 @@ class DockMode(context: Context, private val registry: AppRegistry) {
 
     fun register(bus: Bus) {
         bus.register(SERVICE, "listDockModeLaunchPoints", Bus.CallHandler { call ->
+            lastIds = exhibitionIds()
             call.reply(launchPoints())
             if (call.subscribe && !call.cancelled) {
                 subscribers += call
@@ -61,9 +62,23 @@ class DockMode(context: Context, private val registry: AppRegistry) {
      * one thing a device does push to everyone watching.
      */
     fun launchPointsChanged() {
+        // Only when the set of apps changed. The shell rescans its apps at every start and after
+        // package scripts, and a list pushed for nothing reached Palm's Exhibition app as a second
+        // answer, which it appends to the first (its handleDockAppList empties its list with
+        // splice, which returns what it removed): every app twice (Fold3, 2026-11-08).
+        val ids = exhibitionIds()
+        if (ids == lastIds) return
+        lastIds = ids
         val list = launchPoints()
         subscribers.toList().forEach { it.reply(list) }
     }
+
+    /** The Exhibition apps when a list last went out (null: never), to push only a change. */
+    private var lastIds: String? = null
+
+    private fun exhibitionIds() = registry.apps
+        .filter { it.appinfo.optBoolean("dockMode", false) || it.appinfo.optBoolean("exhibitionMode", false) }
+        .map { it.id }.sorted().joinToString(",")
 
     fun isEnabled(appId: String): Boolean = prefs.getBoolean(appId, false)
 

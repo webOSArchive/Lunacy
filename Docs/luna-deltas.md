@@ -758,6 +758,18 @@ the media indexer's db8 kinds. All in [fix-log.md](fix-log.md) "Known gaps".
 - **The 300 ms rotation animation** (`rotationAnimationDuration`). Android animates its own
   rotation; matching webOS's would mean drawing the rotation by hand. Not worth it.
 
+### B24. Exhibition's "Android Screen Saver Settings" button
+
+**An addition, codepoet's request (2026-11-07).** Palm's Exhibition app has one more button
+under "Find More...": "Android Screen Saver Settings", with a line under it ("Choose Lunacy
+Exhibition as Android's screen saver to show Exhibition while the device charges or sits in its
+dock."), in the TouchPad's button and body-text styles and the app's four languages. It opens
+Android's own screen saver settings (`android/openSettings`, panel `screensaver`), where Lunacy
+Exhibition (`shell/ExhibitionDream`) is chosen; that screen's gear opens this app, so each leads
+to the other. A device without the screen says so in the line. Marked [Lunacy] in the app
+(an exception to rule 5, in its NOTICE). Seen on the Fold3 (Android 15): Settings' Screen saver
+opened with Lunacy Exhibition listed.
+
 ### B16. Exhibition windows at the TouchPad's dock size
 
 **codepoet's decision, 2026-10-19.** An Exhibition (dock mode) window is laid out at the TouchPad's dock size, its 1024 x 768 screen less the 28 px status bar - 768 x 996 upright, 1024 x 740 on its side - and scaled to fit the dock area under the status bar, centred, black around it (`ShellActivity.layDockWindow`, `AppWindow.designSize`). Rule 3 would give it the screen's own size; but Exhibition was the Touchstone's, and its apps were written for exactly that window: Photos hard-codes its height in Exhibition (`h = 1024-28`, "a very-very-very bad special hack" in its own words), so on a taller dock its slideshow stopped short and its hidden controls sat on the screen. On a screen of the TouchPad's shape nothing changes; on another, the window is letterboxed (about 50 px a side on the Galaxy Z Fold3's inner screen). The shell's own Time face is not a window and still fills the screen.

@@ -1,10 +1,13 @@
 {
+	"Android Screen Saver Settings": "Android-Bildschirmschoner-Einstellungen",
 	"Applications": "Anwendungen",
+	"Choose Lunacy Exhibition as Android's screen saver to show Exhibition while the device charges or sits in its dock.": "Wählen Sie Lunacy Exhibition als Android-Bildschirmschoner, damit der Präsentations-Modus erscheint, während das Gerät lädt oder im Dock steht.",
 	"Exhibition": "Präsentations-Modus",
 	"Exhibition Mode": "Präsentations-Modus",
 	"Find More...": "Weitere suchen...",
 	"Preferences": "Einstellungen",
 	"Start Exhibition": "Präsentations-Modus starten",
 	"Tap to find other applications that support Exhibition Mode.": "Tippen Sie, um weitere Anwendungen zu suchen, die den Präsentations-Modus unterstützen.",
+	"This device has no screen saver settings.": "Dieses Gerät hat keine Bildschirmschoner-Einstellungen.",
 	"Time": "Zeit"
 }

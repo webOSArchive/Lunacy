@@ -26,8 +26,8 @@ after 1.0.
   on 2026-11-04, and `compat.js` was split the same day. Left: the rest of §3.1 (`animateValue`
   at 6 of its 24 sites; the scroll masks, drawers and dashboard rows, each against its own
   measured numbers).
-- **Exhibition:** a button in its settings that opens Android's Screen Saver settings, so a
-  person can set Lunacy as the screen saver.
+- ~~**Exhibition:** a button in its settings that opens Android's Screen Saver settings~~ done
+  2026-11-08 (luna-deltas B24).
 
 Before shipping 1.0, as for every release: the latest App Catalog bundled (6.2.2931 as of
 2026-11-08, the same as the Museum's).

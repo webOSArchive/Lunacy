@@ -756,6 +756,9 @@ class LunacyService(
             "settings" to Settings.ACTION_SETTINGS,
             "input" to Settings.ACTION_INPUT_METHOD_SETTINGS,
             "battery" to Intent.ACTION_POWER_USAGE_SUMMARY,
+            // Android's screen saver (Daydream on Android 5), where Lunacy Exhibition
+            // (shell/ExhibitionDream) is chosen: Palm's Exhibition app opens it.
+            "screensaver" to Settings.ACTION_DREAM_SETTINGS,
             // Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS, public from Android 5.1; the
             // screen is there on 5.0 under the same action.
             "notificationaccess" to "android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS",

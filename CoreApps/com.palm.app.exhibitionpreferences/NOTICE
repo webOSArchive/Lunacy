@@ -10,3 +10,9 @@ is the webOS App Catalog's icon, the same file as the CE project's system/ (webo
 67ad3d8). It lists the apps that support
 Exhibition Mode and starts it; Lunacy's shell draws the Exhibition clock itself, as
 LunaSysMgr did (see "Exhibition" in docs/architecture.md).
+
+[Lunacy] One addition, codepoet's (2026-11-07): an "Android Screen Saver Settings" button under
+"Find More...", with a line under it, which opens Android's screen saver settings
+(org.webosarchive.lunacy android/openSettings, panel "screensaver"), where Lunacy Exhibition is
+chosen; its strings in the app's four languages are Lunacy's. Marked [Lunacy] in
+source/ExhibitionPreferencesApp.js.

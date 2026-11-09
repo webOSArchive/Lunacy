@@ -1,9 +1,12 @@
 {
+	"Android Screen Saver Settings": "Paramètres de l’économiseur d’écran Android",
+	"Choose Lunacy Exhibition as Android's screen saver to show Exhibition while the device charges or sits in its dock.": "Choisissez Lunacy Exhibition comme économiseur d’écran Android pour afficher le mode exhibition pendant que l’appareil se recharge ou est sur sa station d’accueil.",
 	"Exhibition": "Exposition",
 	"Exhibition Mode": "Mode Exposition",
 	"Find More...": "Rechercher autres...",
 	"Preferences": "Préférences",
 	"Start Exhibition": "Démarrer Exposition",
 	"Tap to find other applications that support Exhibition Mode.": "Appuyez pour trouver d’autres applications prenant en charge le mode Exposition.",
+	"This device has no screen saver settings.": "Cet appareil n’a pas de paramètres d’économiseur d’écran.",
 	"Time": "Heure"
 }

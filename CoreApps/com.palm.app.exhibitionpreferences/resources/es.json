@@ -1,10 +1,13 @@
 {
+	"Android Screen Saver Settings": "Ajustes del protector de pantalla de Android",
 	"Applications": "Aplicaciones",
+	"Choose Lunacy Exhibition as Android's screen saver to show Exhibition while the device charges or sits in its dock.": "Elige Lunacy Exhibition como protector de pantalla de Android para mostrar el modo exposición mientras el dispositivo se carga o está en su base.",
 	"Exhibition": "Exposición",
 	"Exhibition Mode": "Modo exposición",
 	"Find More...": "Buscar más...",
 	"Preferences": "Preferencias",
 	"Start Exhibition": "Comenzar exhibición",
 	"Tap to find other applications that support Exhibition Mode.": "Toca para buscar otras aplicaciones compatibles con el modo exposición.",
+	"This device has no screen saver settings.": "Este dispositivo no tiene ajustes de protector de pantalla.",
 	"Time": "Hora"
 }

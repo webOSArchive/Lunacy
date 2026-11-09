@@ -1,10 +1,13 @@
 {
+	"Android Screen Saver Settings": "Impostazioni salvaschermo di Android",
 	"Applications": "Applicazioni",
+	"Choose Lunacy Exhibition as Android's screen saver to show Exhibition while the device charges or sits in its dock.": "Scegliere Lunacy Exhibition come salvaschermo di Android per mostrare la modalità Esposizione mentre il dispositivo è in carica o nella base.",
 	"Exhibition": "Esposizione",
 	"Exhibition Mode": "Modalità Esposizione",
 	"Find More...": "Trova altri...",
 	"Preferences": "Preferenze",
 	"Start Exhibition": "Avvia modalità Esposizione",
 	"Tap to find other applications that support Exhibition Mode.": "Toccare per trovare altre applicazioni che supportano la modalità Esposizione.",
+	"This device has no screen saver settings.": "Questo dispositivo non ha impostazioni del salvaschermo.",
 	"Time": "Ora"
 }

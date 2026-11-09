@@ -81,8 +81,10 @@ From Open webOS's db8 source (LG's release of HP's), and measured where marked:
   and the next one isn't. Lunacy took a revision for every put and merge until 2026-11-09, and
   Palm's mail services clear an account's `error` or `retry` each time Email opens, so Email's
   account watch fired once per account and rebuilt its whole account list each time: a flash
-  per account on the Fold3. (The reference TouchPad's bus didn't answer that day, so this is
-  from the source, not measured there.)
+  per account on the Fold3. Measured on the reference TouchPad (2026-11-09, as the probe app):
+  merging `a: 1` into `a: 1` kept the revision; merging `b: null` into an object without `b`
+  took one and stored the null; a query merge of `error: null` into an object whose `error`
+  was already null answered `count: 1` and kept the revision.
 
 - **Every kind has db8's own `_id` index** (`MojDbKind::IdIndexJson`, `incDel`), so a query on
   `_id` is always served.

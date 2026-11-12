@@ -115,3 +115,47 @@ body {
 	color: #888;
 	padding: 0 14px;
 }
+
+/* About (App Menu): webOS CE's Device Info About scene, from its ce-about.css on the
+ * reference TouchPad (same sizes and colours; ids renamed to this app's classes). */
+.about-body {
+	margin: 0 auto;
+	padding: 24px 16px 24px 16px;
+	max-width: 720px;
+	color: #444444;
+}
+.about-version {
+	font-size: 16px;
+	font-weight: bold;
+	color: #777777;
+	text-align: center;
+}
+.about-p {
+	margin: 18px 0 14px 0;
+	font-size: 17px;
+	line-height: 25px;
+}
+.about-rule {
+	margin: 22px 0 18px 0;
+	height: 1px;
+	background-color: #cccccc;
+}
+.about-credits {
+	margin: 0 0 0 20px;
+}
+.about-credit {
+	display: inline-block;
+	width: 32%;
+	min-width: 180px;
+	padding: 3px 0;
+	font-size: 16px;
+	line-height: 22px;
+	vertical-align: top;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.about-credit-code {
+	font-weight: bold;
+	color: #222222;
+}

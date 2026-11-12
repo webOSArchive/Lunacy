@@ -16,11 +16,12 @@ enyo.kind({
 	components: [
 		{kind: "Control", className: "enyo-toolbar-light header-welcome", components: [
 			{kind: "Image", src: "images/header-icon-deviceinfo.png"},
-			{content: $L("Device Information"), style: "padding-left: 10px;"}
+			{name: "title", content: $L("Device Information"), style: "padding-left: 10px;"}
 		]},
 		{className: "header-shadow"},
-		{kind: "Scroller", flex: 1, components: [
-			{kind: "Pane", flex: 1, components: [
+		{kind: "Scroller", name: "scroller", flex: 1, components: [
+			// Drawn at once: a cross fade showed the text before the rest (codepoet, 2026-11-12).
+			{kind: "Pane", flex: 1, transitionKind: "enyo.transitions.Simple", components: [
 				{kind: "HFlexBox", flex: 1, pack: "center", align: "center", components: [
 					{kind: "Spinner"},
 					{content: $L("Reading the environment...")}
@@ -70,8 +71,22 @@ enyo.kind({
 					{content: $L("Apps see the card size in TouchPad pixels, so they lay out as they did on a TouchPad whatever this screen's density is."), className: "note"},
 					{kind: "Button", className: "enyo-button", caption: $L("Android Device Info"), onclick: "openAndroid"},
 					{content: $L("Android owns the rest: its own About screen has the hardware, the build and the legal notices."), className: "note"}
+				]},
+				// About (App Menu), after webOS CE's Device Info About scene on the reference
+				// TouchPad: a version line, the dedication, a rule, and the names, code
+				// contributors in bold. The words are codepoet's (2026-11-12).
+				{name: "about", className: "about-body", components: [
+					{name: "aboutVersion", className: "about-version"},
+					{className: "about-p", content: $L("Lunacy is dedicated to everyone who helped keep the dream alive. All of the community members of webOS Archive, the former members of webOS Nation, the developers of webOS Ports, and the original developers at Palm and HP deserve credit for maintaining and believing in something special. The following contributors have provided recent code for webOS Community Edition that has found a new home in Lunacy:")},
+					{className: "about-rule"},
+					{name: "credits", className: "about-credits"}
 				]}
 			]}
+		]},
+		// CE's About scene had a command menu with Back; the gesture area's back does the same.
+		{kind: "Toolbar", name: "aboutBar", showing: false, components: [
+			{caption: $L("Back"), onclick: "closeAbout"},
+			{flex: 1}
 		]},
 		// Changing the device id: a power user's migration, so it explains itself and takes the
 		// id written however it was copied off the old device.
@@ -130,10 +145,11 @@ enyo.kind({
 		]},
 		// The shell keeps PalmSystem.screenOrientation current and the window resizes, so Enyo
 		// raises windowRotated: the display rows are worth re-reading then.
-		{kind: "ApplicationEvents", onWindowRotated: "refresh"},
+		{kind: "ApplicationEvents", onWindowRotated: "refresh", onBack: "back"},
 		{kind: "AppMenu", components: [
 			{caption: $L("Refresh"), onclick: "refresh"},
-			{caption: $L("Save a Log"), onclick: "saveLog"}
+			{caption: $L("Save a Log"), onclick: "saveLog"},
+			{caption: $L("About"), onclick: "openAbout"}
 		]},
 		{kind: "PalmService", service: "palm://org.webosarchive.lunacy/", components: [
 			{name: "getEnvironment", method: "system/getEnvironment", onResponse: "gotEnvironment"},
@@ -205,7 +221,38 @@ enyo.kind({
 			: $L("The TouchPad's layout, and apps are told they are on a TouchPad.")) + " " + $L("Change it in Screen & Lock."));
 		this.$.appWidth.setValue(y.appLayoutWidth === undefined ? "" : (y.appLayoutWidth === 0 ? $L("the card's own") : y.appLayoutWidth + " px"));
 		this.software(r.software || []);
+		this.$.aboutVersion.setContent(l.version ? $L("Lunacy") + " " + l.version + " (" + $L("build") + " " + l.build + ")" : "");
+		// A refresh (a rotation raises one) leaves About open if it is.
+		if (!this.aboutShown) this.$.pane.selectViewByName("info");
+	},
+	//* In the order codepoet gave; all of them wrote code, so all are in CE's bold.
+	credits: ["achunt", "codepoet", "Rad", "Herrie", "Tofe"],
+	openAbout: function() {
+		if (!this.$.credits.getControls().length) {
+			for (var i = 0; i < this.credits.length; i++) {
+				this.$.credits.createComponent({className: "about-credit about-credit-code", content: this.credits[i]});
+			}
+			this.$.credits.render();
+		}
+		this.aboutShown = true;
+		this.$.title.setContent($L("About Lunacy"));
+		this.$.aboutBar.show();
+		this.$.pane.selectViewByName("about");
+		this.$.scroller.scrollTo(0, 0);
+		this.resized();
+	},
+	closeAbout: function() {
+		this.aboutShown = false;
+		this.$.title.setContent($L("Device Information"));
+		this.$.aboutBar.hide();
 		this.$.pane.selectViewByName("info");
+		this.$.scroller.scrollTo(0, 0);
+		this.resized();
+	},
+	back: function(inSender, inEvent) {
+		if (!this.aboutShown) return;
+		this.closeAbout();
+		inEvent.preventDefault();
 	},
 	//* One row per app: its title, its version, and the fixed-viewport switch on the right.
 	software: function(apps) {

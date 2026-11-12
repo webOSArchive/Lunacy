@@ -194,6 +194,8 @@ libSDL_cinema, and a hybrid's plug-in. No app in the corpus uses SDL 2: the PDK 
 - [ ] After a change to the PDK runtime, the whole corpus as well (`pdk-sweep.sh <device> <list>`).
       Never sampled: N.O.V.A. 2, Asphalt 5 and Oregon Trail, which never worked.
 - [ ] A PDK movie plays to its end; Quick Office and Adobe Reader open their types.
+- [ ] Asphalt 6: Free Race, Nassau, Normal Race starts and the track draws, no crash (GLES 2
+      shaders and attributes, [pdk.md](pdk.md) §6l).
 - A new kind of fix adds its app to `pdk-scenarios.txt`.
 
 ## 13. Install paths — [Human]

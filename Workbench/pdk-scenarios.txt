@@ -17,6 +17,7 @@ com.apkenv.wheresmywater | an Android port through apkenv: EGL | the title, draw
 com.apkenv.fruitninja | an Android port native on 64-bit; the PDK lock per socket | the first frame shows (6e, 0.9.2)
 com.glu.app.ghero5 | a phone game: touches scaled, its menu answers | the first menu (6i)
 com.gameloft.app.hawx | two GL apps; a movie through libSDL_cinema | the intro movie or the menu after it (6i, 6j)
+com.gameloft.app.asphalt6 | GLES 2: strict GLSL, a program's own attributes | its intro movie or title (takes over 16 s); a race by hand, Free Race (6l)
 com.quickoffice.webos | a hybrid: a web page with a PDK plug-in, which starts when a document opens | the test document's one line of text (6c) | {"target":"$DOC"}
 
 # Never in the sample: these never worked, staged for later (codepoet, 2026-11-01).

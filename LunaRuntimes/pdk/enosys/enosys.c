@@ -38,6 +38,40 @@
 #define SYS_SECCOMP 1
 #endif
 
+/* The file and offset an address falls in, from the process's maps. */
+static void locate(pid_t who, const char *what, unsigned long a)
+{
+	char path[64], line[512];
+	snprintf(path, sizeof path, "/proc/%d/maps", who);
+	FILE *f = fopen(path, "r");
+	if (f) {
+		while (fgets(line, sizeof line, f)) {
+			unsigned long lo, hi, off; char name[400] = "";
+			if (sscanf(line, "%lx-%lx %*s %lx %*s %*s %399[^\n]", &lo, &hi, &off, name) >= 3 && a >= lo && a < hi) {
+				fprintf(stderr, "lunacy: crash %s %08lx = %s +%lx\n", what, a, name[0] ? name : "(anonymous)", a - lo + off);
+				fclose(f); return;
+			}
+		}
+		fclose(f);
+	}
+	fprintf(stderr, "lunacy: crash %s %08lx, unmapped\n", what, a);
+}
+
+/* A fault signal on its way to the app: where it happened, read from outside, so nothing in
+   the app's process changes to find out (a handler preloaded into Asphalt 6 moved its crash
+   away, 2026-11-12). The first few only. */
+static void where(pid_t who, int sig)
+{
+	static int told;
+	if (told++ >= 4) return;
+	siginfo_t si; struct pt_regs r; struct iovec io = { &r, sizeof r };
+	if (ptrace(PTRACE_GETSIGINFO, who, 0, &si) != 0 || ptrace(PTRACE_GETREGSET, who, (void *)NT_PRSTATUS, &io) != 0) return;
+	fprintf(stderr, "lunacy: crash: signal %d code %d at %p in thread %d\n", sig, si.si_code, si.si_addr, who);
+	locate(who, "pc", r.ARM_pc); locate(who, "lr", r.ARM_lr);
+	fprintf(stderr, "lunacy: crash r0 %08lx r1 %08lx r2 %08lx r3 %08lx r4 %08lx r5 %08lx r6 %08lx r7 %08lx r8 %08lx r9 %08lx r10 %08lx fp %08lx ip %08lx sp %08lx cpsr %08lx\n",
+		r.ARM_r0, r.ARM_r1, r.ARM_r2, r.ARM_r3, r.ARM_r4, r.ARM_r5, r.ARM_r6, r.ARM_r7, r.ARM_r8, r.ARM_r9, r.ARM_r10, r.ARM_fp, r.ARM_ip, r.ARM_sp, r.ARM_cpsr);
+}
+
 int main(int argc, char **argv)
 {
 	if (argc < 2) { fprintf(stderr, "usage: %s program [args...]\n", argv[0]); return 2; }
@@ -92,6 +126,7 @@ int main(int argc, char **argv)
 				continue;
 			}
 		}
+		if (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL || sig == SIGFPE) where(who, sig);
 		/* A new thread starts stopped; any other signal goes on to the app. */
 		ptrace(PTRACE_CONT, who, 0, (void *)(long)(sig == SIGSTOP ? 0 : sig));
 	}

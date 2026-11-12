@@ -17,7 +17,7 @@ case OP_glCreateProgram: {
 case OP_glShaderSource: {
 	GLuint shader = map_name(&prog_names, get_u32(&rd_), 0);
 	const char *src = get_blob(&rd_, 1);
-	if (src && blob_len) { GLint n = (GLint)strnlen(src, blob_len); glShaderSource(shader, 1, &src, &n); }
+	if (src && blob_len) { GLint n = (GLint)strnlen(src, blob_len); src = shader_source(src, &n); glShaderSource(shader, 1, &src, &n); }
 	break;
 }
 case OP_glVertexAttribPointer: {

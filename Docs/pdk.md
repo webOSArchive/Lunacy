@@ -1132,8 +1132,54 @@ unplayable to smooth on the Fold3 (25 frames/s, the game's own pace). GLES 2 sti
 element 0.
 
 **Still open.** N.O.V.A. 2 plays its intro movie, then opens `PostEffect_gl2.bdae`, which none of
-its archives hold, and crashes on the missing object (SIGSEGV at 0x50, after "File not found"),
+its archives hold (wrong: it falls back to one that does, §6l), and crashes on the missing object (SIGSEGV at 0x50, after "File not found"),
 on the Fold3 and on a fresh install on the 10 G2. Advertising the TouchPad's GLES 2 extensions
 that the stream passes through (depth textures, 32-bit indices, float textures, anisotropy)
 changed nothing. What the TouchPad does at that point is next to measure: its GLES 2 strings
 (`glprobe2.c`) are Adreno 220's, with 35 extensions to Lunacy's 7.
+
+## 6l. Asphalt 6 and N.O.V.A.: strict GLSL, a program's own attributes, where a crash is, 2026-11-12
+
+codepoet asked for Asphalt 6 (1.0.2, a TouchPad game, GLES 2) and N.O.V.A. (1.1.0, a Pre game,
+the first of the series) on the Galaxy Z Fold3. Both start, play their movies and reach their
+menus; Asphalt 6 closed as a race started (exit 139), and N.O.V.A. plays as it is: menus, the
+first level's cutscene and play, at about 24 frames/s.
+
+**Strict GLSL.** Every race shader failed: "unexpected tokens following #endif". Gameloft's
+Glitch engine writes `#endif]` in its shader prelude. GLSL ES allows only a comment after
+`#else` or `#endif`; Adreno 220's preprocessor ignored the rest, as C preprocessors do, and the
+Fold3's driver refuses the shader. The GLES 2 server now blanks such tokens, up to a comment or
+the line's end, before `glShaderSource` (`gl_server.c`, `shader_source`); a valid shader comes
+through unchanged, and the log says once that it happened. Not measured on the TouchPad: it
+wasn't on its cable. That the game ships the line is the evidence its driver took it.
+
+**A program's own attributes.** With the shaders compiling, the crash stayed. Read from outside
+the process (below), it was `memcpy` in the GLES 2 client's `send_attribs`, reading an address
+the process may not read (SEGV_ACCERR). Each draw copied every enabled vertex array in the app's
+memory; the game leaves one enabled, pointing at memory it has since given back, for an
+attribute the race's program doesn't read. A driver fetches only the current program's active
+attributes, so on the TouchPad the stale pointer was never touched. The client now learns each
+program's active attributes when it links (`GL_ACTIVE_ATTRIBUTES`, `glGetActiveAttrib`,
+`glGetAttribLocation`: round trips at link time only; matrices and arrays take their run of
+locations) and a draw sends only those; a program whose answers don't add up sends every
+enabled array, as before. Fewer bytes per draw, too. Asphalt 6 races at 60 frames/s.
+
+**Where a crash is.** A signal handler preloaded into the game to find the fault moved it away:
+with one more library loaded the race ran clean every time, and without it the crash came back
+every time. libenosys already runs the app as its ptrace child and sees every signal first, so
+it now logs the first few fault signals (SIGSEGV, SIGBUS, SIGILL, SIGFPE) with the fault
+address, `pc` and `lr` as file and offset from the process's maps, and the registers, as
+`lunacy: crash ...` lines in the app's log, before passing the signal on. Nothing in the app's
+process changes. Only on Android 10 and later, where libenosys runs; an offset is the file's,
+so `llvm-readelf -l` gives the address to look up.
+
+**N.O.V.A. 2, looked at again.** The 6k note had it wrong: `PostEffect_gl2.bdae` isn't what
+fails. The game asks for `<name>_gl2.bdae` because its GLES 2 flag (0x630240) is set and its
+quality level (0x630244) is 0, the default without a `device.txt`, as it would be on the
+TouchPad. It then falls back to the plain name, and `effects.gla/posteffect.bdae` opens: the
+archive's names are encrypted on disk, so they were read decrypted from the game's heap, held
+at the fault by a temporary preload. The "Error - File not found" it prints names an **empty**
+file (`427ac4` prints the header, the name, the footer). The crash follows in its first
+main-loop update (`9e33c`, `25e2b0`): a lookup (`c0f70`) returns NULL and `cc4d8` reads 0x50
+from it. The strict-GLSL and attribute fixes above don't change it. Next: where the empty name
+comes from, or the same moment on the TouchPad.

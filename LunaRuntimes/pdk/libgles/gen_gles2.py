@@ -209,6 +209,11 @@ def gen_client(protos):
                 print(f'    return ({ret})an_.ret;')
         if name in ('glFlush', 'glFinish'):
             print('    lunacy_gl_flush();')
+        # Which attributes each program reads, so a draw sends only those (client2_prelude.c).
+        if name == 'glLinkProgram':
+            print('    learn_attribs(program);')
+        if name == 'glUseProgram':
+            print('    current_program = program;')
         print('}')
 
 

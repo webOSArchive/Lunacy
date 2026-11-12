@@ -685,6 +685,41 @@ static char *out_buffer(GLsizei n)
 	memset(out_str, 0, (size_t)n);
 	return out_str;
 }
+/* A shader's source as the TouchPad's driver read it. GLSL ES allows nothing but a comment
+   after `#else` or `#endif`; Adreno 220's preprocessor ignored what followed, as C
+   preprocessors do, and today's drivers refuse the shader. Gameloft's Glitch engine ships
+   `#endif]` (Asphalt 6: every race shader failed on a Galaxy Z Fold3, then the game crashed,
+   2026-11-12). The stray tokens are blanked, up to a comment or the line's end; a valid
+   shader comes through unchanged. */
+static __thread char *src_copy; static __thread size_t src_cap;
+static const char *shader_source(const char *src, GLint *n)
+{
+	if (!grow(&src_copy, &src_cap, (size_t)*n + 1)) return src;
+	memcpy(src_copy, src, (size_t)*n); src_copy[*n] = 0;
+	int fixed = 0;
+	for (char *line = src_copy; *line; ) {
+		char *p = line;
+		while (*p == ' ' || *p == '\t') p++;
+		if (*p == '#') {
+			p++;
+			while (*p == ' ' || *p == '\t') p++;
+			size_t k = !strncmp(p, "endif", 5) ? 5 : !strncmp(p, "else", 4) ? 4 : 0;
+			if (k && (p[k] == ' ' || p[k] == '\t' || (p[k] && p[k] != '\n' && p[k] != '\r' && p[k] != '/'))) {
+				for (p += k; *p && *p != '\n' && *p != '\r'; p++) {
+					if (p[0] == '/' && (p[1] == '/' || p[1] == '*')) break;
+					if (*p != ' ' && *p != '\t') { *p = ' '; fixed = 1; }
+				}
+			}
+		}
+		char *nl = strchr(line, '\n');
+		if (!nl) break;
+		line = nl + 1;
+	}
+	static int told;
+	if (fixed && !told) { told = 1; LOGI("pdk gl: stray tokens after #else/#endif blanked in a shader (logged once)"); }
+	return src_copy;
+}
+
 /* A shader that doesn't compile, or a program that doesn't link, is logged with the
    driver's message: GLSL the TouchPad's driver took and this one doesn't shows up here. */
 static void check_compile(GLuint shader)

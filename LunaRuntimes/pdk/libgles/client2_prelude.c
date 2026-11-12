@@ -25,14 +25,59 @@ struct attrib { int enabled; GLint size; GLenum type; GLboolean normalized; GLsi
 static struct attrib attribs[ATTRIBS];
 
 
-/* Before a draw: each enabled attribute array in the app's memory, the elements it covers. */
+/* The attributes each program reads, by the app's program name: bit i for location i, and
+   KNOWN once learnt at link. A driver fetches only the current program's active attributes;
+   an enabled array the program doesn't read is never touched, and games leave such arrays
+   pointing at memory they have since freed. Asphalt 6 did, and copying one killed it as a race
+   started (SIGSEGV in send_attribs, a Galaxy Z Fold3, 2026-11-12). A program not learnt (the
+   queries failed) sends every enabled array, as before. */
+#define KNOWN 0x10000u
+static uint32_t *program_attribs; static GLuint program_attribs_n;
+static GLuint current_program;
+static void learn_attribs(GLuint program)
+{
+	if (!program) return;
+	if (program >= program_attribs_n) {
+		GLuint n = program + 64;
+		uint32_t *p = realloc(program_attribs, n * sizeof *p);
+		if (!p) return;
+		memset(p + program_attribs_n, 0, (n - program_attribs_n) * sizeof *p);
+		program_attribs = p; program_attribs_n = n;
+	}
+	program_attribs[program] = 0;
+	GLint linked = 0, count = -1;
+	glGetProgramiv(program, GL_LINK_STATUS, &linked);
+	if (!linked) return;   /* nothing draws with it until it links again */
+	glGetProgramiv(program, GL_ACTIVE_ATTRIBUTES, &count);
+	if (count < 0) return;
+	uint32_t mask = 0;
+	for (GLint i = 0; i < count; i++) {
+		char name[256] = ""; GLsizei len = 0; GLint size = 0; GLenum type = 0;
+		glGetActiveAttrib(program, (GLuint)i, sizeof name, &len, &size, &type, name);
+		GLint at = name[0] ? glGetAttribLocation(program, name) : -1;
+		if (at < 0) return;   /* an answer that doesn't add up: send every array for this one */
+		int slots = type == GL_FLOAT_MAT4 ? 4 : type == GL_FLOAT_MAT3 ? 3 : type == GL_FLOAT_MAT2 ? 2 : 1;
+		for (GLint k = 0; k < (size > 0 ? size : 1) * slots; k++)
+			if (at + k < ATTRIBS) mask |= 1u << (at + k);
+	}
+	program_attribs[program] = mask | KNOWN;
+}
+static int program_reads(uint32_t i)
+{
+	if (current_program >= program_attribs_n) return 1;
+	uint32_t m = program_attribs[current_program];
+	return !(m & KNOWN) || (m & (1u << i));
+}
+
+/* Before a draw: each enabled attribute array in the app's memory that the program reads, the
+   elements it covers. */
 static void send_attribs(size_t vertices, size_t count, GLenum index_type, const void *indices)
 {
 	size_t lowest_;   /* GLES 2 sends from element 0 */
 	if (count && index_extent(&lowest_, &vertices, count, index_type, indices) < 0) return;
 	for (uint32_t i = 0; i < ATTRIBS; i++) {
 		struct attrib *a = &attribs[i];
-		if (!a->enabled || a->buffer || !a->ptr || !vertices) continue;
+		if (!a->enabled || a->buffer || !a->ptr || !vertices || !program_reads(i)) continue;
 		size_t elem = (size_t)a->size * gl_type_size(a->type);
 		size_t stride = a->stride > 0 ? (size_t)a->stride : elem;
 		size_t n = stride * (vertices - 1) + elem;

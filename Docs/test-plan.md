@@ -208,6 +208,9 @@ libSDL_cinema, and a hybrid's plug-in. No app in the corpus uses SDL 2: the PDK 
 ## 14. Device behaviour — [Human]
 
 - [ ] Sleep and wake; Lunacy as the home app; the Fold3 folded and unfolded mid-use.
+- [ ] The startup sound (webOS's boot.mp3) plays once as a fresh Lunacy appears, and not
+      again on Home, on returning to Lunacy, on a fold, or when Exhibition starts it; with
+      Sounds & Alerts' System Sounds off, it doesn't play at all.
 
 ## If something is off — first places to look
 

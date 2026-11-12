@@ -121,6 +121,14 @@ class Sounds(private val context: Context, private val server: AppServer, privat
      */
     fun batteryFull() = playAsset("battery_full.mp3", AudioManager.STREAM_NOTIFICATION)
 
+    /**
+     * webOS's startup sound: LunaSysMgr's WindowServer played /usr/palm/sounds/boot.mp3 on the
+     * notifications class, uncut, once, as boot finished and the boot screen gave way to the
+     * shell. Sounds & Alerts' master switch and its System Sounds switch silence it (codepoet,
+     * 2026-11-12), and so does Android's silent mode.
+     */
+    fun boot() { if (!allMuted() && !feedbackMuted()) playAsset("boot.mp3", AudioManager.STREAM_NOTIFICATION) }
+
     private fun playAsset(name: String, stream: Int) {
         start(stream, "sound $name") { player ->
             context.assets.openFd("luna/sounds/$name").use { player.setDataSource(it.fileDescriptor, it.startOffset, it.length) }

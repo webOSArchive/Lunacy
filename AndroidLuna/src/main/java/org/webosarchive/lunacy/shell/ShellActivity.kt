@@ -465,7 +465,16 @@ class ShellActivity : Activity(), WindowHost {
         // The splash was the window's background (Theme.Lunacy.Splash), which is what Android
         // painted while this was all being set up. The shell covers it now, so let the logo go
         // rather than hold the bitmap behind an opaque wallpaper for the rest of the session.
-        cards.post { window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK)) }
+        // As the boot screen gave way to the shell, LunaSysMgr played the startup sound: once a
+        // boot, so once a process here. A shell made again in the same process (a fold, a
+        // handoff, Home) is the same boot, and Android's screen saver starting Lunacy for
+        // Exhibition isn't someone starting it.
+        val bootSound = !bootSounded && !intent.getBooleanExtra(EXTRA_EXHIBITION, false)
+        bootSounded = true
+        cards.post {
+            window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK))
+            if (bootSound) sounds.boot()
+        }
         reportedOrientation = screenOrientation()
         (getSystemService(DISPLAY_SERVICE) as android.hardware.display.DisplayManager)
             .registerDisplayListener(displayListener, android.os.Handler(android.os.Looper.getMainLooper()))
@@ -1395,6 +1404,8 @@ class ShellActivity : Activity(), WindowHost {
 
         /** The shell that is up, if any: a second one hands off to it ([onCreate]). */
         private var live: java.lang.ref.WeakReference<ShellActivity>? = null
+        /** This process has had its startup sound (webOS's boot.mp3): see [onCreate]. */
+        private var bootSounded = false
         /** onActivityResult code for Android's credential confirmation (matchDevicePasscode). */
         /** Request codes: the storage permissions asked at start, the system's home-role dialog, the lock screen's confirmation, and the bus's permission requests from FIRST_PERMISSION_REQUEST up. */
         private const val STORAGE_REQUEST = 1

@@ -1128,8 +1128,8 @@ the highest it touched. Asphalt draws its track piece by piece from one array of
 vertices, so each draw sent about 1 MB per attribute, three per draw and 80 draws a frame. The
 client now sends from the lowest element to the highest, with the lowest in the ARRAY command's
 fifth word, and the server points GL that many elements before its copy. The frame rate went from
-unplayable to smooth on the Fold3 (25 frames/s, the game's own pace). GLES 2 still sends from
-element 0.
+unplayable to smooth on the Fold3 (25 frames/s, the game's own pace). GLES 2 sent from element
+0 until §6l.
 
 **Still open.** N.O.V.A. 2 plays its intro movie, then opens `PostEffect_gl2.bdae`, which none of
 its archives hold (wrong: it falls back to one that does, §6l), and crashes on the missing object (SIGSEGV at 0x50, after "File not found"),
@@ -1153,16 +1153,25 @@ the line's end, before `glShaderSource` (`gl_server.c`, `shader_source`); a vali
 through unchanged, and the log says once that it happened. Not measured on the TouchPad: it
 wasn't on its cable. That the game ships the line is the evidence its driver took it.
 
-**A program's own attributes.** With the shaders compiling, the crash stayed. Read from outside
-the process (below), it was `memcpy` in the GLES 2 client's `send_attribs`, reading an address
-the process may not read (SEGV_ACCERR). Each draw copied every enabled vertex array in the app's
-memory; the game leaves one enabled, pointing at memory it has since given back, for an
-attribute the race's program doesn't read. A driver fetches only the current program's active
-attributes, so on the TouchPad the stale pointer was never touched. The client now learns each
-program's active attributes when it links (`GL_ACTIVE_ATTRIBUTES`, `glGetActiveAttrib`,
-`glGetAttribLocation`: round trips at link time only; matrices and arrays take their run of
-locations) and a draw sends only those; a program whose answers don't add up sends every
-enabled array, as before. Fewer bytes per draw, too. Asphalt 6 races at 60 frames/s.
+**A draw's own elements, for GLES 2 too.** With the shaders compiling, the crash stayed. Read
+from outside the process (below), it was `memcpy` in the GLES 2 client's `send_attribs`, with
+0x126c4 bytes still to copy at an address the process may not read (SEGV_ACCERR): partway through
+an array, not at its start. GLES 2 sent each array from element 0 up to the draw's highest index;
+a driver copies from the draw's lowest index, and the GLES 1 stream has done the same since §6k.
+Asphalt 6 points an array into memory whose elements below a draw's lowest aren't all mapped. The
+ATTRIB command now carries the lowest element after the stride, the client sends from it, and the
+server points GL that many elements before its copy (`array_base`, shared with GLES 1).
+
+A first attempt was wrong, and was pushed: it sent only the attributes the current program reads
+(learnt at link: `GL_ACTIVE_ATTRIBUTES`, `glGetActiveAttrib`, `glGetAttribLocation`), on the
+theory that the array belonged to an attribute the program didn't read. The race then ran on the
+folded Fold3, but codepoet's races on the unfolded screen crashed in the same `memcpy` with the
+same counts: the layout of memory had moved, as it did with the preloaded handler below. That
+filter is kept, since a driver fetches only the program's active attributes too, but it is not
+what fixed the game. With both, Asphalt 6 races at 60 frames/s on the unfolded Fold3, codepoet
+racing several times and skipping the pre-race movie, and no crash. **Lesson:** a crash that
+depends on memory layout isn't fixed by one passing run; race in more than one posture and
+condition before calling it done.
 
 **Where a crash is.** A signal handler preloaded into the game to find the fault moved it away:
 with one more library loaded the race ran clean every time, and without it the crash came back

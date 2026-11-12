@@ -70,22 +70,27 @@ static int program_reads(uint32_t i)
 }
 
 /* Before a draw: each enabled attribute array in the app's memory that the program reads, the
-   elements it covers. */
-static void send_attribs(size_t vertices, size_t count, GLenum index_type, const void *indices)
+   elements the draw covers, from its lowest to its highest, as a driver copies them (and as
+   the GLES 1 stream does). Asphalt 6 points an array into memory whose elements below a draw's
+   lowest aren't all there: copying from element 0 read into an unmapped page and killed the
+   game as a race started (a Galaxy Z Fold3, 2026-11-12). The server points GL that many
+   elements before its copy. */
+static void send_attribs(size_t lowest, size_t vertices, size_t count, GLenum index_type, const void *indices)
 {
-	size_t lowest_;   /* GLES 2 sends from element 0 */
-	if (count && index_extent(&lowest_, &vertices, count, index_type, indices) < 0) return;
+	if (count && index_extent(&lowest, &vertices, count, index_type, indices) < 0) return;
+	if (lowest >= vertices) return;
 	for (uint32_t i = 0; i < ATTRIBS; i++) {
 		struct attrib *a = &attribs[i];
-		if (!a->enabled || a->buffer || !a->ptr || !vertices || !program_reads(i)) continue;
+		if (!a->enabled || a->buffer || !a->ptr || !program_reads(i)) continue;
 		size_t elem = (size_t)a->size * gl_type_size(a->type);
 		size_t stride = a->stride > 0 ? (size_t)a->stride : elem;
-		size_t n = stride * (vertices - 1) + elem;
-		uint8_t *w = begin(ATTRIB_OP, 5 * 4 + 4 + blob_len(a->ptr, n));   /* the blob is padded to 4 */
+		size_t n = stride * (vertices - lowest - 1) + elem;
+		const uint8_t *from = (const uint8_t *)a->ptr + stride * lowest;
+		uint8_t *w = begin(ATTRIB_OP, 6 * 4 + 4 + blob_len(from, n));   /* the blob is padded to 4 */
 		if (!w) return;
 		w = put_u32(w, i); w = put_u32(w, (uint32_t)a->size); w = put_u32(w, a->type);
-		w = put_u32(w, a->normalized); w = put_u32(w, (uint32_t)a->stride);
-		w = put_blob(w, a->ptr, n);
+		w = put_u32(w, a->normalized); w = put_u32(w, (uint32_t)a->stride); w = put_u32(w, (uint32_t)lowest);
+		w = put_blob(w, from, n);
 		end(w);
 	}
 }

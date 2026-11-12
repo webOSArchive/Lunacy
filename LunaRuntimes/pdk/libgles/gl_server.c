@@ -178,7 +178,7 @@ static __thread struct array arrays[ARRAYS];
 static void take_array(struct reader *r, int attrib)
 {
 	uint32_t s = get_u32(r), size, stride, type, normalized = 0, first = 0;
-	if (attrib) { size = get_u32(r); type = get_u32(r); normalized = get_u32(r); stride = get_u32(r); }
+	if (attrib) { size = get_u32(r); type = get_u32(r); normalized = get_u32(r); stride = get_u32(r); first = get_u32(r); }
 	else { size = get_u32(r); stride = get_u32(r); type = get_u32(r); first = get_u32(r); get_u32(r); }
 	uint32_t len = get_u32(r);
 	size_t padded;
@@ -194,6 +194,14 @@ static void take_array(struct reader *r, int attrib)
 	r->p += padded;
 }
 
+/* Where element 0 would be: the copy starts at the draw's lowest element, which GL then
+   reads at its own index (it reads nothing below it). */
+static const void *array_base(const struct array *a)
+{
+	size_t stride = a->stride > 0 ? (size_t)a->stride : (size_t)(a->size ? a->size : 1) * gl_type_size(a->type);
+	return (const uint8_t *)a->data - (size_t)a->first * stride;
+}
+
 #if GLES_VERSION == 2
 /* Before a draw: each attribute whose elements just arrived points at the copy. */
 static void apply_attribs(void)
@@ -203,7 +211,7 @@ static void apply_attribs(void)
 		if (!a->fresh) continue;
 		a->fresh = 0;
 		if (array_bound) glBindBuffer(GL_ARRAY_BUFFER, 0);
-		glVertexAttribPointer(i, a->size, a->type, a->normalized, a->stride, a->data);
+		glVertexAttribPointer(i, a->size, a->type, a->normalized, a->stride, array_base(a));
 		if (array_bound) glBindBuffer(GL_ARRAY_BUFFER, array_bound);
 	}
 }
@@ -236,13 +244,6 @@ static void server_enable(GLenum cap, int on)
 	}
 	if (s >= 0) arrays[s].enabled = on;
 	if (on) glEnableClientState(cap); else glDisableClientState(cap);
-}
-/* Where element 0 would be: the copy starts at the draw's lowest element, which GL then
-   reads at its own index (it reads nothing below it). */
-static const void *array_base(const struct array *a)
-{
-	size_t stride = a->stride > 0 ? (size_t)a->stride : (size_t)(a->size ? a->size : 1) * gl_type_size(a->type);
-	return (const uint8_t *)a->data - (size_t)a->first * stride;
 }
 /* Before a draw: point the real GL at the copies that just arrived. */
 static void apply_arrays(void)

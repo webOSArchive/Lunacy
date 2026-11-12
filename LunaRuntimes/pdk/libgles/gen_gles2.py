@@ -175,9 +175,9 @@ def gen_client(protos):
         if name == 'glPixelStorei':
             print('    if (pname == 0x0CF5) unpack_alignment = param; if (pname == 0x0D05) pack_alignment = param;')
         if name == 'glDrawArrays':
-            print('    send_attribs((size_t)first + (size_t)count, 0, 0, NULL);')
+            print('    send_attribs((size_t)first, (size_t)first + (size_t)count, 0, 0, NULL);')
         if name == 'glDrawElements':
-            print('    send_attribs(0, (size_t)count, type, indices);')
+            print('    send_attribs(0, 0, (size_t)count, type, indices);')
         inputs = INPUT.get(name, {})
         outs = OUTPUT.get(name, [])
         blobs = [(n, inputs[n]) for t, n in ps if is_ptr(t) and n in inputs]

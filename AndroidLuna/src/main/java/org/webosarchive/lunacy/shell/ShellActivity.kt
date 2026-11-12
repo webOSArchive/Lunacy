@@ -10,6 +10,7 @@ import org.json.JSONObject
 import org.webosarchive.lunacy.card.AppFiles
 import org.webosarchive.lunacy.card.AppInfo
 import org.webosarchive.lunacy.card.AppRegistry
+import org.webosarchive.lunacy.card.BuildVariant
 import org.webosarchive.lunacy.card.LocationService
 import org.webosarchive.lunacy.card.PhotoCache
 import org.webosarchive.lunacy.card.UpdateService
@@ -1287,10 +1288,7 @@ class ShellActivity : Activity(), WindowHost {
         // daily check announces a new release once (UpdateService, System Alerts). After the
         // activity manager, which keeps its daily activity.
         val version = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull().orEmpty()
-        // This build's own APK on a release page: its flavour (arm64 if its native code is) and type.
-        val flavour = if (applicationInfo.nativeLibraryDir.orEmpty().contains("arm64")) "arm64" else "arm32"
-        val type = if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) "debug" else "release"
-        UpdateService(this, bus, version, "AndroidLuna-$flavour-$type.apk") { found ->
+        UpdateService(this, bus, version, BuildVariant.apkName(this)) { found ->
             if (registry.get(LocationService.ALERTS_APP) == null || !LunacyService.firstUseDone(this)) false
             else { launch(LocationService.ALERTS_APP, JSONObject().put("alert", "UpdateAvailable").put("version", found), Placement.NO_CARD); true }
         }.also { it.register(); closeOnDestroy += it::close }

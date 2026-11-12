@@ -354,6 +354,8 @@ class LunacyService(
         val j = JSONObject().put("returnValue", true)
         j.put("lunacy", JSONObject()
             .put("version", versionName()).put("build", versionCode())
+            .put("flavour", BuildVariant.flavour(context)).put("type", BuildVariant.type(context))
+            .put("apk", BuildVariant.apkName(context))
             .put("package", context.packageName)
             .put("reportsWebOS", DeviceProfile.forScreen(context).versionString)
             .put("reportsAs", DeviceProfile.forScreen(context).modelName)

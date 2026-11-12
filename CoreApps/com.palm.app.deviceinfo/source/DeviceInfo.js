@@ -45,6 +45,8 @@ enyo.kind({
 					{name: "deviceIdNote", className: "note"},
 					{kind: "RowGroup", caption: $L("Lunacy"), components: [
 						{kind: "InfoRow", name: "version", label: $L("Version")},
+						{kind: "InfoRow", name: "variant", label: $L("Variant")},
+						{kind: "InfoRow", name: "apk", label: $L("Update With"), small: true},
 						{kind: "InfoRow", name: "enyo", label: $L("Enyo Framework")},
 						{kind: "InfoRow", name: "node", label: $L("Node (JS Services)")},
 						{kind: "InfoRow", name: "apps", label: $L("Apps Installed")},
@@ -166,6 +168,9 @@ enyo.kind({
 		this.$.battery.setValue(d.battery >= 0 ? d.battery + "%" + (d.charging ? " " + $L("(charging)") : "") : $L("unknown"));
 		this.$.serial.setValue(d.serial);
 		this.$.version.setValue(l.version ? l.version + " (" + $L("build") + " " + l.build + ")" : "");
+		// Which of a release's APKs this is, so an update is downloaded as the same one.
+		this.$.variant.setValue(l.flavour ? (l.flavour == "arm64" ? $L("64-bit") : $L("32-bit")) + " " + (l.type == "debug" ? $L("Debug") : $L("Release")) : "");
+		this.$.apk.setValue(l.apk);
 		// The rows that say the quiet part: apps are told this is a webOS device, because that
 		// is the contract they were written against. Nothing else here pretends.
 		var w = r.webos || {};

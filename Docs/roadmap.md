@@ -40,6 +40,12 @@ Before shipping 1.0, as for every release: the latest App Catalog bundled (6.2.2
 only; the one exception is a change F-Droid needs. A new idea goes on the post-1.0 list.
 LunaKeyboard is separate: it needs work, and that work isn't part of 1.0's stabilisation.
 
+**F-Droid (codepoet, 2026-11-13): our own repository, not F-Droid's.** F-Droid's main
+repository can't take Lunacy (Palm's non-free frameworks, apps and libraries, and a build that
+needs the TouchPad's files), so the webOS Archive hosts an F-Droid repository of its own at
+https://www.webosarchive.org/fdroid/repo, fed from each release's APKs
+([Meta/fdroid/README.md](../Meta/fdroid/README.md)). 0.9.6 build 593 is in it, not uploaded yet.
+
 **Tests (2026-11-09):** the release test plan ([test-plan.md](test-plan.md)), after webOS CE's:
 `./test.sh` runs everything that needs no device (and `build.sh release` stops on a failure),
 `Workbench/device-test.sh` everything on a device a script can decide (42 checks on the Fold3,

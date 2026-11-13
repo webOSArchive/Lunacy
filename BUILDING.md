@@ -70,7 +70,8 @@ libraries it loads, libpurple and its plugins, the AIM plugin, BusyBox; see [NOT
 `./build.sh publish` builds a significant release ready to upload: the release build, the
 debug build, and then `AndroidLuna/tools/gather-gpl-sources.py`, which gathers that source
 into `out/Lunacy-<version>-gpl-sources.tar` and adds it to `out/SHA256SUMS`; it is attached to
-the GitHub release with the APKs. Its options go to the release build. It checks every download against its SHA-256, and stops if
+the GitHub release with the APKs. The release APKs then go into Lunacy's own F-Droid repository with
+`Meta/fdroid/update-repo.sh` ([Meta/fdroid/README.md](Meta/fdroid/README.md)). Its options go to the release build. It checks every download against its SHA-256, and stops if
 a Termux package Lunacy ships no longer matches the termux-packages recipe it bundles. The APKs are reproducible because AGP's encrypted
 dependency block is left out of them (it was new bytes on every build); app bundles keep it for
 Google Play. The Gradle tasks underneath still work alone:

@@ -1,0 +1,21 @@
+Categories:
+  - Keyboard & IME
+License: Apache-2.0
+AuthorName: codepoet
+WebSite: https://github.com/webOSArchive/Lunacy/tree/main/LunaKeyboard
+SourceCode: https://github.com/webOSArchive/Lunacy/tree/main/LunaKeyboard
+IssueTracker: https://github.com/webOSArchive/Lunacy/issues
+Changelog: https://github.com/webOSArchive/Lunacy/releases
+
+Name: LunaKeyboard
+Summary: An Android keyboard that looks and behaves like the HP TouchPad's
+Description: |-
+    webOS's tablet keyboard, rebuilt as an Android input method. It works anywhere in
+    Android, with or without Lunacy.
+
+    * Palm's US QWERTY tablet layout, key for key, with LunaCE's key art.
+    * Press and hold a key for its accents and alternates, in Palm's own order.
+    * The symbol page, and shift and shift-lock as webOS had them.
+
+    A companion to Lunacy, which runs legacy webOS apps on Android, but it needs nothing
+    from it.

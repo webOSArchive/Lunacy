@@ -10,8 +10,9 @@ F-Droid's own repository can't take Lunacy: it ships Palm's and HP's frameworks,
 native libraries, which were never released under an open licence, and its build needs the
 reference TouchPad's files, which aren't public. A repository of our own has no such rules.
 
-The repository is a project of its own (`webosarchive-fdroid`, beside this one on codepoet's
-machine), since it carries other Android apps too. It holds the signing key, every app's
+The repository is a project of its own,
+[webOSArchive/fdroid-repo](https://github.com/webOSArchive/fdroid-repo), since it carries other
+Android apps too; update-repo.sh expects its clone at `~/Projects/webosarchive-fdroid`. It holds the signing key, every app's
 description (Lunacy's are its `metadata/org.webosarchive.lunacy.yml` and
 `metadata/org.webosarchive.keyboard.yml`), and its own README on how it was set up.
 

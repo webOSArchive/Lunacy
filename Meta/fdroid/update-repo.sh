@@ -4,8 +4,8 @@
 #
 #   Meta/fdroid/update-repo.sh [repository project]
 #
-# The repository is a project of its own (default ~/Projects/webosarchive-fdroid), since it
-# carries other apps too; Lunacy's descriptions are its metadata/org.webosarchive.*.yml. See
+# The repository is a project of its own, github.com/webOSArchive/fdroid-repo (its clone by
+# default at ~/Projects/webosarchive-fdroid), since it carries other apps too; Lunacy's descriptions are its metadata/org.webosarchive.*.yml. See
 # README.md here.
 set -eu
 cd "$(dirname "$0")/../.."

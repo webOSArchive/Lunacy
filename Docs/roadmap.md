@@ -74,6 +74,22 @@ broker, with Palm's mail services logging in with XOAUTH2 under them, unchanged
   yet (a skeleton: no password sent, blocking network calls, stubbed sends); it builds here with
   the PDK's GCC 4.3.3 and HP's CE build-support headers.
 
+**0.9.6** (2026-11-13), Release Candidate 1: the first candidate for 1.0, built with
+`./build.sh publish`. Bug fixes only since the feature freeze. Everything since 0.9.5:
+
+- **Asphalt 6 races** on the Galaxy Z Fold3, folded and unfolded: the PDK's GLES 2 client
+  sends a draw's arrays from its lowest element, as a driver does, and the GL server takes
+  Gameloft's stray tokens after `#endif`. Faults in a PDK game are now logged with where they
+  happened.
+- **Startup sound:** webOS's boot sound plays once as a fresh shell appears, silenced by Sounds
+  & Alerts and by Android's silent mode.
+- **Device Info:** an About scene after webOS CE's, with the dedication and credits; Variant
+  and Update With rows name the APK to update with.
+- **Wi-Fi and Bluetooth in airplane mode** hand over to Android's panel, which alone may
+  switch them then.
+- **Licensing:** Lunacy is Apache 2.0, with a root NOTICE indexing everything else; each
+  release carries the source of the GPL programs it ships.
+
 **0.9.5** (2026-11-09), modern mail accounts: Microsoft and Google sign in with OAuth, and work
 and school Microsoft accounts get mail, contacts and calendar over Exchange. Everything since 0.9.4:
 

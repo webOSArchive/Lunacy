@@ -1,8 +1,8 @@
 # Lunacy's F-Droid repository
 
 Lunacy's own F-Droid repository, hosted by the webOS Archive beside its Preware feeds:
-**https://www.webosarchive.org/fdroid/repo**. Users add it in the F-Droid client and get each
-release from it. It carries the release APKs (both ABIs, the client picks the one the device
+**https://stacks.webosarchive.org/feeds/fdroid/repo**. Users add it in the F-Droid client and
+get each release from it. It carries the release APKs (both ABIs, the client picks the one the device
 runs) and LunaKeyboard, signed with the same key as the APKs on GitHub, so a copy installed
 from GitHub updates from here and the other way round.
 
@@ -20,7 +20,7 @@ reference TouchPad's files, which aren't public. A repository of our own has no 
 
 1. `./build.sh publish` ([BUILDING.md](../../BUILDING.md)).
 2. `Meta/fdroid/update-repo.sh`.
-3. Upload the workspace's `repo/` and `archive/` to `https://www.webosarchive.org/fdroid/`, as
+3. Upload the workspace's `repo/` and `archive/` to `https://stacks.webosarchive.org/feeds/fdroid/`, as
    they are (rsync with `--delete` is fine; nothing else lives there).
 
 ## The workspace

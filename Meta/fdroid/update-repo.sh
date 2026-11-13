@@ -6,7 +6,8 @@
 # The workspace (default ~/Projects/LunacyFDroid) holds config.yml and keystore.p12, the
 # repository's own signing key: never commit either, and keep a backup of the key - a lost key
 # means every user has to remove the repository and add it again. After this, upload the
-# workspace's repo/ and archive/ folders as they are to https://www.webosarchive.org/fdroid/.
+# workspace's repo/ and archive/ folders as they are to
+# https://stacks.webosarchive.org/feeds/fdroid/.
 # README.md says how the workspace and fdroidserver were set up.
 set -eu
 cd "$(dirname "$0")/../.."
@@ -45,4 +46,4 @@ cp Meta/LunacyRobot.png "$WORK/icon.png"
 # machine's CPU and memory. fdroid update itself takes seconds and well under a gigabyte.
 cd "$WORK"
 ANDROID_HOME=$SDK systemd-run --user --scope -q -p MemoryMax=6G timeout 900 nice "$FDROID" update
-echo "Ready to upload: $WORK/repo/ and $WORK/archive/ to https://www.webosarchive.org/fdroid/"
+echo "Ready to upload: $WORK/repo/ and $WORK/archive/ to https://stacks.webosarchive.org/feeds/fdroid/"

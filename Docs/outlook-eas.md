@@ -300,6 +300,24 @@ and a 7 KB `.jpg` in one message):
 - Still to see: attachments on the legacy type, a large file (several MB, many pauses), an
   inline image in a message body.
 
+## The calendar's 15-minute bursts (2026-11-14)
+
+On codepoet's Microsoft 365 account (Pixel Tablet) the calendar synced in bursts: a dozen
+syncs a second or a few apart, every 15 minutes. Measured, with a temporary build logging only
+each Sync's shape (taken out again):
+
+- **The device sends nothing.** Every calendar Sync it sent was a bare request (WindowSize
+  500, no Add, Change or Delete), and Palm wrote nothing to those events but what the server
+  sent. webCal's own 15-minute sync touched nothing on that account.
+- **The server re-sends the same events, a few at a time.** Each reply's Changes carried one
+  calendar field, `DtStamp` (Calendar page tag 0x11), for the same 52 meetings each time (all
+  with attendees, none with a reminder); db8 snapshots a minute apart showed `dtstamp` as the
+  only field that changed. Each merge fires Palm's own collection watch, so the next Sync goes
+  a second later and picks up the next few. A Teams push reached the Pixel 3 s before one burst
+  began (08:15:26, burst 08:15:29): a Microsoft service restamps those meetings.
+- **Nothing to fix in Lunacy.** Palm's client does what it would on a TouchPad. Dropping
+  DtStamp-only Changes in the preload would hide server data and isn't done.
+
 ## Before it ships
 
 - Everything in "Two things this work must never break", checked on a device.

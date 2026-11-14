@@ -453,6 +453,25 @@ shadow showed as a gray block beside every Enyo dashboard, and a thin highlight 
 `left: 100%`, its right edge, which is where they were on the TouchPad. Nothing changes at
 320 px. CSS only, so the source and built copies take the same change.
 
+### 0017-webview-box-no-transform.patch
+
+A native web view's box takes no transform, so what the page draws over it can be touched.
+
+With patch 0005 a `BasicWebView` in a Lunacy card is an empty box with the native view kept
+over it, and whatever the page draws over the box is cut out of the native view (patch 0011
+decides what counts as over it, by CSS painting order: position and z-index). The box kept
+BasicWebView's own `-webkit-transform: translate3d(0,0,0)`, which was there for the plugin. A
+transformed element paints, and is hit, above static content that comes after it, so the page's
+content over the box showed through the native view but every tap on it went to the empty box.
+Email puts a message's header over its body view, and the header's meeting invite block is
+static: Accept, Maybe and Decline did nothing (codepoet, 2026-11-14, on the Pixel Tablet; the
+sender and To rows worked, being `position: relative` with a z-index). Seen over DevTools: the
+button's centre hit the box; without the transform it hit the button, and Email's handler ran.
+The box is empty, so it draws nothing either way; outside a Lunacy card (the iframe of patch
+0002) the transform stays.
+
+Files: `framework/source/palm/controls/BasicWebView.js`, `framework/build/enyo-build.js`.
+
 ## Added
 
 Nothing, since the rebase. `lib/networkproxy` (HP's network-proxy settings library, which the

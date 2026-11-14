@@ -1,0 +1,32 @@
+--- a/framework/source/palm/controls/BasicWebView.js
++++ b/framework/source/palm/controls/BasicWebView.js
+@@ -698,6 +698,13 @@
+ 		create.apply(this, arguments);
+ 		delete this.domAttributes.frameborder;
+ 		delete this.domAttributes.scrolling;
++		// The box is empty: the native view is drawn over it, and what the page draws over the
++		// box is cut out of that view (holesOver). BasicWebView's translate3d(0,0,0) was for the
++		// plugin; on an empty box it only lifts the box above the page's static content after it,
++		// which then shows through the native view but can't be touched - Email's Accept, Maybe
++		// and Decline (2026-11-14). Without it the box stands in the painting order holesOver
++		// already assumes.
++		delete this.domStyles["-webkit-transform"];
+ 	};
+ 
+ 	p.adapterReady = function () { return Boolean(this.hasNode()); };
+--- a/framework/build/enyo-build.js
++++ b/framework/build/enyo-build.js
+@@ -13470,6 +13470,13 @@
+ 		create.apply(this, arguments);
+ 		delete this.domAttributes.frameborder;
+ 		delete this.domAttributes.scrolling;
++		// The box is empty: the native view is drawn over it, and what the page draws over the
++		// box is cut out of that view (holesOver). BasicWebView's translate3d(0,0,0) was for the
++		// plugin; on an empty box it only lifts the box above the page's static content after it,
++		// which then shows through the native view but can't be touched - Email's Accept, Maybe
++		// and Decline (2026-11-14). Without it the box stands in the painting order holesOver
++		// already assumes.
++		delete this.domStyles["-webkit-transform"];
+ 	};
+ 
+ 	p.adapterReady = function () { return Boolean(this.hasNode()); };

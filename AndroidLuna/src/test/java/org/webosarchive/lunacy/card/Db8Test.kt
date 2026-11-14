@@ -68,6 +68,16 @@ class Db8Test {
         assertEquals(listOf("cherry", "apricot"), names(find(JSONObject().put("where", JSONArray().put(JSONObject().put("prop", "size").put("op", ">").put("val", 3))).put("orderBy", "size"))))
     }
 
+    /** An object without the ordered property isn't in its index: a find ordered by it leaves the
+     *  object out, one without the order finds it (as measured on the TouchPad, 2026-11-14). */
+    @Test fun orderedFindLeavesOutObjectsWithoutTheProperty() {
+        val p = call("put", JSONObject().put("objects", JSONArray().put(JSONObject().put("_kind", kind).put("name", "nosize"))).toString())
+        assertTrue(p.toString(), p.getBoolean("returnValue"))
+        assertEquals(listOf("banana", "apple", "cherry", "apricot"), names(find(JSONObject().put("orderBy", "size"))))
+        assertTrue(names(find(JSONObject())).contains("nosize"))
+        assertTrue(names(find(JSONObject().put("orderBy", "name"))).contains("nosize"))
+    }
+
     @Test fun getMergeAndDel() {
         val all = find(JSONObject().put("orderBy", "name")).getJSONArray("results")
         val apple = all.getJSONObject(0).getString("_id")

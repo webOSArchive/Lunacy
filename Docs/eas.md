@@ -95,7 +95,11 @@ Not Lunacy's to change (rule 0, the bus tells the truth); recorded for the webOS
   there says "_rev must be specified for existing objects". The contacts linker then throws
   `Cannot read property 'getDBObject' of null` over it; on the TouchPad no person was made for
   it. Lunacy's db8 does the same, but after Lunacy restarted, its Contacts did list Test User,
-  where the TouchPad's doesn't: a difference not yet looked into.
+  where the TouchPad's doesn't: a difference not yet looked into. In Email the same kind of record (a Change for
+  a message the device never had) showed in Lunacy as an empty message dated "//N"; the
+  TouchPad had one too and didn't list it. Measured 2026-11-14: webOS's db8 answers a find
+  ordered by a property only with the objects that have it (its index holds no others), and
+  the record has no sortKeys. Lunacy's db8 now does the same.
 - **The TouchPad doubled its own event.** An event put into the EAS calendar on the TouchPad
   went up and came back from Zoho as an Add with another server id, so the TouchPad shows it
   twice (America/New_York and America/Toronto). Lunacy, which only received it, has it once.

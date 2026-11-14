@@ -795,8 +795,16 @@ class Db8(private val service: String, file: File?,
         }
         val family = family(from)
         val collate = orderBy?.let { ob -> k.indexes.flatMap { it.props }.firstOrNull { it.name == ob }?.collate }
+        // A find ordered by a property is read from that property's index, which holds only the
+        // objects that have it (or whose index gives it a default; an explicit null counts):
+        // the others aren't found. Measured on the TouchPad (2026-11-14): an object without the
+        // ordered property is left out, and found again by a query without the order. Email
+        // lists a folder by sortKeys, and the record mojomail-eas makes for a Change it can't
+        // place (no sortKeys, no date) showed as a message dated "//N"; on the TouchPad it doesn't.
+        val indexedOnly = orderBy != null && orderBy != "_id" && !search
         val list = family.flatMap { objects(it).values }
             .filter { o -> (incDel || !o.optBoolean("_del")) && where.all { matches(o, it) } && filter.all { matches(o, it) } }
+            .filter { o -> !indexedOnly || indexedValue(o, orderBy!!) != null || storedNull(o, orderBy!!) }
             .sortedWith(Comparator { a, b ->
                 val c = if (orderBy == null) 0 else compare(indexedValue(a, orderBy), indexedValue(b, orderBy), collate)
                 if (c != 0) c else a.getString("_id").compareTo(b.getString("_id"))

@@ -1,0 +1,17 @@
+[INFO] sample of 4 from 2 other PDK apps: com.emu7800.touchpad com.apkenv.templerun2 
+[SKIP] org.scummvm.scummvm: not installed on this device
+[SKIP] com.ea.app.worms.pre.na.efigs: not installed on this device
+[SKIP] com.cmdrkeen.game: not installed on this device
+[PASS] com.subatomicstudios.fieldrunners: started (fieldrunners through libld-linux.so), still running after 16 s
+[SKIP] com.bigfishgames.app.atlantisskypatrolhd: not installed on this device
+[SKIP] com.hyperdevbox.exzeus: not installed on this device
+[SKIP] com.explusalpha.snes9x: not installed on this device
+[PASS] com.apkenv.wheresmywater: started (apkenv through libld-linux.so), still running after 16 s
+[PASS] com.apkenv.fruitninja: started (apkenv through libld-linux.so), still running after 16 s
+[SKIP] com.glu.app.ghero5: not installed on this device
+[SKIP] com.gameloft.app.hawx: not installed on this device
+[SKIP] com.gameloft.app.asphalt6: not installed on this device
+[PASS] com.quickoffice.webos: started (qoservice through libld-linux.so), still running after 16 s
+[PASS] com.emu7800.touchpad: started (emu7800.arm through libld-linux.so), still running after 16 s
+[PASS] com.apkenv.templerun2: started (apkenv through libld-linux.so), still running after 16 s
+===== 6 started, 0 failed, 9 not installed; judge the screenshots in /tmp/claude-1000/-home-jonwise-Projects-Lunacy/eaa9e40a-3269-4597-83f3-5bea95cdfd4f/scratchpad/pdk-n5 against pdk-scenarios.txt =====

@@ -147,6 +147,15 @@ What CE could take from this:
   rather than raw MIME, which 16.1 answers with status 101 while the binary believes it sent. CE preloads libssl_compat into
   the mail services already, so the same code could live there, with OAuth's Bearer token
   (Microsoft 365 also wants OAuth, not passwords).
+- **More of mojomail-eas against 16.1 (2026-11-14, Lunacy's preload, [outlook-eas.md](outlook-eas.md)):**
+  attachments are fetched with `Cmd=GetAttachment`, gone from 14.0 (HTTP 400): sent as
+  ItemOperations Fetch of the same file reference, which goes as the binary has it (it is
+  already %-escaped), with the reply's file part handed back as GetAttachment's body;
+  invitations name their meeting with Calendar's `UID` at 16.x and the binary reads only Email's
+  `GlobalObjId`, so its replies had an empty UID (written as the GlobalObjId it stands for); and
+  its reply's calendar part has no `method=REPLY`, so Outlook showed it as text (added). In
+  mojomail-eas itself the three are: use ItemOperations at 14.0 and later, read `calendar:UID`,
+  and write `text/calendar; method=REPLY`.
 
 ## Security policies (2026-10-10)
 

@@ -281,6 +281,12 @@ class AppServer(
             val rel = p.removePrefix(CRYPTOFS)
             return { files.open(rel) }
         }
+        // The rest a page may read by path (the file cache: Email's image attachments, which its
+        // viewer shows through the thumbnailer).
+        if (ROOT_READABLE.any { p.startsWith(it) }) {
+            val f = rootFile(p, *ROOT_READABLE.toTypedArray()) ?: return null
+            return { runCatching { f.inputStream() as InputStream }.getOrNull() }
+        }
         return null
     }
 

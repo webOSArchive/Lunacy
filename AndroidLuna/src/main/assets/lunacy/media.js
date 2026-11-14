@@ -27,13 +27,15 @@ window.__lunacyLocalUrl = function (u) {
 // Pages that put a file:// URL in a frame or an image, as webOS pages could: an app's own or
 // another app's files (Enyo's CrossAppUI loads an app's UI from the file:// base path the
 // application manager gives, as Email does its account wizard), the system's files under
-// /usr/palm, and the file cache, where the mail services keep message bodies and attachments.
-// An app's files are on that app's origin; the rest are on every origin.
+// /usr/palm, the file cache, where the mail services keep message bodies and attachments, and
+// the thumbnailer's /var/luna/data/extractfs (Email's attachment viewer, enyo.SizeableImage,
+// shows an image through it). An app's files are on that app's origin; the rest are on every
+// origin.
 window.__lunacyPageUrl = function (u) {
 	if (typeof u !== "string" || u.slice(0, 8).toLowerCase() !== "file:///") { return u; }
 	var app = /^file:\/\/\/media\/cryptofs\/apps\/usr\/palm\/applications\/([^\/?#]+)(.*)$/i.exec(u);
 	if (app) { return "https://" + app[1] + ".media.cryptofs.apps" + u.slice(7); }
-	if (/^file:\/\/\/(usr\/palm|var\/file-cache|media\/internal)\//i.test(u)) { return u.slice(7); }
+	if (/^file:\/\/\/(usr\/palm|var\/file-cache|var\/luna\/data\/extractfs|media\/internal)\//i.test(u)) { return u.slice(7); }
 	return u;
 };
 (function () {

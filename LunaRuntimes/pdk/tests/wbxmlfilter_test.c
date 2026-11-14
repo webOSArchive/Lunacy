@@ -141,6 +141,34 @@ int main(void)
 	longresp[ln++] = 0x00; longresp[ln++] = 0x01; longresp[ln++] = 0x01; longresp[ln++] = 0x01; longresp[ln++] = 0x01;
 	same_every_way(longresp, ln, longresp, ln, "a long Responses entry passes whole");
 
+	/* An email's MeetingRequest names its meeting with Calendar's UID at 16.x: Palm is given the
+	   GlobalObjId a 12.1 server sent, from which it gets the same UID back (expected values built
+	   independently, with Python's base64). */
+	{
+		static const char *uids[] = {
+			"040000008200E00074C5B7101A82E00800000000C00EAD614071DD0100000000000000001000000020AC5C6A6E28CA4B97445C55FC3A9663",
+			"abc-123@example.com" };
+		static const char *goids[] = {
+			"BAAAAIIA4AB0xbcQGoLgCAAAAADADq1hQHHdAQAAAAAAAAAAEAAAACCsXGpuKMpLl0RcVfw6lmM=",
+			"BAAAAIIA4AB0xbcQGoLgCAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAHZDYWwtVWlkAQAAAGFiYy0xMjNAZXhhbXBsZS5jb20A" };
+		for (int u = 0; u < 2; u++) {
+			unsigned char in[512], want[512]; size_t ni = 0, nw = 0;
+			const unsigned char head[] = { HDR, 0x00, 0x02, 0x62, 0x5e, 0x03, 'x', 0x00, 0x01 };   /* MeetingRequest, EndTime */
+			memcpy(in, head, sizeof head); ni = sizeof head; memcpy(want, head, sizeof head); nw = sizeof head;
+			in[ni++] = 0x00; in[ni++] = 0x04; in[ni++] = 0x68; in[ni++] = 0x03;                   /* Calendar UID */
+			memcpy(in + ni, uids[u], strlen(uids[u]) + 1); ni += strlen(uids[u]) + 1; in[ni++] = 0x01;
+			want[nw++] = 0x74; want[nw++] = 0x03;                                                  /* Email GlobalObjId */
+			memcpy(want + nw, goids[u], strlen(goids[u]) + 1); nw += strlen(goids[u]) + 1; want[nw++] = 0x01;
+			const unsigned char tail[] = { 0x00, 0x02, 0x63, 0x03, 'o', 0x00, 0x01, 0x01 };         /* Organizer, /MeetingRequest */
+			memcpy(in + ni, tail, sizeof tail); ni += sizeof tail;
+			memcpy(want + nw, tail + 2, sizeof tail - 2); nw += sizeof tail - 2;                 /* already on page 2 */
+			same_every_way(in, ni, want, nw, u ? "an iCal UID in a MeetingRequest becomes a vCal-Uid GlobalObjId" : "an Outlook UID in a MeetingRequest becomes its GlobalObjId");
+		}
+		/* A calendar item's own UID (not in a MeetingRequest) passes as it was. */
+		const unsigned char item[] = { HDR, 0x00, 0x04, 0x68, 0x03, 'u', 'i', 'd', 0x00, 0x01, 0x66, 0x03, 's', 0x00, 0x01 };
+		same_every_way(item, sizeof item, item, sizeof item, "a calendar item's UID is left alone");
+	}
+
 	if (failures) { fprintf(stderr, "wbxmlfilter_test: %d failed\n", failures); return 1; }
 	printf("wbxmlfilter_test: ok\n");
 	return 0;

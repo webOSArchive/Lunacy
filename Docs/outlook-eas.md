@@ -326,7 +326,12 @@ Email's Accept, Maybe and Decline did nothing on any account in a Lunacy card (E
 `respondToMeetingInvitations` ran within 30 ms, marked it processed, and sent "Accepted: Test
 Meeting" through the outbox (ComposeMail, adapter 3) about 2 s later, with no error from
 Exchange Online; the event stayed in the calendar as Busy (it had been tentative), and the
-invitation was hidden, as webOS does. Not yet seen: Maybe and Decline, a recurring series,
+invitation was hidden, as webOS does. But the reply's vCalendar had an empty `UID:`, so the
+organizer's Outlook couldn't match it and showed the reply as text: at 16.x a MeetingRequest
+names its meeting with Calendar's UID, not Email's GlobalObjId, the only one Palm reads (its
+binary even says "UID EMTPY!!!!!"). The reply filter (`libpreload/wbxmlfilter.h`) now writes a
+MeetingRequest's UID as the GlobalObjId it stands for; a second invitation then arrived with one,
+and its reply carried the meeting's UID (`040000008200E000...`). Not yet seen: Maybe and Decline, a recurring series,
 the legacy Exchange type.
 
 ## Before it ships

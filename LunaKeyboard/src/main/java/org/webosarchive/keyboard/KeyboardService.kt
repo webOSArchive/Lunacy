@@ -101,6 +101,13 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
         if (view?.scale != KeyboardView.Scale.current(this)) setInputView(onCreateInputView())
         view?.reset()
         resetAssist()
+        // The new field's cursor, as it starts. Kept from the last field, it made the first
+        // letter of the first word look typed somewhere else: the field's next selection update
+        // dropped it from the word, and the rest was corrected on its own, "esting" to "eating"
+        // after the "T" (codepoet, 2026-11-14: "Testing" became "Teating", "Keyboard"
+        // "Kkeyboard"). Chromium sends no update for where a field starts.
+        selStart = info?.initialSelStart ?: -1
+        selEnd = info?.initialSelEnd ?: -1
         requestPositions()
         updateCaps()
     }

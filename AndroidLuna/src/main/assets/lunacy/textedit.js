@@ -493,4 +493,43 @@
 			return false;
 		}
 	};
+
+	// A real mouse (a Bluetooth or USB one; the TouchPad had none). Its events reach the page
+	// as they are, and Enyo cancels every mousedown, as it did a finger's - which also keeps
+	// Chromium from placing the caret or starting a selection, so a click in Email's compose
+	// body did nothing (codepoet, 2026-11-14, Pixel Tablet). Where the page cancelled the
+	// press in a field, the release does what a tap does: the caret where it was clicked, or,
+	// dragged, the text between press and release selected. Where it didn't cancel it, the
+	// engine has done that already. The compat layer's own mouse events (a touch's) are
+	// marked and left to tapped().
+	var press = null;
+	window.addEventListener("mousedown", function (ev) {
+		press = null;
+		if (ev.__lunacyTouch || ev.button !== 0) { return; }
+		var f = editableOf(ev.target);
+		if (f) { press = { ev: ev, f: f, x: ev.clientX, y: ev.clientY, at: offsetAt(f, ev.clientX, ev.clientY) }; }
+	}, true);
+	window.addEventListener("mouseup", function (ev) {
+		var p = press;
+		press = null;
+		if (!p || ev.__lunacyTouch || ev.button !== 0 || !p.ev.defaultPrevented) { return; }
+		var x = ev.clientX, y = ev.clientY;
+		setTimeout(function () {
+			var f = p.f;
+			if (document.activeElement !== f && !(f.isContentEditable && f.contains(document.activeElement))) {
+				try { f.focus(); } catch (e) {}
+			}
+			hide();
+			field = f;
+			var to = offsetAt(f, x, y);
+			if (Math.abs(x - p.x) <= 3 && Math.abs(y - p.y) <= 3) { placeCaret(f, to); return; }
+			if (plain(f)) {
+				try { f.setSelectionRange(Math.min(p.at, to), Math.max(p.at, to)); } catch (e) {}
+			} else if (p.at && to) {
+				var s = window.getSelection();
+				s.removeAllRanges(); s.addRange(p.at);
+				try { s.extend(to.startContainer, to.startOffset); } catch (e) { placeCaret(f, to); }
+			}
+		}, 0);
+	}, true);
 })();

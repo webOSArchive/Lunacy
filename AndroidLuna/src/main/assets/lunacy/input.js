@@ -33,6 +33,7 @@
 		var e = document.createEvent("MouseEvents");
 		e.initMouseEvent(type, true, true, window, 1, t.screenX, t.screenY, t.clientX, t.clientY,
 			false, false, false, false, 0, null);
+		e.__lunacyTouch = true;   // a touch's, not a mouse's (textedit.js)
 		return target.dispatchEvent(e);
 	}
 	function under(t) { return document.elementFromPoint(t.clientX, t.clientY) || (st && st.target) || document.body; }

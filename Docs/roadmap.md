@@ -81,6 +81,25 @@ broker, with Palm's mail services logging in with XOAUTH2 under them, unchanged
   yet (a skeleton: no password sent, blocking network calls, stubbed sends); it builds here with
   the PDK's GCC 4.3.3 and HP's CE build-support headers.
 
+**0.9.7** (2026-11-14), Release Candidate 2: bug fixes only, from a day of Email, Exchange and
+keyboard testing on the Pixel Tablet. Everything since 0.9.6:
+
+- **Exchange Online (Microsoft 365):** attachments download (GetAttachment, gone from EAS 14,
+  sent as ItemOperations); meeting invitations can be accepted, and the organizer's Outlook
+  records the answer (the invitation's UID reaches Palm's client, and the reply's calendar part
+  says `method=REPLY`).
+- **Email:** an invitation's Accept, Maybe and Decline respond to taps; an image attachment
+  shows in the viewer; typing in a long draft keeps the caret in view; a Bluetooth mouse's
+  click places the caret and a drag selects; compose's background fills a screen wider than a
+  TouchPad's; an empty "//N" message no longer shows in an Exchange inbox.
+- **Mojo apps:** widgets inside a drawer, and pickers' popup lists, work (Night Moves' time
+  picker and Save buttons): Mojo's removal events arrive when it expects them.
+- **Audio:** a quiet volume set by an app is no longer taken as silent, which closed Lunacy
+  (Night Moves' night schedule); any service that fails answers with an error instead.
+- **LunaKeyboard:** the first letter of a word typed straight after changing fields is no
+  longer lost to Auto-Correction ("Testing" became "Teating"); a correction's dots go when its
+  word does.
+
 **0.9.6** (2026-11-13), Release Candidate 1: the first candidate for 1.0, built with
 `./build.sh publish`. Bug fixes only since the feature freeze. Everything since 0.9.5:
 

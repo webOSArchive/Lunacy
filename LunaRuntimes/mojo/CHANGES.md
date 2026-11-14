@@ -36,7 +36,11 @@ Mojo can't work without it in a current browser, named `compat-<name>.patch`: a 
 preview has no compat layer. So far that is `compat-mutation-events.patch`, compat.js's
 `DOMNodeRemovedFromDocument`/`DOMNodeInsertedIntoDocument` (Mojo cleans its widgets up on
 them, and current engines fire neither), put at the top of `javascripts/framework.js`, the
-first file the desktop loader runs.
+first file the desktop loader runs. Since 2026-11-14 a listener hears only of changes made after it was
+added, and a node removed or moved by `removeChild`, `replaceChild`, `appendChild` or
+`insertBefore` is told at once, before it goes, as WebKit told it: told later, Mojo's
+`WidgetController.reparent` and a Drawer's move of its children cleaned up the widgets they
+were moving (Night Moves' time pickers and Save buttons).
 
 ## Patches
 

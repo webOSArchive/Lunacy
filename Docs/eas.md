@@ -190,6 +190,8 @@ checked); it was removed at once (android5-setup.md).
   not answered). The policy's inactivity timeout and attempt limit aren't enforced on Android.
 - Tasks: the template's TASKS capability is there, and mojomail-eas syncs task lists, but
   Lunacy has no Tasks app and Zoho's account showed none.
-- Untried: attachments, meeting invitations from someone else (`respondToMeetingInvitations`),
+- Attachments: Zoho untried. Exchange Online works through an adapter (GetAttachment as
+  ItemOperations, [outlook-eas.md](outlook-eas.md), "Attachments").
+- Untried: meeting invitations from someone else (`respondToMeetingInvitations`),
   moving mail between folders, autodiscover, a real Exchange or Office 365 server, Android 5,
   64-bit-only devices (qemu), deleting the account.

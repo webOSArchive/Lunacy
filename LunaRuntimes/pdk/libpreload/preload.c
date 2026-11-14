@@ -1272,6 +1272,7 @@ out:
 #include "mailauth.h"
 #include "wbxmlfilter.h"
 #include "composemail.h"
+#include "attfetch.h"
 #include "backoff.h"
 #include "calfilter.h"
 #include "easerr.h"
@@ -1550,6 +1551,12 @@ static struct lc_handle {
 	int token_final;               /* the token sent was fresh, or a retry's: a 401 to it is the server's last word */
 	const void *post_ptr;          /* the request body being sent (the caller's, or ours in its place) */
 	int post_fresh;                /* post_ptr was set for the request now being made, not an earlier one */
+	int fetching;                  /* this request is a GetAttachment sent as ItemOperations Fetch (attfetch.h) */
+	int af_pass;                   /* its reply isn't a 200: headers and body pass as they came */
+	int af_ended;                  /* the reply was judged at its end (af_done), af_code its verdict */
+	int af_code;
+	int af_refused;                /* the caller refused a header or the file's bytes */
+	struct af_reply af;
 } lc_handles[LC_HANDLES];
 static pthread_mutex_t lc_lock = PTHREAD_MUTEX_INITIALIZER;
 static int lc_version(const char *host, const char *asked, char *out, size_t cap);
@@ -1585,12 +1592,17 @@ static int lc_apply_headers(struct lc_handle *e)
 	for (struct curl_slist *s = e->theirs; s; s = s->next) {
 		if (e->handle[0] && strncasecmp(s->data, "Authorization:", 14) == 0) continue;
 		char v[16], line[64];
+		if (e->fetching && strncasecmp(s->data, "Content-Type:", 13) == 0) continue;   /* WBXML, below */
 		if (e->sending && strncasecmp(s->data, "Content-Type:", 13) == 0 && strcasecmp(s->data + 13 + strspn(s->data + 13, " "), "message/rfc822") == 0) {
 			list = lc_slist_append(list, "Content-Type: application/vnd.ms-sync.wbxml");
 		} else if (strncasecmp(s->data, "MS-ASProtocolVersion:", 21) == 0 && lc_version(e->host, s->data + 21 + strspn(s->data + 21, " "), v, sizeof v)) {
 			snprintf(line, sizeof line, "MS-ASProtocolVersion: %s", v);
 			list = lc_slist_append(list, line);
 		} else list = lc_slist_append(list, s->data);
+	}
+	if (e->fetching) {
+		list = lc_slist_append(list, "Content-Type: application/vnd.ms-sync.wbxml");
+		list = lc_slist_append(list, "MS-ASAcceptMultiPart: T");
 	}
 	char line[MAILAUTH_TOKEN_MAX + 32];
 	if (e->handle[0]) {
@@ -1756,6 +1768,37 @@ static void lc_hold(CURL *h, struct lc_handle *e)
 	}
 }
 
+/*
+ * Whether the request this handle is about to make is an attachment download to send as
+ * ItemOperations (attfetch.h); sets it up (lock held). Only where the request goes out at 14.0 or
+ * later, which the version adapter decides, as for sends. Done as the request starts, after every
+ * option the service sets, so its method and body are the ones that go.
+ */
+#define LC_CURLOPT_POST 47
+#define LC_CURLOPT_POSTFIELDS 10015      /* as below, where the Provision body is swapped */
+#define LC_CURLOPT_POSTFIELDSIZE 60
+static void lc_fetch_setup(CURL *h, struct lc_handle *e)
+{
+	char ref[1024], url[sizeof e->url], asked[16] = "", ver[16];
+	if (e->fetching || !af_parse_url(e->url, ref, sizeof ref)) return;
+	for (struct curl_slist *q = e->theirs; q; q = q->next)
+		if (strncasecmp(q->data, "MS-ASProtocolVersion:", 21) == 0) snprintf(asked, sizeof asked, "%s", q->data + 21 + strspn(q->data + 21, " "));
+	if (!asked[0] || !lc_version(e->host, asked, ver, sizeof ver) || atof(ver) < 14.0 - 1e-6) return;
+	size_t len;
+	unsigned char *b;
+	if (!af_url(e->url, url, sizeof url) || !(b = af_body(ref, &len))) return;
+	free(e->post); e->post = b; e->post_ptr = b; e->post_size = (long)len; e->post_fresh = 1;
+	snprintf(e->url, sizeof e->url, "%s", url);
+	if (!e->held) lc_real_setopt(h, 10002, (void *)e->url);
+	lc_real_setopt(h, LC_CURLOPT_POST, 1L);
+	lc_real_setopt(h, LC_CURLOPT_POSTFIELDSIZE, (long)len);
+	lc_real_setopt(h, LC_CURLOPT_POSTFIELDS, (void *)b);
+	e->fetching = 1; e->af_pass = 0; e->af_ended = 0; e->af_code = 0; e->af_refused = 0;
+	af_free(&e->af); af_init(&e->af);
+	lc_apply_headers(e);
+	fprintf(stderr, "lunacy: an attachment download from %s sent as ItemOperations at %s\n", e->host, ver);
+}
+
 int curl_multi_add_handle(void *multi, CURL *h)
 {
 	static int (*real)(void *, CURL *);
@@ -1763,6 +1806,7 @@ int curl_multi_add_handle(void *multi, CURL *h)
 	lc_init();
 	pthread_mutex_lock(&lc_lock);
 	struct lc_handle *e = lc_find(h, 0);
+	if (e) lc_fetch_setup(h, e);
 	if (e) lc_hold(h, e);
 	if (e && !e->held) {
 		char head[1100];
@@ -1791,6 +1835,23 @@ static size_t lc_header(char *buf, size_t size, size_t n, void *data)
 	if (!theirs) return size * n;   /* can't happen: set together with the callback */
 	size_t len = size * n;
 	lc_backoff_header(data, buf, len);
+	/* An attachment Fetch's reply: its own size and type are told with the file (lc_write). */
+	int fetch_hide = 0;
+	pthread_mutex_lock(&lc_lock);
+	for (int i = 0; i < LC_HANDLES; i++) {
+		struct lc_handle *e = &lc_handles[i];
+		if (!e->h || !e->fetching || e->header_data != data) continue;
+		if (len > 9 && strncmp(buf, "HTTP/", 5) == 0) {
+			const char *sp = memchr(buf, ' ', len);
+			e->af_pass = !sp || atoi(sp + 1) != 200;
+		} else if (!e->af_pass) {
+			fetch_hide = strncasecmp(buf, "Content-Length:", 15) == 0 || strncasecmp(buf, "Content-Type:", 13) == 0
+				|| len <= 2;   /* the blank line that ends them: said once the size is known */
+		}
+		break;
+	}
+	pthread_mutex_unlock(&lc_lock);
+	if (fetch_hide) return len;
 	static const char name[] = "MS-ASProtocolVersions:";
 	if (len > sizeof name && len < 512 && strncasecmp(buf, name, sizeof name - 1) == 0) {
 		/* The server's list, for the requests that follow to it (lc_version). */
@@ -1847,12 +1908,53 @@ static struct lc_handle *lc_by_write_data(void *data)
 	return NULL;
 }
 
+/* An attachment Fetch's file, told to the service as GetAttachment's reply was (attfetch.h). */
+#define LC_WRITEFUNC_PAUSE 0x10000001   /* libemail-common's CurlWriteCallback pauses while the service can't take bytes */
+static int lc_fetch_head(void *ctx, const char *type, size_t size)
+{
+	struct lc_handle *e = ctx;
+	char line[256];
+	int n;
+	if (type && type[0] && !strpbrk(type, "\r\n")) {
+		n = snprintf(line, sizeof line, "Content-Type: %s\r\n", type);
+		if (n > 0 && n < (int)sizeof line && e->their_header(line, 1, (size_t)n, e->header_data) != (size_t)n) { e->af_refused = 1; return 1; }
+	}
+	n = snprintf(line, sizeof line, "Content-Length: %lu\r\n", (unsigned long)size);
+	if (e->their_header(line, 1, (size_t)n, e->header_data) != (size_t)n) { e->af_refused = 1; return 1; }
+	if (e->their_header("\r\n", 1, 2, e->header_data) != 2) { e->af_refused = 1; return 1; }
+	return 0;
+}
+
+static int lc_fetch_data(void *ctx, const unsigned char *b, size_t n)
+{
+	struct lc_handle *e = ctx;
+	size_t w = e->their_write((char *)b, 1, n, e->write_data);
+	if (w == LC_WRITEFUNC_PAUSE) return AF_PAUSE;   /* its file isn't open yet (the file cache answers over the bus) */
+	if (w != n) { e->af_refused = 1; return 1; }
+	return 0;
+}
+
 static size_t lc_write(char *buf, size_t size, size_t n, void *data)
 {
 	pthread_mutex_lock(&lc_lock);
 	struct lc_handle *e = lc_by_write_data(data);
 	lc_header_fn theirs = e ? e->their_write : NULL;
 	if (e) lc_dump(e->host, "<", buf, size * n);
+	if (e && e->fetching && !e->af_pass && e->their_header) {
+		/* The handle's slot stays this request's until it ends: the service's callbacks run
+		   on this thread, unlocked, as for every other reply. */
+		pthread_mutex_unlock(&lc_lock);
+		int r = af_feed(&e->af, (unsigned char *)buf, size * n, e, lc_fetch_head, lc_fetch_data);
+		if (r == -2) return LC_WRITEFUNC_PAUSE;   /* curl gives the piece again once the service unpauses */
+		if (r && e->af_refused) return 0;   /* the service's own failure: curl stops */
+		if (r && !e->af_code) {
+			/* A failed Fetch: the rest is dropped, its code told (getinfo). */
+			e->af_code = e->af.code ? e->af.code : 500;
+			fprintf(stderr, "lunacy: %s refused an attachment Fetch: status %d/%d, told as HTTP %d\n",
+				e->host, e->af.info.status, e->af.info.fetch_status, e->af_code);
+		}
+		return size * n;
+	}
 	if (e && e->body_seen == 0) {
 		/* A WBXML reply from a server the version adapter speaks 16.1 to: newer code pages out. */
 		char ver[16];
@@ -2062,6 +2164,7 @@ int curl_easy_setopt(CURL *h, int option, ...)
 			else if (option == LC_CURLOPT_WRITEFUNCTION) e->their_write = (lc_header_fn)v;
 			else {
 				e->body_seen = 0; e->provision = 0; e->filtering = 0; e->host[0] = 0;
+				e->fetching = 0; af_free(&e->af);
 				e->held = 0; bo_reset(&e->bo);
 				const char *u = v, *hs = u ? strstr(u, "://") : NULL;
 				snprintf(e->url, sizeof e->url, "%s", u ? u : "");
@@ -2203,7 +2306,24 @@ int curl_easy_getinfo(CURL *h, int info, ...)
 	if (r == 0 && info == LC_CURLINFO_RESPONSE_CODE && out && *(long *)out == 200) {
 		pthread_mutex_lock(&lc_lock);
 		struct lc_handle *e = lc_find(h, 0);
-		if (e && e->provision) *(long *)out = 449;
+		if (e && e->fetching && !e->af_pass) {
+			/* The Fetch's verdict, once there is one. The service asks for the code mid-reply too
+			   (its header callback, as the file's size is told), so a reply still arriving is
+			   left alone: only a plain WBXML reply, told nothing until it is judged, is judged
+			   here, and a reply already refused says why. */
+			if (!e->af_ended && e->af.state == 5) {
+				e->af_ended = 1;
+				pthread_mutex_unlock(&lc_lock);
+				int bad = af_done(&e->af, e, lc_fetch_head, lc_fetch_data);
+				pthread_mutex_lock(&lc_lock);
+				if (bad && !e->af_refused) e->af_code = e->af.code ? e->af.code : 500;
+				if (e->af_code) fprintf(stderr, "lunacy: %s refused an attachment Fetch: status %d/%d, told as HTTP %d\n",
+					e->host, e->af.info.status, e->af.info.fetch_status, e->af_code);
+				af_free(&e->af);
+			}
+			if (e->af_code) *(long *)out = e->af_code;
+		}
+		else if (e && e->provision) *(long *)out = 449;
 		else if (e && e->sending && e->send_status && e->send_status != 1) *(long *)out = 500;   /* the send failed: the service retries */
 		pthread_mutex_unlock(&lc_lock);
 	}
@@ -2233,6 +2353,7 @@ void curl_easy_cleanup(CURL *h)
 	if (e) {
 		if (e->ours) lc_slist_free(e->ours);
 		free(e->post);
+		af_free(&e->af);
 		memset(e, 0, sizeof *e);
 	}
 	pthread_mutex_unlock(&lc_lock);

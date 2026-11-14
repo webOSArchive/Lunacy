@@ -267,6 +267,39 @@ second pick, validated by Palm's IMAP service, which got Outlook.com's "User is 
 but not connected" (item 9, Microsoft's side), and its handle forgotten; the hidden template
 listed for the page; the existing Exchange accounts (Microsoft 365 and Zoho) syncing as before.
 
+## Attachments (2026-11-14)
+
+Measured on the Pixel Tablet against codepoet's own Microsoft 365 account (a 272 KB `.xlsx`
+and a 7 KB `.jpg` in one message):
+
+- **Palm's download is its own, not downloadmanager's.** Email calls
+  `com.palm.eas/downloadAttachment`; mojomail-eas (`EasAttachmentDownload`) sends
+  `Cmd=GetAttachment&AttachmentName=<file reference>` through libemail-common's curl, with the
+  bearer like every other request. Exchange Online answered **400**: GetAttachment is gone from
+  EAS 14.0. Email showed "http error 400" after about 20 s.
+- **Adapter 7, `libpreload/attfetch.h`:** where the version adapter sends at 14.0 or later, the
+  request goes as `ItemOperations` / `Fetch` (`Store` Mailbox, `airsyncbase:FileReference`) with
+  `MS-ASAcceptMultiPart: T`. The multipart reply is taken apart as it arrives: the WBXML part's
+  statuses are read, then the service is told `Content-Type` (the server's `ContentType`, if any)
+  and `Content-Length` (the file part's size: the file cache refuses a size of 0) and given the
+  file part's bytes, never held. A reply without parts is held and its base64 `Data` decoded. A
+  failed Fetch is told as an HTTP code (404 for status 4, 6, 15; 403 for 5, 16, 18; 449 for
+  142-144; else 500). Host test: `tests/attfetch_test.c`.
+- **Three things learned on the way, each one try on the device:**
+  - The file reference goes as it stands in Palm's URL, **not %-decoded**: Palm appends the
+    reference unescaped (`EasNetworkCommand::SetCommandUrl`), and Exchange's references are
+    themselves escaped (`16%3aX%3a...`). Decoded once more, Exchange answered Fetch status 15.
+  - The service asks for the response code **mid-reply** (in its header callback, as the size is
+    told), so a verdict is given only once there is one.
+  - libemail-common's `CurlWriteCallback` **pauses** the transfer (`CURL_WRITEFUNC_PAUSE`) until
+    the file cache has answered over the bus; curl then gives the same piece again. The adapter
+    passes the pause on and skips what it had taken of that piece (curl error 23 otherwise).
+- **Seen working:** the `.xlsx` opened in Quickoffice, the `.jpg` in Email's viewer (that one
+  also needed the thumbnailer fix in [fix-log.md](fix-log.md), 2026-11-14). The legacy Exchange
+  type (Zoho, 14.1 offered) never reaches the adapter: the version adapter isn't at work there.
+- Still to see: attachments on the legacy type, a large file (several MB, many pauses), an
+  inline image in a message body.
+
 ## Before it ships
 
 - Everything in "Two things this work must never break", checked on a device.

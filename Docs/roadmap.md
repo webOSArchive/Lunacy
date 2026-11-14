@@ -34,7 +34,7 @@ after 1.0.
 Before shipping 1.0, as for every release: the latest App Catalog bundled (6.2.2931 as of
 2026-11-08, the same as the Museum's).
 
-## Where things stand (2026-11-09)
+## Where things stand (2026-11-14)
 
 **Feature freeze (codepoet, 2026-11-09, at 0.9.5).** Until 1.0, Lunacy itself takes bug fixes
 only; the one exception is a change F-Droid needs. A new idea goes on the post-1.0 list.
@@ -45,13 +45,22 @@ repository can't take Lunacy (Palm's non-free frameworks, apps and libraries, an
 needs the TouchPad's files), so the webOS Archive hosts an F-Droid repository of its own at
 https://stacks.webosarchive.org/feeds/fdroid/repo, a project of its own that carries other
 Android apps too, fed from each release's APKs ([Meta/fdroid/README.md](../Meta/fdroid/README.md)).
-0.9.6 build 593 is in it, not uploaded yet.
+It is live: 0.9.7 build 617 was the first release installed through it (the Kyocera, a manual
+update, since Lunacy's targetSdk 28 rules out an unattended one). Its apps are listed as the
+webOS Archive's, not one person's.
+
+**0.9.7 released (2026-11-14), the second release candidate; the next build is likely 1.0.**
+It passed `device-test.sh` on the Pixel Tablet, Fold3, Kyocera and HP 10 G2, codepoet's check
+by hand on the Nexus 5, and the PDK scenario sweep on the HP and Nexus 5
+([test-results/617](test-results/617)). Bugs found from here go in 1.0. A device on a lock
+screen or a sleeping display fails every card the test opens behind it: keep the screen awake
+(an unplugged device ignores `svc power stayon`). Dead Space's tilt was the port's (apkenv's
+EA module never passed the accelerometer on); codepoet fixed it in the ports repository.
 
 **Tests (2026-11-09):** the release test plan ([test-plan.md](test-plan.md)), after webOS CE's:
 `./test.sh` runs everything that needs no device (and `build.sh release` stops on a failure),
 `Workbench/device-test.sh` everything on a device a script can decide (42 checks on the Fold3,
-each seen failing once), and the rest is a list worked by hand. Next: the release candidate,
-with the plan's first full round.
+each seen failing once), and the rest is a list worked by hand.
 
 **OAuth for mail, for 0.9.5 (started 2026-11-05, pushed through 25d82d7; b64149a local):**
 Google and Microsoft account types whose sign-in page uses OAuth on the device or through the

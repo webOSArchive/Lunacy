@@ -85,6 +85,14 @@ through the SDK's novacomd relay when it runs here (it works with a release buil
 DevTools on a debug build. On the relay, `luna-send` needs `</dev/null` or it exits silently
 (learnt from CE's plan; it cost a morning on the TouchPad too).
 
+Keep the screen awake and unlocked for the whole run. A card opened behind a lock screen or a
+sleeping display never lays out, so every app fails "no card" (the HP 10 G2, 2026-11-14).
+`svc power stayon true` holds only while the device is plugged in, and an `am start` from adb
+isn't user activity, so on an unplugged device dismiss the lock screen and send
+`input keyevent KEYCODE_WAKEUP` every minute or so during the run. On a phone (the Nexus 5),
+an app late in the run may miss the 25 s limit once some twenty cards are open: open it by hand
+before calling it a failure.
+
 **Tier 1** (`test.sh`) is:
 - every bundled JSON file parses (a stray comma silently stops a kind, a template or an app);
 - the account templates and the OAuth providers agree (ids, folders, fallbacks);

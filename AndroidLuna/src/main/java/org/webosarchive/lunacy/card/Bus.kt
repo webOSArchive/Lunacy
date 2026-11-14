@@ -170,7 +170,14 @@ class Bus {
             // com.palm.systemservice/wallpaper/listWallpapers is unknown "for category
             // \"/wallpaper\"" (measured on the reference TouchPad).
             call.reply(if (has(service)) unknownMethod(method) else noService(service))
-        } else h.handle(call)
+        } else {
+            // A service that throws answers its caller with an error; it doesn't stop Lunacy
+            // (an unchecked SecurityException from Android's AudioManager did, 2026-11-14).
+            try { h.handle(call) } catch (e: RuntimeException) {
+                Log.e(AppServer.TAG, "bus: $service/$method threw", e)
+                if (!call.cancelled) call.reply(Bus.error("${e.javaClass.simpleName}: ${e.message}"))
+            }
+        }
         return call
     }
 

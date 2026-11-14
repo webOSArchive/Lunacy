@@ -140,7 +140,12 @@ class AudioService(
     }
 
     private fun max() = am.getStreamMaxVolume(STREAM).coerceAtLeast(1)
-    private fun step(volume: Int) = (volume * max() / 100f).roundToInt()
+    /**
+     * webOS's 0..100 as the stream's steps. A volume above 0 is never the bottom step: on Android
+     * that is the ringer going silent, which only an app with Do Not Disturb access may do (Night
+     * Moves' night volume 1 rounded to 0 on the Pixel's seven steps, and Android threw).
+     */
+    private fun step(volume: Int) = (volume * max() / 100f).roundToInt().let { if (volume > 0) it.coerceAtLeast(1) else it }
 
     /** 0..100. A volume the slider set is kept while the stream is at its step, so it doesn't jump. */
     private fun volume(): Int {
@@ -181,8 +186,12 @@ class AudioService(
             return c.reply(JSONObject().put("returnValue", false).put("errorCode", 3)
                 .put("errorText", "Invalid 'volume' integer parameter value.").toString())
         }
+        // Android may still refuse (0 is silent, which needs Do Not Disturb access): an error then.
+        try { am.setStreamVolume(STREAM, step(v), 0) } catch (e: SecurityException) {
+            return c.reply(JSONObject().put("returnValue", false).put("errorCode", -1)
+                .put("errorText", "Android wouldn't let Lunacy set the volume: ${e.message}").toString())
+        }
         asked = v
-        am.setStreamVolume(STREAM, step(v), 0)
         c.reply(Bus.ok())
         changed(listOf("volume"))
     }

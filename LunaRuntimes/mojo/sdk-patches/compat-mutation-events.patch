@@ -1,6 +1,6 @@
 --- a/javascripts/framework.js
 +++ b/javascripts/framework.js
-@@ -14,6 +14,57 @@
+@@ -14,6 +14,85 @@
   * @namespace Holds framework-wide functionality
   */
  
@@ -13,6 +13,12 @@
 +// as webOS's WebKit did: not bubbling, to each removed or added node and every element in it, in
 +// the order of the changes. They arrive once the script that made the change returns rather than
 +// inside the removeChild call. The observer starts only when something listens for them.
++// A listener hears only of changes made after it was added, as with webOS's events, which
++// fired inside the change: the changes still waiting are sent before it is added (a Drawer
++// moves its children before the widgets in them are set up). And a node removed by removeChild
++// or replaceChild, or moved by appendChild or insertBefore, is told at once, before it goes,
++// as WebKit told it: Mojo's WidgetController moves a widget with `reparenting` set so that its
++// cleanup ignores that removal. Removals by any other way still come from the observer.
 +(function () {
 +	var REMOVED = "DOMNodeRemovedFromDocument", INSERTED = "DOMNodeInsertedIntoDocument";
 +	if (!window.MutationObserver || !window.EventTarget) { return; }
@@ -34,23 +40,45 @@
 +			list[i].dispatchEvent(e);
 +		}
 +	}
++	var TOLD = "__lunacyRemovalTold";
++	function deliver(records) {
++		for (var r = 0; r < records.length; r++) {
++			var rec = records[r], j, n;
++			for (j = 0; j < rec.removedNodes.length; j++) {
++				n = rec.removedNodes[j];
++				if (n[TOLD]) { delete n[TOLD]; continue; }   // told when it was removed
++				send(n, REMOVED);
++			}
++			for (j = 0; j < rec.addedNodes.length; j++) {
++				if (document.documentElement.contains(rec.addedNodes[j])) { send(rec.addedNodes[j], INSERTED); }
++			}
++		}
++	}
 +	var observer = null;
 +	function start() {
 +		if (observer) { return; }
-+		observer = new MutationObserver(function (records) {
-+			for (var r = 0; r < records.length; r++) {
-+				var rec = records[r], j;
-+				for (j = 0; j < rec.removedNodes.length; j++) { send(rec.removedNodes[j], REMOVED); }
-+				for (j = 0; j < rec.addedNodes.length; j++) {
-+					if (document.documentElement.contains(rec.addedNodes[j])) { send(rec.addedNodes[j], INSERTED); }
-+				}
-+			}
-+		});
++		observer = new MutationObserver(deliver);
 +		observer.observe(document, { childList: true, subtree: true });
 +	}
++	// A node in the document that a DOM call is about to take out: told now.
++	function leaving(node) {
++		if (!observer || !node || node.nodeType !== 1 || !document.documentElement.contains(node)) { return; }
++		node[TOLD] = true;
++		send(node, REMOVED);
++	}
++	var N = Node.prototype, removeChild = N.removeChild, replaceChild = N.replaceChild,
++		appendChild = N.appendChild, insertBefore = N.insertBefore;
++	N.removeChild = function (child) { leaving(child); return removeChild.apply(this, arguments); };
++	N.replaceChild = function (child, old) { leaving(old); if (child !== old) { leaving(child); } return replaceChild.apply(this, arguments); };
++	N.appendChild = function (child) { leaving(child); return appendChild.apply(this, arguments); };
++	N.insertBefore = function (child) { leaving(child); return insertBefore.apply(this, arguments); };
 +	var add = EventTarget.prototype.addEventListener;
 +	EventTarget.prototype.addEventListener = function (type) {
-+		if (type === REMOVED || type === INSERTED) { start(); }
++		if (type === REMOVED || type === INSERTED) {
++			start();
++			var waiting = observer.takeRecords();
++			if (waiting.length) { deliver(waiting); }
++		}
 +		return add.apply(this, arguments);
 +	};
 +})();

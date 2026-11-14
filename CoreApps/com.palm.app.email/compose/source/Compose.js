@@ -26,6 +26,7 @@ enyo.kind({
 	windowActivated: function () {
 		if (this.hasNode()) {
 			this.node.style.backgroundImage = 'url("' + this.backgroundImage + '")';
+			this.fitWallpaper();
 		}
 		if (this.$.shade.hasNode()) {
 			this.$.shade.node.style.background = "";
@@ -41,6 +42,19 @@ enyo.kind({
 		if (this.backgroundImage) {
 			this.windowActivated();
 		}
+	},
+	// [Lunacy] The wallpaper is drawn at its own size, which on a TouchPad is what the system
+	// drew behind the card. On a larger screen the system scales one that fills a TouchPad
+	// screen (1024 x 768 either way up) to fill it (Lunacy's shell, luna-deltas B9), and here
+	// it was repeated instead. A smaller one stays at its own size, as on the TouchPad.
+	fitWallpaper: function () {
+		var node = this.node, img = new Image();
+		img.onload = function () {
+			var w = img.naturalWidth, h = img.naturalHeight;
+			var fills = (w >= 1024 && h >= 768) || (w >= 768 && h >= 1024);
+			node.style.backgroundSize = fills ? "cover" : "";
+		};
+		img.src = this.backgroundImage;
 	},
 	updateBackground: function (self, result, response) {
 		var path = result.wallpaper.wallpaperFile;

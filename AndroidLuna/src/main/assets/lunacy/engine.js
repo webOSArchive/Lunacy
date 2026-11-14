@@ -1,7 +1,7 @@
 // Lunacy's compat layer, part 2 of 4 (see input.js): what the TouchPad's 2011 engine did that
 // Chromium doesn't - border images without a border style, uncaught errors kept off the page,
 // callable collections, no service workers, the old animation-frame name, webosEvent, and
-// -webkit-box's static positions and edge margins. ES5 only.
+// -webkit-box's static positions and edge margins, and window.caretRect. ES5 only.
 // A border-image is painted only where a border is. The reference TouchPad's WebKit (534.6)
 // drew the nine-piece image from paintBorder(), which it called only when
 // RenderStyle::hasBorder() held - a border width above zero on some side. Chromium paints a
@@ -386,4 +386,60 @@
 		queue();
 	}
 	if (document.documentElement) { start(); } else { document.addEventListener("DOMContentLoaded", start); }
+})();
+
+// window.caretRect(): the TouchPad's WebKit gave every page the caret's rectangle, in window
+// coordinates, as {x, y, width, height}. Enyo keeps the caret in view with it as you type
+// (enyo.keyboard, on every keydown); without it Enyo falls back to the top of the focused field,
+// so in a long Email draft every key scrolled the start of the body back into view (codepoet,
+// 2026-11-14, Pixel Tablet). Mojo's character picker places itself by it. Rich text: the
+// collapsed selection's rectangle, or on an empty line the node at the caret. An input or a
+// textarea: measured on an off-screen copy with the same styles and text up to the caret. Nowhere
+// to measure: zeros, which Enyo takes as "no answer" and falls back as before.
+(function () {
+	if (window.caretRect) { return; }
+	var COPY = ["boxSizing", "width", "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth",
+		"paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "fontStyle", "fontVariant", "fontWeight",
+		"fontSize", "lineHeight", "fontFamily", "textAlign", "textTransform", "textIndent", "letterSpacing",
+		"wordSpacing", "whiteSpace", "wordWrap", "tabSize"];
+	function none() { return { x: 0, y: 0, width: 0, height: 0 }; }
+	function out(r) { return { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width || 0), height: Math.round(r.height) }; }
+	function field(el) {
+		var at = typeof el.selectionEnd === "number" ? el.selectionEnd : null;
+		if (at === null) { return none(); }
+		var box = el.getBoundingClientRect(), cs = getComputedStyle(el), copy = document.createElement("div"), s = copy.style;
+		for (var i = 0; i < COPY.length; i++) { s[COPY[i]] = cs[COPY[i]]; }
+		s.position = "absolute"; s.visibility = "hidden"; s.left = "-10000px"; s.top = "0"; s.overflow = "hidden";
+		if (el.tagName === "TEXTAREA") { s.whiteSpace = "pre-wrap"; s.wordWrap = "break-word"; } else { s.whiteSpace = "pre"; }
+		copy.textContent = el.value.slice(0, at);
+		var mark = document.createElement("span");
+		mark.textContent = el.value.slice(at) || ".";
+		copy.appendChild(mark);
+		document.body.appendChild(copy);
+		var lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2 || 16;
+		var r = { left: box.left + mark.offsetLeft - el.scrollLeft, top: box.top + mark.offsetTop - el.scrollTop, width: 0, height: lh };
+		document.body.removeChild(copy);
+		return out(r);
+	}
+	window.caretRect = function () {
+		try {
+			var el = document.activeElement;
+			if (el && (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && /^(text|search|email|url|tel|password|number)?$/i.test(el.type || "")))) { return field(el); }
+			var sel = window.getSelection && window.getSelection();
+			if (!sel || !sel.rangeCount) { return none(); }
+			var range = sel.getRangeAt(0).cloneRange();
+			range.collapse(false);
+			var rs = range.getClientRects();
+			if (rs.length && (rs[rs.length - 1].height || rs[rs.length - 1].top)) { return out(rs[rs.length - 1]); }
+			// An empty line (a <div><br></div>): the node at the caret.
+			var n = range.startContainer;
+			if (n.nodeType === 1 && n.childNodes.length) { n = n.childNodes[Math.min(range.startOffset, n.childNodes.length - 1)]; }
+			if (n && n.nodeType === 3) { n = n.parentNode; }
+			if (!n || !n.getBoundingClientRect || n === document.body) { return none(); }
+			var b = n.getBoundingClientRect();
+			return b.height ? out({ left: b.left, top: b.top, width: 0, height: Math.min(b.height, 40) }) : none();
+		} catch (e) {
+			return none();
+		}
+	};
 })();

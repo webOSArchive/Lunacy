@@ -320,6 +320,7 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
         val ov = overlay ?: return
         // A tap that puts the cursor in a corrected word opens its bubble; anything else closes it.
         val ours = SystemClock.uptimeMillis() - lastOwnEdit < OWN_EDIT_MS
+        if (!ours && newSelStart == newSelEnd) checkMarks(newSelStart)
         val m = if (!ours && newSelStart == newSelEnd && word.isEmpty())
             ov.marks.lastOrNull { newSelStart >= it.start && newSelStart <= it.end } else null
         if (m != null && stillThere(m, newSelStart)) { undo = null; ov.showBubble(m) }
@@ -336,6 +337,31 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
         val ok = before != null && after != null && before + after == m.text
         if (!ok) { overlay?.marks?.remove(m); local.remove(m); overlay?.invalidate() }
         return ok
+    }
+
+    /**
+     * Drops every mark whose word is no longer where it was. The field's text can change
+     * without the keyboard - the app clearing or setting it, a send emptying it - and a mark
+     * was only checked when the cursor came into it, so its dots stayed under whatever took
+     * the word's place (codepoet, 2026-11-14: "Teating"'s dots under Email's "Tap Here To
+     * Type" once the subject was emptied). A mark too far from the cursor to read cheaply stays.
+     */
+    private fun checkMarks(cursor: Int) {
+        val ov = overlay ?: return
+        if (ov.marks.isEmpty() || cursor < 0) return
+        val ic = currentInputConnection ?: return
+        var dropped = false
+        for (m in ov.marks.toList()) {
+            val here: String? = when {
+                m.end <= cursor -> if (cursor - m.start > MARK_REACH) continue
+                    else ic.getTextBeforeCursor(cursor - m.start, 0)?.toString()?.let { if (it.length == cursor - m.start) it.take(m.text.length) else null }
+                m.start >= cursor -> if (m.end - cursor > MARK_REACH) continue
+                    else ic.getTextAfterCursor(m.end - cursor, 0)?.toString()?.let { if (it.length == m.end - cursor) it.drop(m.start - cursor) else null }
+                else -> (ic.getTextBeforeCursor(cursor - m.start, 0)?.toString() ?: "") + (ic.getTextAfterCursor(m.end - cursor, 0)?.toString() ?: "")
+            }
+            if (here != m.text) { ov.marks.remove(m); local.remove(m); dropped = true }
+        }
+        if (dropped) ov.invalidate()
     }
 
     /** A word from the bubble replaces the corrected one; its original comes back unmarked. */
@@ -526,6 +552,8 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
         const val ANCHOR_WAIT_MS = 120L
         /** A selection change this soon after the keyboard's own edit is the keyboard's. */
         const val OWN_EDIT_MS = 300L
+        /** How far from the cursor a mark is read back to check it: farther, it is left be. */
+        const val MARK_REACH = 4000
         /** Two spaces this close together make a period. */
         const val DOUBLE_SPACE_MS = 1500L
         /** How much of a line's box is below its baseline, where the field doesn't say. */

@@ -487,7 +487,13 @@ starting; some may have been settled since without a note. All of it comes after
 
 - **Chat:** longevity on the devices; webOS CE's startup hang (PmLogLib's semaphore; take CE's
   fix if it lands in the transport); the Add Buddy invitation message, which the transport drops.
-- **Exchange:** a real server's policy, tasks, attachments.
+- **`com.palm.wifi` and `com.palm.audio/ringtone` (codepoet, 2026-11-14: "we should have built it
+  to begin with"):** webOS apps that switch Wi-Fi or the ringer volume get "Service does not
+  exist" today (Night Moves' night and morning schedules). The shell already switches Wi-Fi
+  (`SystemControls.setWifi`, allowed at target 28): `setstate` and `getstatus` (with its
+  subscription), measured on the TouchPad first; `com.palm.wan` stays an error, since Android
+  lets no app switch mobile data.
+- **Exchange:** a real server's policy, tasks, attachments (attachments done 2026-11-14).
 - **PDK intro movies:** done 2026-11-07, Android's player behind Palm's API ([pdk.md](pdk.md)
   §6j). Still to see: Oregon Trail, Asphalt 5 and Nova 2's movies, the end event's path on
   each, and a movie on the 32-bit devices.

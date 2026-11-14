@@ -77,14 +77,15 @@ devices and a 64-bit one for the newer. Phones are partially supported through l
 
 [<img src="https://appcatalog.webosarchive.org/assets/fdroid.png" alt="Get it on F-Droid" height="60">](https://stacks.webosarchive.org/feeds/fdroid/repo/)
 
-**From F-Droid** (the easiest way, with updates): Lunacy and LunaKeyboard are in the webOS
-Archive's own F-Droid repository. In the F-Droid app, add the repository
-`https://stacks.webosarchive.org/feeds/fdroid/repo` (Settings → Repositories → +), or open
-[its page](https://stacks.webosarchive.org/feeds/fdroid/repo/) on the device and follow the
-link or scan the QR code. Its signing key's fingerprint is
-`E441B611BFE19109A873451865AEE9871800E9EF8677F725CD3F31C1182FC96E`. F-Droid picks the 32-bit or
-64-bit build for the device. It carries the release builds, so it updates a release APK from
-GitHub too; a debug build has to be uninstalled first (its data goes with it).
+**Lunacy is available on F-Droid**, along with LunaKeyboard, from the webOS Archive's own
+repository. To add it to F-Droid:
+
+- Open the [repository page](https://stacks.webosarchive.org/feeds/fdroid/repo/) on your
+  device and tap its link, or scan its QR code.
+- Or, in F-Droid, go to Settings → Repositories → + and enter
+  `https://stacks.webosarchive.org/feeds/fdroid/repo`
+
+F-Droid then installs the right build for your device and keeps it up to date.
 
 **Or sideload the APKs** from [the releases](https://github.com/webOSArchive/Lunacy/releases):
 

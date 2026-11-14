@@ -192,6 +192,6 @@ checked); it was removed at once (android5-setup.md).
   Lunacy has no Tasks app and Zoho's account showed none.
 - Attachments: Zoho untried. Exchange Online works through an adapter (GetAttachment as
   ItemOperations, [outlook-eas.md](outlook-eas.md), "Attachments").
-- Untried: meeting invitations from someone else (`respondToMeetingInvitations`),
-  moving mail between folders, autodiscover, a real Exchange or Office 365 server, Android 5,
+- Meeting invitations: accepting one works on Exchange Online ([outlook-eas.md](outlook-eas.md)).
+- Untried: moving mail between folders, autodiscover, a real Exchange or Office 365 server, Android 5,
   64-bit-only devices (qemu), deleting the account.

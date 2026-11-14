@@ -318,6 +318,17 @@ each Sync's shape (taken out again):
 - **Nothing to fix in Lunacy.** Palm's client does what it would on a TouchPad. Dropping
   DtStamp-only Changes in the preload would hide server data and isn't done.
 
+## Meeting invitations (2026-11-14)
+
+Email's Accept, Maybe and Decline did nothing on any account in a Lunacy card (Enyo patch 0017,
+[fix-log.md](fix-log.md)). With that fixed, an invitation codepoet sent from another Microsoft
+365 tenant was accepted on the Pixel Tablet: Email stored the response, Palm's
+`respondToMeetingInvitations` ran within 30 ms, marked it processed, and sent "Accepted: Test
+Meeting" through the outbox (ComposeMail, adapter 3) about 2 s later, with no error from
+Exchange Online; the event stayed in the calendar as Busy (it had been tentative), and the
+invitation was hidden, as webOS does. Not yet seen: Maybe and Decline, a recurring series,
+the legacy Exchange type.
+
 ## Before it ships
 
 - Everything in "Two things this work must never break", checked on a device.

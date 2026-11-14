@@ -2065,6 +2065,7 @@ static size_t lc_read(char *buf, size_t size, size_t n, void *data)
 		size_t r = theirs(buf + o, 1, cap - o, data);
 		if (r == LC_READFUNC_ABORT) return r;
 		if (r == LC_READFUNC_PAUSE) return o ? o : r;   /* asked again once it's unpaused */
+		if (r && cm_fix_reply(buf + o, r)) fprintf(stderr, "lunacy: a meeting reply's calendar part said as one (method=REPLY)\n");
 		if (r) return o + r;
 		pthread_mutex_lock(&lc_lock);
 		e = lc_by_read_data(data);

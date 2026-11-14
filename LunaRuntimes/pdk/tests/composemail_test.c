@@ -54,6 +54,28 @@ int main(void)
 	static const unsigned char sync[] = { 0x03, 0x01, 0x6a, 0x00, 0x45, 0x4e, 0x03, '1', 0x00, 0x01, 0x01 };
 	check(cm_status(sync, sizeof sync) == 0, "another command's reply isn't a send status");
 
+	/* A meeting reply's calendar part gets method=REPLY, at the same length; nothing else changes. */
+	{
+		const char *hd = "MIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary=\"B\"\r\n\r\n--B\r\n";
+		const char *part = "Content-Type: text/calendar\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: inline\r\n\r\n";
+		const char *reply = "QkVHSU46VkNBTEVOREFSDQpNRVRIT0Q6UkVQTFkNClBST0RJRDpNaWNyb3NvZnQgRXhjaGFuZ2UgU2VydmVyIDIwMDcN\r\n";   /* BEGIN:VCALENDAR, METHOD:REPLY */
+		const char *request = "QkVHSU46VkNBTEVOREFSDQpNRVRIT0Q6UkVRVUVTVA0KUFJPRElEOk1pY3Jvc29mdCBFeGNoYW5nZSBTZXJ2ZXIgMjAw\r\n";   /* METHOD:REQUEST */
+		char m[1024], was[1024];
+		snprintf(m, sizeof m, "%s%s%s--B--\r\n", hd, part, reply);
+		size_t ml = strlen(m);
+		check(cm_fix_reply(m, ml) == 1 && strlen(m) == ml, "a reply is rewritten, same length");
+		check(strstr(m, "Content-Type: text/calendar; method=REPLY; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\nQkVH") != NULL, "with method=REPLY, and the body where it was");
+		check(strstr(m, "Content-Disposition") == NULL, "inline, the default, goes");
+		snprintf(m, sizeof m, "%s%s%s--B--\r\n", hd, part, request); memcpy(was, m, strlen(m) + 1);
+		check(cm_fix_reply(m, strlen(m)) == 0 && strcmp(m, was) == 0, "a request (or any other calendar) is left alone");
+		snprintf(m, sizeof m, "%s%s", hd, part); memcpy(was, m, strlen(m) + 1);
+		check(cm_fix_reply(m, strlen(m)) == 0 && strcmp(m, was) == 0, "a part whose body isn't in the piece is left alone");
+		char lf[512];
+		snprintf(lf, sizeof lf, "Content-Type: text/calendar\nContent-Transfer-Encoding: base64\nContent-Disposition: inline\n\nQkVHSU46VkNBTEVOREFSDQpNRVRIT0Q6UkVQTFkNCg==\n");
+		size_t ll = strlen(lf);
+		check(cm_fix_reply(lf, ll) == 1 && strlen(lf) == ll && strncmp(lf, "Content-Type: text/calendar;method=REPLY; charset=UTF-8\n", 56) == 0, "LF line ends too");
+	}
+
 	if (failures) { fprintf(stderr, "composemail_test: %d failed\n", failures); return 1; }
 	printf("composemail_test: ok\n");
 	return 0;

@@ -122,4 +122,50 @@ static int cm_status(const unsigned char *b, size_t n)
 	return v;
 }
 
+/*
+ * A meeting reply's calendar part, said as one (Docs/outlook-eas.md, "Meeting invitations").
+ * Palm answers an invitation with a message whose one part is its vCalendar (METHOD:REPLY):
+ *
+ *   Content-Type: text/calendar / Content-Transfer-Encoding: base64 / Content-Disposition: inline
+ *
+ * with no `method` parameter, which RFC 6047 requires and Outlook goes by: the organizer saw the
+ * reply as text and the attendee's answer was never recorded (2026-11-14, Exchange Online). The
+ * three lines are rewritten in place, to the same length - the ComposeMail around the message has
+ * already said how long it is - as `Content-Type: text/calendar; method=REPLY; charset=UTF-8`
+ * and the encoding line (inline is the default). Only where the part's body decodes to a
+ * vCalendar with METHOD:REPLY, and only where the whole of it is in the piece given; anything else
+ * is left as it is. Returns whether it rewrote.
+ */
+static int cm_fix_reply(char *b, size_t n)
+{
+	static const char *const olds[2] = {
+		"Content-Type: text/calendar\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: inline\r\n\r\n",
+		"Content-Type: text/calendar\nContent-Transfer-Encoding: base64\nContent-Disposition: inline\n\n" };
+	static const char *const news[2] = {
+		"Content-Type: text/calendar; method=REPLY; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n",
+		"Content-Type: text/calendar;method=REPLY; charset=UTF-8\nContent-Transfer-Encoding: base64\n\n" };
+	static const char b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	int done = 0;
+	for (int v = 0; v < 2; v++) {
+		size_t ol = strlen(olds[v]);
+		if (strlen(news[v]) != ol) continue;          /* can't happen: the two are the same length */
+		for (size_t i = 0; i + ol <= n; i++) {
+			if (memcmp(b + i, olds[v], ol) != 0) continue;
+			/* The body: its first 80 base64 characters, decoded. */
+			char dec[64]; size_t dl = 0; unsigned acc = 0; int bits = 0;
+			for (size_t k = i + ol; k < n && k < i + ol + 120 && dl < sizeof dec - 1; k++) {
+				const char *q = b[k] ? strchr(b64, b[k]) : NULL;
+				if (!q) { if (b[k] == '\r' || b[k] == '\n') continue; break; }
+				acc = acc << 6 | (unsigned)(q - b64); bits += 6;
+				if (bits >= 8) { bits -= 8; dec[dl++] = (char)(acc >> bits); }
+			}
+			dec[dl] = 0;
+			if (strncmp(dec, "BEGIN:VCALENDAR", 15) != 0 || !strstr(dec, "METHOD:REPLY")) continue;
+			memcpy(b + i, news[v], ol);
+			done = 1;
+		}
+	}
+	return done;
+}
+
 #endif

@@ -331,7 +331,15 @@ organizer's Outlook couldn't match it and showed the reply as text: at 16.x a Me
 names its meeting with Calendar's UID, not Email's GlobalObjId, the only one Palm reads (its
 binary even says "UID EMTPY!!!!!"). The reply filter (`libpreload/wbxmlfilter.h`) now writes a
 MeetingRequest's UID as the GlobalObjId it stands for; a second invitation then arrived with one,
-and its reply carried the meeting's UID (`040000008200E000...`). Not yet seen: Maybe and Decline, a recurring series,
+and its reply carried the meeting's UID (`040000008200E000...`). The organizer still saw text: Palm's reply is
+`multipart/alternative` with one part, `Content-Type: text/calendar` with no `method`
+parameter (RFC 6047 requires it; Outlook goes by it). The send adapter (`composemail.h`,
+`cm_fix_reply`) rewrites that part's three header lines in place, at the same length - the
+ComposeMail has already said how long the message is - as `text/calendar; method=REPLY;
+charset=UTF-8` and the encoding line, only where the part decodes to a vCalendar with
+METHOD:REPLY. Test Meeting 3's reply then showed on the organizer's side as an acceptance, and
+the attendee as accepted (codepoet, 2026-11-14). Still not seen: Maybe, Decline, a series. The
+reply's DTSTART/DTEND are UTC without `Z`; Outlook matched by UID regardless. Not yet seen: Maybe and Decline, a recurring series,
 the legacy Exchange type.
 
 ## Before it ships

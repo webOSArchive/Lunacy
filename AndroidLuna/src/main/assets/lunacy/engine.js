@@ -1,7 +1,8 @@
 // Lunacy's compat layer, part 2 of 4 (see input.js): what the TouchPad's 2011 engine did that
 // Chromium doesn't - border images without a border style, uncaught errors kept off the page,
 // callable collections, no service workers, the old animation-frame name, webosEvent, and
-// -webkit-box's static positions and edge margins, and window.caretRect. ES5 only.
+// -webkit-box's static positions and edge margins, window.caretRect, and getElementsByTagName
+// by local name in XML documents. ES5 only.
 // A border-image is painted only where a border is. The reference TouchPad's WebKit (534.6)
 // drew the nine-piece image from paintBorder(), which it called only when
 // RenderStyle::hasBorder() held - a border width above zero on some side. Chromium paints a
@@ -442,4 +443,33 @@
 			return none();
 		}
 	};
+})();
+
+// getElementsByTagName in an XML document: the TouchPad's WebKit matched a name without a
+// prefix against each element's local name, in any namespace, and Chromium matches the
+// qualified name. Measured with Workbench/probe's xmlprobe (2026-11-15) on a WebDAV reply
+// (<d:multistatus xmlns:d="DAV:">): "response" found 2 on the TouchPad and 0 here, "id"
+// found <oc:id>, and "d:response" found nothing there. WebDAV Client asks for "response",
+// "href" and "getlastmodified", and listed an empty folder. So in an XML document a name
+// without a prefix is getElementsByTagNameNS("*", name), which is what the old engine did; a
+// prefixed name keeps Chromium's match (the TouchPad found nothing for one, so no app of its
+// relied on that), and an HTML document is untouched, as it was the same on both.
+(function () {
+	var HTMLDoc = window.HTMLDocument;
+	if (!HTMLDoc) { return; }
+	function inXml(node) {
+		var d = node.nodeType === 9 ? node : node.ownerDocument;
+		return !!d && !(d instanceof HTMLDoc);
+	}
+	function patch(proto) {
+		if (!proto || !proto.getElementsByTagName || !proto.getElementsByTagNameNS) { return; }
+		var byName = proto.getElementsByTagName;
+		proto.getElementsByTagName = function (name) {
+			var n = String(name);
+			if (n !== "*" && n.indexOf(":") < 0 && inXml(this)) { return this.getElementsByTagNameNS("*", n); }
+			return byName.apply(this, arguments);
+		};
+	}
+	patch(window.Document && Document.prototype);
+	patch(window.Element && Element.prototype);
 })();

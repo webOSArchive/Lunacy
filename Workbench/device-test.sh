@@ -137,6 +137,14 @@ setTimeout(function(){res(JSON.stringify(o))},8000)})')
   echo "$r" | grep -q '"fnd": *true' && P "2 bus  filenotifyd's state answers Video Player's watch" || F "2 bus  filenotifyd state -- $r"
 fi
 
+# The compat layer's engine fixes, in a page (debug builds): getElementsByTagName by local name
+# in an XML document, as the TouchPad's WebKit (Workbench/probe/org.webosarchive.lunacy.xmlprobe;
+# WebDAV Client listed nothing without it, 2026-11-15).
+if [ -n "$DEBUG" ]; then
+  r=$(js /com.palm.app.email/index.html '(function(){var d=new DOMParser().parseFromString("<d:multistatus xmlns:d=\"DAV:\"><d:response><d:href>/a</d:href></d:response></d:multistatus>","application/xml");return d.getElementsByTagName("response").length+" "+d.getElementsByTagName("d:response")[0].getElementsByTagName("href").length+" "+document.createElement("div").getElementsByTagName("span").length})()')
+  echo "$r" | grep -q '1 1 0' && P "2 page  XML getElementsByTagName matches local names (WebDAV replies)" || F "2 page  XML getElementsByTagName -- $r"
+fi
+
 # ---------------------------------------------------------------- 3. mail accounts (ids and codes only)
 # An account in error shows a warning in Email; an account the person removed may leave its
 # mail record behind until the delete finishes, which is no fault of this build. Asked from

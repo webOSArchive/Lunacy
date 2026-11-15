@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html><head><title>XML Probe</title>
+<script type="text/javascript">
+// How getElementsByTagName and friends match in an XML document with namespace prefixes, as a
+// WebDAV reply has them (<d:response> in DAV:). The TouchPad's WebKit and Lunacy's WebView
+// differ here (WebDAV Client, 2026-11-15). Read with palm-log, or the page itself.
+var out = [];
+function say(s) { out.push(s); try { console.error("XMLPROBE " + s); } catch (e) {} }
+var XML = '<?xml version="1.0"?><d:multistatus xmlns:d="DAV:" xmlns:s="http://sabredav.org/ns" xmlns:oc="http://owncloud.org/ns">' +
+	'<d:response><d:href>/a/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat></d:response>' +
+	'<d:response><d:href>/a/b.txt</d:href><d:propstat><d:prop><d:getcontentlength>3</d:getcontentlength><oc:id>1</oc:id></d:prop></d:propstat></d:response>' +
+	'</d:multistatus>';
+var PLAIN = '<?xml version="1.0"?><multistatus xmlns="DAV:"><response><href>/x</href></response></multistatus>';
+function n(list) { return list ? list.length : "null"; }
+function run(label, doc) {
+	var r = doc.documentElement;
+	say(label + " doc.gEBTN('response')=" + n(doc.getElementsByTagName("response")) +
+		" ('d:response')=" + n(doc.getElementsByTagName("d:response")) +
+		" ('D:response')=" + n(doc.getElementsByTagName("D:response")) +
+		" ('multistatus')=" + n(doc.getElementsByTagName("multistatus")) +
+		" ('id')=" + n(doc.getElementsByTagName("id")) +
+		" ('*')=" + n(doc.getElementsByTagName("*")) +
+		" NS(DAV:,response)=" + (doc.getElementsByTagNameNS ? n(doc.getElementsByTagNameNS("DAV:", "response")) : "none"));
+	var first = doc.getElementsByTagName("d:response")[0];
+	if (first) {
+		say(label + " el.gEBTN('href')=" + n(first.getElementsByTagName("href")) + " ('d:href')=" + n(first.getElementsByTagName("d:href")) +
+			" ('collection')=" + n(first.getElementsByTagName("collection")) + " tagName=" + first.tagName + " nodeName=" + first.nodeName +
+			" localName=" + first.localName + " prefix=" + first.prefix);
+	}
+	say(label + " root.getAttribute('xmlns:s')=" + r.getAttribute("xmlns:s") + " root.getAttribute('xmlns:d')=" + r.getAttribute("xmlns:d") +
+		" querySelectorAll('response')=" + (r.querySelectorAll ? n(doc.querySelectorAll("response")) : "none"));
+}
+window.onload = function () {
+	say("ua " + navigator.userAgent);
+	var p = new DOMParser();
+	run("dom-appxml", p.parseFromString(XML, "application/xml"));
+	run("dom-textxml", p.parseFromString(XML, "text/xml"));
+	var plain = p.parseFromString(PLAIN, "application/xml");
+	say("plain gEBTN('response')=" + n(plain.getElementsByTagName("response")) + " ('href')=" + n(plain.getElementsByTagName("href")));
+	// A responseXML too, from a data: URL where XHR allows it.
+	try {
+		var x = new XMLHttpRequest();
+		x.open("GET", "data:application/xml," + encodeURIComponent(XML), false);
+		x.send(null);
+		if (x.responseXML) { run("xhr", x.responseXML); } else { say("xhr no responseXML"); }
+	} catch (e) { say("xhr threw " + e); }
+	// An HTML document is not affected either way: the same names in it.
+	var h = document.createElement("div"); h.innerHTML = "<span></span>";
+	say("html gEBTN('span')=" + n(h.getElementsByTagName("span")));
+	document.getElementById("out").appendChild(document.createTextNode(out.join("\n")));
+};
+</script></head>
+<body style="background:#fff"><pre id="out" style="font:14px monospace;white-space:pre-wrap"></pre></body></html>

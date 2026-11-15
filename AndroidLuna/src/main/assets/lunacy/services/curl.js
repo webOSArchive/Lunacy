@@ -32,7 +32,8 @@ function die(code, text) {
 // Options that take a value, by long name, with their short forms.
 const TAKES = { "max-time": "m", "connect-timeout": null, header: "H", request: "X", data: "d", "data-binary": null,
 	"data-raw": null, "data-ascii": null, "dump-header": "D", output: "o", "write-out": "w", "user-agent": "A",
-	config: "K", referer: "e", user: "u", "max-redirs": null, retry: null, "retry-delay": null, "retry-max-time": null };
+	config: "K", referer: "e", user: "u", "max-redirs": null, retry: null, "retry-delay": null, "retry-max-time": null,
+	noproxy: null };
 const SHORT = { m: "max-time", H: "header", X: "request", d: "data", D: "dump-header", o: "output", w: "write-out",
 	A: "user-agent", K: "config", e: "referer", u: "user", s: "silent", S: "show-error", L: "location",
 	f: "fail", I: "head", k: "insecure", v: "verbose", i: "include", O: "remote-name", G: "get" };
@@ -51,6 +52,9 @@ function apply(name, value) {
 		case "verbose": case "no-buffer": case "globoff": case "http1.1": case "no-keepalive":
 		case "tr-encoding": case "no-progress-meter": case "progress-bar": case "retry": case "retry-delay":
 		case "retry-max-time": break;
+		// The hosts to reach without a proxy: this curl never uses one, so every host already is
+		// (WebDAV Client sends --noproxy "*" when its proxy setting is off, 2026-11-15).
+		case "noproxy": break;
 		case "max-time": opt.maxTime = parseFloat(value) * 1000; break;
 		case "connect-timeout": opt.connectTimeout = parseFloat(value) * 1000; break;
 		case "max-redirs": opt.maxRedirs = parseInt(value, 10); break;
@@ -143,7 +147,17 @@ function fetchOnce(job, url, method, body, redirects, start, finish) {
 	setHeader("Accept", "*/*");
 	if (opt.compressed) { setHeader("Accept-Encoding", "deflate, gzip"); }
 	if (opt.referer) { setHeader("Referer", opt.referer); }
-	if (opt.user) { setHeader("Authorization", "Basic " + Buffer.from(opt.user).toString("base64")); }
+	// A URL's own user:password is taken percent-decoded, as curl takes it, and sent as Basic
+	// auth; --user wins over it. Node 12 (Lunacy's) would send it still encoded, so a password
+	// with an @ or ! in it failed (WebDAV Client's listing, 2026-11-15): it is taken out here.
+	let fromUrl = null;
+	if (u.username || u.password) {
+		try { fromUrl = decodeURIComponent(u.username) + ":" + decodeURIComponent(u.password); }
+		catch (e) { fromUrl = u.username + ":" + u.password; }
+		u.username = ""; u.password = "";
+	}
+	const user = opt.user || fromUrl;
+	if (user) { setHeader("Authorization", "Basic " + Buffer.from(user).toString("base64")); }
 	if (body !== null) { setHeader("Content-Type", "application/x-www-form-urlencoded"); }
 	for (const h of opt.headers) {
 		const i = h.indexOf(":");

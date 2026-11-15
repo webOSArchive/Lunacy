@@ -84,6 +84,33 @@ if command -v node >/dev/null; then
   done
 else S "app   no node"; fi
 
+# ---- Lunacy's curl (services shell out to /usr/bin/curl, which is curl.js in Node): the
+# options apps send, each seen against a local server. A missing one fails the whole command
+# ("option --noproxy: is unknown": WebDAV Client listed nothing, 2026-11-15).
+if command -v node >/dev/null; then
+  r=$(node - "AndroidLuna/src/main/assets/lunacy/services/curl.js" <<'NODE'
+const http = require("http"), { execFile } = require("child_process");
+const seen = [];
+const srv = http.createServer((q, s) => { let b = ""; q.on("data", d => b += d); q.on("end", () => {
+  const a = q.headers.authorization ? Buffer.from(q.headers.authorization.replace(/^Basic /, ""), "base64").toString() : "none";
+  seen.push(q.method + " " + (q.headers.depth || "") + " " + a + " " + b.length);
+  s.writeHead(207, { "Content-Type": "application/xml" }); s.end("<multistatus/>"); }); });
+srv.listen(0, "127.0.0.1", () => {
+  const url = "http://127.0.0.1:" + srv.address().port + "/remote.php/webdav/";
+  // WebDAV Client 0.7.1's directory listing, as its service builds it, through a shell.
+  // Its listing puts the credentials in the URL, encodeURIComponent'd; its uploads use -u.
+  const creds = encodeURIComponent("us@r") + ":" + encodeURIComponent("@Pa!ss") + "@";
+  const list = 'node "' + process.argv[2] + '" -k -s -S -f --noproxy "*" -X PROPFIND -H "Depth: 1" -H "Content-Type: application/xml" -d \'<propfind/>\' -w "%{http_code}" "' + url.replace("//", "//" + creds) + '"';
+  const withU = 'node "' + process.argv[2] + '" -k -s -f -X PROPFIND -H "Depth: 1" -d \'<propfind/>\' -u "user:pass" -w "%{http_code}" "' + url + '"';
+  execFile("/bin/sh", ["-c", list], (e, out, err) => execFile("/bin/sh", ["-c", withU], (e2, out2) => {
+    console.log(JSON.stringify({ code: (e ? e.code : 0) + (e2 ? e2.code : 0), out: out + out2, err: err, seen: seen })); srv.close(); }));
+});
+NODE
+)
+  echo "$r" | python3 -c 'import json,sys; r=json.load(sys.stdin); ok=r["code"]==0 and r["out"]=="<multistatus/>207"*2 and r["seen"]==["PROPFIND 1 us@r:@Pa!ss 11","PROPFIND 1 user:pass 11"]; sys.exit(0 if ok else 1)' \
+    && P "curl  curl.js takes WebDAV Client's PROPFIND (--noproxy, credentials in the URL and -u, -d, -w)" || F "curl  WebDAV Client's PROPFIND -- $r"
+else S "curl  no node on this machine"; fi
+
 # ---- the JVM tests (Robolectric: db8 on a real SQLite, the transforms, the page hooks, ...).
 if [ -z "$QUICK" ]; then
   rm -rf AndroidLuna/build/test-results/testArm64DebugUnitTest

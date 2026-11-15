@@ -124,13 +124,17 @@ setTimeout(function(){res(JSON.stringify(o))},8000)})')
   echo "$r" | grep -q '"nosvc": *true' && P "2 bus  an unknown service answers an error (rule 2)" || F "2 bus  unknown service -- $r"
 else S "2 bus  no SDK relay for $MODEL and a release build: start the redux novacomd"; fi
 # A com.palm app reaches them: Night Moves' night and morning schedules, Video Player (2026-11-15).
+# Sent, then read back a few seconds later: Chromium 37's DevTools (Android 5) hands back a
+# Promise unresolved, as "{}" (the Nexus 7, 2026-11-15).
 if [ -n "$DEBUG" ]; then
-  r=$(js /com.palm.app.email/index.html 'new Promise(function(res){var n=0,o={};function c(u,k,f){var b=new PalmServiceBridge();b.onservicecallback=function(t){try{o[k]=f(JSON.parse(t))}catch(e){o[k]="bad reply"}if(++n==4)res(JSON.stringify(o))};b.call(u,u.indexOf("filenotifyd")>0?"{\"subscribe\":true}":"{}");(window.__dtw=window.__dtw||[]).push(b)}
-c("palm://com.palm.wifi/getstatus","wifi",function(r){return r.returnValue===true&&/^(serviceDisabled|serviceEnabled|connectionStateChanged)$/.test(r.status)});
-c("palm://com.palm.audio/ringtone/status","ring",function(r){return r.scenario==="ringtone_default"&&r.volume>=0});
-c("palm://com.palm.btmonitor/monitor/getradiostate","bt",function(r){return r.returnValue===true&&/^(on|off|turningon|turningoff)$/.test(r.radio)});
-c("palm://com.palm.filenotifyd/state","fnd",function(r){return r.state==="idle"&&r.mounted["/media/internal"]===true});
-setTimeout(function(){res(JSON.stringify(o))},8000)})')
+  js /com.palm.app.email/index.html '(function(){var o=window.__dtw={};window.__dtwb=[];function c(u,p,k,f){var b=new PalmServiceBridge();window.__dtwb.push(b);b.onservicecallback=function(t){try{o[k]=f(JSON.parse(t))}catch(e){o[k]="bad reply"}};b.call(u,p)}
+c("palm://com.palm.wifi/getstatus","{}","wifi",function(r){return r.returnValue===true&&/^(serviceDisabled|serviceEnabled|connectionStateChanged)$/.test(r.status)});
+c("palm://com.palm.audio/ringtone/status","{}","ring",function(r){return r.scenario==="ringtone_default"&&r.volume>=0});
+c("palm://com.palm.btmonitor/monitor/getradiostate","{}","bt",function(r){return r.returnValue===true&&/^(on|off|turningon|turningoff)$/.test(r.radio)});
+c("palm://com.palm.filenotifyd/state","{\"subscribe\":true}","fnd",function(r){return r.state==="idle"&&r.mounted["/media/internal"]===true});
+return "sent"})()' >/dev/null
+  sleep 5
+  r=$(js /com.palm.app.email/index.html 'JSON.stringify(window.__dtw||{})')
   echo "$r" | grep -q '"wifi": *true' && P "2 bus  com.palm.wifi answers a com.palm app" || F "2 bus  com.palm.wifi -- $r"
   echo "$r" | grep -q '"ring": *true' && P "2 bus  the ringtone volume answers a com.palm app" || F "2 bus  ringtone/status -- $r"
   echo "$r" | grep -q '"bt": *true' && P "2 bus  com.palm.btmonitor answers a com.palm app" || F "2 bus  btmonitor -- $r"
@@ -139,9 +143,10 @@ fi
 
 # The compat layer's engine fixes, in a page (debug builds): getElementsByTagName by local name
 # in an XML document, as the TouchPad's WebKit (Workbench/probe/org.webosarchive.lunacy.xmlprobe;
-# WebDAV Client listed nothing without it, 2026-11-15).
+# WebDAV Client listed nothing without it, 2026-11-15). The element is found by namespace: a
+# prefixed name finds nothing on Chromium 37, as on the TouchPad.
 if [ -n "$DEBUG" ]; then
-  r=$(js /com.palm.app.email/index.html '(function(){var d=new DOMParser().parseFromString("<d:multistatus xmlns:d=\"DAV:\"><d:response><d:href>/a</d:href></d:response></d:multistatus>","application/xml");return d.getElementsByTagName("response").length+" "+d.getElementsByTagName("d:response")[0].getElementsByTagName("href").length+" "+document.createElement("div").getElementsByTagName("span").length})()')
+  r=$(js /com.palm.app.email/index.html '(function(){var d=new DOMParser().parseFromString("<d:multistatus xmlns:d=\"DAV:\"><d:response><d:href>/a</d:href></d:response></d:multistatus>","application/xml");return d.getElementsByTagName("response").length+" "+d.getElementsByTagNameNS("DAV:","response")[0].getElementsByTagName("href").length+" "+document.createElement("div").getElementsByTagName("span").length})()')
   echo "$r" | grep -q '1 1 0' && P "2 page  XML getElementsByTagName matches local names (WebDAV replies)" || F "2 page  XML getElementsByTagName -- $r"
 fi
 
@@ -150,11 +155,14 @@ fi
 # mail record behind until the delete finishes, which is no fault of this build. Asked from
 # Email's own page, which has the rights.
 if [ -n "$DEBUG" ]; then
-  r=$(js /com.palm.app.email/index.html 'new Promise(function(res){var b=new PalmServiceBridge(),m;b.onservicecallback=function(t){var r=JSON.parse(t);if(!m){m=r.results||[];b.call("palm://com.palm.db/find",JSON.stringify({query:{from:"com.palm.account:1"}}));return}var live={};(r.results||[]).forEach(function(a){if(!a._del&&!a.beingDeleted)live[a._id]=a.templateId});res(JSON.stringify(m.map(function(x){return [x.accountId,x._kind.replace(/^com.palm.|.account:1$/g,""),x.error&&x.error.errorCode||0,live[x.accountId]||""]})))};b.call("palm://com.palm.db/find",JSON.stringify({query:{from:"com.palm.mail.account:1"}}));window.__dt2=b;setTimeout(function(){res("timeout")},8000)})')
+  # Sent, then read back: Chromium 37's DevTools hands back a Promise unresolved (see section 2).
+  js /com.palm.app.email/index.html '(function(){window.__dtm=null;var b=new PalmServiceBridge(),m;window.__dt2=b;b.onservicecallback=function(t){var r=JSON.parse(t);if(!m){m=r.results||[];b.call("palm://com.palm.db/find",JSON.stringify({query:{from:"com.palm.account:1"}}));return}var live={};(r.results||[]).forEach(function(a){if(!a._del&&!a.beingDeleted)live[a._id]=a.templateId});window.__dtm=JSON.stringify(m.map(function(x){return [x.accountId,x._kind.replace(/^com.palm.|.account:1$/g,""),x.error&&x.error.errorCode||0,live[x.accountId]||""]}))};b.call("palm://com.palm.db/find",JSON.stringify({query:{from:"com.palm.mail.account:1"}}));return "sent"})()' >/dev/null
+  for i in 1 2 3 4 5 6 7 8; do sleep 1; r=$(js /com.palm.app.email/index.html 'window.__dtm||"waiting"'); [ "$r" != waiting ] && break; done
   while IFS=$'\t' read -r k rest; do case $k in P) P "$rest";; F) F "$rest";; I) I "$rest";; esac; done < <(echo "$r" | python3 -c '
 import json,sys
 try: rows=json.loads(sys.stdin.read())
 except Exception: print("F\t3 mail  accounts unreadable"); sys.exit()
+if not isinstance(rows,list): print("F\t3 mail  accounts unreadable: %s" % json.dumps(rows)[:60]); sys.exit()
 if not rows: print("I\t3 mail  no mail accounts")
 for acct,kind,err,tpl in rows:
     if not tpl: print("I\t3 mail  %s (%s): left by a removed account%s" % (acct,kind," (error %s)"%err if err else ""))

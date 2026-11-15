@@ -117,13 +117,21 @@ Palm's Jasmine spec for Contacts is listed as skipped: it needs a browser harnes
       `com.palm.wifi`, `com.palm.btmonitor`, the ringtone class) and answer a `com.palm` page
       (those, and `com.palm.filenotifyd/state`). *Seen failing:* luna-send without `-P` (the
       relay's private bus) answered all three; that was the check's mistake, fixed to `-P`.
+      The in-page half first waited on a Promise, which Chromium 37's DevTools hands back
+      unresolved, as `{}`: all four failed on the Nexus 7 though the services answered there
+      (1.0 round, 2026-11-15). In-page checks now send, then read back a few seconds later.
 - [ ] In an XML document `getElementsByTagName` finds elements by local name, as the
-      TouchPad's WebKit did (a WebDAV reply's `<d:response>` for `"response"`).
+      TouchPad's WebKit did (a WebDAV reply's `<d:response>` for `"response"`). The check
+      finds the element itself by namespace: a prefixed name finds nothing on Chromium 37,
+      as on the TouchPad, and the first version of the check threw there.
 
 ## 3. Mail accounts — *automated, debug build*
 
 - [ ] No mail account has an error. An account the person removed may leave its record behind
       until the delete finishes; that is INFO, not a failure.
+      *Wrong signal, found 2026-11-15:* the check waited on a Promise, so on Android 5
+      (Chromium 37's DevTools) it read `{}` and reported "no mail accounts" whatever there was.
+      It now sends, then reads back, and anything but a list is a failure.
 
 ## 4. Every bundled app opens a card — *automated*
 

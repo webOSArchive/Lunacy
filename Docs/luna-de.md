@@ -14,7 +14,9 @@ Status: **first light** (2026-11-15). Branch `luna-de`. Reviewed, and being buil
   `ServerHooks`; Android keeps its call sites through extensions (`serve(Uri)`,
   `androidComponent`, `DeviceProfile.nduid(context)`). db8 and WebSQL haven't moved.
 - **Milestone 3, first light.** `DesktopLuna/host` and `DesktopLuna/app` (Electron 44.9.3) on
-  Linux: a launcher of the installed apps, and each app in a 1024 x 768 window. Calculator and
+  Linux: a launcher of the installed apps, and each app in a 1024 x 768 window. codepoet then
+  asked for one window running the shell, with apps as cards in it, keeping the separate
+  window as a pop-out (milestone 3b, being built). Calculator and
   the Enyo 1 Sampler run; bus calls go round with real errors (no services on the desktop yet).
   How it's wired: [DesktopLuna/README.md](../DesktopLuna/README.md).
 - **Next:** the services an Enyo app asks for first (systemservice's preferences and time,
@@ -49,7 +51,6 @@ Status: **first light** (2026-11-15). Branch `luna-de`. Reviewed, and being buil
   notifications, Wi-Fi and Bluetooth, hand-offs to Android apps. On the desktop those
   services answer with real errors (rule 2), never a stubbed success.
 - PDK, for now (see goal 2).
-- The full card view and launcher at first: an app runs in a window (see "Rule 0").
 
 ## Where the code lives
 
@@ -172,8 +173,24 @@ Not every move is a pure one, and the plan doesn't pretend otherwise:
 
 - **Electron main process:** starts the JVM running LunaCore, keeps it alive, opens windows.
   The JRE is bundled with `jlink`, so developers install nothing else.
-- **A card is a `BrowserWindow`.** Apps keep their real origins
-  (`https://<id>.media.cryptofs.apps/...`, `AppServer.appUrl`). Electron's session protocol
+- **One window is the device** (codepoet, 2026-11-15: "a single Electron window, running Luna
+  CE and apps opening within that window"). The window is a TouchPad's screen, and the shell
+  runs in it: the status bar, the launcher and the card view, drawn in HTML from the same LunaCE
+  images AndroidLuna draws with. Each app's window is a card in that page (an Electron
+  `<webview>`, which the card view scales and slides as webOS's did). Apps keep their real origins
+  (`https://<id>.media.cryptofs.apps/...`, `AppServer.appUrl`).
+- **Pop out, a developer's tool.** Any card can be peeled off into a window of its own (a
+  `BrowserWindow` on the same page interface; first light's way of running an app), to sit
+  beside the device with its own DevTools. Same-window is the default (codepoet, 2026-11-15:
+  "don't throw the baby out with the bath water").
+- **The shell's logic is shared; only its drawing is the platform's.** AndroidLuna's shell
+  is Kotlin and Android Views (ShellChrome, CardHost, CardLayer, Launcher, NotificationHost),
+  so a desktop shell is the one piece that has to be drawn twice. To keep that second drawing
+  thin, what the shell *decides* moves into LunaCore: which apps run with which windows, a
+  launch or a relaunch, a window opened or closed, an app ending with its last window
+  (AppLifecycle), the cards' order and placement (CardHost's decisions), the launcher's pages
+  and launch points (LauncherStore), the dashboards and banners (the notification model).
+  Android keeps its Views over that model, and the desktop draws the same model in HTML. Electron's session protocol
   handler routes every request on those origins to LunaCore's AppServer, so the transforms and
   caller identity work as on Android.
 - **The `window.LunacyNative` contract** (`AppWindow.kt`'s `Native`) gets an Electron
@@ -245,9 +262,11 @@ What that means in practice:
 - **What an app draws stays rule 0.** The card's contents come from the same frameworks,
   compat layer and transforms as on Android, so an app looks as it does on a TouchPad.
   That fidelity is what makes it a useful test bench; the shared code gives it for free.
-- **Luna DE's own interface is its own:** the window chrome, rotation, the menus,
-  any launcher, the absence of a card view, First Use (skipped, or replaced by a developer's
-  setup).
+- **The shell follows the TouchPad, with exemptions as needed.** It is drawn with Lunacy's
+  LunaCE images and follows AndroidLuna's shell; where the desktop needs it to differ (a
+  developer's tools, the pop-out, mouse instead of touch, no First Use), it may.
+- **Luna DE's own interface is its own:** the window chrome, rotation, the menus, the
+  developer's tools, First Use (skipped, or replaced by a developer's setup).
 - **Engine differences:** Electron's Chromium is much newer than Chromium 37. Lunacy already
   runs on current WebViews (Android 17 on the Pixel Tablet), so this is not new ground.
   Anything that renders differently is recorded in `Docs/luna-deltas.md`, as now.
@@ -269,7 +288,13 @@ round noticing (no contacts linker until a restart, 2026-11-15).
 2. **Move the bus,** then **db8** (SQL behind `Sql`), then **AppServer and the transforms**,
    one per commit series, each followed by the full test round.
 3. **First light:** a minimal DesktopLuna serves one bundled Enyo app (Calculator, then Clock)
-   into an Electron window, with the `LunacyNative` contract over IPC, on Linux.
+   into an Electron window, with the `LunacyNative` contract over IPC, on Linux. *(Done
+   2026-11-15, as a launcher window and a window per app; that path stays as the pop-out.)*
+3b. **The single-window shell.** One window as a TouchPad screen: the status bar, the launcher,
+   apps as cards, the card view (switch, close by flicking up), pop-out to a window. Its first
+   drawing keeps its own list of cards in the page; the shell-logic moves (AppLifecycle,
+   CardHost's decisions, LauncherStore, the notification model) then replace that list with
+   LunaCore's, one at a time, each with the full round on Android.
 4. **Lifecycle and services:** ActivityManager, SystemService and the JS service host move.
    Bundled Enyo CoreApps run, and an app can launch another.
 5. **The SDK's tools:** Packages and Novacom move; the novacomd `local` transport lands in
@@ -315,8 +340,8 @@ onto `luna-de`, and nothing goes back until the refactoring is done and proven (
 2. The webOS root's shell: how package scripts are kept inside the root on each host, and on
    Windows a bundled busybox-w32 or a mapped minimal shell?
 3. Does Luna DE share a version number with Lunacy, or have its own?
-4. Is a launcher wanted, or is "one window per launched app, driven by `palm-launch` and a
-   menu of installed apps" enough at first?
+4. *(Settled 2026-11-15: one window running the shell, with the launcher and card view; a card
+   can pop out into a window of its own.)*
 5. Is the single bundled JVM acceptable, or should LunaCore aim at Kotlin Multiplatform
    (compiling the core to JavaScript or native) to drop the JRE later? The recommendation is the
    JVM: it's the smaller change and keeps the core byte-for-byte the code Android runs.

@@ -777,11 +777,37 @@ class ShellActivity : Activity(), WindowHost {
             launch(LunacyService.FIRST_USE_APP, JSONObject().put("only", "location"))
         }
         val prefs = java.io.File(webos.root, "var/luna/preferences")
-        runCatching { prefs.mkdirs(); java.io.File(prefs, "ran-first-use").createNewFile() }
-        if (java.io.File(prefs, "first-use-profile-created").exists()) return
+        val ranFirstUse = java.io.File(prefs, "ran-first-use")
+        val profileMade = java.io.File(prefs, "first-use-profile-created")
+        // The configurator holds back every activity file not marked firstUseSafe until both
+        // flags exist (Configurator.activities): the contacts linker's watch, db8's purge,
+        // apps' own. A device rebooted here and its configurator sent them at that boot;
+        // Lunacy sends them now, once the flags are down. Before 2026-11-15 nothing did until
+        // Lunacy next started, so a fresh install's Android contacts reached db8 and never
+        // the Contacts list (no linker), on the Kyocera.
+        val configureAfter = !ranFirstUse.exists() || !profileMade.exists()
+        runCatching { prefs.mkdirs(); ranFirstUse.createNewFile() }
+        if (profileMade.exists()) {
+            if (configureAfter) configurator.run()
+            return
+        }
         bus.call("", "palm://com.palm.accountservices/createNovaAccount", "{\"createDefaultAccount\":true}", privateBus = true) { r ->
             Log.i(AppServer.TAG, "firstuse-createDefaultAccount: $r")
         }
+        // The service answers before the account is made, and writes the flag as it makes it
+        // (1.1 s after the answer on the Kyocera): the configurator waits for the flag itself.
+        configureOnceProfileMade(profileMade, PROFILE_FLAG_WAIT_MS)
+    }
+
+    private fun configureOnceProfileMade(flag: java.io.File, leftMs: Long) {
+        if (isDestroyed) return
+        if (flag.exists()) {
+            Log.i(AppServer.TAG, "first use: profile account made, configuring what waited for it")
+            configurator.run()
+            return
+        }
+        if (leftMs <= 0) { Log.w(AppServer.TAG, "first use: no profile account after ${PROFILE_FLAG_WAIT_MS / 1000} s; the rest is configured at the next start"); return }
+        shellHandler.postDelayed({ configureOnceProfileMade(flag, leftMs - PROFILE_FLAG_STEP_MS) }, PROFILE_FLAG_STEP_MS)
     }
 
     /** The installed apps changed (an install, a removal, a script's rescan): the launcher hears it. */
@@ -1414,6 +1440,9 @@ class ShellActivity : Activity(), WindowHost {
     }
 
     companion object {
+        /** How long [afterFirstUse] waits for the profile account's flag, and how often it looks. */
+        private const val PROFILE_FLAG_WAIT_MS = 60_000L
+        private const val PROFILE_FLAG_STEP_MS = 500L
 
         /** The shell that is up, if any: a second one hands off to it ([onCreate]). */
         private var live: java.lang.ref.WeakReference<ShellActivity>? = null

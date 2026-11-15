@@ -124,6 +124,7 @@ class ExhibitionController(private val activity: Activity, private val host: Hos
 
     /** The shell is going: the charger is no longer watched. */
     fun stop() {
+        holdAwake(false)
         if (watchingPower) { activity.unregisterReceiver(powerReceiver); watchingPower = false }
     }
 
@@ -152,10 +153,35 @@ class ExhibitionController(private val activity: Activity, private val host: Hos
             watchingPower = true
         }
         Log.i(AppServer.TAG, "exhibition: Android's screen saver; on a charger = $dreamPlugged")
+        holdAwake(true)
         setExhibition(true)
     }
 
+    /**
+     * The screen held on, and the device awake, for as long as the screen saver's Exhibition
+     * runs: a TouchPad on its Touchstone stayed lit until it was lifted off. The window's
+     * keep-screen-on flag does that only for an awake device whose window shows, and a dream
+     * that ends leaves Android about to sleep (the Pixel Tablet went to sleep 15 ms after the
+     * dream handed over, 2026-11-15); this wake lock wakes it and keeps it so, on Android
+     * versions without DreamService.wakeUp too. It goes with Exhibition, which ends when the
+     * charger does ([powerReceiver]).
+     */
+    private var awake: android.os.PowerManager.WakeLock? = null
+
+    @Suppress("DEPRECATION")
+    private fun holdAwake(on: Boolean) {
+        if (on && awake == null) {
+            val pm = activity.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+            awake = pm.newWakeLock(android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "lunacy:exhibition").also { it.setReferenceCounted(false); it.acquire() }
+        } else if (!on) {
+            awake?.let { if (it.isHeld) it.release() }
+            awake = null
+        }
+    }
+
     private fun endDreamExhibition() {
+        holdAwake(false)
         dreamExhibition = false
         dreamPlugged = false
         if (watchingPower) { activity.unregisterReceiver(powerReceiver); watchingPower = false }

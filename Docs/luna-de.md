@@ -1,6 +1,28 @@
 # Luna Desktop Edition (Luna DE): plan
 
-Status: **proposal, for review** (2026-11-15). Branch `luna-de`. Nothing here is built yet.
+Status: **first light** (2026-11-15). Branch `luna-de`. Reviewed, and being built.
+
+## Where it stands (2026-11-15)
+
+- **Milestone 1, done.** `LunaCore`, with the API 21 gate (Animal Sniffer, run before every
+  Android build; it caught a Kotlin bridge to Java 8's `Map.getOrDefault` in AppServer on its
+  first day), AOSP's `org.json`, and `core.Log` and `core.Scheduler`, which `LunacyApplication`
+  sets to logcat and the main Looper in every process.
+- **Milestone 2, in part.** Moved, packages unchanged: `Bus`, `AppServer` and its transforms,
+  `AppInfo`/`AppFiles`/`AppRegistry`, `DeviceProfile`, `LaunchPoint`, `PageHooks`, `JsText`.
+  What they took from Android goes through `core.Assets`, `core.Images`, `core.WebosPaths` and
+  `ServerHooks`; Android keeps its call sites through extensions (`serve(Uri)`,
+  `androidComponent`, `DeviceProfile.nduid(context)`). db8 and WebSQL haven't moved.
+- **Milestone 3, first light.** `DesktopLuna/host` and `DesktopLuna/app` (Electron 44.9.3) on
+  Linux: a launcher of the installed apps, and each app in a 1024 x 768 window. Calculator and
+  the Enyo 1 Sampler run; bus calls go round with real errors (no services on the desktop yet).
+  How it's wired: [DesktopLuna/README.md](../DesktopLuna/README.md).
+- **Next:** the services an Enyo app asks for first (systemservice's preferences and time,
+  applicationManager's launch and open), the network shim and WebSQL (both need their native
+  half: net.js and websql.js stand aside until then), then db8, then milestone 5's tools.
+- **Ratchet items (desktop):** Electron runs with `--no-sandbox` in development (the Linux
+  setuid helper needs root); app windows share the page's world with the preload
+  (`contextIsolation: false`), as Android's WebView binding does.
 
 ## Goals
 

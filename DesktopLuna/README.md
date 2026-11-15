@@ -22,6 +22,10 @@ installed in Luna DE's data folder; click one to open it in a TouchPad-sized win
   works (milestone 5).
 - `LUNADE_OPEN=<app id>`: open that app at start.
 
+The first test app, the Enyo 1 Sampler: `DesktopLuna/install-sampler.sh <data folder>` (it fetches
+webOS Archive's copy and points it at the system's Enyo), then
+`LUNADE_DATA=<data folder> LUNADE_OPEN=com.palmdts.enyo.stylematters npm start`.
+
 `npm start` passes `--no-sandbox`: on this Linux setup Chromium's setuid sandbox helper would
 need root. **Ratchet item** for packaging (Docs/luna-de.md): the packaged app runs with the
 sandbox.

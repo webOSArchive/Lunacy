@@ -32,7 +32,8 @@ Status: **proposal, for review** (2026-11-15). Branch `luna-de`. Nothing here is
 ## Where the code lives
 
 In this repo, beside the existing hosts, so that one commit builds every platform and
-`test.sh` covers them all:
+`test.sh` covers them all (today it runs only AndroidLuna's unit tests; LunaCore's tests and a
+desktop smoke test are added as each arrives):
 
 ```
 Lunacy/
@@ -90,6 +91,31 @@ implementation:
 | `Assets` (bundled files) | `AssetManager` | the packaged resources folder |
 | `Sql` (db8 and WebSQL) | `android.database.sqlite` | SQLite over JDBC (xerial) |
 | `Base64`, device info, locale | Android APIs | `java.util` and the JVM |
+| `Collation` (db8's sorted queries) | `java.text.Collator`, which is ICU there | ICU4J, so both sort alike |
+| `Cookies` (`Http.kt` shares the page's jar) | `android.webkit.CookieManager` | the Electron session's cookies |
+| `Images` (decode and scale: wallpapers) | `Bitmap`/`BitmapFactory` | `javax.imageio` |
+| `Platform` (symlinks, where Node and busybox are) | `Os.symlink`, `nativeLibraryDir` | `java.nio.file`, the package's folder |
+
+The table is what a read of the imports found on 2026-11-15, and it isn't complete: each move
+starts by listing what the class takes from Android, and an interface is added when its first
+user moves, not before. `AppServer` also answers with `WebResourceResponse` and reads
+`android.net.Uri`; the move gives it a plain response type that each host converts.
+
+**The API 21 gate.** AndroidLuna compiles against `android.jar` with `NewApi` lint fatal and no
+desugaring, which is what keeps Android 5 working. A plain JVM module compiles against JDK 17,
+where `java.time`, `java.nio.file`, streams and `InputStream.readAllBytes` all build, and would
+crash only on the old devices. LunaCore's build therefore fails on any API newer than 21:
+Animal Sniffer with the API 21 signature, or the same sources also compiled as an Android
+library under the existing lint. This is part of milestone 1, before any code moves.
+
+**`org.json`.** On Android the platform's `org.json` always wins over a copy in the APK, so
+"one implementation on both" can't mean bundling one. The two differ where db8 depends on it:
+Android's `JSONObject` keeps keys in insertion order (`LinkedHashMap`) and the Maven
+`org.json:json` doesn't (`HashMap`; both checked in the jars, 2026-11-15). db8 stores
+`o.toString()`, compares those strings and matches `"_del":true` in them. So LunaCore compiles
+against AOSP's `org.json` (published on Maven as `com.vaadin.external.google:android-json`),
+compile-only on Android, and the desktop runs that same code. The unit tests, which use
+`org.json:json:20231013` today, change to it too.
 
 What moves into LunaCore, which is the part a webOS web app needs:
 
@@ -107,6 +133,19 @@ What moves into LunaCore, which is the part a webOS web app needs:
 Each class moves as it is. Where a class mixes core logic and Android glue, it is split along
 that line, and the Android half stays in AndroidLuna.
 
+Not every move is a pure one, and the plan doesn't pretend otherwise:
+
+- **db8 and WebSQL are rewrites of their storage calls.** `Db8.kt` calls `SQLiteDatabase`,
+  `ContentValues` and `Handler` directly; `WebSql.kt` leans on `SQLiteCursor`,
+  `SQLiteProgram`, `DatabaseUtils` and Android's exception classes to produce WebSQL's error
+  codes. Putting `Sql` under them changes the path that holds people's mail, contacts and
+  calendars. Two tests come first: one suite run against both `Sql` implementations, and an
+  upgrade test that opens a data directory written by 1.0 with the new build.
+- **The bus's one-thread rule** (`Bus.mainOnly`) asks the `Looper`; it asks `Scheduler`.
+- **`Power`, `DisplayService` and `ActivityRequirements` are mostly Android** (alarms,
+  broadcasts, settings, the battery). What moves is their bus surface and state; the rest
+  stays in AndroidLuna, and the desktop gets its own small implementations or real errors.
+
 ### DesktopLuna (new)
 
 - **Electron main process:** starts the JVM running LunaCore, keeps it alive, opens windows.
@@ -117,9 +156,15 @@ that line, and the Android half stays in AndroidLuna.
   caller identity work as on Android.
 - **The `window.LunacyNative` contract** (`AppWindow.kt`'s `Native`) gets an Electron
   implementation: a preload script exposes the same methods, carried to LunaCore over a local
-  WebSocket or pipe. Several methods are synchronous (`netSendSync`, `sqlOpen`, `deviceInfo`,
-  `screenSize` and others); Electron's `ipcRenderer.sendSync` covers those, through the main
-  process.
+  WebSocket or pipe. The contract is 48 methods and many return a value (`netSendSync`,
+  `netResult`, `sqlOpen`, `sqlResult`, `deviceInfo`, `screenSize`, `processId`, `activityId`,
+  `webViewCreate`, `pluginCall` and others); Electron's `ipcRenderer.sendSync` covers those,
+  through the main process. On Android these run on the bridge's own thread; here each is a
+  renderer → main → JVM round trip with the renderer stopped, and the main process must never
+  wait on a renderer. The cost is measured at first light (milestone 3), before more code
+  moves: if it is too slow, the transport changes while little depends on it.
+- **Only Lunacy's origins are intercepted.** A handler for `https` sees every request in the
+  session, so everything that isn't an app origin passes through to the network untouched.
 - **The window is a TouchPad's screen:** 1024×768 landscape or 768×1024 portrait, switched
   by rotating, and the page renders at that width (rule 3). Other devices (Pre3, Veer, Pre,
   Pixi) come later as a device picker using `DeviceProfile`'s values (codepoet, 2026-11-15:
@@ -128,6 +173,9 @@ that line, and the Android half stays in AndroidLuna.
   over `chrome://inspect` on a tablet.
 - **JS services** run under a Node the same major version as nodejs-mobile's (Node 12), so
   their behaviour matches Android's. Electron's own Node is newer, so it's not a match.
+  Node 12 has been out of support since 2022 and, to be confirmed, has no official builds for
+  Apple Silicon or Windows on ARM, so those machines would run the x64 build under
+  translation or need a Node 12 built for them (open question 6).
 - **Packaging:** electron-builder for Windows (installer and zip), macOS (dmg, signed and
   notarised when there's a key) and Linux (AppImage and tar).
 
@@ -137,10 +185,10 @@ Lunacy on Android serves novacom's device protocol on an abstract socket, and th
 novacomd reaches it through the adb server (webos-sdk-redux `novacomd/src/host/adb_relay.c`).
 On the desktop there is no adb. Two ways:
 
-- **A (recommended):** LunaCore's novacom listens on a fixed localhost TCP port. novacomd gains
-  a small `local` transport, which probes that port the way `adb_relay.c` probes adb and
-  splices each connection through unchanged. Luna DE is then listed in `novacom -l` like any
-  device, `-d lunacy` still picks it, and the protocol stays the same.
+- **A (recommended):** LunaCore's novacom listens locally. novacomd gains a small `local`
+  transport, which probes for it the way `adb_relay.c` probes adb and splices each connection
+  through unchanged. Luna DE is then listed in `novacom -l` like any device, `-d lunacy` still
+  picks it, and the protocol stays the same.
 - **B:** reuse novacomd's existing TCP transport (`novacom-tcp`). It speaks the device
   daemon's framing and nduid handshake, which Lunacy's novacom doesn't implement today, so
   this means more new protocol code in Lunacy.
@@ -149,6 +197,22 @@ On the desktop there is no adb. Two ways:
 busybox on Android. On the desktop, Linux and macOS can use a host busybox or the system shell
 with webOS paths mapped; Windows needs a bundled busybox-w32 or an equivalent. This is an
 open question.
+
+Two things Android gave for free have to be built here:
+
+- **Who may connect.** On Android, novacom serves only a peer running as root or adb's shell
+  user (`Novacom.kt`, by the socket's peer credentials). A fixed localhost TCP port has no
+  such check: any process on the machine could run commands as the developer. So the listener
+  is a per-user Unix socket or named pipe (the JVM and Windows 10 both have them), or a TCP
+  port that demands a token kept in the user's own files. Two running copies of Luna DE must
+  not collide either.
+- **Containment.** On Android a postinst or `novacom run` is held by the app's sandbox. On the
+  desktop a script run by "the system shell with webOS paths mapped" runs as the developer on
+  their real machine, and an absolute path in it is the host's path. Package scripts have to
+  run, and have to be unable to reach outside the webOS root. How (a namespace or chroot
+  where the host has one, a busybox that resolves paths inside the root, or something else)
+  is open question 2, and it is settled before milestone 5 ships anything that installs
+  packages.
 
 ## Rule 0
 
@@ -168,12 +232,18 @@ What that means in practice:
 
 ## Milestones
 
-Each step is a pure move or an addition. After each one, `test.sh` passes and
-`Workbench/device-test.sh` passes on the Fold3, the Pixel Tablet and the Nexus 7, so Lunacy on
-Android can't regress.
+Each step is a move or an addition. After each one, `test.sh` passes and
+`Workbench/device-test.sh` passes on the HP 10 G2 (API 21 and Chromium 37, where a too-new API
+shows), the Nexus 7, the Fold3 and the A7 Lite (mail and EAS, for the db8 and WebSQL moves),
+and on the Pixel Tablet when codepoet opens it, so Lunacy on Android can't regress. And
+`Workbench/fresh-install.sh` passes on the Kyocera: a clean install, First Use, the Android
+account, checked in that same run of Lunacy. The Configurator, First Use's end and the activity
+manager all move into LunaCore, and that first run is exactly where 1.0 broke without any
+round noticing (no contacts linker until a restart, 2026-11-15).
 
-1. **LunaCore module, empty.** The Gradle module, the platform interfaces, and their Android
-   implementations; AndroidLuna depends on it. No behaviour changes.
+1. **LunaCore module, empty.** The Gradle module with its API 21 gate and AOSP's `org.json`,
+   and the first interfaces (`Logger`, `Scheduler`) with their Android implementations;
+   AndroidLuna depends on it. No behaviour changes.
 2. **Move the bus,** then **db8** (SQL behind `Sql`), then **AppServer and the transforms**,
    one per commit series, each followed by the full test round.
 3. **First light:** a minimal DesktopLuna serves one bundled Enyo app (Calculator, then Clock)
@@ -190,12 +260,21 @@ Android can't regress.
 ## Risks
 
 - **Refactoring 1.0's code.** The moves touch the most-tested parts of a stable release. The
-  mitigations: pure moves, small commits, the full device round after each step, and the
-  branch until codepoet merges it.
-- **`org.json` differences.** Android's `org.json` and the Maven artifact differ in small
-  ways (number formatting, `null` handling, `opt*` edge cases). The bus's replies depend on
-  them, so LunaCore's tests pin the Android behaviour, or LunaCore uses one implementation on
-  both.
+  mitigations: small commits, the API 21 gate, the full device round after each step, and the
+  storage tests named under "LunaCore" before db8 and WebSQL move.
+- **The branch.** codepoet, 2026-11-15: `luna-de` lives on its own branch until it is stable.
+  Until then main takes bug fixes only, and each is cherry-picked onto `luna-de`; nothing goes
+  from `luna-de` to main until the refactoring is done and proven. The cost is that the moves
+  are applied to fixes one cherry-pick at a time, and one merge comes at the end: a fix to a
+  file that has moved has to be carried by hand, so each cherry-pick is checked with the same
+  round as a milestone.
+- **`org.json` differences.** Key order, number formatting, `null` handling and `opt*` edge
+  cases differ between Android's and the Maven artifact. Running AOSP's code on both (see
+  "LunaCore") removes the difference instead of pinning it in tests.
+- **Sorting.** db8's collated queries use `java.text.Collator`, which is ICU on Android and
+  the JDK's own rules on the desktop. A test bench that orders results differently from a
+  device misleads, hence ICU4J behind `Collation`.
+- **The bridge's speed.** See "DesktopLuna": measured at first light.
 - **Threading.** Code written against Android's main `Looper` assumes one main thread. The
   desktop `Scheduler` must give the same guarantee, or races will appear only on the desktop.
 - **Windows.** Paths, busybox and the JS services' shell-outs (e.g. `/usr/bin/curl`, which is
@@ -206,11 +285,18 @@ Android can't regress.
 
 ## Open questions
 
+Settled: `luna-de` stays on its branch until stable; main is bug fixes only meanwhile, cherry-picked
+onto `luna-de`, and nothing goes back until the refactoring is done and proven (codepoet,
+2026-11-15; "The branch" under Risks).
+
 1. The novacom transport: A (a novacomd `local` transport) or B (the TCP transport)?
-2. The webOS root's shell on Windows: a bundled busybox-w32, or a mapped minimal shell?
+2. The webOS root's shell: how package scripts are kept inside the root on each host, and on
+   Windows a bundled busybox-w32 or a mapped minimal shell?
 3. Does Luna DE share a version number with Lunacy, or have its own?
 4. Is a launcher wanted, or is "one window per launched app, driven by `palm-launch` and a
    menu of installed apps" enough at first?
 5. Is the single bundled JVM acceptable, or should LunaCore aim at Kotlin Multiplatform
    (compiling the core to JavaScript or native) to drop the JRE later? The recommendation is the
    JVM: it's the smaller change and keeps the core byte-for-byte the code Android runs.
+6. Node on Apple Silicon and Windows on ARM: Node 12 x64 under translation, a Node 12 built
+   for them, or a newer Node there with the difference recorded?

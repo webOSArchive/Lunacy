@@ -23,7 +23,7 @@ class AppServer(
     companion object {
         /** Pages waiting on their fonts that are remembered: more than are ever current. */
         private const val FONT_WAITS = 64
-        const val TAG = "Lunacy"
+        const val TAG = org.webosarchive.lunacy.core.Lunacy.TAG
         /** Apps check location.hostname for this (the TouchPad reports ".media.cryptofs.apps..."). */
         const val HOST_SUFFIX = ".media.cryptofs.apps"
         /** Installed packages' tree, served from AppFiles (installed first, then bundled). */

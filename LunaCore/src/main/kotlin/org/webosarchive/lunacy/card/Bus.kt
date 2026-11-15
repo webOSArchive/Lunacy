@@ -1,6 +1,8 @@
 package org.webosarchive.lunacy.card
 
-import android.util.Log
+import org.webosarchive.lunacy.core.Log
+import org.webosarchive.lunacy.core.Lunacy
+import org.webosarchive.lunacy.core.Platform
 import org.json.JSONObject
 
 /**
@@ -159,11 +161,11 @@ class Bus {
         mainOnly("call $url")
         val (service, method) = serviceAndMethod(url)
         val h = handlers["$service/$method"] ?: services[service]
-        Log.i(AppServer.TAG, "bus [$appId] $service/$method ${if (h == null) "UNHANDLED" else ""} ${if (personal(appId, service, params)) "(${params.length} characters)" else redact(params)}")
+        Log.i(Lunacy.TAG, "bus [$appId] $service/$method ${if (h == null) "UNHANDLED" else ""} ${if (personal(appId, service, params)) "(${params.length} characters)" else redact(params)}")
         val p = try { JSONObject(params.ifEmpty { "{}" }) } catch (e: Exception) { JSONObject() }
         val call = Call(appId, service, method, p, reply, privateBus || privileged(appId), params.ifEmpty { "{}" })
         if (closed) {
-            Log.w(AppServer.TAG, "bus closed: [$appId] $service/$method not sent")
+            Log.w(Lunacy.TAG, "bus closed: [$appId] $service/$method not sent")
             call.cancel()
         } else if (h == null) {
             // webOS names the category the method sits in: a call to
@@ -174,7 +176,7 @@ class Bus {
             // A service that throws answers its caller with an error; it doesn't stop Lunacy
             // (an unchecked SecurityException from Android's AudioManager did, 2026-11-14).
             try { h.handle(call) } catch (e: RuntimeException) {
-                Log.e(AppServer.TAG, "bus: $service/$method threw", e)
+                Log.e(Lunacy.TAG, "bus: $service/$method threw", e)
                 if (!call.cancelled) call.reply(Bus.error("${e.javaClass.simpleName}: ${e.message}"))
             }
         }
@@ -221,10 +223,10 @@ class Bus {
 
         /** The bus's one-thread rule: see the class doc. */
         fun mainOnly(what: String) {
-            if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) return
+            if (Platform.scheduler.isMainThread()) return
             val e = IllegalStateException("bus: $what off the main thread (${Thread.currentThread().name})")
             if (strict) throw e
-            Log.e(AppServer.TAG, e.message, e)
+            Log.e(Lunacy.TAG, e.message, e)
         }
 
         /**

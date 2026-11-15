@@ -9,3 +9,7 @@ rootProject.name = "lunacy"
 // is here so it builds with the same toolchain, not because Lunacy needs it.
 include(":AndroidLuna")
 include(":LunaKeyboard")
+// The platform-neutral core the Android shell and Luna DE (DesktopLuna) share: Docs/luna-de.md.
+include(":LunaCore")
+// Luna DE's JVM host: LunaCore on a desktop, for DesktopLuna's Electron shell.
+include(":DesktopLuna:host")

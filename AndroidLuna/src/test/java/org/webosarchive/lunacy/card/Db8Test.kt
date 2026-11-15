@@ -42,6 +42,8 @@ class Db8Test {
     }
 
     @Before fun setUp() {
+        // LunaCore's platform, as LunacyApplication gives it on a device.
+        org.webosarchive.lunacy.shell.LunacyApplication.install()
         bus = Bus()
         Db8("com.palm.db", null).register(bus)
         val k = call("putKind", JSONObject().put("id", kind).put("owner", app).put("indexes", JSONArray()

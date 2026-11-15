@@ -1605,7 +1605,7 @@ activity runs at a time and two that a user started.
   [sleep-and-wake.md](sleep-and-wake.md). Until 2026-10-08 schedules were Handler delays,
   which count only time awake. **Exact alarms (ratchet item):** apps targeting API 31 and
   later need `SCHEDULE_EXACT_ALARM` or `USE_EXACT_ALARM`; Lunacy targets 24 and 28.
-- **Wi-Fi and the volumes, for apps that switch them on a schedule** (Night Moves, 2026-11-15).
+- **Wi-Fi, Bluetooth and the volumes, for apps that switch them on a schedule** (Night Moves, 2026-11-15).
   `com.palm.wifi`'s `getstatus` (with its subscription) and `setstate` are Android's own Wi-Fi,
   the same switch the system menu works; `com.palm.audio`'s ringtone class is Android's ring
   stream, beside the system class (the system stream) and the media class (the music stream).
@@ -1614,9 +1614,14 @@ activity runs at a time and two that a user started.
   bus's: an app outside `com.palm.*` gets "Service does not exist" and "Unknown method", as a
   probe app got on the TouchPad. The rest of the wifi service (finding and joining networks,
   the profiles) is Android's Wi-Fi screen's, and the bus says "Unknown method".
+  `com.palm.btmonitor`'s radio (`monitor/getradiostate`, `subscribenotifications`, `radioon`,
+  `radiooff`) is Android's Bluetooth adapter the same way (`BtMonitorService.kt`), private too;
+  its `visible` is luna-deltas C4.
   `com.palm.wan` stays an error: Android lets no app switch mobile data. **Switching Wi-Fi
-  (ratchet item):** `WifiManager.setWifiEnabled` works for apps targeting API 28 and below;
-  from 29 an app may only open Android's Wi-Fi panel, which a schedule at night can't use.
+  and Bluetooth (ratchet items):** `WifiManager.setWifiEnabled` works for apps targeting API 28
+  and below, `BluetoothAdapter.enable`/`disable` for apps targeting 32 and below (with
+  `BLUETOOTH_ADMIN`; 31 and later also need `BLUETOOTH_CONNECT` granted); past those an app may
+  only open Android's panel, which a schedule at night can't use.
 
 ## Email
 

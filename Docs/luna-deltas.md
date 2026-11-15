@@ -689,6 +689,18 @@ four before choosing which of the above to do first.
 for its click sounds - the same samples as B8), `com.palm.zeroconf`, `com.palm.accountservices`,
 the media indexer's db8 kinds. All in [fix-log.md](fix-log.md) "Known gaps".
 
+### C4. Bluetooth's `visible`: the radio, not discoverability (2026-11-15)
+
+`com.palm.btmonitor/monitor/radioon {"visible":true,"connectable":true}` turned the
+TouchPad's radio on and made it discoverable, as asked. Android makes a device discoverable
+for an app only through its own dialog ("An app wants to make your tablet visible..."), which
+asks the person, and Night Moves sends it from a schedule, at night. So Lunacy checks both
+booleans as the TouchPad did (errorCode 134217729 for one missing) and turns the radio on;
+the device is discoverable while Android's Bluetooth screen is open, as on any Android device,
+and Lunacy never raises the dialog (the Zen of Palm: nothing that nags). Connectable is what
+Android's radio is whenever it is on. `card/BtMonitorService.kt`; measured on the TouchPad and
+checked on the Pixel Tablet.
+
 ---
 
 ## D. Not deltas - so nobody chases them

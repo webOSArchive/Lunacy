@@ -526,10 +526,15 @@ starting; some may have been settled since without a note. All of it comes after
 - **PDK intro movies:** done 2026-11-07, Android's player behind Palm's API ([pdk.md](pdk.md)
   §6j). Still to see: Oregon Trail, Asphalt 5 and Nova 2's movies, the end event's path on
   each, and a movie on the 32-bit devices.
-- **Launching an app as the shell starts (0.9.0 sweep):** an `--es launch` of Calendar, Clock
-  or Email in the intent that starts Lunacy can come up with no card (Calendar: "no card
-  opened"; the Nexus 5 showed the launcher), seemingly racing the same app's own start at
-  boot. A tap once the shell is up opens them (codepoet, HP 10 G2). Not compared with 0.8.4.
+- ~~**Launching an app as the shell starts (0.9.0 sweep)**~~ done 2026-11-15 for 1.0 (fix-log
+  2026-11-15): a relaunch waits for the page to load, and a launch from outside waits for the
+  boot-time apps and the boot activities to start (1.5 to 3.3 s on the Fold3).
+- **The startup card at once for a launch as the shell starts (codepoet, 2026-11-15: a nice
+  post-1.0 optimization):** since the fix above, a launch from Android that comes as Lunacy
+  starts shows the launcher for 1.5 to 3.3 s (Fold3) before the app's card, while the boot's
+  own apps and activities start. Show the startup card at once and hold only the launch itself
+  behind it (`AppLifecycle.launchFromOutside`), keeping the order the fix needs: the boot's
+  relaunches first, the person's last.
 - **Video Player:** `com.palm.filenotifyd`'s `state` (whether `/media/internal` is mounted and
   scanned) isn't there. (`com.palm.audio`'s `media/lockVolumeKeys` is, since Music's port, and
   while a video plays Android points the volume keys at media itself: measured 2026-11-07.)

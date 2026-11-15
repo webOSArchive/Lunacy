@@ -444,7 +444,10 @@ class ShellActivity : Activity(), WindowHost {
             // services and activities again on its closed bus, and launched the boot apps.
             runOnUiThread {
                 if (isDestroyed || live?.get() !== this) { Log.i(AppServer.TAG, "webOS root ready for a shell that has gone"); return@runOnUiThread }
-                jsServices.reload(); nativeServices.reload(); appsChanged(); activityManager.enable(); powerService.enable(); afterFirstUse(); androidNotificationsChanged(); FontWarmer(this, server).warmWhenIdle()
+                jsServices.reload(); nativeServices.reload(); appsChanged(); activityManager.enable(); powerService.enable()
+                lifecycle.bootSettled = { !activityManager.bootActivitiesPending() }
+                lifecycle.bootPending = { activityManager.bootActivitiesDescribed() }
+                afterFirstUse(); androidNotificationsChanged(); FontWarmer(this, server).warmWhenIdle()
             }
         }, "webos-root").start()
 
@@ -607,7 +610,7 @@ class ShellActivity : Activity(), WindowHost {
         // A webOS app's icon on Android's home screen. Taken once: the activity is singleTask
         // and a re-created one would otherwise open it again.
         if (intent.action == HomeScreenPins.ACTION_OPEN_APP) {
-            intent.getStringExtra(HomeScreenPins.EXTRA_APP)?.let { lifecycle.openDirect(it) }
+            intent.getStringExtra(HomeScreenPins.EXTRA_APP)?.let { id -> lifecycle.launchFromOutside(bootAppsToCome()) { lifecycle.openDirect(id) } }
             intent.action = null
         }
         intent.takeString("launch")?.let { id ->
@@ -617,7 +620,7 @@ class ShellActivity : Activity(), WindowHost {
                     .onFailure { e -> Log.w(AppServer.TAG, "launch $id: params is not JSON (${raw.length} characters)") }
                     .getOrNull()
             }
-            launch(id, params)
+            lifecycle.launchFromOutside(bootAppsToCome()) { launch(id, params) }
         }
         if (intent.getBooleanExtra(EXTRA_EXHIBITION, false)) { intent.removeExtra(EXTRA_EXHIBITION); exhibitions.startDreamExhibition() }
         // Android 5's am has no send-trim-memory; this stands in for it (Docs/dev-workflow.md).
@@ -752,6 +755,12 @@ class ShellActivity : Activity(), WindowHost {
      * account when one exists (a sign-in during First Use). Called once the webOS root's
      * services are up, and when First Use finishes, where the device would reboot.
      */
+    /**
+     * Whether the boot-time apps are still to start: they do once First Use is done
+     * ([afterFirstUse]). Before that the launch goes now, as First Use's own does.
+     */
+    private fun bootAppsToCome() = LunacyService.firstUseDone(this)
+
     private fun afterFirstUse() {
         if (!LunacyService.firstUseDone(this) || !::webos.isInitialized) return
         lifecycle.launchBootTimeApps()

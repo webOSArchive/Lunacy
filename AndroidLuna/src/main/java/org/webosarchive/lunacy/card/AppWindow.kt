@@ -283,10 +283,11 @@ open class AppWindow(
                 // A new page: the old one's native web views go with it.
                 if (hasBrowserViews) browserViews.destroyAll()
                 plugins?.stopAll()
-                pageReady = false; told = null
+                pageReady = false; told = null; pageLoaded = false
             }
             override fun onPageFinished(view: WebView, url: String) {
                 host.onPageLoaded(this@AppWindow)
+                pageUp()
                 // The window.open transport resets the background; apply transparency again.
                 if (type == WindowType.DASHBOARD || type == WindowType.POPUP_ALERT) view.setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 // Guarded: a window.open transport finishes with no body, and an unguarded
@@ -406,9 +407,35 @@ open class AppWindow(
      * then Mojo.relaunch() runs. done gets whether the app handled it; if not, the shell
      * brings the app's first card forward.
      */
-    open fun relaunch(params: String, done: (Boolean) -> Unit) = evaluateJavascript(
-        "(function(){try{return window.${PageHooks.RELAUNCH}?${PageHooks.RELAUNCH}(${jsString(params)}):false}catch(e){console.error('relaunch: '+e);return false}})()"
-    ) { done(it == "true") }
+    /**
+     * A relaunch goes to the app's page once it has loaded. One that comes while the page is
+     * still loading waits for it: run then, it found no framework to take it, and wrote its
+     * params over the ones the page was started with. That lost the launch of an app that was
+     * still starting headless at boot (Calendar, Clock, Email, launched from Android as Lunacy
+     * started: no card, 0.9.0's sweep). The page then hears it as a running app does.
+     */
+    open fun relaunch(params: String, done: (Boolean) -> Unit) {
+        if (!pageLoaded) {
+            Log.i(AppServer.TAG, "[$appId] relaunch waits for the page to load")
+            waitingRelaunches += params to done
+            return
+        }
+        evaluateJavascript(
+            "(function(){try{return window.${PageHooks.RELAUNCH}?${PageHooks.RELAUNCH}(${jsString(params)}):false}catch(e){console.error('relaunch: '+e);return false}})()"
+        ) { done(it == "true") }
+    }
+
+    /** The page has loaded (or said it is ready, or drawn), so a relaunch can reach it. */
+    private var pageLoaded = false
+    private val waitingRelaunches = ArrayList<Pair<String, (Boolean) -> Unit>>()
+
+    private fun pageUp() {
+        if (pageLoaded) return
+        pageLoaded = true
+        val waiting = waitingRelaunches.toList()
+        waitingRelaunches.clear()
+        waiting.forEach { (params, done) -> relaunch(params, done) }
+    }
 
     /**
      * Focus, as LunaSysMgr gave it: PalmSystem.isActivated, which Enyo reads to find the active
@@ -456,6 +483,7 @@ open class AppWindow(
     }
 
     private fun onPageReady() {
+        pageUp()
         if (pageReady) return
         pageReady = true
         // Until now it believed itself inactive, which is how a page starts.

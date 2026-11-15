@@ -350,6 +350,52 @@ class AppLifecycle(
         bootTimeAppsLaunched = true
         for (id in LAUNCH_AT_BOOT) if (host.registry.get(id) != null && running[id] == null)
             launch(id, JSONObject().put("launchedAtBoot", true), Placement.NO_CARD)
+        flushWhenSettled(0)
+    }
+
+    /** Whether what a boot starts has run: the shell's activity manager has no boot activity left. */
+    var bootSettled: () -> Boolean = { true }
+    /** What the boot still has to do, for the log. */
+    var bootPending: () -> String = { "" }
+
+    /**
+     * The launches from outside, once the boot's own work is done: the boot-time apps
+     * started, and the boot activities started, which relaunch Clock and Calendar for their own
+     * ends. A launch that came in among them was taken over by them (Clock started on the
+     * person's launch, asked for its preferences, and by their answer its window params were
+     * an alarm update's: no card). Never longer than [BOOT_SETTLE_MAX_MS], so a boot activity
+     * that never starts (one ahead of it in the queue whose app never completes it) can't keep the launch from happening.
+     */
+    private fun flushWhenSettled(waited: Long) {
+        if (waitingForBoot.isEmpty()) return
+        if (!bootSettled() && waited < BOOT_SETTLE_MAX_MS) {
+            handler.postDelayed({ flushWhenSettled(waited + BOOT_SETTLE_STEP_MS) }, BOOT_SETTLE_STEP_MS)
+            return
+        }
+        Log.i(AppServer.TAG, "launch from outside: the boot settled after $waited ms${if (bootSettled()) "" else " (gave up waiting on ${bootPending()})"}")
+        val waiting = waitingForBoot.toList()
+        waitingForBoot.clear()
+        waiting.forEach { it() }
+    }
+
+    /** Launches from outside that came before the boot-time apps had started. */
+    private val waitingForBoot = ArrayList<() -> Unit>()
+
+    /**
+     * A launch from outside the shell (Android's intent, a pinned icon on Android's home
+     * screen), which can come as the shell starts. On a device the boot-time apps were running
+     * before anyone could tap an icon, so a launch reached Email or Calendar as a relaunch of
+     * the headless app. One that came first here started the app cold beside its own boot
+     * start and its boot activities, and could come up with no card (0.9.0's sweep; Email's
+     * card came after its placeholder had gone). So it waits for the boot-time apps when
+     * they are still to come, which they are only until First Use is done and the webOS
+     * root is up ([launchBootTimeApps]), and for the boot activities ([flushWhenSettled]);
+     * [booting] says whether they are still to come.
+     */
+    fun launchFromOutside(booting: Boolean, launch: () -> Unit) {
+        if (!booting || bootTimeAppsLaunched) { launch(); return }
+        Log.i(AppServer.TAG, "launch from outside waits for the boot-time apps")
+        waitingForBoot += launch
     }
 
     // ---- memory ----
@@ -409,6 +455,8 @@ class AppLifecycle(
          */
         val LAUNCH_AT_BOOT = listOf("com.palm.app.phone", "com.palm.app.email", "com.palm.app.calendar", "com.palm.app.messaging")
         val KEEP_ALIVE = setOf("com.palm.app.email", "com.palm.app.calendar", "com.palm.app.messaging", "com.palm.app.photos", "com.palm.app.musicplayer")
+        const val BOOT_SETTLE_STEP_MS = 100L
+        const val BOOT_SETTLE_MAX_MS = 5_000L
         const val MEMORY_CHECK_MS = 10_000L
         const val MEMORY_CALM_MS = 30_000L
         /** How long a headless app outlives its last visible window: long enough to hear that window go. */

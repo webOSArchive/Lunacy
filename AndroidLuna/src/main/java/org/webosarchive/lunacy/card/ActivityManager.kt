@@ -815,6 +815,22 @@ class ActivityManager(private val context: Context, private val power: Power) {
      * restored activity is started, so its trigger and schedule are armed again; with no
      * subscribers, its callback is how its service hears of it.
      */
+    /**
+     * Whether an activity that waits for a boot (`"requirements":{"bootup":true}`) is still to
+     * start: Clock's alarm update and Calendar's reminders, which the configurator creates and
+     * the queue starts one at a time in the seconds after the shell starts. Started is enough:
+     * its callback has been sent (an app relaunched), and some never complete (Clock's update
+     * stays running). Until the persisted activities are read, the configurator's creates are
+     * held ([loaded]), so they count as still to start.
+     */
+    fun bootActivitiesPending() = !loaded || held.isNotEmpty() ||
+        activities.values.any { it.requirements.has("bootup") && !it.running && it.ending == null }
+
+    /** What [bootActivitiesPending] waits on, for the log. */
+    fun bootActivitiesDescribed() = (if (!loaded) "not loaded; " else "") + (if (held.isNotEmpty()) "${held.size} calls held; " else "") +
+        activities.values.filter { it.requirements.has("bootup") && !it.running && it.ending == null }
+            .joinToString { "${it.id} ${it.name} queued=${it.queued} initialized=${it.initialized}" }
+
     fun enable() {
         if (started) return
         started = true

@@ -13,7 +13,9 @@ Build under test:  0.9.x, build NNN, commit abcdef0
                    out/SHA256SUMS sha256 ...           (six APKs: release + debug, both
                                                         ABIs and the keyboard)
 Tier 1:            ./test.sh             N passed / 0 failed     (build.sh release ran it)
-Tier 2:            device-test.sh        per device, below; every device on build NNN
+                   apk-inventory         every APK: N files, 0 problems (build.sh ran it)
+Tier 2:            fresh-install.sh      one device, debug: N passed / 0 failed  test-results/NNN/fresh-<device>.txt
+                   device-test.sh        per device, below; every device on build NNN
                    HP 10 G2   (debug)    N passed / 0 failed     test-results/NNN/hp10g2.txt
                    Fold3      (debug)    ...
                    ...
@@ -70,6 +72,14 @@ phone mode the Pre3.
 # Tier 1, on the build machine (build.sh release runs it and stops on a failure)
 ./test.sh                 # all of it; `./test.sh quick` leaves out the JVM tests
 
+# Tier 1, after each build: what each APK holds against the tree (build.sh runs it, and
+# stops on a gap; by hand: Workbench/apk-inventory.py out/AndroidLuna-*.apk)
+
+# Tier 2, first: a fresh install, on one device with Android contacts (the Kyocera). ERASES
+# Lunacy's data there; installs the candidate's debug build, finishes First Use over the bus,
+# adds the Android account, and runs device-test in that same run of Lunacy, unrestarted
+Workbench/fresh-install.sh 192.168.10.58:5555 out/AndroidLuna-arm64-debug.apk Docs/test-results/NNN/fresh-kyocera.txt
+
 # Tier 2, on each device, the candidate installed and First Use done
 Workbench/device-test.sh 192.168.10.36:5555 NNN Docs/test-results/NNN/hp10g2.txt
 
@@ -78,6 +88,16 @@ Workbench/pdk-sweep.sh 192.168.10.175:5555 scenarios Workbench/results/pdk-NNN-f
 cp Workbench/results/pdk-NNN-fold3/summary.txt Docs/test-results/NNN/pdk-fold3.txt
 #   (only the summary is kept: the folder's logcats and screenshots may show mail)
 ```
+
+**Why a fresh install, every round.** 1.0 shipped two bugs that lived only in the first run
+after an install, and every device in its round had been set up long before and restarted
+since (2026-11-15). The activity files the configurator holds back until First Use (the
+contacts linker's watch among them) were sent only at the next start, so a new install's
+Android contacts sat in db8 behind an empty Contacts list; and adding the Android account from
+Contacts' or Calendar's first screen made no account. `device-test.sh` restarts Lunacy first,
+which hid the first; `fresh-install.sh` runs it with `NORESTART=1`. The second is checked in
+the source by `test.sh`; adding the account by hand from Contacts' first screen on the fresh
+install (section 9) is the person's half.
 
 `device-test.sh` restarts Lunacy twice and opens every bundled app; it reads no mail or
 messages, only counts, ids and error codes, so its results file can be committed. Bus calls go
@@ -120,6 +140,12 @@ Palm's Jasmine spec for Contacts is listed as skipped: it needs a browser harnes
       The in-page half first waited on a Promise, which Chromium 37's DevTools hands back
       unresolved, as `{}`: all four failed on the Nexus 7 though the services answered there
       (1.0 round, 2026-11-15). In-page checks now send, then read back a few seconds later.
+- [ ] Every activity file that waits (a trigger or a schedule: the system's, its services',
+      the bundled apps') is live: in the fresh-install pass, in the run First Use finished in.
+      *Seen failing:* 1.0's fresh installs had none of the 17 until Lunacy restarted.
+- [ ] *(debug)* Contacts in db8 reach the Contacts list: where there are contacts, there are
+      people (`com.palm.person`), so the linker runs. *Seen failing:* 455 Android contacts and
+      no people on 1.0's fresh install (the Kyocera).
 - [ ] In an XML document `getElementsByTagName` finds elements by local name, as the
       TouchPad's WebKit did (a WebDAV reply's `<d:response>` for `"response"`). The check
       finds the element itself by namespace: a prefixed name finds nothing on Chromium 37,
@@ -201,6 +227,11 @@ Test accounts only, never codepoet's personal ones.
 - [ ] A recurring event with an exception, and an event in another time zone, read as in Outlook.
 - [ ] Wrong password, throttling and admin approval each say so plainly; "Change login
       settings" fixes a wrong password.
+- [ ] On the fresh install (after `fresh-install.sh`, or a new install by hand): Contacts'
+      first screen, Add Account, Android, through Android's permission questions: the account
+      is made ("Syncing"), and Android's contacts are in the list without restarting Lunacy;
+      then the same from Calendar's first screen on another fresh install. *Seen failing:*
+      1.0, both (the Kyocera, 2026-11-15).
 
 ## 10. Messaging — [Human]
 

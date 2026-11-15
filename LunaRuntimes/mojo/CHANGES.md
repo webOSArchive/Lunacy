@@ -156,3 +156,25 @@ Files: `builtins/palmInitFramework506.js` (Mojo 1), `builtins/palmInitFramework2
 
 SDK: `sdk-patches/0004-whole-pixel-dimensions.patch`, the same change to `javascripts/view.js`,
 which is where a desktop page gets `Mojo.View.getDimensions`.
+
+### 0005-dashboard-count-on-one-line.patch
+
+A dashboard's count badge (`.dashboard-newitem`, the number over the icon) broke a two-digit
+count between its digits: SimpleChat's dashboard showed "1" in the badge and "8" under the
+icon for 18 new messages (codepoet, on the Fold3 and the Pixel Tablet, 2026-11-15).
+
+The badge floats and shrinks to fit its count, and the count's span has `margin: 0 -6px`, so
+the badge's content box is exactly the count's width less 12 px (4 px for "18", 16 px wide in
+Prelude bold). `global-base.css` gives every div `overflow-wrap: break-word`, which the span
+inherits. Chromium fits the text before it adds the span's closing margin, finds it 6 px too
+wide, and `break-word` lets it break inside the word. The TouchPad's WebKit kept the count on
+one line with the same CSS. Measured on the Fold3's live dashboard: the span was two line
+fragments; with `overflow-wrap: normal` it is one, and the badge reads "18" over the icon as on
+a device. A single digit never broke (there is nowhere to break it).
+
+The span gets `overflow-wrap: normal`; nothing else in the dashboard changes.
+
+File: `submissions/506/stylesheets/global-notifications.css`. Mojo 2 (submission 205) has the
+same rule but is served unpatched; no Mojo 2 app with a count badge has been seen.
+
+SDK: applies as it is (`update-frameworks.sh` applies it to the SDK's copy of the stylesheet).

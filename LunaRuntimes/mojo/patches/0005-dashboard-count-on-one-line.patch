@@ -1,0 +1,21 @@
+--- a/submissions/506/stylesheets/global-notifications.css
++++ b/submissions/506/stylesheets/global-notifications.css
+@@ -111,6 +111,18 @@
+   top:-3px;
+   margin: 0 -6px;
+   font-size: 16px;
++
++  /*
++     Lunacy's change. The count is never broken between its digits.
++
++     global-base.css gives every div overflow-wrap: break-word, and the span inherits it. The
++     badge floats and shrinks to its count, and the span's -6px margins make that exactly the
++     count's width less 12 px. Chromium fits the text before it adds the closing margin, finds
++     it 6 px too wide, and break-word splits it: a two-digit count came out as its first digit
++     in the badge and the second below it (SimpleChat's 18 as "1" over "8", on the Fold3 and
++     the Pixel Tablet, codepoet, 2026-11-15). The TouchPad's WebKit kept it on one line.
++  */
++  overflow-wrap: normal;
+ }
+ 
+ .dashboard-title,

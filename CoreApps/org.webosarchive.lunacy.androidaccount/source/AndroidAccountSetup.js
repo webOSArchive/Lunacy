@@ -110,8 +110,14 @@ enyo.kind({
 		}
 		this.$.goButton.setDisabled(false);
 		if (this.granted) {
+			// The template goes back with the account, as Accounts' own pages send it: First
+			// Launch (entry-first-launch.js, Contacts' and Calendar's first screen) makes no
+			// account from a result without one, and only Add Account falls back to its own.
+			var template = (this.params || {}).template;
 			this.$.crossAppResult.sendResult({
 				returnValue: true,
+				template: template,
+				templateId: template && template.templateId,
 				username: "android",
 				alias: $L("Android"),
 				credentials: {},

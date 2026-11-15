@@ -147,5 +147,24 @@ EOF
   else F "jvm   $t tests, $f failed, $e errors (gradle $rc) -- $(grep -E "FAILED|Exception" "$WORK/gradle.log" | head -3 | tr '\n' ' ')"; fi
 else S "jvm   skipped (quick)"; fi
 
+# ---- LunaCore's tests, and its API 21 gate (Animal Sniffer): the code AndroidLuna and Luna DE
+# share (Docs/luna-de.md). Only where the module exists (the luna-de branch).
+if [ -z "$QUICK" ] && [ -d LunaCore ]; then
+  rm -rf LunaCore/build/test-results/test
+  ./gradlew :LunaCore:test :LunaCore:animalsnifferMain -q > "$WORK/core.log" 2>&1
+  rc=$?
+  read t f e <<<"$(python3 - <<'EOF'
+import glob, re
+t = f = e = 0
+for p in glob.glob("LunaCore/build/test-results/test/*.xml"):
+    m = re.search(r'tests="(\d+)" skipped="\d+" failures="(\d+)" errors="(\d+)"', open(p).read())
+    if m: t += int(m[1]); f += int(m[2]); e += int(m[3])
+print(t, f, e)
+EOF
+)"
+  if [ "$rc" = 0 ] && [ "$f" = 0 ] && [ "$e" = 0 ] && [ "$t" -gt 0 ]; then P "core  $t LunaCore tests, and its API 21 gate"
+  else F "core  $t tests, $f failed, $e errors (gradle $rc) -- $(grep -E "FAILED|Undefined|Exception" "$WORK/core.log" | head -3 | tr '\n' ' ')"; fi
+fi
+
 echo "===== $pass passed, $fail failed, $skip skipped ====="
 [ "$fail" = 0 ]

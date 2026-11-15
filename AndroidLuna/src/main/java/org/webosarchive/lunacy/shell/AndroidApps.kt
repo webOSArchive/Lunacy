@@ -1,5 +1,6 @@
 package org.webosarchive.lunacy.shell
 
+import org.webosarchive.lunacy.card.androidComponent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -71,7 +72,7 @@ class AndroidApps(private val context: Context, private val files: AppFiles, pri
                     type = "android", version = version, userInstalled = !system, visible = true,
                     androidSettings = "", splashIcon = "", uiRevision = 2, category = "android",
                     keywords = emptyList(), appinfo = JSONObject(), files = files,
-                    androidComponent = cn,
+                    hostApp = cn,
                     androidIcon = { icon(id, ri)?.let { ByteArrayInputStream(it) } },
                 )
             }

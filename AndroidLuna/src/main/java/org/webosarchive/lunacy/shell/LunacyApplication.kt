@@ -26,6 +26,7 @@ class LunacyApplication : Application() {
                 else android.util.Log.println(p, tag, msg + "\n" + android.util.Log.getStackTraceString(tr))
             }
             Platform.scheduler = AndroidScheduler()
+            Platform.images = org.webosarchive.lunacy.card.AndroidImages
         }
     }
 }

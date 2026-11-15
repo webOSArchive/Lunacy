@@ -169,9 +169,5 @@ object UserFiles {
      * it out, and a sibling whose name starts the same ("apps2" beside "apps") isn't inside.
      * The one check every webOS path from a page or a service goes through.
      */
-    fun inside(f: File, root: File): Boolean = try {
-        val c = f.canonicalPath
-        val r = root.canonicalPath
-        c == r || c.startsWith(r + File.separator)
-    } catch (e: Exception) { false }
+    fun inside(f: File, root: File): Boolean = org.webosarchive.lunacy.core.WebosPaths.inside(f, root)
 }

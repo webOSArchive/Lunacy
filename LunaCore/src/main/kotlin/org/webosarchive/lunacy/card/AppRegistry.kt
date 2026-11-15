@@ -1,7 +1,9 @@
 package org.webosarchive.lunacy.card
 
-import android.content.res.AssetManager
-import android.util.Log
+import org.webosarchive.lunacy.core.Assets
+import org.webosarchive.lunacy.core.Log
+import org.webosarchive.lunacy.core.Platform
+import org.webosarchive.lunacy.core.WebosPaths
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -58,8 +60,12 @@ class AppInfo(
     /** The app's appinfo.json as packaged. */
     val appinfo: JSONObject,
     private val files: AppFiles,
-    /** Set for an Android app shown in the launcher (shell/AndroidApps.kt); null for webOS apps. */
-    val androidComponent: android.content.ComponentName? = null,
+    /**
+     * Set for a host app shown in the launcher; null for webOS apps. On Android an
+     * android.content.ComponentName (shell/AndroidApps.kt), which AndroidLuna reads as
+     * `androidComponent` (card/AppInfoAndroid.kt).
+     */
+    val hostApp: Any? = null,
     private val androidIcon: (() -> InputStream?)? = null,
     /**
      * Set for a dynamic launch point's tile ([LaunchPoint]): the launcher shows it as an icon
@@ -101,18 +107,18 @@ class AppInfo(
     /** The URL of the app's main page, at its webOS path on its own origin. */
     val url get() = AppServer.appUrl(id, main, dir)
     val isWeb get() = type == "web"
-    fun openIcon(): InputStream? = androidIcon?.invoke() ?: files.open("${Packages.APPS}/$dir/$icon")
+    fun openIcon(): InputStream? = androidIcon?.invoke() ?: files.open("${WebosPaths.APPS}/$dir/$icon")
     /** appinfo.json's `miniicon`, "miniicon.png" when it names none (ApplicationDescription). */
-    fun openMiniIcon(): InputStream? = if (androidIcon != null) androidIcon.invoke() else files.open("${Packages.APPS}/$dir/" + appinfo.optString("miniicon", "miniicon.png").ifEmpty { "miniicon.png" })
+    fun openMiniIcon(): InputStream? = if (androidIcon != null) androidIcon.invoke() else files.open("${WebosPaths.APPS}/$dir/" + appinfo.optString("miniicon", "miniicon.png").ifEmpty { "miniicon.png" })
     fun openSplashIcon(): InputStream? =
-        if (splashIcon.isEmpty()) null else files.open("${Packages.APPS}/$dir/$splashIcon")
+        if (splashIcon.isEmpty()) null else files.open("${WebosPaths.APPS}/$dir/$splashIcon")
 
     /** The app's main page as a file:// path, the form webOS's bus answers with. */
-    fun filePath(): String = "file:///media/cryptofs/apps/${Packages.APPS}/$dir/$main"
+    fun filePath(): String = "file:///media/cryptofs/apps/${WebosPaths.APPS}/$dir/$main"
 
     /** This app's entry in applicationManager/listApps, with the fields a TouchPad returns. */
     fun listEntry(): JSONObject {
-        val path = "/media/cryptofs/apps/${Packages.APPS}/$dir/"
+        val path = "/media/cryptofs/apps/${WebosPaths.APPS}/$dir/"
         val j = JSONObject()
             .put("id", id).put("main", "file://$path$main").put("version", version)
             .put("category", appinfo.optString("category", "")).put("title", title)
@@ -143,7 +149,7 @@ internal fun isNewerVersion(a: String, b: String): Boolean {
  * script puts a system app, as the webOS Community Account Manager's does - then the apps
  * bundled in the APK's assets/apps/. Every app is served at its /media/cryptofs/apps path.
  */
-class AppFiles(private val assets: AssetManager, val root: File, private val system: File? = null, private val apk: File? = null) {
+class AppFiles(private val assets: Assets, val root: File, private val system: File? = null, private val apk: File? = null) {
 
     /**
      * The bundled apps' folders, from one read of the APK's index. AssetManager.list reads the
@@ -189,16 +195,16 @@ class AppFiles(private val assets: AssetManager, val root: File, private val sys
     /** rel is relative to /media/cryptofs/apps, e.g. "usr/palm/applications/<id>/index.html". */
     fun open(rel: String): InputStream? {
         val f = File(root, rel)
-        if (f.isFile && UserFiles.inside(f, root)) return f.inputStream()
-        if (!rel.startsWith("${Packages.APPS}/")) return null
+        if (f.isFile && WebosPaths.inside(f, root)) return f.inputStream()
+        if (!rel.startsWith("${WebosPaths.APPS}/")) return null
         if (system != null) {
             val s = File(system, rel)
-            if (s.isFile && UserFiles.inside(s, system)) return s.inputStream()
+            if (s.isFile && WebosPaths.inside(s, system)) return s.inputStream()
         }
-        return try { assets.open("apps/" + rel.removePrefix("${Packages.APPS}/")) } catch (e: IOException) { null }
+        return try { assets.open("apps/" + rel.removePrefix("${WebosPaths.APPS}/")) } catch (e: IOException) { null }
     }
 
-    fun isInstalled(id: String) = File(root, "${Packages.APPS}/$id/appinfo.json").isFile
+    fun isInstalled(id: String) = File(root, "${WebosPaths.APPS}/$id/appinfo.json").isFile
 
     /**
      * Ids of installed packages older than the copy bundled in this APK. An installed package
@@ -211,7 +217,7 @@ class AppFiles(private val assets: AssetManager, val root: File, private val sys
             assets.open("apps/$dir/appinfo.json").bufferedReader().use { JSONObject(it.readText()) }
         } catch (e: Exception) { return@mapNotNull null }
         val id = bundled.optString("id", dir)
-        val installed = File(root, "${Packages.APPS}/$id/appinfo.json")
+        val installed = File(root, "${WebosPaths.APPS}/$id/appinfo.json")
         if (!installed.isFile) return@mapNotNull null
         val version = try { JSONObject(installed.readText()).optString("version") }
                       catch (e: Exception) { return@mapNotNull null }
@@ -225,16 +231,16 @@ class AppFiles(private val assets: AssetManager, val root: File, private val sys
      */
     fun list(rel: String): List<String> {
         val installed = File(root, rel).list().orEmpty().toList()
-        val sys = if (system != null && rel.startsWith("${Packages.APPS}/")) File(system, rel).list().orEmpty().toList() else emptyList()
-        val bundled = if (rel.startsWith("${Packages.APPS}/"))
-            assetList("apps/" + rel.removePrefix("${Packages.APPS}/"))
+        val sys = if (system != null && rel.startsWith("${WebosPaths.APPS}/")) File(system, rel).list().orEmpty().toList() else emptyList()
+        val bundled = if (rel.startsWith("${WebosPaths.APPS}/"))
+            assetList("apps/" + rel.removePrefix("${WebosPaths.APPS}/"))
         else emptyList()
         return (installed + sys + bundled).distinct().sorted()
     }
 
     fun appIds(): List<String> =
-        (File(root, Packages.APPS).list().orEmpty().toList() +
-            (system?.let { File(it, Packages.APPS).list() }.orEmpty()) +
+        (File(root, WebosPaths.APPS).list().orEmpty().toList() +
+            (system?.let { File(it, WebosPaths.APPS).list() }.orEmpty()) +
             assetList("apps")).distinct().sorted()
 }
 
@@ -256,9 +262,10 @@ class AppRegistry(private val files: AppFiles) {
     /** The app with its default launch point's icon changed, or null if [icon] isn't one of its files. */
     fun setIcon(id: String, icon: String): AppInfo? {
         val app = get(id) ?: return null
-        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        files.open("${Packages.APPS}/${app.dir}/$icon")?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
-        if (bounds.outWidth <= 0) return null
+        // An image this platform decodes, when it can decode (Platform.images); a file at least.
+        val images = Platform.images
+        val size = files.open("${WebosPaths.APPS}/${app.dir}/$icon")?.use { if (images == null) intArrayOf(1, 1) else images.size(it) }
+        if (size == null || size[0] <= 0) return null
         iconOverrides[id] = icon
         apps = apps.map { if (it.id == id) read(it.dir) ?: it else it }
         return get(id)
@@ -276,7 +283,7 @@ class AppRegistry(private val files: AppFiles) {
     private fun load(): List<AppInfo> = files.appIds().mapNotNull { read(it) }.distinctBy { it.id }
 
     private fun read(dir: String): AppInfo? = try {
-        val text = files.open("${Packages.APPS}/$dir/appinfo.json")?.use { it.bufferedReader().readText() } ?: return null
+        val text = files.open("${WebosPaths.APPS}/$dir/appinfo.json")?.use { it.bufferedReader().readText() } ?: return null
         // Some packaged appinfo.json files start with a BOM, which webOS tolerated.
         val j = JSONObject(text.trimStart('\uFEFF'))
         AppInfo(

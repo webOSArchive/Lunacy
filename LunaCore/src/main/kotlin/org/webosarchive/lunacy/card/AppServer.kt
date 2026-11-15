@@ -1,9 +1,9 @@
 package org.webosarchive.lunacy.card
 
-import android.content.res.AssetManager
-import android.net.Uri
-import android.util.Log
-import android.webkit.WebResourceResponse
+import org.webosarchive.lunacy.core.Assets
+import org.webosarchive.lunacy.core.Log
+import org.webosarchive.lunacy.core.Platform
+import org.webosarchive.lunacy.core.WebosPaths
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
@@ -14,11 +14,13 @@ import org.json.JSONObject
  * frameworks, and Lunacy's injected scripts. See Docs/architecture.md, "Card host".
  */
 class AppServer(
-    private val assets: AssetManager,
+    private val assets: Assets,
     private val files: AppFiles,
     val webosRoot: java.io.File,
     /** Where the per-app lists of framework art live; see [preload]. */
     private val artCacheDir: java.io.File,
+    /** What serving needs from the platform (Android's folders, its playlists, its routes). */
+    private val hooks: ServerHooks = object : ServerHooks {},
 ) {
     companion object {
         /** Pages waiting on their fonts that are remembered: more than are ever current. */
@@ -30,7 +32,7 @@ class AppServer(
         const val CRYPTOFS = "media/cryptofs/apps/"
         /** The origin the Web app reads an app's folder through for a file:///usr/palm/applications URL. */
         const val FILE_HOST = "com.palm.app.browser"
-        const val APPS = CRYPTOFS + Packages.APPS + "/"
+        const val APPS = CRYPTOFS + WebosPaths.APPS + "/"
         const val MEDIA_INTERNAL = "media/internal/"
         const val IPKGS = "usr/palm/ipkgs/"
         /** webOS-root trees pages may read, as a TouchPad's WebKit read them through file://. */
@@ -41,7 +43,7 @@ class AppServer(
 
         /** The app id an origin belongs to, or null for any other host. */
         fun appIdOf(url: String?): String? {
-            val host = Uri.parse(url ?: return null).host ?: return null
+            val host = ServeUrl(url ?: return null).host ?: return null
             return if (host.endsWith(HOST_SUFFIX)) host.removeSuffix(HOST_SUFFIX) else null
         }
 
@@ -148,12 +150,16 @@ class AppServer(
             "var n=w.length;function one(){if(--n<=0)document.title=\"$WARM_DONE\";}" +
             "if(!n)one();for(var i=0;i<w.length;i++)w[i].load().then(one,one);};</script></head>" +
             "<body></body></html>"
-        private fun htmlResponse(s: String) = WebResourceResponse("text/html", "utf-8", 200, "OK", emptyMap(),
+        private fun htmlResponse(s: String) = Served("text/html", "utf-8", 200, "OK", emptyMap(),
             ByteArrayInputStream(s.toByteArray()))
     }
 
-    /** [image]: the engine is loading it to draw it, which decides a JPEG's EXIF orientation ([ExifOrientation]). */
-    fun serve(uri: Uri, image: Boolean = false): WebResourceResponse? {
+    /**
+     * An app origin's answer for [url], or null for a URL that isn't one (the real network). A
+     * JPEG's EXIF orientation is the platform's to apply (AppServerAndroid.kt on Android).
+     */
+    fun serve(url: String): Served? {
+        val uri = ServeUrl(url)
         val host = uri.host ?: return null
         if (!host.endsWith(HOST_SUFFIX)) return null  // real network
         // A run of slashes is one, as the TouchPad's filesystem read a file:// path: Email
@@ -171,8 +177,7 @@ class AppServer(
             ?: rootRoute(path, resource, app)
             ?: userRoute(path, encodedPath, thumb, resource, app))?.response
         if (resp != null) noteArt(app, path) else Log.w(TAG, "404 $uri")
-        if (image && resp?.mimeType == "image/jpeg" && resp.data != null) resp.data = ExifOrientation.ignored(resp.data)
-        return resp ?: WebResourceResponse("text/plain", "utf-8", 404, "Not Found", emptyMap(),
+        return resp ?: Served("text/plain", "utf-8", 404, "Not Found", emptyMap(),
             ByteArrayInputStream(ByteArray(0)))
     }
 
@@ -181,27 +186,24 @@ class AppServer(
      * 404. A route that isn't the path's returns no Routed at all, and the next one is tried;
      * one that is never hands the path on, as the frameworks' and the root's prefixes overlap.
      */
-    private class Routed(val response: WebResourceResponse?)
+    private class Routed(val response: Served?)
 
     /** Lunacy's own files (`__lunacy/`), and the answers it gives in the system's place. */
-    private fun lunacyRoute(uri: Uri, path: String, app: String): Routed? = when {
+    private fun lunacyRoute(uri: ServeUrl, path: String, app: String): Routed? {
+        // The platform's own routes first (Android: the notifications app's icons).
+        hooks.platformRoute(app, path)?.let { return Routed(it) }
+        return when {
         path == "__lunacy/fonts-loaded" -> Routed(fontsLoaded(uri))
         path == "__lunacy/warm.html" -> Routed(htmlResponse(WARM_PAGE))
         path == "__lunacy/fonts-ready.js" -> Routed(fontsReady(uri))
         path.startsWith("__lunacy/fonts/") -> Routed(font(path.removePrefix("__lunacy/fonts/")))
-        // An Android app's icon, for the Android Notifications app's dashboards only, and only
-        // while that app has a notification showing.
-        path.startsWith(AndroidNotifications.ICON_PATH.trimStart('/')) -> {
-            val bytes = if (app == AndroidNotifications.APP_ID) AndroidNotifications.dashboardIcon(path.removePrefix(AndroidNotifications.ICON_PATH.trimStart('/')).removeSuffix(".svg")) else null
-            Routed(bytes?.let { WebResourceResponse("image/svg+xml", "utf-8", 200, "OK", emptyMap(), ByteArrayInputStream(it)) }
-                ?: WebResourceResponse("text/plain", "utf-8", 404, "Not Found", emptyMap(), ByteArrayInputStream(ByteArray(0))))
-        }
         path.startsWith("__lunacy/") -> Routed(asset("lunacy/" + path.removePrefix("__lunacy/"), path))
         // The TouchPad answers this one with 200 and an empty body; Enyo's Tellurium hooks
         // read it while starting, and a 404 makes them throw where a device doesn't.
-        path == "usr/palm/frameworks/tellurium/tellurium_config.json" -> Routed(WebResourceResponse("application/json", "utf-8", 200, "OK",
+        path == "usr/palm/frameworks/tellurium/tellurium_config.json" -> Routed(Served("application/json", "utf-8", 200, "OK",
             mapOf("Access-Control-Allow-Origin" to "*"), ByteArrayInputStream(ByteArray(0))))
         else -> null
+        }
     }
 
     /** The frameworks and the system UI's files, served from Lunacy's assets. */
@@ -228,7 +230,7 @@ class AppServer(
 
     /** [path]'s file in the webOS root, if it is one and lies under one of [prefixes]. */
     private fun rootFile(path: String, vararg prefixes: String): java.io.File? =
-        java.io.File(webosRoot, path).takeIf { f -> f.isFile && prefixes.any { UserFiles.inside(f, java.io.File(webosRoot, it)) } }
+        java.io.File(webosRoot, path).takeIf { f -> f.isFile && prefixes.any { WebosPaths.inside(f, java.io.File(webosRoot, it)) } }
 
     /** The webOS root's files that pages read by path, and the installed apps' own. */
     private fun rootRoute(path: String, resource: Boolean, app: String): Routed? = when {
@@ -247,24 +249,21 @@ class AppServer(
 
     /** webOS's user storage, shared by apps and services (JS services write files here), and its thumbnailer. */
     private fun userRoute(path: String, encodedPath: String, thumb: Int?, resource: Boolean, app: String): Routed? = when {
-        encodedPath.startsWith(EXTRACTFS) -> Routed(extractfs(Uri.decode(encodedPath.removePrefix(EXTRACTFS))))
+        encodedPath.startsWith(EXTRACTFS) -> Routed(extractfs(ServeUrl.decode(encodedPath.removePrefix(EXTRACTFS))))
         path.startsWith(MEDIA_INTERNAL) -> {
             val rel = path.removePrefix(MEDIA_INTERNAL)
             Routed(if (thumb != null) thumbnail(rel, thumb)
-                else internal(rel)?.let { s -> respond(LocalNet.playlist(s, rel, "file:///$path"), path, resource, app) })
+                else internal(rel)?.let { s -> respond(hooks.playlist(s, rel, "file:///$path"), path, resource, app) })
         }
         else -> null
     }
 
     /** webOS's user storage, Lunacy's own and the Android folders mapped into it (UserFiles). */
     private fun internal(rel: String): InputStream? =
-        UserFiles.resolve(webosRoot, rel)?.takeIf { it.isFile }?.inputStream()
+        hooks.userFile(webosRoot, rel)?.takeIf { it.isFile }?.inputStream()
 
     /** webOS's thumbnailer, as a page reads it ([Extractfs]). */
-    private fun extractfs(spec: String): WebResourceResponse? =
-        Extractfs.read(spec, Extractfs.Opener(::resolveWebos))?.let {
-            WebResourceResponse(it.mime, null, 200, "OK", mapOf("Cache-Control" to "max-age=600"), ByteArrayInputStream(it.bytes))
-        }
+    private fun extractfs(spec: String): Served? = hooks.extractfs(spec, ::resolveWebos)
 
     /**
      * An absolute webOS path, as the thumbnailer is given one: user storage or an app's own
@@ -274,7 +273,7 @@ class AppServer(
     private fun resolveWebos(path: String): (() -> InputStream?)? {
         val p = path.trimStart('/')
         if (p.startsWith(MEDIA_INTERNAL)) {
-            val f = UserFiles.resolve(webosRoot, p.removePrefix(MEDIA_INTERNAL))?.takeIf { it.isFile } ?: return null
+            val f = hooks.userFile(webosRoot, p.removePrefix(MEDIA_INTERNAL))?.takeIf { it.isFile } ?: return null
             return { runCatching { f.inputStream() as InputStream }.getOrNull() }
         }
         if (p.startsWith(CRYPTOFS)) {
@@ -291,39 +290,19 @@ class AppServer(
     }
 
     /** A JPEG copy of an image under /media/internal, scaled so its short side is about `size`. */
-    private fun thumbnail(rel: String, size: Int): WebResourceResponse? {
-        val f = UserFiles.resolve(webosRoot, rel)?.takeIf { it.isFile } ?: return null
+    private fun thumbnail(rel: String, size: Int): Served? {
+        val f = hooks.userFile(webosRoot, rel)?.takeIf { it.isFile } ?: return null
         val px = size.coerceIn(16, 1024)
-        return try {
-            val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            android.graphics.BitmapFactory.decodeFile(f.path, bounds)
-            if (bounds.outWidth <= 0) return null
-            var sample = 1
-            while (minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= px) sample *= 2
-            val bmp = android.graphics.BitmapFactory.decodeFile(f.path,
-                android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
-            val scale = px.toFloat() / minOf(bmp.width, bmp.height)
-            val out = if (scale < 1f)
-                android.graphics.Bitmap.createScaledBitmap(bmp, Math.round(bmp.width * scale), Math.round(bmp.height * scale), true)
-            else bmp
-            val bytes = java.io.ByteArrayOutputStream()
-            out.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, bytes)
-            if (out !== bmp) out.recycle()
-            bmp.recycle()
-            WebResourceResponse("image/jpeg", null, 200, "OK", mapOf("Cache-Control" to "max-age=600"),
-                ByteArrayInputStream(bytes.toByteArray()))
-        } catch (e: Exception) {
-            Log.w(TAG, "thumbnail $rel: $e")
-            null
-        }
+        val bytes = Platform.images?.jpegThumbnail(f, px) ?: return null
+        return Served("image/jpeg", null, 200, "OK", mapOf("Cache-Control" to "max-age=600"), ByteArrayInputStream(bytes))
     }
 
-    private fun asset(assetPath: String, name: String, resource: Boolean = false): WebResourceResponse? {
+    private fun asset(assetPath: String, name: String, resource: Boolean = false): Served? {
         var path = if (assetPath.startsWith("fw/")) "fw/" + followLinks(assetPath.removePrefix("fw/")) else assetPath
         // Dashboards in a phone's bottom area wear the Pre3's boxes: the TouchPad's Mojo ships
         // these three transparent, its dashboards sitting in the drop-down (Docs/phone.md §7).
         // One rule for every app, by where the dashboards are, as the frameworks are served.
-        if (FormFactor.pre3Dashboards && path.startsWith(MOJO_IMAGES) && path.removePrefix(MOJO_IMAGES) in PRE3_MOJO_IMAGES) {
+        if (hooks.pre3Dashboards && path.startsWith(MOJO_IMAGES) && path.removePrefix(MOJO_IMAGES) in PRE3_MOJO_IMAGES) {
             path = "luna/images/pre3/mojo/" + path.removePrefix(MOJO_IMAGES)
         }
         val stream: InputStream = try { assets.open(path) } catch (e: IOException) { return null }
@@ -357,7 +336,7 @@ class AppServer(
     }
 
     private fun respond(stream: InputStream, name: String, resource: Boolean = false,
-                        app: String? = null): WebResourceResponse {
+                        app: String? = null): Served {
         val mime = mimeOf(name)
         val body = when (mime) {
             "text/html" -> html(stream, resource, app)
@@ -365,7 +344,7 @@ class AppServer(
             "application/javascript" -> if (resource) stream else JsTransforms.apply(stream)
             else -> stream
         }
-        return WebResourceResponse(mime, "utf-8", 200, "OK", mapOf("Access-Control-Allow-Origin" to "*"), body)
+        return Served(mime, "utf-8", 200, "OK", mapOf("Access-Control-Allow-Origin" to "*"), body)
     }
 
     /**
@@ -419,15 +398,18 @@ class AppServer(
      */
     // A page that never asks is forgotten once there are too many to be current: the oldest
     // goes, not - as before - every page still loading.
-    private val fontWaits: MutableMap<String, java.util.concurrent.CountDownLatch> = java.util.Collections.synchronizedMap(
-        object : LinkedHashMap<String, java.util.concurrent.CountDownLatch>() {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, java.util.concurrent.CountDownLatch>?) = size > FONT_WAITS
-        })
+    // A plain map, its oldest evicted in fontToken: a LinkedHashMap subclass carries Kotlin's
+    // bridges to Java 8's Map methods, which Android 5 lacks (LunaCore's API 21 gate).
+    private val fontWaits: MutableMap<String, java.util.concurrent.CountDownLatch> =
+        java.util.Collections.synchronizedMap(LinkedHashMap<String, java.util.concurrent.CountDownLatch>())
     private val fontTokens = java.util.concurrent.atomic.AtomicLong()
 
     private fun fontToken(): String {
         val t = fontTokens.incrementAndGet().toString(36) + java.lang.Long.toString(System.nanoTime() and 0xffffff, 36)
-        fontWaits[t] = java.util.concurrent.CountDownLatch(1)
+        synchronized(fontWaits) {
+            fontWaits[t] = java.util.concurrent.CountDownLatch(1)
+            if (fontWaits.size > FONT_WAITS) fontWaits.keys.iterator().let { it.next(); it.remove() }
+        }
         return t
     }
 
@@ -447,18 +429,18 @@ class AppServer(
         "}catch(e){done();}})();</script>"
 
     /** A font file, from the one origin every page's fonts.css names, cached for good. */
-    private fun font(name: String): WebResourceResponse? {
+    private fun font(name: String): Served? {
         val stream = try { assets.open("luna/fonts/$name") } catch (e: IOException) { return null }
-        return WebResourceResponse("font/ttf", null, 200, "OK",
+        return Served("font/ttf", null, 200, "OK",
             mapOf("Access-Control-Allow-Origin" to "*", "Cache-Control" to "max-age=31536000, immutable"), stream)
     }
 
-    private fun fontsLoaded(uri: Uri): WebResourceResponse {
+    private fun fontsLoaded(uri: ServeUrl): Served {
         uri.getQueryParameter("t")?.let { fontWaits[it]?.countDown() }
-        return WebResourceResponse("text/plain", "utf-8", 204, "No Content", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+        return Served("text/plain", "utf-8", 204, "No Content", emptyMap(), ByteArrayInputStream(ByteArray(0)))
     }
 
-    private fun fontsReady(uri: Uri): WebResourceResponse {
+    private fun fontsReady(uri: ServeUrl): Served {
         val t = uri.getQueryParameter("t").orEmpty()
         val start = System.nanoTime()
         // The page's word arrives on another thread while this one waits, so the wait stays
@@ -467,7 +449,7 @@ class AppServer(
         fontWaits.remove(t)
         val ms = (System.nanoTime() - start) / 1_000_000
         Log.i(TAG, "fonts ${if (ready == true) "ready" else "not ready"} after $ms ms (${uri.host})")
-        return WebResourceResponse("application/javascript", "utf-8", 200, "OK", emptyMap(),
+        return Served("application/javascript", "utf-8", 200, "OK", emptyMap(),
             ByteArrayInputStream("/* Lunacy: this page's fonts are in. */".toByteArray()))
     }
 
@@ -593,10 +575,10 @@ class AppServer(
      * them, and the prelude does nothing. Not for a `palmGetResource` read, which gets the
      * file as it is.
      */
-    private fun mojoJs(assetPath: String): WebResourceResponse? {
+    private fun mojoJs(assetPath: String): Served? {
         val js = try { assets.open("fw/" + followLinks(assetPath.removePrefix("fw/"))).bufferedReader().readText() } catch (e: IOException) { return null }
         val prelude = try { assets.open("lunacy/mojo-prelude.js").bufferedReader().readText() } catch (e: IOException) { "" }
-        return WebResourceResponse("application/javascript", "utf-8", 200, "OK", mapOf("Access-Control-Allow-Origin" to "*"),
+        return Served("application/javascript", "utf-8", 200, "OK", mapOf("Access-Control-Allow-Origin" to "*"),
             ByteArrayInputStream((prelude + "\n" + JsTransforms.sloppyMode(js)).toByteArray()))
     }
 

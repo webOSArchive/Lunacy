@@ -1,5 +1,6 @@
 package org.webosarchive.lunacy.shell
 
+import org.webosarchive.lunacy.card.androidComponent
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject

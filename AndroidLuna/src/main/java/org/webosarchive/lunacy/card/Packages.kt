@@ -240,7 +240,7 @@ class Packages(val root: File, private val cache: File, private val webos: Webos
     companion object {
         /** How long a finished script's last output is waited for. */
         private const val OUTPUT_DRAIN_MS = 2000L
-        const val APPS = "usr/palm/applications"
+        const val APPS = org.webosarchive.lunacy.core.WebosPaths.APPS
         const val PACKAGES = "usr/palm/packages"
         const val SERVICES = "usr/palm/services"
         const val INFO = "usr/lib/ipkg/info"

@@ -1,5 +1,6 @@
 package org.webosarchive.lunacy.shell
 
+import org.webosarchive.lunacy.card.androidComponent
 import android.app.Activity
 import android.graphics.Color
 import android.os.Bundle
@@ -7,6 +8,8 @@ import android.util.Log
 import android.view.WindowManager
 import android.webkit.WebView
 import org.json.JSONObject
+import org.webosarchive.lunacy.card.AndroidAssets
+import org.webosarchive.lunacy.card.AndroidServerHooks
 import org.webosarchive.lunacy.card.AppFiles
 import org.webosarchive.lunacy.card.AppInfo
 import org.webosarchive.lunacy.card.AppRegistry
@@ -414,10 +417,10 @@ class ShellActivity : Activity(), WindowHost {
         // What webOS's syslogd kept, and novacomd's device side: the SDK's tools over adb.
         SysLog.start(webos.root)
         Novacom(webos) { DeviceProfile.nduid(this) }.start()
-        files = AppFiles(assets, installed, webos.root, java.io.File(applicationInfo.sourceDir))
+        files = AppFiles(AndroidAssets(assets), installed, webos.root, java.io.File(applicationInfo.sourceDir))
         jsServices = JsServices(bus, files.root, webos)
         nativeServices = NativeServices(bus, webos) { pdkRuntime }
-        server = AppServer(assets, files, jsServices.root, java.io.File(filesDir, "framework-art"))
+        server = AppServer(AndroidAssets(assets), files, jsServices.root, java.io.File(filesDir, "framework-art"), AndroidServerHooks)
         mediaServer = MediaServer(jsServices.root)
         registry = AppRegistry(files)
         handlers = ContentHandlers(registry, webos.root)

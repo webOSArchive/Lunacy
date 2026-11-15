@@ -25,4 +25,7 @@ object Platform {
 
     /** Whether a platform has set its scheduler yet. */
     val ready: Boolean get() = current != null
+
+    /** Image decoding; null where the platform has none (an icon's size then isn't checked). */
+    @Volatile var images: Images? = null
 }

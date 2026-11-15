@@ -8,6 +8,7 @@ import org.webosarchive.lunacy.card.AppFiles
 import org.webosarchive.lunacy.card.AppRegistry
 import org.webosarchive.lunacy.card.AppServer
 import org.webosarchive.lunacy.card.Bus
+import org.webosarchive.lunacy.card.LauncherPages
 import org.webosarchive.lunacy.core.FolderAssets
 import org.webosarchive.lunacy.core.Log
 import org.webosarchive.lunacy.core.Lunacy
@@ -77,11 +78,33 @@ fun main(args: Array<String>) {
     // The launcher's apps: what the Android launcher draws (AppRegistry.launchPoints).
     http.createContext("/apps") { ex -> ex.use {
         val list = JSONArray()
-        registry.launchPoints.filter { !it.noWindow }.sortedBy { it.title.lowercase() }.forEach { a ->
-            list.put(JSONObject().put("id", a.id).put("title", a.title).put("url", AppServer.appUrl(a.id, a.main, a.dir))
-                .put("icon", "/icon?id=" + java.net.URLEncoder.encode(a.id, "UTF-8")))
-        }
+        registry.launchPoints.sortedBy { it.title.lowercase() }.forEach { a -> list.put(entryOf(a)) }
         send(ex, 200, "application/json; charset=utf-8", list.toString().toByteArray())
+    } }
+
+    // The shell's launcher and quick-launch bar, placed by LunaCore's rules (LauncherPages), as
+    // AndroidLuna's launcher places a fresh install's apps: the default layout first, then each
+    // other app on its category's or keywords' page, alphabetically. The user's own tabs and
+    // groups (Launcher.setApps on Android) come with editable tabs here.
+    val launcherPages = LauncherPages(assets)
+    http.createContext("/shell") { ex -> ex.use {
+        val apps = registry.launchPoints
+        val byId = apps.associateBy { it.id }
+        fun entry(a: org.webosarchive.lunacy.card.AppInfo) = entryOf(a)
+        val pages = launcherPages.initialPages.map { (d, name) -> d to (name to ArrayList<org.webosarchive.lunacy.card.AppInfo>()) }
+        val placed = HashSet<String>()
+        for ((designator, ids) in launcherPages.defaultLayout) {
+            val page = pages.firstOrNull { it.first == designator }?.second?.second ?: continue
+            ids.mapNotNull { byId[it] }.filter { placed.add(it.id) }.forEach { page += it }
+        }
+        for (a in apps.filter { it.id !in placed }.sortedBy { it.title.lowercase() }) {
+            val d = launcherPages.designatorFor(a)
+            (pages.firstOrNull { it.first == d } ?: pages.first()).second.second += a
+        }
+        val out = JSONObject()
+            .put("pages", JSONArray(pages.map { (d, p) -> JSONObject().put("designator", d).put("title", p.first).put("apps", JSONArray(p.second.map(::entry))) }))
+            .put("dock", JSONArray(launcherPages.quickLaunch().mapNotNull { byId[it] }.map(::entry)))
+        send(ex, 200, "application/json; charset=utf-8", out.toString().toByteArray())
     } }
 
     http.createContext("/icon") { ex -> ex.use {
@@ -118,6 +141,14 @@ fun main(args: Array<String>) {
     println("LUNADE-HOST ${http.address.port}")
     System.out.flush()
 }
+
+/**
+ * An app as the shell launches it: its page's URL, and whether it has a window of its own or
+ * starts headless and opens its cards itself (appinfo.json's noWindow, as Email and Calendar do).
+ */
+private fun entryOf(a: org.webosarchive.lunacy.card.AppInfo) = JSONObject().put("id", a.id).put("title", a.title)
+    .put("url", AppServer.appUrl(a.id, a.main, a.dir)).put("noWindow", a.noWindow)
+    .put("icon", "/icon?id=" + java.net.URLEncoder.encode(a.id, "UTF-8"))
 
 private fun query(ex: HttpExchange): Map<String, String> =
     ex.requestURI.rawQuery.orEmpty().split('&').filter { it.isNotEmpty() }.associate {

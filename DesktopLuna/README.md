@@ -13,9 +13,15 @@ cd DesktopLuna && npm install && npm start
 ```
 
 It needs `AndroidLuna/local-assets` (`AndroidLuna/fetch-assets.sh`), which holds the frameworks
-and the webOS root, as an Android build does. The launcher lists the bundled apps and the ones
-installed in Luna DE's data folder; click one to open it in a TouchPad-sized window (1024 x
-768). F12 opens that window's DevTools, F5 reloads it.
+and the webOS root, as an Android build does.
+
+One window is the device: a TouchPad's screen (1024 x 768) running the shell, with a bezel
+below it holding the home button. The launcher button (bottom right) opens the launcher; an app
+comes up as a card. Home (the bezel's button, or F1) goes from an app to the card view, where a
+tap brings a card up, a flick up closes it, a sideways drag or the wheel slides between them, and
+a right-click offers Luna DE's tools: **pop out** (the card's live page moves into a window of its
+own, beside the device), DevTools, reload, close. F12 opens the DevTools of whatever has the
+keyboard, F5 reloads it.
 
 - `LUNADE_DATA=<folder>`: where Luna DE keeps its data (default: Electron's userData/data).
   Installed apps go in `<folder>/cryptofs/apps/usr/palm/applications/<id>/` until `palm-install`
@@ -35,6 +41,6 @@ sandbox.
 | Path | What it is |
 |---|---|
 | `host/` | The JVM host (Kotlin): LunaCore's AppServer and bus, the page's native interface (`DesktopWindow`), the desktop's `Scheduler` and `Images`, over HTTP on the loopback interface. |
-| `app/main.js` | Electron's main process: starts the host, routes the app origins (`*.media.cryptofs.apps`, and only those) to it, opens the launcher and the app windows. |
-| `app/app-preload.js` | `window.LunacyNative` in an app window: synchronous requests to the page's own origin, and a long poll for the bus's replies. |
-| `app/launcher.html` | Luna DE's launcher, its own and not the TouchPad's (rule 0 exemption, codepoet 2026-11-15). |
+| `app/main.js` | Electron's main process: starts the host, routes the app origins (`*.media.cryptofs.apps`, and only those) to it, and keeps the cards: each a native view over the shell, so that an app's `window.open` (a headless app opening its cards) makes a real window with its opener. |
+| `app/shell.html`, `shell.js`, `shell.css` | The shell, drawn from AndroidLuna's LunaCE images and measurements: status bar, launcher, quick-launch bar, card view (cards shown as snapshots of their pages), the card menu. |
+| `app/app-preload.js` | `window.LunacyNative` in an app's page: synchronous requests to the page's own origin, and a long poll for the bus's replies. |

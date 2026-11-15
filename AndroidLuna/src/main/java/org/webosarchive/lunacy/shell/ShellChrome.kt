@@ -621,10 +621,8 @@ class ShellChrome(
      */
     private fun dock(): List<String> {
         val a = dockPrefs.getString("dock", null)?.let { runCatching { org.json.JSONArray(it) }.getOrNull() }
-            ?: runCatching {
-                val o = org.json.JSONObject(activity.assets.open("luna/default-dock-positions.json").bufferedReader().use { it.readText() })
-                (if (luna.phone) o.optJSONArray("quicklauncher-phone") else null) ?: o.getJSONArray("quicklauncher")
-            }.getOrDefault(org.json.JSONArray())
+            ?: return org.webosarchive.lunacy.card.LauncherPages(org.webosarchive.lunacy.card.AndroidAssets(activity.assets))
+                .quickLaunch(luna.phone).take(quickLaunch.maxItems)
         return (0 until a.length()).map { a.optString(it).removeSuffix("_default") }.take(quickLaunch.maxItems)
     }
 

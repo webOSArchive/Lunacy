@@ -14,48 +14,20 @@ import org.webosarchive.lunacy.card.AppInfo
 class LauncherStore(private val context: Context) {
     private val prefs = context.getSharedPreferences("launcher", Context.MODE_PRIVATE)
 
-    /**
-     * The pages, their names and the keyword map, from assets/luna/launcher-pages.json (which
-     * says where each value comes from). LunaCE's four built-in pages, named as the reference
-     * TouchPad names them: APPS, DOWNLOADS, GAMES, SETTINGS.
-     */
-    private val pageMap = runCatching {
-        JSONObject(context.assets.open("luna/launcher-pages.json").bufferedReader().use { it.readText() })
-    }.getOrDefault(JSONObject())
+    /** The bundled pages, layout and placement rule, shared with Luna DE (LunaCore's LauncherPages). */
+    private val bundled = org.webosarchive.lunacy.card.LauncherPages(org.webosarchive.lunacy.card.AndroidAssets(context.assets))
 
     /** The pages a launcher starts with, before the user's own tabs. */
-    fun initialPages(): MutableList<Launcher.Page> = pageMap.optJSONArray("pages")?.let { a ->
-        (0 until a.length()).map { i ->
-            val p = a.getJSONObject(i)
-            Launcher.Page(p.optString("designator"), p.optString("name", p.optString("designator")))
-        }.toMutableList()
-    }?.takeIf { it.isNotEmpty() } ?: mutableListOf(
-        Launcher.Page("apps", "apps"), Launcher.Page("downloads", "downloads"), Launcher.Page("favorites", "android"), Launcher.Page("prefs", "settings"))
+    fun initialPages(): MutableList<Launcher.Page> =
+        bundled.initialPages.map { (designator, name) -> Launcher.Page(designator, name) }.toMutableList()
+
+    /** Where a bundled app starts: page designator to app ids ([org.webosarchive.lunacy.card.LauncherPages.defaultLayout]). */
+    val defaultLayout: List<Pair<String, List<String>>> get() = bundled.defaultLayout
 
     /**
-     * Where a bundled app starts, from `layout` in that file: webOS shipped the same thing as
-     * /etc/palm/default-launcher-page-layout.json, which is what put Palm's settings apps on
-     * the prefs page. Page designator to app ids, in the order they should appear.
-     */
-    val defaultLayout: List<Pair<String, List<String>>> =
-        pageMap.optJSONArray("layout")?.let { arr ->
-            (0 until arr.length()).mapNotNull { i ->
-                val o = arr.optJSONObject(i) ?: return@mapNotNull null
-                val items = o.optJSONArray("items")
-                o.optString("title") to (0 until (items?.length() ?: 0))
-                    .map { j -> items!!.optString(j).removeSuffix("_default") }
-            }
-        }.orEmpty()
-
-    /** keyword (lower case) to page designator. */
-    private val keywordPages: Map<String, String> = pageMap.optJSONObject("keywords")?.let { o ->
-        o.keys().asSequence().associate { it.lowercase() to o.optString(it) }
-    }.orEmpty()
-
-    /**
-     * The page an app with no place of its own belongs to, as LunaCE's
-     * AppMonitor::pageDesignatorForWebOSApp works it out: its category first, then each of its
-     * keywords. Anything unrecognised goes to the first page.
+     * The page an app with no place of its own belongs to: LunaCE's rule
+     * ([org.webosarchive.lunacy.card.LauncherPages.designatorFor]), after Lunacy's own for
+     * Android's apps and added launch points. Anything unrecognised goes to the first page.
      */
     fun pageFor(app: AppInfo, pages: List<Launcher.Page>): Int {
         // Proof of concept: Android's apps start on the favorites page, named "android".
@@ -63,12 +35,7 @@ class LauncherStore(private val context: Context) {
         // LauncherObject::slotAppAuxiliaryIconAdd put a launch point an app adds on Favorites,
         // which is Android's tab in Lunacy; codepoet's call: it goes on the first page.
         if (app.launchPoint != null) return 0
-        val designator = keywordPages[app.category.lowercase()]
-            ?: app.keywords.firstNotNullOfOrNull { keywordPages[it.lowercase()] }
-            // LauncherObject::pageIndexForAppByPredefinedDesignators: an app the user installed
-            // goes on the downloads page (installedAppsPageIndex), as every installed app does
-            // on the reference TouchPad; the rest on the first.
-            ?: if (app.userInstalled) "downloads" else return 0
+        val designator = bundled.designatorFor(app) ?: return 0
         return pages.indexOfFirst { it.designator == designator }.takeIf { it >= 0 } ?: 0
     }
 

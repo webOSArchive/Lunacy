@@ -19,6 +19,11 @@ Status: **first light** (2026-11-15). Branch `luna-de`. Reviewed, and being buil
   window as a pop-out (milestone 3b, being built). Calculator and
   the Enyo 1 Sampler run; bus calls go round with real errors (no services on the desktop yet).
   How it's wired: [DesktopLuna/README.md](../DesktopLuna/README.md).
+- **Milestone 3b, first drawing.** One window as the device: the status bar, the launcher (its
+  pages, layout and placement from LunaCore's `LauncherPages`, which AndroidLuna's `LauncherStore`
+  now uses too), the quick-launch bar, apps as cards, the card view (tap, flick up to close,
+  slide), headless apps opening their own cards (Calendar), pop-out, the bezel's home button.
+  The cards' list is main.js's until AppLifecycle moves.
 - **Next:** the services an Enyo app asks for first (systemservice's preferences and time,
   applicationManager's launch and open), the network shim and WebSQL (both need their native
   half: net.js and websql.js stand aside until then), then db8, then milestone 5's tools.
@@ -176,11 +181,17 @@ Not every move is a pure one, and the plan doesn't pretend otherwise:
 - **One window is the device** (codepoet, 2026-11-15: "a single Electron window, running Luna
   CE and apps opening within that window"). The window is a TouchPad's screen, and the shell
   runs in it: the status bar, the launcher and the card view, drawn in HTML from the same LunaCE
-  images AndroidLuna draws with. Each app's window is a card in that page (an Electron
-  `<webview>`, which the card view scales and slides as webOS's did). Apps keep their real origins
+  images AndroidLuna draws with. Each app window is a card: a native view (`WebContentsView`) the
+  main process lays over the shell's card area. Not an Electron `<webview>`, which was tried
+  first: a page's `window.open` can't make one, and webOS apps open their cards that way (a
+  `noWindow` app's headless page opens Email's or Calendar's cards, and Enyo's window manager
+  talks to them through the window objects), so each open becomes a card through Electron's
+  `createWindow`, keeping its opener, as Android's onCreateWindow does. **Delta:** a native view
+  can't be CSS-scaled, so the card view shows each card as a snapshot of its page, taken as it
+  goes down and when the card view opens, where Lunacy's cards are live. Apps keep their real origins
   (`https://<id>.media.cryptofs.apps/...`, `AppServer.appUrl`).
-- **Pop out, a developer's tool.** Any card can be peeled off into a window of its own (a
-  `BrowserWindow` on the same page interface; first light's way of running an app), to sit
+- **Pop out, a developer's tool.** Any card can be peeled off into a window of its own (its live
+  view moved into a window, the page carrying on as it was; first light's way of running an app), to sit
   beside the device with its own DevTools. Same-window is the default (codepoet, 2026-11-15:
   "don't throw the baby out with the bath water").
 - **The shell's logic is shared; only its drawing is the platform's.** AndroidLuna's shell

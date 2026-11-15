@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Luna DE</title>
+<link rel="stylesheet" href="shell.css">
+</head>
+<body>
+<!-- The device: a TouchPad's screen, 1024 x 768, and below it Luna DE's bezel with the home
+     button (Docs/luna-de.md, milestone 3b). -->
+<div id="screen">
+	<div id="cards"></div>
+	<div id="pill"><span>Just type...</span></div>
+	<div id="launcher" hidden>
+		<div id="tabs"></div>
+		<div id="grid"></div>
+	</div>
+	<div id="quicklaunch"><div id="dock"></div><button id="launcher-button" title="Launcher"></button></div>
+	<div id="statusbar">
+		<div id="title"><span id="title-text">Luna DE</span><span class="arrow"></span></div>
+		<div id="status-right"><span class="icon wifi"></span><span class="icon battery"></span><span id="clock"></span></div>
+	</div>
+	<div id="menu" hidden></div>
+</div>
+<div id="bezel"><button id="home" title="Home: the card view (F1)"></button></div>
+<script src="shell.js"></script>
+</body>
+</html>

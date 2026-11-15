@@ -1299,7 +1299,7 @@ class ShellActivity : Activity(), WindowHost {
         FileIndex(jsServices.root).attach(db8)
         // The music library, from Android's media library (MusicLibrary): its songs go in with the ringtones.
         val musicLibrary = MusicLibrary(this, jsServices.root).also { it.attach(db8) }
-        MediaIndex(jsServices.root).also { it.music = musicLibrary::songs }.attach(db8, bus)
+        MediaIndex(jsServices.root).also { it.music = musicLibrary::songs; it.attach(db8, bus); it.registerState(bus) }
         // Photos' full-view copies at the screen's size (PhotoCache; LunaRuntimes/photos-service 0001).
         PhotoCache.measure(this)
         PhotoCache.refresh(this, bus, jsServices.root)

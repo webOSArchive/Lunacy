@@ -69,6 +69,26 @@ class MediaIndex(private val webosRoot: File) {
     }
 
     /**
+     * `palm://com.palm.filenotifyd/state`: whether the indexer is busy and /media/internal is
+     * mounted. Video Player watches it and shows its "indexing" spinner while the answer is
+     * "processing" or the volume is unmounted (USB mass storage on a device). Here the index is
+     * brought up to date as it is read (Db8.mirror), never in the background, and
+     * /media/internal is always there (the webOS root's own folder and Android's), so the
+     * answer is the one the TouchPad gave at rest, and a subscription is never told a change.
+     * Measured on the reference TouchPad (2026-11-15): `{"subscribe":true}` (with or without
+     * "watch") `{"returnValue":true,"state":"idle","mounted":{"/media/internal":true}}`; without
+     * a subscription `{"returnValue":false,"errorText":"mustSubscribe"}`, no errorCode. Private
+     * bus only (luna-send -P: "Service does not exist"); the service's other methods answer
+     * "Unknown method".
+     */
+    fun registerState(bus: Bus) = bus.registerPrivate(INDEXER, "state", wholeService = true, Bus.CallHandler { c ->
+        // "watch" alone isn't enough: the TouchPad wanted "subscribe" itself.
+        if (!c.params.optBoolean("subscribe")) return@CallHandler c.reply(JSONObject().put("returnValue", false).put("errorText", "mustSubscribe").toString())
+        c.reply(JSONObject().put("returnValue", true).put("state", "idle")
+            .put("mounted", JSONObject().put("/media/internal", true)).toString())
+    })
+
+    /**
      * The ringtones, as filenotifyd's audio module filed them (measured on the reference
      * TouchPad): isRingtone for a file under /media/internal/ringtones, the title from its tags
      * or else its name, "Unknown Artist", "Unknown Album" and "Unknown Genre" for tags it hasn't

@@ -536,8 +536,8 @@ starting; some may have been settled since without a note. All of it comes after
   own apps and activities start. Show the startup card at once and hold only the launch itself
   behind it (`AppLifecycle.launchFromOutside`), keeping the order the fix needs: the boot's
   relaunches first, the person's last.
-- **Video Player:** `com.palm.filenotifyd`'s `state` (whether `/media/internal` is mounted and
-  scanned) isn't there. (`com.palm.audio`'s `media/lockVolumeKeys` is, since Music's port, and
+- ~~**Video Player:** `com.palm.filenotifyd`'s `state` (whether `/media/internal` is mounted and
+  scanned) isn't there~~ done 2026-11-15 for 1.0 (`MediaIndex.registerState`). (`com.palm.audio`'s `media/lockVolumeKeys` is, since Music's port, and
   while a video plays Android points the volume keys at media itself: measured 2026-11-07.)
 - **Email:** attachments; the Android 5 devices untried; PmLogLib's levels need PmLogDaemon's
   shared memory (only errors are logged unless a service is started with `files/pdk/args`).

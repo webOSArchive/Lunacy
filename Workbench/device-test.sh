@@ -110,6 +110,8 @@ except Exception: print(0)')
   echo "$r" | grep -q 'Service does not exist: com.palm.wifi' && P "2 bus  com.palm.wifi is the private bus's" || F "2 bus  com.palm.wifi answered luna-send -P -- $(echo "$r" | cut -c1-80)"
   r=$(lsp palm://com.palm.audio/ringtone/status '{}')
   echo "$r" | grep -q 'Unknown method' && P "2 bus  the ringtone volume is the private bus's" || F "2 bus  ringtone/status answered luna-send -P -- $(echo "$r" | cut -c1-80)"
+  r=$(lsp palm://com.palm.btmonitor/monitor/getradiostate '{}')
+  echo "$r" | grep -q 'Service does not exist: com.palm.btmonitor' && P "2 bus  com.palm.btmonitor is the private bus's" || F "2 bus  com.palm.btmonitor answered luna-send -P -- $(echo "$r" | cut -c1-80)"
 elif [ -n "$DEBUG" ]; then
   r=$(js /com.palm.app.email/index.html 'new Promise(function(res){var n=0,o={};function c(u,p,k,f){var b=new PalmServiceBridge();b.onservicecallback=function(t){try{o[k]=f(JSON.parse(t))}catch(e){o[k]="bad reply"}if(++n==3)res(JSON.stringify(o))};b.call(u,JSON.stringify(p));(window.__dt=window.__dt||[]).push(b)}
 c("palm://com.palm.systemservice/time/getSystemTime",{},"time",function(r){return r.utc>0});
@@ -121,14 +123,18 @@ setTimeout(function(){res(JSON.stringify(o))},8000)})')
   [ "${napps:-0}" -ge 20 ] && P "2 bus  applicationManager lists $napps apps" || F "2 bus  applicationManager -- $r"
   echo "$r" | grep -q '"nosvc": *true' && P "2 bus  an unknown service answers an error (rule 2)" || F "2 bus  unknown service -- $r"
 else S "2 bus  no SDK relay for $MODEL and a release build: start the redux novacomd"; fi
-# A com.palm app reaches them: Night Moves' night and morning schedules (2026-11-15).
+# A com.palm app reaches them: Night Moves' night and morning schedules, Video Player (2026-11-15).
 if [ -n "$DEBUG" ]; then
-  r=$(js /com.palm.app.email/index.html 'new Promise(function(res){var n=0,o={};function c(u,k,f){var b=new PalmServiceBridge();b.onservicecallback=function(t){try{o[k]=f(JSON.parse(t))}catch(e){o[k]="bad reply"}if(++n==2)res(JSON.stringify(o))};b.call(u,"{}");(window.__dtw=window.__dtw||[]).push(b)}
+  r=$(js /com.palm.app.email/index.html 'new Promise(function(res){var n=0,o={};function c(u,k,f){var b=new PalmServiceBridge();b.onservicecallback=function(t){try{o[k]=f(JSON.parse(t))}catch(e){o[k]="bad reply"}if(++n==4)res(JSON.stringify(o))};b.call(u,u.indexOf("filenotifyd")>0?"{\"subscribe\":true}":"{}");(window.__dtw=window.__dtw||[]).push(b)}
 c("palm://com.palm.wifi/getstatus","wifi",function(r){return r.returnValue===true&&/^(serviceDisabled|serviceEnabled|connectionStateChanged)$/.test(r.status)});
 c("palm://com.palm.audio/ringtone/status","ring",function(r){return r.scenario==="ringtone_default"&&r.volume>=0});
+c("palm://com.palm.btmonitor/monitor/getradiostate","bt",function(r){return r.returnValue===true&&/^(on|off|turningon|turningoff)$/.test(r.radio)});
+c("palm://com.palm.filenotifyd/state","fnd",function(r){return r.state==="idle"&&r.mounted["/media/internal"]===true});
 setTimeout(function(){res(JSON.stringify(o))},8000)})')
   echo "$r" | grep -q '"wifi": *true' && P "2 bus  com.palm.wifi answers a com.palm app" || F "2 bus  com.palm.wifi -- $r"
   echo "$r" | grep -q '"ring": *true' && P "2 bus  the ringtone volume answers a com.palm app" || F "2 bus  ringtone/status -- $r"
+  echo "$r" | grep -q '"bt": *true' && P "2 bus  com.palm.btmonitor answers a com.palm app" || F "2 bus  btmonitor -- $r"
+  echo "$r" | grep -q '"fnd": *true' && P "2 bus  filenotifyd's state answers Video Player's watch" || F "2 bus  filenotifyd state -- $r"
 fi
 
 # ---------------------------------------------------------------- 3. mail accounts (ids and codes only)

@@ -17,7 +17,9 @@ trap 'rm -rf "$WORK"' EXIT
 git clone -q https://github.com/webOSArchive/enyo1-sampler.git "$WORK/src"
 git -C "$WORK/src" checkout -q "$COMMIT"
 rm -rf "$WORK/src/.git" "$WORK/src/enyo" "$WORK/src/.gitmodules"
-sed -i 's#<script src="enyo/enyo.js" launch="debug" type="text/javascript"></script>#<script src="/usr/palm/frameworks/enyo/1.0/framework/enyo.js" type="text/javascript"></script>#' "$WORK/src/index.html"
+# Written out and moved back rather than sed -i, which macOS's sed takes differently.
+sed 's#<script src="enyo/enyo.js" launch="debug" type="text/javascript"></script>#<script src="/usr/palm/frameworks/enyo/1.0/framework/enyo.js" type="text/javascript"></script>#' "$WORK/src/index.html" > "$WORK/index.html"
+mv "$WORK/index.html" "$WORK/src/index.html"
 grep -q '/usr/palm/frameworks/enyo/1.0/framework/enyo.js' "$WORK/src/index.html" || { echo "index.html didn't take the system Enyo" >&2; exit 1; }
 DEST="$DATA/cryptofs/apps/usr/palm/applications/$ID"
 rm -rf "$DEST"; mkdir -p "$(dirname "$DEST")"; cp -r "$WORK/src" "$DEST"

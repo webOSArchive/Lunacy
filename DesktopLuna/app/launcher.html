@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Luna DE</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' http://127.0.0.1:*; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self' 'unsafe-inline'">
+<style>
+/* Luna DE's own launcher: a developer's list of the installed apps, in Lunacy's face and on a
+   TouchPad wallpaper (all from AndroidLuna's assets, with their NOTICEs there). Not the
+   TouchPad's launcher: Luna DE's chrome is its own (codepoet, 2026-11-15, Docs/luna-de.md). */
+@font-face { font-family: Prelude; src: url("../../AndroidLuna/src/main/assets/luna/fonts/Prelude-Medium.ttf"); }
+@font-face { font-family: Prelude; font-weight: bold; src: url("../../AndroidLuna/src/main/assets/luna/fonts/Prelude-Bold.ttf"); }
+:root { --text: #ffffff; --dim: rgba(255,255,255,0.65); --tile: rgba(0,0,0,0.35); --tile-hover: rgba(255,255,255,0.14); }
+html, body { margin: 0; height: 100%; }
+body {
+	background: #1b1b1b url("../../AndroidLuna/src/main/assets/luna/wallpapers/01.jpg") center / cover no-repeat;
+	color: var(--text); font-family: Prelude, sans-serif; overflow-y: auto;
+}
+header { display: flex; align-items: baseline; gap: 12px; padding: 18px 28px 6px; text-shadow: 0 1px 2px #000; }
+header h1 { margin: 0; font-size: 26px; font-weight: bold; }
+header span { color: var(--dim); font-size: 15px; }
+main { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 14px 24px 32px; }
+.app { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 8px; border-radius: 10px;
+	background: var(--tile); cursor: pointer; border: 0; color: inherit; font: inherit; }
+.app:hover, .app:focus-visible { background: var(--tile-hover); outline: none; }
+.app img { width: 64px; height: 64px; object-fit: contain; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.6)); }
+.app .title { font-size: 15px; text-align: center; line-height: 1.2; text-shadow: 0 1px 2px #000; }
+.app .id { font-size: 11px; color: var(--dim); text-align: center; word-break: break-all; }
+#status { padding: 0 28px; color: var(--dim); }
+</style>
+</head>
+<body>
+<header><h1>Luna DE</h1><span>webOS apps on this computer &middot; click to open &middot; F12 opens an app's DevTools</span></header>
+<div id="status">Loading the apps&hellip;</div>
+<main id="apps"></main>
+<script>
+"use strict";
+var DEFAULT_ICON = "../../AndroidLuna/src/main/assets/luna/images/default-app-icon.png";
+window.lunade.apps().then(function (apps) {
+	var list = document.getElementById("apps");
+	document.getElementById("status").textContent = apps.length + " apps";
+	apps.forEach(function (a) {
+		var b = document.createElement("button");
+		b.className = "app";
+		b.title = a.id;
+		var img = document.createElement("img");
+		img.alt = "";
+		img.src = a.icon;
+		img.onerror = function () { img.onerror = null; img.src = DEFAULT_ICON; };
+		var t = document.createElement("div"); t.className = "title"; t.textContent = a.title;
+		var i = document.createElement("div"); i.className = "id"; i.textContent = a.id;
+		b.appendChild(img); b.appendChild(t); b.appendChild(i);
+		b.addEventListener("click", function () { window.lunade.launch(a); });
+		list.appendChild(b);
+	});
+}, function (e) {
+	document.getElementById("status").textContent = "The host didn't answer: " + e;
+});
+</script>
+</body>
+</html>

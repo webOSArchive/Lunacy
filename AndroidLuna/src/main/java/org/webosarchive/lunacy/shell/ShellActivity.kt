@@ -1,5 +1,8 @@
 package org.webosarchive.lunacy.shell
 
+import org.webosarchive.lunacy.card.forScreen
+import org.webosarchive.lunacy.card.nduid
+import org.webosarchive.lunacy.card.serial
 import org.webosarchive.lunacy.card.androidComponent
 import android.app.Activity
 import android.graphics.Color

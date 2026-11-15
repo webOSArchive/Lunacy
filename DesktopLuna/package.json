@@ -1,0 +1,15 @@
+{
+  "name": "lunade",
+  "productName": "Luna DE",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Luna Desktop Edition: Lunacy on the desktop, for webOS app developers (Docs/luna-de.md).",
+  "main": "app/main.js",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "start": "electron . --no-sandbox"
+  },
+  "devDependencies": {
+    "electron": "44.9.3"
+  }
+}

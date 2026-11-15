@@ -1,14 +1,24 @@
-Palm's Video Player (com.palm.app.videoplayer 1.0.0), as shipped on HP webOS 3.x.
+Video Player (com.palm.app.videoplayer 1.0.0): webOS Community Edition's player under Palm's
+id, as webOS CE puts it on a TouchPad, and as the reference TouchPad (webOS CE 3.1.0) runs it.
 
-Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence; distributed by
-Lunacy as abandonware, like Mojo, Palm's other bundled apps, the Prelude fonts and the
-TouchPad wallpapers: no owner has asserted rights since webOS was discontinued.
+webOS CE replaced Palm's Mojo 2 Video Player with an Enyo player of its own (the Videos app,
+com.palm.app.videos 3.2.0, in the webOS Community Edition project, apps/com.palm.app.videos):
+VideoEngine.js, a serialized seek and load gate over <video>, and PlayerApp.js, the card.
+Videos' package script installs the same player under this id, so that apps that launch the
+video player by name get it: index.html, depends.js, source/, css/, the four images in images/
+and this appinfo.json (build/full-ce/videos-app/videoplayer-app/appinfo.json). Those files are
+here as that script installs them, from the project's tree at bc1b6c5 ("Videos: localizable
+strings"); like that script, its resources/ are not copied, so the player's text is English.
+The player is webOS Archive's work, written for webOS CE (codepoet, 2026-11-15: "in CE we built
+a new video player that replaces Palm's").
 
-Copied from the reference TouchPad (/usr/palm/applications/com.palm.app.videoplayer), exactly
-as it was packaged; Lunacy does not change it (rule 5 in CLAUDE.md).
+icon.png and icon-256x256.png are Palm's, from the original Video Player, which webOS CE left
+in place: copyright Palm, Inc. / Hewlett-Packard, never released under an open licence, and
+distributed by Lunacy as abandonware, like Mojo, the Prelude fonts and the TouchPad wallpapers.
 
-It is here because it is part of the platform rather than an app someone chooses: webOS apps
-play video by launching it with a target, and MeTube - among others - has no player of its
-own. It is a Mojo 2 app, and the only one Lunacy has run; it needs the mojo2, mojo.core,
-metascene.* and media frameworks that AndroidLuna/fetch-assets.sh copies off the device.
-Its appinfo.json says "visible": "false", so it has no launcher icon, as on a device.
+Until 2026-11-15 this folder held Palm's original Mojo 2 Video Player 1.0.0, which opened on a
+phone-sized library screen the TouchPad never shows. Lunacy routes videos as before: only a
+launch of this id, or a video file opened through the system's handler table, comes here;
+CE's Videos (com.palm.app.videos) still goes to Android's player (card/WebosLinks.kt). Any
+change Lunacy needs in the player is made in the webOS CE project and comes here with its next
+release (rule 5 in CLAUDE.md).

@@ -715,8 +715,10 @@ it (webCal Sync's own instructions do), and it is where an account is removed:
 - The local profile account is greyed out and can't be opened, as on the reference TouchPad;
   so the profile's settings, and its "erase device", are out of reach on both.
 
-**Palm's Video Player** is in the APK on the same terms, and for a different reason: it is
-part of the platform rather than an app someone chooses. webOS apps play video by launching
+**The Video Player** is in the APK for a different reason: it is part of the platform
+rather than an app someone chooses. Since 2026-11-15 it is webOS CE's Enyo player under Palm's
+id, as the reference TouchPad runs it, in place of Palm's Mojo 2 one (its NOTICE says why and
+from where). webOS apps play video by launching
 `com.palm.app.videoplayer` with a target, and MeTube - among others - has no player of its
 own, so without it those apps get an honest error and no film. Its `appinfo.json` says
 `"visible": "false"`, which is how webOS kept it out of the launcher; Lunacy reads that too,
@@ -1892,8 +1894,8 @@ Mojo isn't packaged the way Enyo is, and that shapes what Lunacy has to do:
   origin - Mojo knew `file://` (a device) and `http://` (a desktop), and Lunacy is `https://`.
 - **Mojo 2 is a second framework beside it**, at `/usr/palm/frameworks/mojo2`, with its own
   loader, its own submission (205) and MojoLoader handing out libraries from
-  `/usr/palm/frameworks/<name>/version/<v>/`. Palm's Video Player is one, and apps hand video
-  to it. The card host serves the whole frameworks tree for it, and the same builtin
+  `/usr/palm/frameworks/<name>/version/<v>/`. Palm's Video Player was one, until webOS CE's
+  Enyo player took its id (2026-11-15). The card host serves the whole frameworks tree for it, and the same builtin
   injection puts Mojo 2's framework and libraries in front of such a page.
 - **Reading a file is not loading a page.** Mojo reads every widget template and every scene
   with `palmGetResource`, which on a device read the file off the disk. That call marks its

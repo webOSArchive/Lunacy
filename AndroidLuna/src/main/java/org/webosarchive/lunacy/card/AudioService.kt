@@ -24,7 +24,14 @@ import kotlin.math.roundToInt
  *   with "scenario":"media_back_speaker", "active":true and "mic_gain":-1, measured on the
  *   TouchPad; `media/getVolume` is `{"returnValue":true,"scenario":"media_back_speaker","volume":70}`
  *   and `media/lockVolumeKeys` `{"returnValue":true}`.
- * - Other classes (ringtone, voice) aren't here, and the bus says so.
+ * - The ringtone class (codepoet 2026-11-15; Night Moves' night and morning schedules) is
+ *   Android's ring stream, kept the same way as the system class: the TouchPad keeps the two
+ *   apart (a system volume change sent nothing to ringtone subscribers), and so does Android
+ *   where the device has a ringer of its own. Its muted is the ring stream's mute.
+ * - Other classes (voice, alerts, notifications) aren't here, and the bus says so.
+ * - The system and ringtone classes are the private bus's: an app outside com.palm.* gets the
+ *   router's "Unknown method" for them, measured with Workbench/probe's bus probe under both
+ *   ids on the TouchPad (2026-11-15). The media class answers both.
  *
  * Measured on the reference TouchPad with luna-send (webOS CE 3.1.0):
  * - `system/status`: `{"returnValue":true,"action":"requested","scenario":"system_default",
@@ -39,7 +46,12 @@ import kotlin.math.roundToInt
  *   message against schema"}`. The same schema error comes from `playFeedback` without a name.
  * - `systemsounds/playFeedback {"name":…}` answers `{"returnValue":true}`, even for a sound that
  *   doesn't exist.
- * - A public caller gets the same answers as a system app.
+ * - `ringtone/status`: the system class's shape with "scenario":"ringtone_default";
+ *   `ringtone/getVolume` `{"returnValue":true,"scenario":"ringtone_default","volume":70}`;
+ *   `ringtone/setVolume` and `ringtone/setMuted` the system class's answers and errors. A change
+ *   is sent as `"action":"changed","changed":["volume"]`, as for the system class.
+ * - An app outside com.palm.* (a probe app, not luna-send) gets `Unknown method "status" for
+ *   category "/system"` (and "/ringtone"); `media/status` answers it.
  */
 class AudioService(
     context: Context,
@@ -51,19 +63,13 @@ class AudioService(
 ) {
     private val app: Context = context.applicationContext
     private val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    private val watchers = LinkedHashSet<Bus.Call>()
-
     /** The system class is muted: Lunacy's feedback sounds don't play. */
     var muted = startMuted
         private set
 
-    /** The last volume asked for, reported while Android's stream is still at the step it maps to. */
-    private var asked = -1
-    private var reported = -1
-
     // Android's own volume keys and its settings change the stream too.
     private val receiver = object : BroadcastReceiver() {
-        override fun onReceive(c: Context, i: Intent) { changed(listOf("volume")); mediaChanged() }
+        override fun onReceive(c: Context, i: Intent) { system.changed(listOf("volume")); ringtone.changed(listOf("volume", "muted").filter { it == "volume" || ringIsMuted() != lastRingMuted }); lastRingMuted = ringIsMuted(); mediaChanged() }
     }
 
     // ---- the media class ----
@@ -118,9 +124,11 @@ class AudioService(
         c.onCancel { locks.remove(c); if (locks.isEmpty()) lockVolumeKeys(false) }
     }
 
+    private var lastRingMuted = false
+
     init {
         mediaReported = mediaVolume()
-        reported = volume()
+        lastRingMuted = ringIsMuted()
         app.registerReceiver(receiver, IntentFilter(VOLUME_CHANGED))
     }
 
@@ -128,9 +136,8 @@ class AudioService(
     fun close() { runCatching { app.unregisterReceiver(receiver) } }
 
     fun register(bus: Bus) {
-        bus.register(SERVICE, "system/status", Bus.CallHandler { status(it) })
-        bus.register(SERVICE, "system/setVolume", Bus.CallHandler { setVolume(it) })
-        bus.register(SERVICE, "system/setMuted", Bus.CallHandler { setMuted(it) })
+        system.register(bus)
+        ringtone.register(bus)
         bus.register(SERVICE, "systemsounds/playFeedback", Bus.CallHandler { feedback(it) })
         bus.register(SERVICE, "media/status", Bus.CallHandler { mediaStatus(it) })
         bus.register(SERVICE, "media/getVolume", Bus.CallHandler { it.reply(JSONObject().put("returnValue", true)
@@ -139,70 +146,122 @@ class AudioService(
         bus.register(SERVICE, "media/lockVolumeKeys", Bus.CallHandler { lock(it) })
     }
 
-    private fun max() = am.getStreamMaxVolume(STREAM).coerceAtLeast(1)
     /**
-     * webOS's 0..100 as the stream's steps. A volume above 0 is never the bottom step: on Android
-     * that is the ringer going silent, which only an app with Do Not Disturb access may do (Night
-     * Moves' night volume 1 rounded to 0 on the Pixel's seven steps, and Android threw).
+     * One of webOS's volume classes over one of Android's streams: status (with its
+     * subscription), getVolume, setVolume and setMuted, as the TouchPad answered them.
      */
-    private fun step(volume: Int) = (volume * max() / 100f).roundToInt().let { if (volume > 0) it.coerceAtLeast(1) else it }
+    private inner class VolumeClass(
+        private val category: String,
+        private val stream: Int,
+        private val scenario: String,
+        /** Whether the class is muted. */
+        private val isMuted: () -> Boolean,
+        /** Mutes or unmutes it; an error reply's text when Android refuses. */
+        private val setMutedTo: (Boolean) -> String?,
+    ) {
+        private val watchers = LinkedHashSet<Bus.Call>()
+        /** The last volume asked for, reported while Android's stream is still at the step it maps to. */
+        private var asked = -1
+        private var reported = -1
 
-    /** 0..100. A volume the slider set is kept while the stream is at its step, so it doesn't jump. */
-    private fun volume(): Int {
-        val now = am.getStreamVolume(STREAM)
-        if (asked >= 0 && step(asked) == now) return asked
-        asked = -1
-        return (now * 100f / max()).roundToInt()
-    }
-
-    private fun state(): JSONObject = JSONObject()
-        .put("returnValue", true)
-        .put("scenario", "system_default")
-        .put("volume", volume())
-        .put("active", false)
-        .put("ringer switch", true)
-        .put("muted", muted)
-        .put("slider", false)
-        .put("hac", false)
-
-    private fun status(c: Bus.Call) {
-        val j = state().put("action", "requested").put("subscribed", c.subscribe)
-        c.reply(j.toString())
-        if (c.subscribe && !c.cancelled) { watchers += c; c.onCancel { watchers.remove(c) } }
-    }
-
-    /** Tells subscribers what changed, only if it did: the TouchPad sends nothing for a no-op. */
-    private fun changed(keys: List<String>) {
-        val real = keys.filter { k -> k != "volume" || volume() != reported }
-        reported = volume()
-        if (real.isEmpty()) return
-        val j = state().put("action", "changed").put("changed", JSONArray(real)).toString()
-        watchers.toList().forEach { it.reply(j) }
-    }
-
-    private fun setVolume(c: Bus.Call) {
-        val v = integer(c.params, "volume") ?: return c.reply(SCHEMA_ERROR)
-        if (v !in 0..100) {
-            return c.reply(JSONObject().put("returnValue", false).put("errorCode", 3)
-                .put("errorText", "Invalid 'volume' integer parameter value.").toString())
+        fun register(bus: Bus) {
+            fun private(method: String, h: (Bus.Call) -> Unit) =
+                bus.registerPrivate(SERVICE, "$category/$method", wholeService = false, Bus.CallHandler(h))
+            private("status") { status(it) }
+            private("getVolume") { it.reply(JSONObject().put("returnValue", true).put("scenario", scenario).put("volume", volume()).toString()) }
+            private("setVolume") { setVolume(it) }
+            private("setMuted") { setMuted(it) }
+            reported = volume()
         }
-        // Android may still refuse (0 is silent, which needs Do Not Disturb access): an error then.
-        try { am.setStreamVolume(STREAM, step(v), 0) } catch (e: SecurityException) {
-            return c.reply(JSONObject().put("returnValue", false).put("errorCode", -1)
-                .put("errorText", "Android wouldn't let Lunacy set the volume: ${e.message}").toString())
+
+        private fun max() = am.getStreamMaxVolume(stream).coerceAtLeast(1)
+        /**
+         * webOS's 0..100 as the stream's steps. A volume above 0 is never the bottom step: on
+         * Android that is the ringer going silent, which only an app with Do Not Disturb access
+         * may do (Night Moves' night volume 1 rounded to 0 on the Pixel's seven steps, and
+         * Android threw).
+         */
+        private fun step(volume: Int) = (volume * max() / 100f).roundToInt().let { if (volume > 0) it.coerceAtLeast(1) else it }
+
+        /** 0..100. A volume the slider set is kept while the stream is at its step, so it doesn't jump. */
+        fun volume(): Int {
+            val now = am.getStreamVolume(stream)
+            if (asked >= 0 && step(asked) == now) return asked
+            asked = -1
+            return (now * 100f / max()).roundToInt()
         }
-        asked = v
-        c.reply(Bus.ok())
-        changed(listOf("volume"))
+
+        private fun state(): JSONObject = JSONObject()
+            .put("returnValue", true)
+            .put("scenario", scenario)
+            .put("volume", volume())
+            .put("active", false)
+            .put("ringer switch", true)
+            .put("muted", isMuted())
+            .put("slider", false)
+            .put("hac", false)
+
+        private fun status(c: Bus.Call) {
+            c.reply(state().put("action", "requested").put("subscribed", c.subscribe).toString())
+            if (c.subscribe && !c.cancelled) { watchers += c; c.onCancel { watchers.remove(c) } }
+        }
+
+        /** Tells subscribers what changed, only if it did: the TouchPad sends nothing for a no-op. */
+        fun changed(keys: List<String>) {
+            val real = keys.filter { k -> k != "volume" || volume() != reported }
+            reported = volume()
+            if (real.isEmpty()) return
+            val j = state().put("action", "changed").put("changed", JSONArray(real)).toString()
+            watchers.toList().forEach { it.reply(j) }
+        }
+
+        private fun setVolume(c: Bus.Call) {
+            val v = integer(c.params, "volume") ?: return c.reply(SCHEMA_ERROR)
+            if (v !in 0..100) {
+                return c.reply(JSONObject().put("returnValue", false).put("errorCode", 3)
+                    .put("errorText", "Invalid 'volume' integer parameter value.").toString())
+            }
+            // Android may still refuse (0 is silent, which needs Do Not Disturb access): an error then.
+            try { am.setStreamVolume(stream, step(v), 0) } catch (e: SecurityException) {
+                return c.reply(refused(e))
+            }
+            asked = v
+            c.reply(Bus.ok())
+            changed(listOf("volume"))
+        }
+
+        private fun setMuted(c: Bus.Call) {
+            val m = c.params.opt("muted") as? Boolean ?: return c.reply(SCHEMA_ERROR)
+            val was = isMuted()
+            setMutedTo(m)?.let { return c.reply(it) }
+            c.reply(Bus.ok())
+            if (was != isMuted()) changed(listOf("muted"))
+        }
     }
 
-    private fun setMuted(c: Bus.Call) {
-        val m = c.params.opt("muted") as? Boolean ?: return c.reply(SCHEMA_ERROR)
-        val was = muted
-        muted = m
-        c.reply(Bus.ok())
-        if (was != m) changed(listOf("muted"))
-    }
+    private fun refused(e: SecurityException) = JSONObject().put("returnValue", false).put("errorCode", -1)
+        .put("errorText", "Android wouldn't let Lunacy set the volume: ${e.message}").toString()
+
+    private val system = VolumeClass("system", AudioManager.STREAM_SYSTEM, "system_default",
+        isMuted = { muted }, setMutedTo = { muted = it; null })
+
+    /** The ring stream's own mute: Android 6 and later can say whether it is on; before that, Lunacy remembers. */
+    private var ringMuted = false
+    private fun ringIsMuted() = if (android.os.Build.VERSION.SDK_INT >= 23) am.isStreamMute(AudioManager.STREAM_RING) else ringMuted
+
+    private val ringtone = VolumeClass("ringtone", AudioManager.STREAM_RING, "ringtone_default",
+        isMuted = { ringIsMuted() },
+        setMutedTo = { m ->
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= 23) {
+                    am.adjustStreamVolume(AudioManager.STREAM_RING, if (m) AudioManager.ADJUST_MUTE else AudioManager.ADJUST_UNMUTE, 0)
+                } else {
+                    @Suppress("DEPRECATION") am.setStreamMute(AudioManager.STREAM_RING, m)
+                }
+                ringMuted = m
+                null
+            } catch (e: SecurityException) { refused(e) }
+        })
 
     private fun feedback(c: Bus.Call) {
         val name = c.params.opt("name") as? String ?: return c.reply(SCHEMA_ERROR)
@@ -220,7 +279,6 @@ class AudioService(
 
     companion object {
         const val SERVICE = "com.palm.audio"
-        private const val STREAM = AudioManager.STREAM_SYSTEM
         /** AudioManager.VOLUME_CHANGED_ACTION, not public API but sent since Android 4. */
         private const val VOLUME_CHANGED = "android.media.VOLUME_CHANGED_ACTION"
         private val SCHEMA_ERROR = JSONObject().put("returnValue", false).put("errorCode", 1)

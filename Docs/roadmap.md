@@ -515,8 +515,9 @@ starting; some may have been settled since without a note. All of it comes after
 
 - **Chat:** longevity on the devices; webOS CE's startup hang (PmLogLib's semaphore; take CE's
   fix if it lands in the transport); the Add Buddy invitation message, which the transport drops.
-- **`com.palm.wifi` and `com.palm.audio/ringtone` (codepoet, 2026-11-14: "we should have built it
-  to begin with"):** webOS apps that switch Wi-Fi or the ringer volume get "Service does not
+- ~~**`com.palm.wifi` and `com.palm.audio/ringtone`**~~ done 2026-11-15 for 1.0 (architecture,
+  "Wi-Fi and the volumes"). Was (codepoet, 2026-11-14: "we should have built it
+  to begin with"): webOS apps that switch Wi-Fi or the ringer volume get "Service does not
   exist" today (Night Moves' night and morning schedules). The shell already switches Wi-Fi
   (`SystemControls.setWifi`, allowed at target 28): `setstate` and `getstatus` (with its
   subscription), measured on the TouchPad first; `com.palm.wan` stays an error, since Android

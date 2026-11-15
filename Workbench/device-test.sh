@@ -103,6 +103,13 @@ except Exception: print(0)')
   # luna-send is no app: db8 refuses it, as webOS's did an unprivileged caller.
   r=$(ls palm://com.palm.db/find '{"query":{"from":"com.palm.mail.account:1"}}')
   echo "$r" | grep -q '"returnValue": *false' && P "2 bus  db8 refuses a caller without rights" || F "2 bus  db8 answered luna-send -- $(echo "$r" | cut -c1-80)"
+  # Wi-Fi and the ringer are the private bus's, as on the TouchPad (Workbench/probe, 2026-11-15):
+  # luna-send -P is a public caller (the relay's plain luna-send is on the private bus, as on webOS).
+  lsp() { novacom -d "$NOVA" run file:///usr/bin/luna-send -- -P -n 1 "$1" "$2" </dev/null 2>/dev/null; }
+  r=$(lsp palm://com.palm.wifi/getstatus '{}')
+  echo "$r" | grep -q 'Service does not exist: com.palm.wifi' && P "2 bus  com.palm.wifi is the private bus's" || F "2 bus  com.palm.wifi answered luna-send -P -- $(echo "$r" | cut -c1-80)"
+  r=$(lsp palm://com.palm.audio/ringtone/status '{}')
+  echo "$r" | grep -q 'Unknown method' && P "2 bus  the ringtone volume is the private bus's" || F "2 bus  ringtone/status answered luna-send -P -- $(echo "$r" | cut -c1-80)"
 elif [ -n "$DEBUG" ]; then
   r=$(js /com.palm.app.email/index.html 'new Promise(function(res){var n=0,o={};function c(u,p,k,f){var b=new PalmServiceBridge();b.onservicecallback=function(t){try{o[k]=f(JSON.parse(t))}catch(e){o[k]="bad reply"}if(++n==3)res(JSON.stringify(o))};b.call(u,JSON.stringify(p));(window.__dt=window.__dt||[]).push(b)}
 c("palm://com.palm.systemservice/time/getSystemTime",{},"time",function(r){return r.utc>0});
@@ -114,6 +121,15 @@ setTimeout(function(){res(JSON.stringify(o))},8000)})')
   [ "${napps:-0}" -ge 20 ] && P "2 bus  applicationManager lists $napps apps" || F "2 bus  applicationManager -- $r"
   echo "$r" | grep -q '"nosvc": *true' && P "2 bus  an unknown service answers an error (rule 2)" || F "2 bus  unknown service -- $r"
 else S "2 bus  no SDK relay for $MODEL and a release build: start the redux novacomd"; fi
+# A com.palm app reaches them: Night Moves' night and morning schedules (2026-11-15).
+if [ -n "$DEBUG" ]; then
+  r=$(js /com.palm.app.email/index.html 'new Promise(function(res){var n=0,o={};function c(u,k,f){var b=new PalmServiceBridge();b.onservicecallback=function(t){try{o[k]=f(JSON.parse(t))}catch(e){o[k]="bad reply"}if(++n==2)res(JSON.stringify(o))};b.call(u,"{}");(window.__dtw=window.__dtw||[]).push(b)}
+c("palm://com.palm.wifi/getstatus","wifi",function(r){return r.returnValue===true&&/^(serviceDisabled|serviceEnabled|connectionStateChanged)$/.test(r.status)});
+c("palm://com.palm.audio/ringtone/status","ring",function(r){return r.scenario==="ringtone_default"&&r.volume>=0});
+setTimeout(function(){res(JSON.stringify(o))},8000)})')
+  echo "$r" | grep -q '"wifi": *true' && P "2 bus  com.palm.wifi answers a com.palm app" || F "2 bus  com.palm.wifi -- $r"
+  echo "$r" | grep -q '"ring": *true' && P "2 bus  the ringtone volume answers a com.palm app" || F "2 bus  ringtone/status -- $r"
+fi
 
 # ---------------------------------------------------------------- 3. mail accounts (ids and codes only)
 # An account in error shows a warning in Email; an account the person removed may leave its

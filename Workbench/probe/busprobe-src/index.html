@@ -9,7 +9,14 @@ var calls = [
 	["private method", "palm://com.palm.service.accounts/listAccounts", "{}"],
 	["public method", "palm://com.palm.service.accounts/listAccountTemplates", "{}"],
 	["private-only service", "palm://com.palm.accountservices/getAccountToken", "{}"],
-	["private db8 kind", "palm://com.palm.db/find", "{\"query\":{\"from\":\"com.palm.palmprofile:1\"}}"]
+	["private db8 kind", "palm://com.palm.db/find", "{\"query\":{\"from\":\"com.palm.palmprofile:1\"}}"],
+	// 2026-11-15: Wi-Fi and the volume classes (Night Moves).
+	["wifi getstatus", "palm://com.palm.wifi/getstatus", "{}"],
+	["wifi setstate", "palm://com.palm.wifi/setstate", "{\"state\":\"enabled\"}"],
+	["audio system/status", "palm://com.palm.audio/system/status", "{}"],
+	["audio ringtone/status", "palm://com.palm.audio/ringtone/status", "{}"],
+	["audio ringtone/setVolume", "palm://com.palm.audio/ringtone/setVolume", "{\"volume\":70}"],
+	["audio media/status", "palm://com.palm.audio/media/status", "{}"]
 ];
 var bridges = [];
 function next(i) {

@@ -1234,6 +1234,8 @@ class ShellActivity : Activity(), WindowHost {
             // Music holds media/lockVolumeKeys while it is in front: the keys work its volume.
             lockVolumeKeys = { on -> volumeControlStream = if (on) android.media.AudioManager.STREAM_MUSIC else android.media.AudioManager.USE_DEFAULT_STREAM_TYPE })
         audio.register(bus)
+        // Android's Wi-Fi as webOS's wifi service: its state, and its switch (Night Moves).
+        org.webosarchive.lunacy.card.WifiService(this).also { w -> w.register(bus); closeOnDestroy += { w.close() } }
         // Lunacy's own service, on its own name: the environment it really runs in, and
         // Android's settings screens for the settings Android owns.
         lunacyService = LunacyService(this, registry, jsServices, jsServices.root, object : ShellHooks {

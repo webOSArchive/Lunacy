@@ -55,7 +55,7 @@ measured and written down ([Docs/luna-deltas.md](Docs/luna-deltas.md)).
 ## Scope and order
 
 1. Enyo 1 apps (webOS 3.x, TouchPad era), and Enyo 2 apps, which bundle their own framework
-   can run on any OS, but feel at home on Lunacy.
+   and run on any OS, but feel at home on Lunacy.
 2. Mojo apps (webOS 1.x–2.x)
 3. JS (Node) services that ship with apps
 4. PDK native apps
@@ -75,6 +75,8 @@ devices and a 64-bit one for the newer. Phones are partially supported through l
 
 ## Using it
 
+**Lunacy 1.0 is out** (November 2026): [release notes](https://github.com/webOSArchive/Lunacy/releases/latest).
+
 [<img src="https://appcatalog.webosarchive.org/assets/fdroid.png" alt="Get it on F-Droid" height="60">](https://stacks.webosarchive.org/feeds/fdroid/repo/)
 
 **Lunacy is available on F-Droid**, along with LunaKeyboard, from the webOS Archive's own
@@ -91,25 +93,29 @@ F-Droid then installs the right build for your device and keeps it up to date.
 
 1. **Allow unknown sources.** Settings → Security → Unknown sources. (On Android 8 and later
    this is asked for per app, when you open the APK.)
-2. **Install the APK for your device** - `AndroidLuna-arm64.apk` for a 64-bit device,
-   `AndroidLuna-arm32.apk` for a 32-bit one (every Android 5 device; if unsure, try the
+2. **Install the APK for your device** - `AndroidLuna-arm64-release.apk` for a 64-bit device,
+   `AndroidLuna-arm32-release.apk` for a 32-bit one (every Android 5 device; if unsure, try the
    64-bit one first, which a 32-bit device refuses). Copy it to the device and tap it, or
-   `adb install`. Open **Lunacy** from the Android launcher. The card view, the launcher and the bundled apps are
+   `adb install`. The `-debug` APKs are for development; a debug build and a release build
+   can't be installed over each other without uninstalling, which loses Lunacy's data. Open **Lunacy** from the Android launcher. The card view, the launcher and the bundled apps are
    there; **App Catalog**, on the launcher's Downloads tab, is where the apps come from.
-3. **Optional: the webOS keyboard.** Install `LunaKeyboard.apk`, open **LunaKeyboard** and
+3. **Optional: the webOS keyboard.** Install `LunaKeyboard-release.apk`, open **LunaKeyboard** and
    use its two buttons - switch it on in Android's settings, then choose it while a text field
    has focus. Android's own keyboard stays installed; switching back is the same picker.
-4. **Optional: Exhibition as the screen saver.** Settings → Display → Daydream, turn it on and
-   pick **Lunacy Exhibition**. Whenever Android would sleep, Lunacy shows webOS's Exhibition
-   mode instead. Which face it shows is chosen in Lunacy's own Exhibition app, on the Settings
-   tab. Lunacy never turns Daydream on by itself.
+4. **Optional: Exhibition as the screen saver.** In Android's screen saver settings (Settings →
+   Display → Screen saver; Daydream on Android 5, or the button in Lunacy's **Exhibition**
+   Settings app), pick **Lunacy Exhibition**. On a dock or charger, when the screen would time
+   out, Lunacy shows webOS's Exhibition mode instead, and it stays on until the device comes
+   off the charger, as a TouchPad did on its Touchstone. Which face it shows is chosen in the
+   Exhibition app; tap the screen during Exhibition for controls (if the app provides them).
+   Lunacy never turns the screen saver on by itself.
 
 ## Customizing
 
 ### Look and Feel
 
 Lunacy attempts to adapt to the environment it's running on -- with the wide range of Android devices and form-factors
-this doesn't always work perfectly. Its been tested on small screens, big low density screens, big high density screens, 
+this doesn't always work perfectly. It's been tested on small screens, big low density screens, big high density screens, 
 and foldables with multiple screens... but your mileage may still vary. Similarly, GPUs are different than the TouchPad's 
 and may have issues rendering PDK games.
 
@@ -119,7 +125,7 @@ Two Settings apps help you tweak system-wide and on a per-app basis:
 
 - In **Device Info**, you can see the details Lunacy has found for your device, and how it has attempted to map your device
  to one of the webOS form factors -- either simulating a TouchPad or a Pre3.
-   - Also in Device Info, you can over-ride how an app chooses its screen style: turn Phone Zoom on or off, to scale a tablet UI that doesn't adapt well to a smaller screen
+   - Also in Device Info, you can override how an app chooses its screen style: turn Phone Zoom on or off, to scale a tablet UI that doesn't adapt well to a smaller screen
 - In **Screen & Lock**, you can see the default system wide layout that has been selected.
    - Automatic behaves as the detection describes (the text below the drop-down)
    - Phone forces Lunacy to treat your device as a Pre3 by default
@@ -163,10 +169,11 @@ To pin a webOS app to an alternate Android Launcher, use **Software Manager**, f
 - **Android media notifications:** can be connected both ways: webOS media apps show up in Android media controls; Android media apps show a webOS Dashboard for controls. This feature requires that you grant the permission in Android.
 - **Android notification light:** if your device has a notification light, webOS notifications can pulse the light. You can disable this in **Screen & Lock** if you prefer.
 - **Multi-tasking:** Android and webOS both compete for edge swipes, experiment with Gesture and Button controls in Android, and toggling (side) Edge swipe in **Screen & Lock** to find what works best for your device.
-- **Calender and Contact Mirroring:** Android PIM data can be mirrored to webOS, if enabled and with your permission. Add this feature as a new "Account" in the webOS Calender and Contacts apps.
-- **Exhibition:** the webOS Exhibition feature is mapped to Daydream/Screensaver on Android. Choose Lunacy as your Android screensaver, to have Lunacy launch exhibition when the screen times out. Use the webOS **Exhibition** Settings app to determine which exhibitions are available. Tap the screen during Exhibition for controls (if the app provides them).
+- **Calendar and Contact Mirroring:** Android PIM data can be mirrored to webOS, if enabled and with your permission. Add this feature as a new "Account" in the webOS Calendar and Contacts apps.
+- **Exhibition:** webOS's Exhibition is Android's screen saver (step 4 under "Using it").
+- **Wi-Fi, Bluetooth and the ringer:** webOS apps that switch them (Night Moves, on a schedule) switch Android's own.
 - **webOS Keyboard:** A couple optional Android keyboards are available to complete the webOS experience -- choose one that works for your device, or stick with an Android keyboard if you prefer.
-   - [LunaKeyboard](https://github.com/webOSArchive/Lunacy/releases): A separate APK in this project that simulates the TouchPad keyboard -- works best on larger screens.
+   - [LunaKeyboard](LunaKeyboard/README.md): A separate APK in this project that simulates the TouchPad keyboard, scroll ball and all, and works in any Android app -- best on larger screens.
    - [PreKeyboard](https://github.com/alan-morford/prekeyboard): From Alan Morford, this one simulates the Palm Pre hardware keyboard -- works best on smaller screens.
 
 ## Building
@@ -178,23 +185,17 @@ Building from source is [BUILDING.md](BUILDING.md).
 - [BUILDING.md](BUILDING.md): what you need and how to build both APKs
 - [Architecture diagrams](https://claude.ai/artifact/X3upLYuqeZBM4Dq3pPS2bx): the whole system on one page, for newcomers
 - [Docs/architecture.md](Docs/architecture.md): components and boundaries
-- [Docs/roadmap.md](Docs/roadmap.md): phases and exit criteria
+- [Docs/roadmap.md](Docs/roadmap.md): where things stand, what each release brought, and what comes next
 - [Docs/fix-log.md](Docs/fix-log.md): every compatibility fix, the layer it landed in, and how each app fares
 - [Docs/db8.md](Docs/db8.md): webOS's database, and what Lunacy answers for it
 - [Docs/lessons.md](Docs/lessons.md): the rules this and earlier attempts have paid for
 - [Docs/mojo.md](Docs/mojo.md): how Mojo is packaged, and what it takes to run it
-- [Docs/spike-1.md](Docs/spike-1.md): stock Enyo on an Android 5 tablet, first results
-- [Docs/android5-setup.md](Docs/android5-setup.md): what is done to an Android 5 device
+- [Docs/test-plan.md](Docs/test-plan.md): how a release is tested, on which devices
+- [Docs/android5-setup.md](Docs/android5-setup.md): what is done to each test device
 - [Docs/dev-workflow.md](Docs/dev-workflow.md): building, running, and checking against a TouchPad
 - [Docs/luna-shell-reference.md](Docs/luna-shell-reference.md): LunaCE shell spec, from its source
 - [Docs/luna-deltas.md](Docs/luna-deltas.md): where Lunacy still differs from LunaCE, as a work list with pointers
 - [Docs/related-projects.md](Docs/related-projects.md): the wider webOS preservation landscape
-
-## Companion apps
-
-- [LunaKeyboard/](LunaKeyboard/README.md): an optional Android input method that looks and behaves
-  like the TouchPad's keyboard, scroll ball and all. A separate APK that shares nothing with
-  Lunacy and works in any Android app.
 
 ## Licence
 

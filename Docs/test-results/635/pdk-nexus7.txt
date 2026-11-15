@@ -1,0 +1,18 @@
+[INFO] sample of 4 from 3 other PDK apps: com.apkenv.templerun2 com.apkenv.pvzhd com.emu7800.touchpad 
+[PASS] org.scummvm.scummvm: started (.lunacy.start through libbusybox.so and libld-linux.so), still running after 30 s
+[SKIP] com.ea.app.worms.pre.na.efigs: not installed on this device
+[PASS] com.cmdrkeen.game: started (clonekeen through libld-linux.so), still running after 30 s
+[SKIP] com.subatomicstudios.fieldrunners: not installed on this device
+[SKIP] com.bigfishgames.app.atlantisskypatrolhd: not installed on this device
+[SKIP] com.hyperdevbox.exzeus: not installed on this device
+[SKIP] com.explusalpha.snes9x: not installed on this device
+[PASS] com.apkenv.wheresmywater: started (apkenv through libld-linux.so), still running after 30 s
+[SKIP] com.apkenv.fruitninja: not installed on this device
+[SKIP] com.glu.app.ghero5: not installed on this device
+[SKIP] com.gameloft.app.hawx: not installed on this device
+[SKIP] com.gameloft.app.asphalt6: not installed on this device
+[PASS] com.quickoffice.webos: started (qoservice through libld-linux.so), still running after 30 s
+[PASS] com.apkenv.templerun2: started (apkenv through libld-linux.so), still running after 30 s
+[PASS] com.apkenv.pvzhd: started (apkenv through libld-linux.so), still running after 30 s
+[PASS] com.emu7800.touchpad: started (emu7800.arm through libld-linux.so), still running after 30 s
+===== 7 started, 0 failed, 9 not installed; judge the screenshots in Workbench/results/pdk-635-nexus7 against pdk-scenarios.txt =====

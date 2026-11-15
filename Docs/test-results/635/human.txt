@@ -13,3 +13,8 @@
        Download and upload not tried (codepoet's files).
 [PASS] Night Moves on the Pixel (build 626): the night schedule turned Wi-Fi off and the
        morning one on (codepoet watched); Bluetooth switched by the bus by hand (Pixel).
+[PASS] PDK sweep on the Nexus 7 (arm32, Android 5.1.1, 30 s): all 7 installed apps start and
+       draw what pdk-scenarios.txt asks (Keen, Where's My Water, ScummVM, Quick Office's line,
+       and the sample: Temple Run 2, Plants vs. Zombies HD, EMU7800). The 9 scenarios it lacks
+       (Worms, Fieldrunners, Atlantis, ExZeus, Snes9x, Fruit Ninja, Guitar Hero 5, H.A.W.X.,
+       Asphalt 6) ran on the Fold3.

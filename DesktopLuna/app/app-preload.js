@@ -14,7 +14,7 @@
 		"blockScreenTimeout", "fullScreen", "statusBarColor", "cookieWritten", "webViewCreate", "webViewCall",
 		"webViewPlace", "webViewCovered", "webViewDestroy", "pluginStart", "pluginCall", "pluginStop", "log",
 		"nextWindow", "addBanner", "paste", "clipboardHasText", "removeBanner", "clearBanners", "playSound",
-		"setClipboard", "copiedToClipboard"];
+		"setClipboard", "copiedToClipboard", "netSend", "netResult", "netSendSync", "netAbort"];
 
 	function invoke(method, args) {
 		var x = new XMLHttpRequest();

@@ -38,3 +38,9 @@ object AndroidImages : Images {
         return bytes.toByteArray()
     }
 }
+
+/** The WebViews' cookie jar, as LunaCore's [org.webosarchive.lunacy.core.Cookies]: native requests and pages share it. */
+object AndroidCookies : org.webosarchive.lunacy.core.Cookies {
+    override fun get(url: String): String? = android.webkit.CookieManager.getInstance().getCookie(url)
+    override fun set(url: String, setCookie: String) { android.webkit.CookieManager.getInstance().setCookie(url, setCookie) }
+}

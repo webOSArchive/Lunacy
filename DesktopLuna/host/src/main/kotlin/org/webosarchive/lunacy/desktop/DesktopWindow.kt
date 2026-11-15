@@ -4,6 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.webosarchive.lunacy.card.Bus
 import org.webosarchive.lunacy.card.DeviceProfile
+import org.webosarchive.lunacy.card.NetShim
 import org.webosarchive.lunacy.card.PageHooks
 import org.webosarchive.lunacy.card.jsString
 import org.webosarchive.lunacy.core.Log
@@ -32,6 +33,15 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
     @Volatile private var closed = false
     @Volatile var portrait = false
 
+    /**
+     * The network shim's native half (net.js): an app's cross-origin XHR sent from here, as the
+     * TouchPad sent it (its user agent and X-Palm-Carrier), whatever the server's CORS, and
+     * http:// as well as https://. Its answer is fetched by the page once NET_DONE says so.
+     */
+    private val net = NetShim(appId, profile.userAgent, profile.carrierCode, { 0 }) { id ->
+        if (!closed) outbox.add(PageHooks.call(PageHooks.NET_DONE, "$id"))
+    }
+
     /** A method of window.LunacyNative, with its arguments; its value as JSON text. */
     fun invoke(method: String, a: JSONArray): String = when (method) {
         "deviceInfo" -> JSONObject.quote(deviceInfo())
@@ -45,6 +55,10 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
         "activityId" -> "0"
         "mediaBase" -> JSONObject.quote("")
         "localNetworkBlocked" -> "false"
+        "netSend" -> { net.send(a.optInt(0), a.optString(1)); "null" }
+        "netResult" -> JSONObject.quote(net.result(a.optInt(0)))
+        "netSendSync" -> JSONObject.quote(net.sendSync(a.optString(0)))
+        "netAbort" -> { net.abort(a.optInt(0)); "null" }
         "call" -> call(a.optInt(0), a.optString(1), a.optString(2)).toString()
         "cancel" -> { val t = a.optInt(0); main.post { calls.remove(t)?.cancel() }; "null" }
         "log" -> { Log.i(Lunacy.TAG, "[$appId] palm ${a.optString(0)}"); "null" }
@@ -68,6 +82,7 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
 
     fun close() {
         closed = true
+        net.reset()
         main.post { calls.values.forEach { it.cancel() }; calls.clear() }
     }
 

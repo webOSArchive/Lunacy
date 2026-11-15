@@ -81,7 +81,10 @@ function routeAppOrigins() {
 
 /** What every app page runs with: Lunacy's page interface (app-preload.js) in the page's own world. */
 function pagePrefs() {
-	return { preload: path.join(__dirname, "app-preload.js"), contextIsolation: false, sandbox: false, nodeIntegration: false };
+	// http:// images and media in an app's https page load, as on the TouchPad, where a page's
+	// file:// origin never blocked them (Android: LocalNet and the WebView's mixed-content mode).
+	return { preload: path.join(__dirname, "app-preload.js"), contextIsolation: false, sandbox: false, nodeIntegration: false,
+		allowRunningInsecureContent: true };
 }
 
 function appIdOf(url) {

@@ -1,7 +1,7 @@
 package org.webosarchive.lunacy.card
 
-import android.content.res.AssetManager
-import android.webkit.CookieManager
+import org.webosarchive.lunacy.core.Assets
+import org.webosarchive.lunacy.core.Cookies
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -43,10 +43,12 @@ object Http {
     private const val MAX_REDIRECTS = 20
     private val CREDENTIALS = setOf("authorization", "cookie")
     private fun portOf(u: URL) = if (u.port == -1) u.defaultPort else u.port
-    private lateinit var assets: AssetManager
+    private lateinit var assets: Assets
+    private lateinit var cookies: Cookies
     private val tls: SSLSocketFactory by lazy { tlsFactory() }
 
-    fun init(assets: AssetManager) { this.assets = assets }
+    /** The bundled CA certificates (certs/cacerts.pem) and the cookie jar requests share. */
+    fun init(assets: Assets, cookies: Cookies) { this.assets = assets; this.cookies = cookies }
 
     /**
      * Sends the request and follows redirects as the TouchPad's WebKit did: 301/302/303 turn a
@@ -78,14 +80,14 @@ object Http {
                 c.setRequestProperty(k, v); names += k.lowercase()
             }
             if (referer != null && "referer" !in names) c.setRequestProperty("Referer", referer)
-            if ("cookie" !in names) CookieManager.getInstance().getCookie(url.toString())?.let { c.setRequestProperty("Cookie", it) }
+            if ("cookie" !in names) cookies.get(url.toString())?.let { c.setRequestProperty("Cookie", it) }
             if (body != null) {
                 c.doOutput = true
                 c.setFixedLengthStreamingMode(body.size)
                 c.outputStream.use { it.write(body) }
             }
             val code = c.responseCode
-            c.headerFields["Set-Cookie"]?.forEach { CookieManager.getInstance().setCookie(url.toString(), it) }
+            c.headerFields["Set-Cookie"]?.forEach { cookies.set(url.toString(), it) }
             val location = c.getHeaderField("Location")
             if (code in 300..399 && code != 304 && location != null) {
                 tracker?.redirected(headersOf(c))

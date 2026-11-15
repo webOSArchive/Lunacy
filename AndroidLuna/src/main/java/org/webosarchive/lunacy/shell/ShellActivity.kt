@@ -428,7 +428,7 @@ class ShellActivity : Activity(), WindowHost {
         registry = AppRegistry(files)
         handlers = ContentHandlers(registry, webos.root)
         addedLaunchPoints = LaunchPoints(webos.root, files)
-        Http.init(assets)
+        Http.init(AndroidAssets(assets), org.webosarchive.lunacy.card.AndroidCookies)
         packages = Packages(files.root, java.io.File(cacheDir, "packages"), webos)
         // Native services already in the webOS root are on the bus from the start, before the
         // configurator sends the file cache its types, as ls-hubd knew every service file at

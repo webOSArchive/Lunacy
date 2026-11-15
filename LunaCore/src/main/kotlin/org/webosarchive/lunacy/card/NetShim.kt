@@ -1,7 +1,7 @@
 package org.webosarchive.lunacy.card
 
-import android.util.Base64
-import android.util.Log
+import org.webosarchive.lunacy.core.Base64Codec
+import org.webosarchive.lunacy.core.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -86,11 +86,11 @@ class NetShim(
             if (method != "GET" && method != "HEAD") default("Origin", "file://.media.cryptofs.apps.usr.palm.applications.$appId")
             if (j.has("user")) {
                 val auth = j.optString("user") + ":" + j.optString("password")
-                default("Authorization", "Basic " + Base64.encodeToString(auth.toByteArray(), Base64.NO_WRAP))
+                default("Authorization", "Basic " + Base64Codec.encode(auth.toByteArray()))
             }
             val body = when {
                 j.isNull("body") -> null
-                j.optBoolean("bodyBase64") -> Base64.decode(j.getString("body"), Base64.DEFAULT)
+                j.optBoolean("bodyBase64") -> Base64Codec.decode(j.getString("body"))
                 else -> j.getString("body").toByteArray(Charsets.UTF_8)
             }
             val timeout = j.optInt("timeout", 0)
@@ -107,7 +107,7 @@ class NetShim(
                 Log.i(AppServer.TAG, "net [$appId] $method $url $status ${bytes.size}b")
                 val out = JSONObject().put("status", status).put("url", c.url.toString())
                     .put("headers", JSONArray(merged(hops + listOf(Http.headersOf(c))).map { JSONArray(listOf(it.first, it.second)) }))
-                if (j.optBoolean("binary")) out.put("base64", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                if (j.optBoolean("binary")) out.put("base64", Base64Codec.encode(bytes))
                 else out.put("text", String(bytes, charsetOf(j.optString("charset"), c.contentType, bytes)))
                 return out.toString()
             } finally { c.disconnect() }

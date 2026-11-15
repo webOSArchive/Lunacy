@@ -51,6 +51,9 @@ fun main(args: Array<String>) {
         "" to File(repo, "AndroidLuna/local-assets"),
         "apps/" to File(repo, "CoreApps"),
     ))
+    // Native requests (the network shim's): the bundled CA certificates, and the host's own cookie
+    // jar for now (Docs/luna-de.md: the Electron session's to come).
+    org.webosarchive.lunacy.card.Http.init(assets, org.webosarchive.lunacy.core.MemoryCookies())
     val installed = File(data, "cryptofs/apps").apply { mkdirs() }
     val webosRoot = File(data, "webos").apply { mkdirs() }
     val files = AppFiles(assets, installed)

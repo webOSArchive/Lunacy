@@ -24,9 +24,15 @@ Status: **first light** (2026-11-15). Branch `luna-de`. Reviewed, and being buil
   now uses too), the quick-launch bar, apps as cards, the card view (tap, flick up to close,
   slide), headless apps opening their own cards (Calendar), pop-out, the bezel's home button.
   The cards' list is main.js's until AppLifecycle moves.
+- **The network.** `Http` and `NetShim` moved into LunaCore (cookies through `core.Cookies`,
+  Base64 through LunaCore's own codec, java.util.Base64 being Android 8's); the desktop's pages
+  get net.js's native half, so an app's XHR reaches any server, http or https, whatever its
+  CORS, as on the TouchPad, and http images load in a page. **Delta:** the shim's cookies are the
+  host's own jar, not the Electron session's, so a cookie a page sets with document.cookie
+  isn't sent on its native XHRs (and the reverse) until the host reads the session's.
 - **Next:** the services an Enyo app asks for first (systemservice's preferences and time,
-  applicationManager's launch and open), the network shim and WebSQL (both need their native
-  half: net.js and websql.js stand aside until then), then db8, then milestone 5's tools.
+  applicationManager's launch and open), WebSQL (its native half: websql.js stands aside until
+  then), then db8, then milestone 5's tools.
 - **Ratchet items (desktop):** Electron runs with `--no-sandbox` in development (the Linux
   setuid helper needs root); app windows share the page's world with the preload
   (`contextIsolation: false`), as Android's WebView binding does.

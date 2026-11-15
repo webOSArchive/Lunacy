@@ -113,6 +113,12 @@ Palm's Jasmine spec for Contacts is listed as skipped: it needs a browser harnes
 - [ ] Email loads headless at boot.
 - [ ] The bus answers: the time, `listApps` (20 apps or more), a real error for a service that
       doesn't exist (rule 2), and db8 refuses a caller without rights.
+- [ ] The private bus's services refuse a public caller as the TouchPad did (`luna-send -P`:
+      `com.palm.wifi`, `com.palm.btmonitor`, the ringtone class) and answer a `com.palm` page
+      (those, and `com.palm.filenotifyd/state`). *Seen failing:* luna-send without `-P` (the
+      relay's private bus) answered all three; that was the check's mistake, fixed to `-P`.
+- [ ] In an XML document `getElementsByTagName` finds elements by local name, as the
+      TouchPad's WebKit did (a WebDAV reply's `<d:response>` for `"response"`).
 
 ## 3. Mail accounts — *automated, debug build*
 
@@ -139,6 +145,22 @@ Each line is a bug that reached a device, with the check that would see it again
 - [Human] **Messaging's broken avatar** (6071f3c): a chat with someone new shows their avatar,
       or the generic one, from the first message; never a broken image. Section 4's image
       check covers an open chat only if one is open.
+- [ ] **An app launched as Lunacy starts** (970b21c): Clock, launched by the intent that
+      starts Lunacy, opens its card after the boot settles. *Seen failing:* 617 on the Fold3,
+      every time ("no card opened; the placeholder goes").
+- [ ] **WebDAV Client's curl** (18c28a8): `test.sh` runs `curl.js` with the app's PROPFIND
+      (`--noproxy`, credentials in the URL and `-u`). *Seen failing:* the old `curl.js` gave
+      "option --noproxy: is unknown".
+- [Human] **Exhibition from Android's screen saver stays lit** (dad14ba): with Lunacy chosen as
+      the screen saver, dock or charge the device and leave it past the screen timeout; the
+      screen saver's Exhibition stays on until the device comes off the charger.
+- [Human] **Schedules that switch radios and volumes** (fd57d48, 222a819): Night Moves' night
+      and morning schedules turn Wi-Fi and Bluetooth off and on and set the ringer volume.
+- [Human] **WebDAV Client** (18c28a8): a configured server lists its folders, and a file
+      downloads and uploads.
+- [Human] **Video Player** (8575ef4): launched by id with a video (MeTube, or
+      `alaunch.sh com.palm.app.videoplayer '{"target":...}'`), webOS CE's player plays it
+      across the card.
 - [Human] **Duplicates from leaked shells** (e384a82, 2d64e46): each leaked shell ran its own bus,
       db8 and activity manager, and webCal's events came in twice or more. After a fold, an
       unfold, a rotation and Android sending Lunacy home and back, a synced calendar has no

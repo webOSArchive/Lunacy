@@ -211,6 +211,22 @@ if [ "$n" = 0 ]; then F "5 regr  Email's account query not seen from start to ca
 elif [ "$n" -le 2 ]; then P "5 regr  Email queried its accounts $n time(s) from start to card (22fa049)"
 else F "5 regr  Email reloaded its accounts $n times from start to card (22fa049: db8 waking watches for nothing)"; fi
 
+# 970b21c: an app launched by the intent that starts Lunacy came up with no card. Clock, every
+# time on the Fold3: its boot clock.update activities relaunched it while it was starting on the
+# person's launch, so it handled an alarm update. The launch now waits for the boot ("the boot
+# settled"), and Clock's placeholder must not go without a card. Seen failing: 617 on the Fold3
+# logged "launch com.palm.app.clock: no card opened; the placeholder goes", with no settle line.
+L1="$L1
+$(CRASHLOG)"
+$A shell am force-stop $PKG </dev/null; $A logcat -c </dev/null
+$A shell input keyevent KEYCODE_WAKEUP </dev/null; $A shell wm dismiss-keyguard </dev/null >/dev/null 2>&1
+$A shell am start -n $PKG/.shell.ShellActivity --es launch com.palm.app.clock </dev/null >/dev/null 2>&1
+if wait_log "launch from outside: the boot settled" 90; then
+  sleep 12
+  if lunalog | grep -q "launch com.palm.app.clock: no card opened"; then F "5 regr  Clock launched as Lunacy starts opened no card (970b21c)"
+  else P "5 regr  Clock launched as Lunacy starts opened its card ($(lunalog | grep -o 'the boot settled after [0-9]* ms' | head -1))"; fi
+else F "5 regr  a launch as Lunacy starts never ran (no \"the boot settled\" in 90 s)"; fi
+
 # ---------------------------------------------------------------- 6. crashes
 # Over both starts' logs.
 L="$L1

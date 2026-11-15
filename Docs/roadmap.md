@@ -34,11 +34,54 @@ after 1.0.
 Before shipping 1.0, as for every release: the latest App Catalog bundled (6.2.2931 as of
 2026-11-08, the same as the Museum's).
 
-## Where things stand (2026-11-14)
+## Where things stand (2026-11-15)
 
-**Feature freeze (codepoet, 2026-11-09, at 0.9.5).** Until 1.0, Lunacy itself takes bug fixes
-only; the one exception is a change F-Droid needs. A new idea goes on the post-1.0 list.
-LunaKeyboard is separate: it needs work, and that work isn't part of 1.0's stabilisation.
+**1.0 is being made (codepoet, 2026-11-15).** 0.9.7 was well received and stable, so the
+feature freeze (2026-11-09, at 0.9.5) was lifted for a few changes, all done and checked on
+devices. One more change is coming: an update to the bundled App Catalog, made in another
+session; then 1.0 is done. No change to how apps launch (codepoet: "no changes to launching
+logic today"); whether a video file opened without an app id should go to Android's player is
+an open question for after 1.0 (it goes to `com.palm.app.videoplayer` through the TouchPad's
+handler table, as before). LunaKeyboard stays on its own track.
+
+**1.0** (to be released), everything since 0.9.7:
+
+- **Wi-Fi, Bluetooth and the ringer for webOS apps:** `com.palm.wifi` (state and switch),
+  `com.palm.btmonitor`'s radio, and `com.palm.audio`'s ringtone class, over Android's own, in
+  the TouchPad's answers and errors; private bus only, as there (the system volume, which any
+  app could set, is too). Night Moves' night and morning schedules switch them (fd57d48,
+  222a819).
+- **Launching an app as Lunacy starts** brings its card every time; Clock never did (970b21c).
+- **Exhibition from Android's screen saver** stays lit until the device leaves its charger
+  (dad14ba).
+- **Video Player** is webOS CE's player, as on the TouchPad, in place of Palm's phone-era one;
+  and its watch on the media indexer answers (9d29075, 8575ef4).
+- **WebDAV Client** lists, downloads and uploads: Lunacy's curl takes `--noproxy` and a URL's
+  encoded credentials, and in XML documents `getElementsByTagName` finds elements by local
+  name, as the TouchPad's WebKit did (18c28a8).
+- **App Catalog:** the bundled copy updated (in progress).
+
+**The 1.0 round, prepared (not run).** In order, after the App Catalog change lands:
+1. The bundled App Catalog is the newest (compare with the Museum's), the tree is clean, and
+   `gradle.properties` says 1.0.0.
+2. `./test.sh` (tier 1), then `./build.sh publish`: six APKs, the GPL source tar, one
+   SHA256SUMS; the build number is the commit count. Park `out/` before any ad-hoc build.
+3. Devices back on Wi-Fi adb: on 2026-11-15 the Fold3 (.175) and the Pixel Tablet (.153)
+   answered, and codepoet is readying the Nexus 7 (arm32, Android 5.1.1, Chromium 37: the old
+   device for this round); the HP 10 G2, Nexus 5, A7 Lite and Kyocera need waking, or a cable
+   and `adb tcpip 5555` after a reboot ([dev-workflow.md](dev-workflow.md)). The Boox is
+   codepoet's.
+4. The debug build on every test device (`adb install -r`, each keeps its variant; check
+   `pkgFlags` first), screens kept awake, then `Workbench/device-test.sh <device> <build>
+   Docs/test-results/<build>/<device>.txt` on each: 48 checks on the Fold3 (46 on 2026-11-15
+   before the XML and launch-at-start checks were added), fewer on a release.
+5. The PDK sweep: `Workbench/pdk-sweep.sh <device> scenarios Workbench/results/pdk-<build>-<device>
+   <wait>` on an arm32 device (the Nexus 7, or the HP 10 G2 at 30 s and Nexus 5 at 16 s) and
+   the Fold3 for arm64; summaries to
+   `Docs/test-results/<build>/pdk-<device>.txt`.
+6. The test plan's [Human] lines, today's included (section 5); section 13 on the release APK.
+7. Then the F-Droid feed (`Meta/fdroid/update-repo.sh`; codepoet uploads only `repo/` and
+   `archive/`, and every file is checked against the server).
 
 **F-Droid (codepoet, 2026-11-13): our own repository, not F-Droid's.** F-Droid's main
 repository can't take Lunacy (Palm's non-free frameworks, apps and libraries, and a build that

@@ -151,6 +151,15 @@
         });
     }
 
+    // The catalog back in front after a hand-off: the row goes back to "Install" - unless the
+    // install notification already marked it Installed while the catalog was in the background.
+    function resetAfterHandOff(app) {
+        try {
+            if (app.stateToString() === "findApps.AppState.Installed") { return; }
+        } catch (e) {}
+        app.setState("findApps.AppState.Download");
+    }
+
     // The install handed to a handler app: the button resets when the catalog comes back
     // to the front (the handler's card closing), or reports failure if none would open.
     function installWithHandler(app, ipkUrl) {
@@ -162,7 +171,7 @@
                 var palmId = app.publicApplicationId;
                 // _myApps is keyed by the numeric catalog id; see archive-patch.js.
                 if (numId && palmId !== numId) { app.publicApplicationId = numId; }
-                app.setState("findApps.AppState.Download");
+                resetAfterHandOff(app);
             };
         }, function (r) {
             console.log("ARCHIVE-INSTALL no .ipk handler could be opened: " + JSON.stringify(r));
@@ -254,12 +263,20 @@
     // page from its feeds ({type: "view", id}); else Preware itself (its own launch for that is
     // {source: "updateNotification"} - an empty launch opens nothing). Preware 1.9's
     // AppAssistant.handleLaunch, read on the reference TouchPad.
-    function handToPreware(app, why, localPath) {
+    // counted: this install attempt was already counted when its download began.
+    function handToPreware(app, why, localPath, counted) {
         console.log("ARCHIVE-INSTALL handing " + (app.publicApplicationId || "?") + " to Preware: " + why +
                     (localPath ? " (" + localPath + ")" : ""));
-        // Preware's own Browse names a local package as file:// + its path.
-        if (localPath) { installWithHandler(app, "file://" + localPath); return; }
-        if (app.packageUrl) { countDownload(app); installWithHandler(app, app.packageUrl); return; }
+        // Preware's own Browse names a local package as file:// + its path. Its install service
+        // uses the file in place only from /media/internal/.developer/ (DirectInstall downloads
+        // there) and rejects a filename outside [A-Za-z0-9.+_-], which no path can fix: that
+        // one goes by its URL, if it has one.
+        if (localPath) {
+            var named = /\/[A-Za-z0-9.+_-]+$/.test(localPath);
+            if (named || !app.packageUrl) { installWithHandler(app, "file://" + localPath); return; }
+            console.log("ARCHIVE-INSTALL " + localPath + " can't be named to Preware; handing over its URL");
+        }
+        if (app.packageUrl) { if (!counted) { countDownload(app); } installWithHandler(app, app.packageUrl); return; }
         var id = packageId(app);
         var params = id ? {type: "view", id: id} : {source: "updateNotification"};
         ipkHandlerCandidates(function (ids) {
@@ -276,7 +293,7 @@
                     if (!(r && r.returnValue)) { next(); return; }
                     console.log("ARCHIVE-INSTALL " + handler + " opened with " + JSON.stringify(params));
                     window._archivePatchOnActivated = function () {
-                        try { app.setState("findApps.AppState.Download"); } catch (e) {}
+                        try { resetAfterHandOff(app); } catch (e) {}
                     };
                 });
             }
@@ -320,7 +337,7 @@
     function webosInstall(adm, app) {
         if (app._archiveInstalling) { return; }
         app._archiveInstalling = true;
-        var over = false, job = null, stall = null;
+        var over = false, job = null, stall = null, counted = false;
         function end() { over = true; clearTimeout(stall); app._archiveInstalling = false; }
         function handOff(why) {
             if (over) { return; }
@@ -330,7 +347,7 @@
                 try { localPath = job.keep(); } catch (e) {}
                 try { job.abort(); } catch (e) {}
             }
-            try { handToPreware(app, why, localPath); } catch (e) { console.log("ARCHIVE-INSTALL handing to Preware threw: " + e); }
+            try { handToPreware(app, why, localPath, counted); } catch (e) { console.log("ARCHIVE-INSTALL handing to Preware threw: " + e); }
         }
         function watch(ms) {
             clearTimeout(stall);
@@ -341,6 +358,7 @@
             var report = reporter(adm, params);
             console.log("ARCHIVE-INSTALL installing " + params.id + " directly: " + params.ipkUrl);
             countDownload(app);
+            counted = true;
             watch(STALL_MS);
             job = DirectInstall.run(params, function (state, progress, extra) {
                 if (over) { return; }
@@ -423,6 +441,47 @@
             countDownload(app);
             installWithHandler(app, ipkUrl);
         }
+    };
+
+    // ---- Lunacy: an install that fails ----
+    //
+    // Lunacy's installer runs a package's scripts in its own root, and undoes an install that
+    // fails there, deleting what it downloaded. What it reports is "install failed": HP's code
+    // shows the row's "Failed" pill, and a tap on it opens the catalog's error dialog, whose
+    // "There was a problem installing the application" and Try Again fit a store whose
+    // installs failed by chance. On Lunacy a failed install is about the package, so the
+    // dialog says so, with one button. Dismissing it is HP's own Don't Install: the
+    // appInstallService's cancel, which drops the failed install from the service's list and
+    // resets the row. A failed download isn't this: it keeps HP's download error and Try Again.
+    findApps.Utilities._dialogErrors.LUNACY_INSTALL_FAILED = {
+        dialog: true,
+        title: $L("Couldn't Install"),
+        message: $L("Unable to install this application; it may not be compatible with Lunacy."),
+        choices: [{label: $L("OK"), value: "cancel", type: "dismiss"}]
+    };
+
+    var _origFailedDefaultAction = findApps.AppState.InstallFailed.prototype._defaultAction;
+    findApps.AppState.InstallFailed.prototype._defaultAction = function (app) {
+        if (platform !== "lunacy") { return _origFailedDefaultAction.apply(this, arguments); }
+        var self = this, n = findApps.Utilities.getRandNumber();
+        // The dialog is the last code's; the ones before it are the details the dialog keeps.
+        var errors = [];
+        if (app.errorCode) { errors.push(app.errorCode); }
+        errors.push("LUNACY_INSTALL_FAILED");
+        this["OnCancel" + n] = function () {
+            self.owner.$.downloadStateManager._cancel(app);
+            findApps.Utilities.delFunc(self, "OnCancel", n);
+            // Out of the dialog's own event first.
+            setTimeout(function () {
+                if (self.$["temperror" + n]) { self.$["temperror" + n].destroy(); }
+            }, 0);
+        };
+        this.createComponent({
+            name: "temperror" + n,
+            kind: "findApps.Error",
+            onCancel: "OnCancel" + n,
+            owner: this
+        }).displayError(errors, {title: app.title});
     };
 
     // A list row is found by its app's id to redraw it as an install moves. The row was

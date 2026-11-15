@@ -31,15 +31,15 @@ after 1.0.
 - ~~**Exhibition:** a button in its settings that opens Android's Screen Saver settings~~ done
   2026-11-08 (luna-deltas B24).
 
-Before shipping 1.0, as for every release: the latest App Catalog bundled (6.2.2931 as of
-2026-11-08, the same as the Museum's).
+Before shipping 1.0, as for every release: the latest App Catalog bundled (6.3.2931 since
+2026-11-15, codepoet's package for 1.0).
 
 ## Where things stand (2026-11-15)
 
 **1.0 is being made (codepoet, 2026-11-15).** 0.9.7 was well received and stable, so the
 feature freeze (2026-11-09, at 0.9.5) was lifted for a few changes, all done and checked on
-devices. One more change is coming: an update to the bundled App Catalog, made in another
-session; then 1.0 is done. No change to how apps launch (codepoet: "no changes to launching
+devices. The last change, App Catalog 6.3.2931 from another session, is in; 1.0 is done
+but for its round. No change to how apps launch (codepoet: "no changes to launching
 logic today"); whether a video file opened without an app id should go to Android's player is
 an open question for after 1.0 (it goes to `com.palm.app.videoplayer` through the TouchPad's
 handler table, as before). LunaKeyboard stays on its own track.
@@ -59,9 +59,11 @@ handler table, as before). LunaKeyboard stays on its own track.
 - **WebDAV Client** lists, downloads and uploads: Lunacy's curl takes `--noproxy` and a URL's
   encoded credentials, and in XML documents `getElementsByTagName` finds elements by local
   name, as the TouchPad's WebKit did (18c28a8).
-- **App Catalog:** the bundled copy updated (in progress).
+- **App Catalog 6.3.2931:** a package goes to Preware's own download folder, so a hand-off to
+  Preware installs it in place; a failed install says it is about the package, with one
+  button; text from the server is escaped before it is shown.
 
-**The 1.0 round, prepared (not run).** In order, after the App Catalog change lands:
+**The 1.0 round, prepared (not run).** In order:
 1. The bundled App Catalog is the newest (compare with the Museum's), the tree is clean, and
    `gradle.properties` says 1.0.0.
 2. `./test.sh` (tier 1), then `./build.sh publish`: six APKs, the GPL source tar, one
@@ -604,6 +606,14 @@ starting; some may have been settled since without a note. All of it comes after
   `palm-install` of a 24 MB package was reset by the relay.
 - **SDK:** compare `palm-log` output for the Web app's plugin calls with the TouchPad's; Mojo
   samples don't open in a desktop browser (webos-sdk-redux FRAMEWORKS.md).
+- **SDK: `palm-log --system-log-level` (codepoet, 2026-11-15: after 1.0):** it calls
+  `palm://com.palm.logctld/setloglevel` with `{"level":"info","context":"LunaSysMgrJS"}`,
+  which the reference TouchPad accepts and Lunacy answers "Service does not exist:
+  com.palm.logctld" (found in the SDK tools test on the Pixel Tablet, 2026-11-15; everything
+  else in palm-install, palm-launch, palm-log, palm-run, novacom and novaterm worked). Measure
+  logctld on the TouchPad first (its replies, the levels and contexts it takes, a `getloglevel`
+  if it has one), then make the level govern what apps' `console`/`Mojo.Log`/`enyo` lines
+  reach `/var/log/messages`; Lunacy writes them at info today.
 - **Web app:** the download manager's history; the TouchPad's default bookmarks.
 - **Mojo:** the `WebView` widget (`BrowserAdapter`), so Quick Tip Calculator's first scene is
   an empty panel.

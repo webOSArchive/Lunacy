@@ -10,9 +10,12 @@
  * below is a small port of the well-known "tinf" decoder (RFC 1951), in plain ES5 with plain
  * arrays, because this engine predates typed arrays being dependable.
  *
- *   IpkInspect.scripts(bytes) -> ["postinst", "prerm"] | [] ; throws on a malformed package
+ *   IpkInspect.scriptsFromString(s) -> ["postinst", "prerm"] | [] ; throws on a malformed package
+ *   IpkInspect.scripts(bytes)       -> the same, from an array of numbers 0-255
  *
- * bytes is an array of numbers 0-255 (see IpkInspect.fromBinaryString).
+ * s is a binary XHR's responseText (see IpkInspect.fromBinaryString). Only the package's small
+ * control.tar.gz is turned into numbers: a whole package as an array costs about 8 bytes of
+ * memory for each byte of package, which a large app on a 1 GB TouchPad can't spare.
  */
 var IpkInspect = (function () {
 
@@ -210,6 +213,14 @@ var IpkInspect = (function () {
 
     var SCRIPTS = ["preinst", "postinst", "prerm", "postrm"];
 
+    // The install scripts in a control.tar.gz's bytes.
+    function scriptsOfControl(control) {
+        var files = tarEntries(gunzip(control), function (n) { return SCRIPTS.indexOf(n) >= 0; });
+        var found = [];
+        for (var i = 0; i < SCRIPTS.length; i++) { if (files[SCRIPTS[i]]) { found.push(SCRIPTS[i]); } }
+        return found;
+    }
+
     function scripts(b) {
         var control;
         if (text(b, 0, 8) === "!<arch>\n") {
@@ -219,10 +230,25 @@ var IpkInspect = (function () {
             control = tarEntries(gunzip(b), function (n) { return n === "control.tar.gz"; })["control.tar.gz"];
         }
         if (!control) { throw new Error("no control.tar.gz"); }
-        var files = tarEntries(gunzip(control), function (n) { return SCRIPTS.indexOf(n) >= 0; });
-        var found = [];
-        for (var i = 0; i < SCRIPTS.length; i++) { if (files[SCRIPTS[i]]) { found.push(SCRIPTS[i]); } }
-        return found;
+        return scriptsOfControl(control);
+    }
+
+    // scripts() for a binary string: an ar archive's headers are walked on the string itself
+    // (members come in either order; ipkg-build writes data.tar.gz first), and only
+    // control.tar.gz becomes numbers. The outer tar.gz packaging needs it all gunzipped.
+    function scriptsFromString(s) {
+        if (s.substring(0, 8) !== "!<arch>\n") { return scripts(fromBinaryString(s)); }
+        var pos = 8;
+        while (pos + 60 <= s.length) {
+            var name = s.substring(pos, pos + 16).replace(/[\s\0]+$/, "").replace(/\/$/, "");
+            var size = parseInt(s.substring(pos + 48, pos + 58), 10);
+            if (isNaN(size)) { throw new Error("bad ar header"); }
+            if (name === "control.tar.gz") {
+                return scriptsOfControl(fromBinaryString(s.substring(pos + 60, pos + 60 + size)));
+            }
+            pos += 60 + size + (size & 1);
+        }
+        throw new Error("no control.tar.gz");
     }
 
     // A binary XHR's responseText, read with overrideMimeType("text/plain; charset=x-user-defined").
@@ -232,7 +258,7 @@ var IpkInspect = (function () {
         return b;
     }
 
-    return { scripts: scripts, gunzip: gunzip, fromBinaryString: fromBinaryString };
+    return { scripts: scripts, scriptsFromString: scriptsFromString, gunzip: gunzip, fromBinaryString: fromBinaryString };
 }());
 
 if (typeof module !== "undefined") { module.exports = IpkInspect; }

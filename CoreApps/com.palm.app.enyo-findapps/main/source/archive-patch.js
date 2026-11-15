@@ -66,6 +66,13 @@
     var DETAILS_TRIES = 3;
     // Each request gets its own unique key so the server always returns full
     // data and never sends back cached-null entries from a prior request.
+    // Text from the server, for innerHTML: markup escaped, line breaks kept. The catalog is a
+    // com.palm.* app that may call the installer, so script in a curator's note would run with that.
+    function noteHtml(text) {
+        return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                           .replace(/"/g, "&quot;").replace(/\r\n|\r|\n/g, "<br>");
+    }
+
     function makeKey() {
         return "fap-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     }
@@ -676,7 +683,7 @@
             noteEl.style.marginTop = "14px";
             noteEl.style.marginLeft = "2px";
             if (note) {
-                noteEl.lastChild.innerHTML = note.replace(/\r\n/g, "<br>").replace(/\n/g, "<br>");
+                noteEl.lastChild.innerHTML = noteHtml(note);
                 noteEl.style.display = "";
             } else {
                 noteEl.style.display = "none";
@@ -690,7 +697,7 @@
             noteEl.innerHTML =
                 '<div style="font-size:13px;font-weight:bold;color:#2e2e2e;margin-bottom:4px;">Version Notes</div>' +
                 '<div style="font-size:13px;color:#555;white-space:pre-wrap;">' +
-                note.replace(/\r\n/g, "<br>").replace(/\n/g, "<br>") +
+                noteHtml(note) +
                 '</div>';
             containerNode.parentNode.insertBefore(noteEl, containerNode.nextSibling);
         }
@@ -1026,8 +1033,8 @@
         title.textContent = "Update Available";
 
         var msg = document.createElement("div");
-        msg.innerHTML = "App Catalog " + manifest.version + " is available." +
-            (manifest.versionNote ? "<br><br>" + manifest.versionNote : "");
+        msg.innerHTML = "App Catalog " + noteHtml(manifest.version) + " is available." +
+            (manifest.versionNote ? "<br><br>" + noteHtml(manifest.versionNote) : "");
 
         var buttons = document.createElement("div");
         buttons.setAttribute("style", "display:flex;justify-content:center;gap:16px;margin-top:20px;");

@@ -1,7 +1,9 @@
 /*
  * direct-install.js -- App Catalog installing a package itself on webOS, with no Preware.
  *
- * The download manager fetches the package into /media/internal/downloads; IpkInspect reads
+ * The download manager fetches the package into /media/internal/.developer (Preware's own
+ * download folder, so a hand-off to Preware by path installs the file in place instead of
+ * fetching it again); IpkInspect reads
  * its control.tar.gz; a package without install scripts goes to the stock installer,
  * com.palm.appinstaller/installNoVerify, which a com.palm.* app may call (measured on the
  * reference TouchPad, as App Catalog). A package with scripts is given back (onScripts): the
@@ -20,7 +22,7 @@
  *     abort() stops the install where it is and reports nothing more - a download is
  *       cancelled. An install already handed to the installer runs on.
  *     keep() returns the downloaded package's path, or null if it hasn't downloaded whole,
- *       and keeps the file for whoever installs it instead (it stays in the downloads
+ *       and keeps the file for whoever installs it instead (it stays in the download
  *       folder). Called from report's failures, onScripts, onError or before abort().
  *   The downloaded file is deleted once the package is installed, or after a failure, an
  *   abort, onScripts or onError, unless keep() was called.
@@ -28,6 +30,14 @@
  * No framework of its own, so a probe app can run it as it is (Workbench/probe in Lunacy).
  */
 var DirectInstall = (function () {
+    // Preware's install service (ipkgservice, luna_methods.c do_install) installs a local package
+    // in place only if its URL starts file:///media/internal/.developer/ - its own download
+    // folder; any other URL, file:// included, it fetches again with curl into that folder. So the
+    // package is downloaded there, and a hand-off by path reuses the file. It also rejects a
+    // filename outside [A-Za-z0-9.+_-], so the download is named within that set.
+    // The folder is Preware's to create; if the download manager won't write there, the
+    // package goes to the stock downloads folder (Preware then copies it, but doesn't fail).
+    var PREWARE_DIR = "/media/internal/.developer";
     var DOWNLOAD_DIR = "/media/internal/downloads";
     var pending = [];
 
@@ -58,13 +68,22 @@ var DirectInstall = (function () {
             if (xhr.readyState !== 4) { return; }
             var list = null;
             try {
-                if (xhr.responseText) { list = IpkInspect.scripts(IpkInspect.fromBinaryString(xhr.responseText)); }
+                if (xhr.responseText) { list = IpkInspect.scriptsFromString(xhr.responseText); }
             } catch (e) {
                 console.log("DIRECT-INSTALL can't read " + path + ": " + e);
             }
             callback(list);
         };
         xhr.send();
+    }
+
+    // The package's name for the download manager: the URL's last segment, in Preware's
+    // filename alphabet; "" leaves the naming to the download manager.
+    function packageFilename(url) {
+        var name = String(url || "").replace(/[?#].*$/, "").replace(/\/+$/, "");
+        name = name.substring(name.lastIndexOf("/") + 1);
+        try { name = decodeURIComponent(name); } catch (e) {}
+        return name.replace(/[^A-Za-z0-9.+_-]/g, "_");
     }
 
     function run(params, report, onScripts, onError) {
@@ -104,45 +123,58 @@ var DirectInstall = (function () {
         }
 
         report("ipk download current", 0);
-        bridges.push(lunaCall("palm://com.palm.downloadmanager/download", {
-            target: params.ipkUrl, targetDir: DOWNLOAD_DIR, subscribe: true
-        }, guard(function (r, stop) {
-            if (r.returnValue === false) {
-                stop();
-                report("download failed", 0, {errorCode: -5, reason: "Http error"});
-                return;
-            }
-            if (r.ticket !== undefined && ticket === null) { ticket = r.ticket; }
-            if (r.amountTotal > 0 && !r.completed) {
-                var pct = Math.floor(r.amountReceived * 100 / r.amountTotal);
-                if (pct !== lastPct) { lastPct = pct; report("ipk download current", pct); }
-            }
-            if (r.completed === false && (r.aborted || r.interrupted || r.completionStatusCode !== undefined)) {
-                stop();
-                report("download failed", 0, {errorCode: -5, reason: "Http error"});
-                return;
-            }
-            if (r.completed) {
-                stop();
-                downloaded = true;
-                if (r.completionStatusCode !== 200 && r.httpStatus !== 200) {
-                    forget();
+        startDownload(PREWARE_DIR);
+
+        function startDownload(dir) {
+            var request = {target: params.ipkUrl, targetDir: dir, subscribe: true};
+            var name = packageFilename(params.ipkUrl);
+            if (name) { request.targetFilename = name; }
+            ticket = null;
+            lastPct = -1;
+            bridges.push(lunaCall("palm://com.palm.downloadmanager/download", request, guard(function (r, stop) {
+                if (downloaded) { return; }
+                if (r.returnValue === false) {
+                    stop();
+                    if (dir !== DOWNLOAD_DIR) {
+                        console.log("DIRECT-INSTALL " + params.id + " can't download into " + dir + ": " + (r.errorText || "?"));
+                        startDownload(DOWNLOAD_DIR);
+                        return;
+                    }
                     report("download failed", 0, {errorCode: -5, reason: "Http error"});
                     return;
                 }
-                var path = r.target || ((r.destPath || "") + (r.destFile || ""));
-                file = path;
-                report("ipk download complete", 100);
-                readScripts(path, guard(function (scripts) {
-                    if (scripts === null || scripts.length) {
-                        onScripts(scripts);
-                        release();
+                if (r.ticket !== undefined && ticket === null) { ticket = r.ticket; }
+                if (r.amountTotal > 0 && !r.completed) {
+                    var pct = Math.floor(r.amountReceived * 100 / r.amountTotal);
+                    if (pct !== lastPct) { lastPct = pct; report("ipk download current", pct); }
+                }
+                if (r.completed === false && (r.aborted || r.interrupted || r.completionStatusCode !== undefined)) {
+                    stop();
+                    report("download failed", 0, {errorCode: -5, reason: "Http error"});
+                    return;
+                }
+                if (r.completed) {
+                    stop();
+                    downloaded = true;
+                    if (r.completionStatusCode !== 200 && r.httpStatus !== 200) {
+                        forget();
+                        report("download failed", 0, {errorCode: -5, reason: "Http error"});
                         return;
                     }
-                    bridges.push(installFile(path, report, forget, release, params, guard));
-                }));
-            }
-        }), true));
+                    var path = r.target || ((r.destPath || "") + (r.destFile || ""));
+                    file = path;
+                    report("ipk download complete", 100);
+                    readScripts(path, guard(function (scripts) {
+                        if (scripts === null || scripts.length) {
+                            onScripts(scripts);
+                            release();
+                            return;
+                        }
+                        bridges.push(installFile(path, report, forget, release, params, guard));
+                    }));
+                }
+            }), true));
+        }
 
         return {
             abort: function () {

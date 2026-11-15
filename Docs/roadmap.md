@@ -44,24 +44,27 @@ logic today"); whether a video file opened without an app id should go to Androi
 an open question for after 1.0 (it goes to `com.palm.app.videoplayer` through the TouchPad's
 handler table, as before). LunaKeyboard stays on its own track.
 
-**1.0** (to be released), everything since 0.9.7:
+**1.0** (build 635, from 596f0e6), everything since 0.9.7:
 
-- **Wi-Fi, Bluetooth and the ringer for webOS apps:** `com.palm.wifi` (state and switch),
-  `com.palm.btmonitor`'s radio, and `com.palm.audio`'s ringtone class, over Android's own, in
-  the TouchPad's answers and errors; private bus only, as there (the system volume, which any
-  app could set, is too). Night Moves' night and morning schedules switch them (fd57d48,
-  222a819).
-- **Launching an app as Lunacy starts** brings its card every time; Clock never did (970b21c).
-- **Exhibition from Android's screen saver** stays lit until the device leaves its charger
-  (dad14ba).
-- **Video Player** is webOS CE's player, as on the TouchPad, in place of Palm's phone-era one;
-  and its watch on the media indexer answers (9d29075, 8575ef4).
-- **WebDAV Client** lists, downloads and uploads: Lunacy's curl takes `--noproxy` and a URL's
-  encoded credentials, and in XML documents `getElementsByTagName` finds elements by local
-  name, as the TouchPad's WebKit did (18c28a8).
-- **App Catalog 6.3.2931:** a package goes to Preware's own download folder, so a hand-off to
-  Preware installs it in place; a failed install says it is about the package, with one
-  button; text from the server is escaped before it is shown.
+- **Wi-Fi, Bluetooth and the ringer for webOS apps.** Apps like Night Moves can now turn
+  Wi-Fi and Bluetooth off and on, and set the ringer volume, on a schedule, using Android's own
+  switches. Only Palm-system (`com.palm.*`) apps can do this, as on a TouchPad, and the system
+  volume is now limited the same way (fd57d48, 222a819).
+- **Apps opened from Android always come up.** Launching an app as Lunacy starts, from a
+  pinned icon or another app, now opens its card every time; Clock used to come up empty
+  (970b21c).
+- **Exhibition stays lit as Android's screen saver.** On a dock or charger, Lunacy's screen
+  saver no longer lets the device go to sleep. It stays on until the device comes off the
+  charger, as a TouchPad did on its Touchstone (dad14ba).
+- **A new Video Player.** The built-in player is now webOS Community Edition's, as on a
+  TouchPad today, instead of Palm's phone-era one. Videos still play in Android's player unless
+  an app asks for the built-in one by name (9d29075, 8575ef4).
+- **WebDAV Client works.** It now lists, downloads and uploads, including for servers like
+  ownCloud and passwords with special characters. The fix is general, so other apps that read
+  XML replies or call `curl` the same way benefit too (18c28a8).
+- **App Catalog 6.3.** Downloads go to Preware's own folder, so handing a package to Preware
+  installs it without downloading it again; a failed install now explains that the problem is
+  with the package; text from the catalog server is shown safely (596f0e6).
 
 **The 1.0 round, prepared (not run).** In order:
 1. The bundled App Catalog is the newest (compare with the Museum's), the tree is clean, and

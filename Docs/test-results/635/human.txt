@@ -1,0 +1,15 @@
+1.0 (build 635) - checks by hand or by eye, 2026-11-15
+
+[PASS] Pixel Tablet on its dock, Lunacy as the screen saver, 5-minute timeout, left alone:
+       the screen saver started at 15:49:15, Android went from dreaming straight to awake
+       ("lunacy:exhibition-handover"), and Exhibition was still on and the device awake seven
+       minutes later (dad14ba).
+[PASS] PDK sweep on the Fold3: all 17 screenshots show what pdk-scenarios.txt asks for
+       (Fieldrunners' music not listened to).
+[PASS] App Catalog 6.3.2931 opens on the Fold3 (Pivot), no errors.
+[PASS] Video Player launched by id with a camera video on the Fold3 (build 633, same code):
+       webOS CE's player plays it across the card.
+[PASS] WebDAV Client on the Pixel (build 631, same code): the server's folders list.
+       Download and upload not tried (codepoet's files).
+[PASS] Night Moves on the Pixel (build 626): the night schedule turned Wi-Fi off and the
+       morning one on (codepoet watched); Bluetooth switched by the bus by hand (Pixel).

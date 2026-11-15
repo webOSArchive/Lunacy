@@ -4,6 +4,9 @@
 #
 #   Workbench/device-test.sh <adb device> [expected versionCode] [results file]
 #
+# NORESTART=1 runs section 2 in the Lunacy that is running, without restarting it first
+# (Workbench/fresh-install.sh, for the run First Use finished in).
+#
 # Prints [PASS] / [FAIL] / [SKIP] / [INFO] <section> <check> -- detail, and with a results file
 # writes it there too (keep it with the release: Docs/test-plan.md). Run it with the candidate
 # installed and First Use done. It restarts Lunacy twice and opens every bundled app in turn; it
@@ -36,6 +39,9 @@ try: v=json.loads(t)
 except Exception: v=t
 print(v if isinstance(v,str) else json.dumps(v))'; }
 fresh() {   # Lunacy from cold, back when the activity manager runs and boot's apps have loaded
+  # NORESTART=1 (Workbench/fresh-install.sh): the first pass takes Lunacy as it is, in the run
+  # First Use finished in. A restart is what hid that run's missing activities (2026-11-15).
+  if [ -n "$NORESTART" ]; then NORESTART=; $A shell pidof $PKG </dev/null >/dev/null || return 1; return 0; fi
   $A shell am force-stop $PKG </dev/null; $A logcat -c </dev/null
   $A shell am start -n $PKG/.shell.ShellActivity </dev/null >/dev/null 2>&1
   wait_log "activities: running" 120 || return 1
@@ -112,6 +118,31 @@ except Exception: print(0)')
   echo "$r" | grep -q 'Unknown method' && P "2 bus  the ringtone volume is the private bus's" || F "2 bus  ringtone/status answered luna-send -P -- $(echo "$r" | cut -c1-80)"
   r=$(lsp palm://com.palm.btmonitor/monitor/getradiostate '{}')
   echo "$r" | grep -q 'Service does not exist: com.palm.btmonitor' && P "2 bus  com.palm.btmonitor is the private bus's" || F "2 bus  com.palm.btmonitor answered luna-send -P -- $(echo "$r" | cut -c1-80)"
+  # Every activity file that waits (a trigger or a schedule) is live once First Use is done: the
+  # system's (/etc/palm/activities), its services' and the bundled apps'. The configurator holds
+  # back all but firstUseSafe ones until First Use; a fresh install never got them until Lunacy
+  # restarted, so contacts never reached the Contacts list (no linkerWatch; the Kyocera,
+  # 2026-11-15). Read from this tree's files, so a new one is checked without listing it here.
+  if [ -d AndroidLuna/local-assets/rootfs ]; then
+    r=$(ls palm://com.palm.activitymanager/list '{}' | python3 -c '
+import glob, json, re, sys
+root = sys.argv[1]
+try: live = {a.get("name") for a in json.load(sys.stdin)["activities"]}
+except Exception: print("no list"); sys.exit()
+files = glob.glob(root + "/AndroidLuna/local-assets/rootfs/etc/palm/activities/*/*") + \
+    glob.glob(root + "/AndroidLuna/local-assets/rootfs/usr/palm/services/*/configuration/activities/*/*") + \
+    glob.glob(root + "/CoreApps/*/configuration/activities/*/*")
+want = set()
+for f in files:
+    try: a = json.loads(re.sub(r",(\s*[}\]])", r"\1", open(f).read())).get("activity", {})
+    except Exception: continue
+    if a.get("name") and (a.get("trigger") or a.get("schedule")): want.add(a["name"])
+print("%d/%d %s" % (len(want - live), len(want), ", ".join(sorted(want - live))))' .)
+    case "$r" in
+      0/*) P "2 bus  every waiting activity file is live (${r#0/})";;
+      *) F "2 bus  activity files not live after First Use: $r";;
+    esac
+  else S "2 bus  activity files: no local-assets in this tree"; fi
 elif [ -n "$DEBUG" ]; then
   r=$(js /com.palm.app.email/index.html 'new Promise(function(res){var n=0,o={};function c(u,p,k,f){var b=new PalmServiceBridge();b.onservicecallback=function(t){try{o[k]=f(JSON.parse(t))}catch(e){o[k]="bad reply"}if(++n==3)res(JSON.stringify(o))};b.call(u,JSON.stringify(p));(window.__dt=window.__dt||[]).push(b)}
 c("palm://com.palm.systemservice/time/getSystemTime",{},"time",function(r){return r.utc>0});
@@ -169,6 +200,24 @@ for acct,kind,err,tpl in rows:
     elif err: print("F\t3 mail  %s (%s, %s): error %s" % (acct,kind,tpl,err))
     else: print("P\t3 mail  %s (%s, %s): no error" % (acct,kind,tpl))')
 else S "3 mail  account errors (release build)"; fi
+
+# Contacts in db8 reach the Contacts list: the list shows people (com.palm.person), which the
+# contacts linker makes from contact records, an account's or the Android account's. A fresh
+# install's linker never ran, so 455 Android contacts sat in db8 behind an empty list (the
+# Kyocera, 2026-11-15). Asked from Email's page, which may read both.
+if [ -n "$DEBUG" ]; then
+  js /com.palm.app.email/index.html '(function(){var o=window.__dtp={};window.__dtpb=[];["com.palm.contact:1","org.webosarchive.contact.android:1","com.palm.person:1"].forEach(function(k){var b=new PalmServiceBridge();window.__dtpb.push(b);b.onservicecallback=function(t){var r=JSON.parse(t);o[k]=r.returnValue?r.count:-1};b.call("palm://com.palm.db/find",JSON.stringify({query:{from:k,limit:1},count:true}))});return "sent"})()' >/dev/null
+  sleep 4
+  r=$(js /com.palm.app.email/index.html 'JSON.stringify(window.__dtp||{})')
+  read -r nc na np < <(echo "$r" | python3 -c 'import json,sys
+try: o=json.loads(sys.stdin.read())
+except Exception: o={}
+print(o.get("com.palm.contact:1",-1), o.get("org.webosarchive.contact.android:1",-1), o.get("com.palm.person:1",-1))')
+  if [ "${nc:--1}" -lt 0 ] || [ "${np:--1}" -lt 0 ]; then F "3 contacts  counts unreadable -- $r"
+  elif [ "$nc" -eq 0 ] && [ "${na:-0}" -le 0 ]; then I "3 contacts  no contacts on this device"
+  elif [ "$np" -gt 0 ]; then P "3 contacts  $np people from $nc contacts (${na} Android's): the linker runs"
+  else F "3 contacts  $nc contacts (${na} Android's) and no people: the linker never ran"; fi
+else S "3 contacts  people from contacts (release build)"; fi
 
 # ---------------------------------------------------------------- 4. every bundled app opens a card
 # A card's page logs a size as it loads ("loaded <url> viewport \"884x1076 ..."); a headless page

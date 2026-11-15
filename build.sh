@@ -116,6 +116,16 @@ if [ "$type" = release ]; then
     echo "signed by: $("$apksigner" verify --print-certs "out/${expected[0]}" 2>/dev/null | sed -n 's/.*certificate SHA-256 digest: //p' | head -1)"
 fi
 
+# What each Lunacy APK holds against what it was built from: every asset, bundled app, webOS
+# root file and native library, at its size here, and the configuration parses
+# (Workbench/apk-inventory.py). A gap fails the build before anything is checksummed.
+lunacy=(); for f in "${expected[@]}"; do case $f in AndroidLuna-*) lunacy+=("out/$f");; esac; done
+if [ ${#lunacy[@]} -gt 0 ]; then
+    echo "== apk-inventory"
+    inv=$(python3 Workbench/apk-inventory.py "${lunacy[@]}") || { echo "$inv" | head -20 >&2; die "an APK is missing files or has unreadable configuration"; }
+    echo "$inv"
+fi
+
 # Checksums of every APK in out/, so a debug and a release build can sit side by side.
 (cd out && sha256sum -- *.apk $(ls -- *-gpl-sources.tar 2>/dev/null) > SHA256SUMS)
 

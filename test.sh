@@ -65,6 +65,24 @@ EOF
 )
 [ -z "$out" ] && P "data  account templates and OAuth providers agree" || F "data  $out"
 
+# ---- an account page's result that makes an account (it carries credentials) carries its
+# template: First Launch, Contacts' and Calendar's first screen, makes no account from one
+# without (entry-first-launch.js); only Add Account falls back to its own. The Android account's
+# page left it out, so a fresh install's account was never made (the Kyocera, 2026-11-15).
+out=$(python3 - <<'EOF'
+import glob, re
+errs = []
+for f in sorted(glob.glob("CoreApps/*/source/**/*.js", recursive=True)):
+    src = open(f, encoding="utf-8").read()
+    for m in re.finditer(r"sendResult\(\{(.*?)\}\);", src, re.S):
+        body = m.group(1)
+        if re.search(r"returnValue:\s*true", body) and "credentials" in body and not re.search(r"\btemplate:", body):
+            errs.append("%s:%d" % (f, src[:m.start()].count("\n") + 1))
+print(" ".join(errs))
+EOF
+)
+[ -z "$out" ] && P "data  account pages return their template with an account" || F "data  an account page's result has no template: $out"
+
 # ---- the preload's host tests (C: mail auth, the Exchange adapters, back-off, PDK sends).
 if command -v cc >/dev/null; then
   if out=$(sh LunaRuntimes/pdk/tests/run.sh 2>&1); then

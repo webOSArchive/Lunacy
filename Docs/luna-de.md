@@ -552,11 +552,11 @@ native parts. Checked 2026-11-16 against a TouchPad freshly flashed with webOS C
 to the development machine's, and Luna DE ran on the result (Calendar and Contacts opened, with
 their services). What differed:
 
-- *The palmprofile service.* The development machine's copy is HP's original, kept by the
-  Community Account Manager as `.stock` files on the older image its TouchPad had. Build 600070
-  carries the service already changed for the webOS Archive account, with no originals, so that
-  is what such a device gives (the script says so as it runs). **Open: which copy Luna DE should
-  ship** (codepoet).
+- *The palmprofile service.* Luna DE ships webOS CE's version (codepoet, 2026-11-16): the one a
+  current CE image carries, changed for the webOS Archive account, which is what a builder's
+  TouchPad gives. Android's is still HP's original, restored from the `.stock` files an older
+  image's Community Account Manager kept, so on the development machine `--desktop` reads CE's
+  from a copy of its own (`Workbench/vendor/touchpad/ce-image`).
 - Three browser kinds differ in white space only; `/etc/openal` and the native programs under
   `/usr/bin` and `/usr/lib` are left out, being Android's.
 

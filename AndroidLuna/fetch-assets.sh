@@ -260,18 +260,28 @@ cp -r $V/touchpad/os-services/com.palm.service.accounts $R/usr/palm/services/
 # <file>.stock; those go back in place and the package's own additions come out, so that the
 # package patches Lunacy's copy exactly as it patches a device's.
 P=$R/usr/palm/services/com.palm.service.palmprofile
-cp -r $V/touchpad/os-services/com.palm.service.palmprofile $P
-if [ -n "$(find $P -name '*.stock')" ]; then
-    find $P -name '*.stock' | while read f; do mv "$f" "${f%.stock}"; done
-    rm -f $P/handlers/UpdateUsernameCommandAssistant.js $P/handlers/SyncDeviceNameCommandAssistant.js $P/handlers/SignOutCommandAssistant.js
+if [ -n "$DESKTOP" ]; then
+    # Luna DE ships webOS CE's version of the service (codepoet, 2026-11-16): the one a current
+    # CE image carries, already changed for the webOS Archive account, which is what a builder's
+    # own TouchPad gives. The development machine keeps a copy of it beside its older one
+    # (Workbench/vendor/touchpad/ce-image), since that older one is what Android's is made from.
+    PP=$V/touchpad/ce-image/com.palm.service.palmprofile
+    [ -d $PP ] || PP=$V/touchpad/os-services/com.palm.service.palmprofile
+    [ -z "$(find $PP -name '*.stock')" ] ||
+        { echo "fetch-assets: $PP is an older image's (it has .stock files), not webOS CE's own: get-assets-from-touchpad.sh --force takes a current one" >&2; exit 1; }
+    cp -r $PP $P
+    cat > $P/NOTICE <<'NOTICE'
+The palmprofile service (bus name com.palm.accountservices) as webOS CE 3.1.0 ships it: HP's,
+with the webOS CE project's changes for the webOS Archive account
+(https://github.com/webOSArchive/webOS-Community-Edition), copied from
+/usr/palm/services/com.palm.service.palmprofile on a TouchPad running it. HP's part: copyright
+Palm, Inc. / Hewlett-Packard, never released under an open licence, distributed by Lunacy as
+abandonware, like Mojo.
+NOTICE
 else
-    # A TouchPad flashed with a later webOS CE (build 600070 is one) has no .stock files: its image
-    # carries the service already changed for the webOS Archive account, HP's originals gone. It
-    # is taken whole, as that device runs it, and said so, since it isn't the copy above.
-    echo "fetch-assets: NOTE: this TouchPad's palmprofile service is webOS CE's own (no HP originals on it); taken as the device runs it" >&2
-    PALMPROFILE_CE=1
-fi
-[ -z "$PALMPROFILE_CE" ] || echo "This copy is webOS CE's (the image's own changes for the webOS Archive account), not HP's originals: see fetch-assets.sh." > $P/NOTICE.ce
+cp -r $V/touchpad/os-services/com.palm.service.palmprofile $P
+find $P -name '*.stock' | while read f; do mv "$f" "${f%.stock}"; done
+rm -f $P/handlers/UpdateUsernameCommandAssistant.js $P/handlers/SyncDeviceNameCommandAssistant.js $P/handlers/SignOutCommandAssistant.js
 cat > $P/NOTICE <<'NOTICE'
 HP's palmprofile service (bus name com.palm.accountservices), copied from
 /usr/palm/services/com.palm.service.palmprofile on the reference TouchPad (webOS CE 3.1.0),
@@ -279,6 +289,7 @@ with the files the webOS Community Account Manager patches restored from the sto
 keeps. Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence;
 distributed by Lunacy as abandonware, like Mojo.
 NOTICE
+fi
 # Calendar's reminders service, which schedules each event's reminder as an activity and
 # shows it through the app (Docs/architecture.md, "Calendar").
 cp -r $V/touchpad/os-services/com.palm.service.calendar.reminders $R/usr/palm/services/

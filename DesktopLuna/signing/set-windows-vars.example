@@ -1,0 +1,17 @@
+# Code signing of Luna DE's Windows package (DesktopLuna/signing/windows.js), from Linux or a Mac.
+# Copy this file to set-windows-vars.sh in this folder (git-ignored) and fill in ONE of the two
+# ways below; `npm run dist -- --win` reads it. Variables already in the environment win.
+
+# A code-signing certificate in a .pfx/.p12 file (keep the file out of the repository):
+# export LUNA_DE_WIN_CERT="/path/to/codesigning.pfx"
+# export LUNA_DE_WIN_CERT_PASSWORD="its password"
+# export LUNA_DE_WIN_TSA="http://timestamp.digicert.com"     # optional: the timestamp server
+
+# Or Azure Trusted Signing. The app registration needs the "Trusted Signing Certificate Profile
+# Signer" role on the signing account (Azure portal → signing account → Access control (IAM)).
+# export AZURE_TENANT_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"         # Entra ID → Overview
+# export AZURE_CLIENT_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"         # the app registration
+# export AZURE_CLIENT_SECRET="its client secret's value"
+# export AZURE_TRUSTED_SIGNING_ENDPOINT="https://eus.codesigning.azure.net"   # account → Overview → URI
+# export AZURE_TRUSTED_SIGNING_ACCOUNT="account-name"
+# export AZURE_TRUSTED_SIGNING_PROFILE="certificate-profile-name"

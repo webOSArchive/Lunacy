@@ -535,8 +535,8 @@ onto `luna-de`, and nothing goes back until the refactoring is done and proven (
 
 ## Packaging
 
-`DesktopLuna/package.js` (`npm run dist`) builds a self-contained Luna DE for the machine it
-runs on ([DesktopLuna/README.md](../DesktopLuna/README.md) has the steps). What a package holds,
+`DesktopLuna/package.js` (`npm run dist`) builds a self-contained Luna DE (both Mac processors on a Mac, the machine's own on Linux, Windows with `--win` on either) into `out/` at the top of the repository
+([DesktopLuna/README.md](../DesktopLuna/README.md) has the steps). What a package holds,
 under the app's resources folder, is a checkout in small: `AndroidLuna/src/main/assets`,
 `AndroidLuna/local-assets` (not its PDK part), `CoreApps`, the keyboard's art and
 `DesktopLuna/node`, so the host's `--repo` and the shell's pictures are found as they are in
@@ -574,13 +574,35 @@ Decisions, and why:
   setuid root, which an AppImage or a tarball can't deliver, and Chromium stops before the app's
   own code when it finds it otherwise. The program people start is a two-line script that adds
   `--no-sandbox`. A ratchet item: a `.deb` could install the helper properly.
+- **One machine builds several packages.** A Mac makes Apple Silicon's and Intel's; any machine
+  makes Windows'. Another system's or processor's Java runtime is cut by this JDK's jlink from
+  Eclipse Temurin's modules for it (Adoptium; the same release when Temurin has it, else its
+  latest of the same feature version, which is all jlink insists on), and SQLite's library for it
+  comes out of the driver's jar.
+- **Signing is the build's, and so is checking it** (`DesktopLuna/signing/`). macOS: the
+  Developer ID in the keychain signs everything, Apple's notary service is called from
+  electron-builder's afterSign and its ticket stapled before the dmg is made; the credentials sit
+  in a git-ignored
+  `signing/set-apple-vars.sh`. Windows: signtool runs only on Windows and the Windows package is
+  made elsewhere, so jsign signs from the build machine, with a `.pfx` or Azure Trusted Signing.
+  **Deep:** electron-builder signs only the app's exe and `app.asar.unpacked`, but Smart App
+  Control checks every program and library loaded, and Luna DE's Java runtime, `node.exe` and
+  SQLite's DLL sit elsewhere in `resources/`; so every `.exe` and `.dll` is signed before
+  anything is packed, a valid timestamped maker's signature (Microsoft's, Eclipse's, OpenJS's)
+  being kept. electron-builder only warns when its signing hook fails, so the build ends by
+  reading every signature back (`AuthenticodeCheck.java` on jsign's own parser: digest, signer,
+  timestamp; `codesign`, `stapler` and `spctl` on a Mac) and fails on any gap. `--release`
+  refuses an unsigned or unnotarised package.
 
 Not yet tried, and what to expect:
 
-- **macOS.** Signing and notarisation are configured (hardened runtime, with the entitlements
-  the Java runtime and Node need) and have never run. Node 12 exists for Macs only as an Intel
-  build, so on Apple Silicon the JS services need Rosetta; the rest is native.
-  `AndroidLuna/fetch-assets.sh` hasn't been run on a Mac either.
+- **macOS.** Signed and notarised (2026-11-16, `npm run dist -- --release` on an Intel Mac, with
+  `fetch-assets.sh --desktop` run there too): the Apple Silicon and Intel apps (47 and 46 programs
+  and libraries, all signed by the Developer ID's team under the hardened runtime, timestamped),
+  each notarised, its ticket stapled, and accepted by `spctl` as "Notarized Developer ID"; about
+  15 minutes for both. Not yet tried: a packaged copy downloaded onto another Mac and run, and
+  either app on Apple Silicon. Node 12 exists for Macs only as an Intel build, so on Apple Silicon
+  the JS services need Rosetta; the rest is native.
 - **Windows.** The package is built (2026-11-16, from Linux with `--win`: a 273 MB zip whose
   `Luna DE.exe`, Java runtime, `node.exe` and SQLite library are all Windows x64 programs) and
   **has never been started**: everything below is written from reading the code, not from a run.
@@ -598,6 +620,11 @@ Not yet tried, and what to expect:
     commands are POSIX: they run in Git for Windows' `sh.exe` if that is installed, and fail
     as commands that couldn't start if it isn't.
   Expect the first run to show what reading missed. Not handled at all: `fetch-assets.sh` on
-  Windows (the cross-build avoids needing it), the installer without Wine or a Windows build,
-  and signing.
+  Windows (the cross-build avoids needing it), and the installer without Wine or a Windows build.
+  *Signing* (2026-11-16, built on a Mac with a throwaway self-signed certificate, Luna DE having
+  no Windows key yet): all 86 programs and libraries in the zip verified intact and timestamped,
+  80 with their makers' signatures (Microsoft 51, Eclipse 28, OpenJS 1) and 6 with the test key
+  (`Luna DE.exe`, Electron's four unsigned DLLs and SQLite's); a byte changed in a signed file, or
+  the app's exe unsigned, fails the check. Not tried: Azure Trusted Signing (no account for Luna
+  DE), and Windows itself judging a real certificate.
 - No auto-update, and the version is still 0.0.1.

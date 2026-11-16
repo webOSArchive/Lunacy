@@ -78,12 +78,13 @@ sandbox.
 
 ## Packaging
 
-One command builds the distributable for the machine it runs on, with nothing copied by hand:
+One command builds the distributables, with nothing copied by hand: a Mac's for both processors,
+Linux's for its own, and Windows' from either with `--win`:
 
 ```
 cd DesktopLuna
 npm install
-npm run dist        # output in DesktopLuna/dist/
+npm run dist        # output in out/, at the top of the repository
 ```
 
 It needs a JDK 17 installed (17 to 22 will do; it needn't be the machine's default Java, the build finds it, and `LUNA_DE_JDK` names one outright), Node, and `AndroidLuna/local-assets`: the webOS frameworks
@@ -102,26 +103,83 @@ build refuses assets older than the checkout's patches. (Lunacy's development ma
 `fetch-assets.sh` without `--desktop`, which makes the Android build's native parts too.)
 
 `package.js` builds the
-host, fetches Node 12 for the machine (checked against nodejs.org's checksum), cuts a Java
-runtime with `jlink` so users need no Java, and hands electron-builder the app with Lunacy's
-assets at the places they have in a checkout. A package is for the system and processor it was
-built on.
+host, fetches Node 12 (checked against nodejs.org's checksum), cuts a Java runtime with `jlink`
+so users need no Java, and hands electron-builder the app with Lunacy's assets at the places they
+have in a checkout. Another system's or processor's Java runtime is cut from Eclipse Temurin's
+modules for it (from Adoptium, checked against its checksum), so one machine builds several.
 
-| Built on | Output |
-|---|---|
-| Linux | `luna-de-<version>-linux-x86_64.AppImage` and a `.tar.gz` |
-| macOS | a `.dmg` and a `.zip`; signed with the Developer ID in the keychain (or `CSC_LINK` and `CSC_KEY_PASSWORD`), and notarised when `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` are set |
-| Windows | an installer and a `.zip`; signed when `CSC_LINK` and `CSC_KEY_PASSWORD` name a certificate |
+| Command | Built on | Output |
+|---|---|---|
+| `npm run dist` | macOS | `luna-de-<version>-mac-arm64.dmg` and `-mac-x64.dmg` (and a `.zip` of each), signed and notarised (below) |
+| `npm run dist` | Linux | `luna-de-<version>-linux-x86_64.AppImage` and a `.tar.gz`, for the machine's processor |
+| `npm run dist -- --win` | Linux or macOS | `luna-de-<version>-win-x64.zip`, the whole app in a folder (unzip it and run `Luna DE.exe`); with Wine installed, the installer too. Signed when a key is given (below) |
 
-**Windows from Linux or a Mac.** `npm run dist -- --win` makes the Windows package without a
-Windows machine: `luna-de-<version>-win-x64.zip`, the whole app in a folder (unzip it and run
-`Luna DE.exe`). Nothing is compiled for Windows; its native parts are fetched (`node.exe`, and
-the Windows modules of this machine's JDK version, from Adoptium, both checked against published
-checksums) or come out of a jar. With Wine installed it makes the installer too. It is unsigned:
-Windows SmartScreen will warn until it is signed.
+`--arch x64,arm64` names the processors outright (a Linux arm64 package, say). `--release`
+refuses to finish a package that isn't signed (and, on a Mac, notarised): use it for anything
+handed to people. Without it an unsigned package is built, and the build says what it lacks.
+After building, every signature in the package is read back, and a gap fails the build.
+
+An Apple Silicon Mac's package is native, except the JS services' Node: Node 12 was never built for
+Apple Silicon, so it runs under Rosetta (open question 6 in [Docs/luna-de.md](../Docs/luna-de.md)).
+
+### Signing and notarising for macOS
+
+Needed once: a **Developer ID Application** certificate in the keychain (not "Mac Installer
+Distribution"): Xcode → Settings → Accounts → your Apple account → Manage Certificates → `+` →
+Developer ID Application. With it, everything in the app is signed under the hardened runtime: the
+app, the Java runtime, Node and SQLite's library.
+
+Notarising (so a downloaded copy opens without Gatekeeper's block, or Apple Silicon's "is
+damaged"):
+
+1. Make an app-specific password at [appleid.apple.com](https://appleid.apple.com) → Sign-In and
+   Security → App-Specific Passwords.
+2. Find the team ID at [developer.apple.com/account](https://developer.apple.com/account), top right
+   (10 characters); it is the Developer ID certificate's team.
+3. `cp signing/set-apple-vars.example signing/set-apple-vars.sh` (git-ignored) and fill in
+   `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID`. The environment's own values win
+   over the file.
+4. `npm run dist -- --release`. Each app is sent to Apple's notary service after it is signed (a
+   few minutes each), its ticket is stapled to it, and then the dmg and zip are made of it. The
+   build ends by checking each app as a downloader's Mac would: `codesign --verify --deep
+   --strict`, every program and library signed by the app's team with the hardened runtime and a
+   timestamp, the ticket stapled, and `spctl` accepting it as notarised.
+
+Without the certificate the package is unsigned; without the three variables it is signed and not
+notarised. The build says which, before it starts.
+
+### Signing for Windows
+
+Windows signing runs on the machine that builds the package (Linux or a Mac), with
+[jsign](https://github.com/ebourg/jsign), which the build fetches (a pinned version, checked against
+its checksum). Give it a key in `signing/set-windows-vars.sh` (git-ignored; copy
+`signing/set-windows-vars.example`) or the environment, one of:
+
+- **A code-signing certificate file:** `LUNA_DE_WIN_CERT` (a `.pfx` or `.p12`),
+  `LUNA_DE_WIN_CERT_PASSWORD`, and optionally `LUNA_DE_WIN_TSA` for another timestamp server than
+  DigiCert's.
+- **Azure Trusted Signing:** `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
+  `AZURE_TRUSTED_SIGNING_ENDPOINT`, `AZURE_TRUSTED_SIGNING_ACCOUNT` and
+  `AZURE_TRUSTED_SIGNING_PROFILE`. The app registration needs the *Trusted Signing Certificate
+  Profile Signer* role on the signing account. Only some of the six set stops the build.
+
+Signing is deep. Windows 11's Smart App Control checks every program and library an app loads, and
+electron-builder on its own signs only the app's exe. So, before anything is zipped or packed into
+the installer, every `.exe` and `.dll` in the app is signed: the Java runtime's, `node.exe` and
+SQLite's DLL among them. A file that already carries a valid, timestamped signature keeps its
+maker's (Microsoft's, Eclipse's for the Java runtime, the OpenJS Foundation's for Node); the rest
+get Luna DE's. The installer and uninstaller are signed too. Then every signature is read back:
+each must be intact, verify and be timestamped, and the app's exe and the installer must carry
+Luna DE's signer. Whether Windows trusts the certificate's issuer is Windows' to say; the build
+checks everything short of that.
+
+A signature names the publisher, but SmartScreen's warning only fades as a signing identity earns
+reputation through downloads; a new identity's releases still warn for a while.
 
 Only the Linux package has been run (2026-11-16: the AppImage on a fresh home folder, with no
 Java or Node of the machine's, opened Calendar with its JS services). The Windows zip has been
-built, from Linux, and never started: no Windows machine has run Luna DE yet. The Mac build is
-written and not yet tried. See "Packaging" in [Docs/luna-de.md](../Docs/luna-de.md) for what to
+built, from Linux and a Mac, and never started: no Windows machine has run Luna DE yet (its deep
+signing is checked, with a throwaway certificate). The Mac packages, Apple Silicon's and Intel's,
+are built, signed and notarised, and Gatekeeper accepts both; neither has yet been downloaded onto
+another Mac and run. See "Packaging" in [Docs/luna-de.md](../Docs/luna-de.md) for what to
 expect on each.

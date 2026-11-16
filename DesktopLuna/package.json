@@ -11,6 +11,7 @@
     "dist": "node package.js"
   },
   "devDependencies": {
+    "@electron/notarize": "2.5.0",
     "electron": "44.9.3",
     "electron-builder": "26.18.0"
   },

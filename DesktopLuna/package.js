@@ -167,9 +167,39 @@ function withoutLinks(from, to) {
 	return to;
 }
 
+/**
+ * AndroidLuna/local-assets is made by fetch-assets.sh from Workbench/vendor, which only a machine
+ * set up for Lunacy's own development has (the TouchPad's files and the upstream clones aren't in
+ * the repository). It is the same on every system, so another machine takes it as one archive:
+ *
+ *   npm run dist -- --make-assets          there: writes dist/lunade-assets.tar.gz
+ *   npm run dist -- --assets <that file>   here: unpacks it into AndroidLuna/local-assets, then builds
+ *
+ * The archive leaves out the PDK part, which Luna DE doesn't run.
+ */
+const ASSETS = path.join(REPO, "AndroidLuna", "local-assets");
+function makeAssets() {
+	if (!fs.existsSync(path.join(ASSETS, "rootfs.index"))) { fail("AndroidLuna/local-assets isn't there to archive: run AndroidLuna/fetch-assets.sh"); }
+	fs.mkdirSync(path.join(HERE, "dist"), { recursive: true });
+	const out = path.join(HERE, "dist", "lunade-assets.tar.gz");
+	run("tar", ["-czf", out, "--exclude=./pdk", "-C", ASSETS, "."]);
+	say("done: " + out + " (" + Math.round(fs.statSync(out).size / 1048576) + " MB, sha256 " + sha256(out) + ")");
+}
+function takeAssets(file) {
+	if (!file || !fs.existsSync(file)) { fail("--assets needs the archive --make-assets wrote; no file at " + file); }
+	say("AndroidLuna/local-assets from " + file);
+	fs.rmSync(ASSETS, { recursive: true, force: true });
+	fs.mkdirSync(ASSETS, { recursive: true });
+	run("tar", ["-xzf", path.resolve(file), "-C", ASSETS]);
+}
+
 (async () => {
-	if (!fs.existsSync(path.join(REPO, "AndroidLuna", "local-assets", "rootfs.index"))) {
-		fail("AndroidLuna/local-assets isn't there: run AndroidLuna/fetch-assets.sh first (BUILDING.md)");
+	if (process.argv.includes("--make-assets")) { return makeAssets(); }
+	const given = process.argv.indexOf("--assets");
+	if (given >= 0) { takeAssets(process.argv[given + 1]); }
+	if (!fs.existsSync(path.join(ASSETS, "rootfs.index"))) {
+		fail("AndroidLuna/local-assets isn't there. On the machine Lunacy is developed on, AndroidLuna/fetch-assets.sh makes it; " +
+			"on any other, bring it from there: `npm run dist -- --make-assets` on that machine, then `npm run dist -- --assets <the archive>` here.");
 	}
 	say("building the host");
 	run(path.join(REPO, HOST_WIN ? "gradlew.bat" : "gradlew"), ["--console=plain", "-q", ":DesktopLuna:host:installDist"], { cwd: REPO, shell: HOST_WIN });

@@ -86,8 +86,17 @@ npm install
 npm run dist        # output in DesktopLuna/dist/
 ```
 
-It needs what a build already needs (a JDK 17 with `jlink`, and `AndroidLuna/local-assets`
-from `AndroidLuna/fetch-assets.sh`; see [BUILDING.md](../BUILDING.md)). `package.js` builds the
+It needs a JDK 17 with `jlink`, and `AndroidLuna/local-assets`. That folder is made by
+`AndroidLuna/fetch-assets.sh` from `Workbench/vendor`, which only the machine Lunacy is developed
+on has (see [BUILDING.md](../BUILDING.md)), so **on any other machine bring it as one archive**:
+
+```
+npm run dist -- --make-assets                 # on the development machine: dist/lunade-assets.tar.gz
+npm run dist -- --assets lunade-assets.tar.gz # on the other: unpacks it, then builds
+```
+
+The archive is the same for every system (about 23 MB) and is needed again only when the
+frameworks or their patches change. `package.js` builds the
 host, fetches Node 12 for the machine (checked against nodejs.org's checksum), cuts a Java
 runtime with `jlink` so users need no Java, and hands electron-builder the app with Lunacy's
 assets at the places they have in a checkout. A package is for the system and processor it was

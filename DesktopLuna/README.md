@@ -30,11 +30,16 @@ tap on the status bar's title opens the app's menu; banners and dashboards show 
 | Left, Right, Enter | In the card view: the next card, and bring it up |
 | Esc | The back gesture |
 | F6, F7, F8, F9 | Turn the device up, down, right, left (portrait is 768 x 1024) |
+| The bezel's corner button | Turn the device between wide and tall |
 | F12 | DevTools for whatever has the keyboard |
 | Ctrl/Cmd+R | Reload the card |
 | F1 | A spare home button |
 
 The first six are the old SDK emulator's keys.
+
+**A popped-out card** starts at the device's size and the way it is held, and is then a window
+like any other: resize it freely and the page follows, hearing each change as a resize and a
+change between wide and tall as the device turning.
 
 **Installing an app:** drop its `.ipk`, or its folder (the one holding `appinfo.json`), on the
 window; or press Ctrl/Cmd+O for a package, Ctrl/Cmd+Shift+O for a folder; or start with

@@ -32,7 +32,9 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
     private val calls = HashMap<Int, Bus.Call>()   // on the main thread only
     override val pid = nextPid.getAndIncrement()
     @Volatile private var closed = false
-    private val portrait get() = shell.portrait
+    /** How this window is held when it isn't the device's way: a popped-out window resized to the other shape. */
+    @Volatile var ownOrientation: String? = null
+    private val portrait get() = ownOrientation?.let { it == "up" || it == "down" } ?: shell.portrait
     /** The window's type as its opener named it ("card", "dashboard", "popupalert"...), or null for an app's first window. */
     @Volatile var type: String? = null
 
@@ -209,7 +211,7 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
 
     private fun width() = if (portrait) 768 else 1024
     private fun height() = if (portrait) 1024 else 768
-    private fun screenOrientation() = shell.orientation
+    private fun screenOrientation() = ownOrientation ?: shell.orientation
 
     /** ShellActivity.deviceInfo's answer for a TouchPad's screen, the card the whole of it. */
     private fun deviceInfo(): String {

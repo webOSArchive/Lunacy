@@ -352,6 +352,8 @@
 		else if (maximized) { cardView(); }
 	}
 	$("home").addEventListener("click", home);
+	// The bezel's corner: the device turned between wide and tall.
+	$("rotate").addEventListener("click", function () { window.lunade.rotate(); });
 	document.addEventListener("keydown", function (e) {
 		if (e.key === "F1") { e.preventDefault(); home(); }
 		// Left and Right switch cards in the card view (the SDK emulator's keys).
@@ -488,6 +490,7 @@
 	window.lunade.onLauncher(function () { if ($("launcher").hidden) { openLauncher(); } else { closeLauncher(); } });
 	window.lunade.onScreen(function (d) {
 		measure(d.width, d.height);
+		document.body.classList.toggle("portrait", d.height > d.width);
 		if (maximized) { cards.forEach(function (k, j) { k.el.classList.remove("animate"); transform(k, j === active ? 0 : (j < active ? -1 : 1) * (W + GAP), 0, 1); }); }
 		else { layout(false); }
 		placePanels();

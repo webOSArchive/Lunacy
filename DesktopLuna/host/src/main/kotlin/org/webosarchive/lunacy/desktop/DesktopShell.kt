@@ -71,7 +71,8 @@ class DesktopShell(
     fun turn(to: String) {
         if (to !in listOf("up", "down", "left", "right") || to == orientation) return
         orientation = to
-        main.post { windows.values.forEach { it.setScreenOrientation(to) } }
+        // But a popped-out window, which is held its own way.
+        main.post { windows.values.filter { it.ownOrientation == null }.forEach { it.setScreenOrientation(to) } }
     }
 
     /** Something Electron tells one page, by its page id: its type, its focus, the back gesture. */
@@ -82,6 +83,8 @@ class DesktopShell(
             "active" -> main.post { w.setStageActive(value == "true") }
             "focus" -> main.post { w.sendFocus(value == "true") }
             "back" -> main.post { w.sendBack() }
+            // A window of its own (popped out) turned between wide and tall as it was resized.
+            "orientation" -> main.post { w.ownOrientation = value; w.setScreenOrientation(value) }
         }
     }
 

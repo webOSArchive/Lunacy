@@ -33,6 +33,11 @@ API 21 gate.
   the app calls `stageReady` (or its page has loaded); the page then takes the splash's place over
   300 ms. A headless app's loading card takes the first card the app opens. The timings are open
   to refining; the order of what is seen is the TouchPad's.
+- **Turning and resizing.** The bezel has a rotate button in its corner (wide and tall; F6 to F9
+  pick each way up). A popped-out card starts at the device's size and is then freely resizable:
+  its page hears each change as a resize, and a change between wide and tall as the device
+  turning, for that window alone. Either way PalmSystem.screenOrientation is set before the page's
+  resize arrives, since Enyo reads it there.
 - **Installing an app.** A package (.ipk) or an app's own folder (the one with appinfo.json) is
   dropped on the window, chosen with Ctrl/Cmd+O (Shift for a folder), or named in
   `LUNADE_INSTALL`. A package goes through Lunacy's package installer, as from the App Catalog; a

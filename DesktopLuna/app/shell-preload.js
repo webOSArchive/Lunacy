@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld("lunade", {
 	place: (rects, dashboardsOpen) => ipcRenderer.invoke("lunade:place", rects, dashboardsOpen),
 	appMenu: () => ipcRenderer.invoke("lunade:appmenu"),
 	back: () => ipcRenderer.invoke("lunade:back"),
+	rotate: () => ipcRenderer.invoke("lunade:rotate"),
 	onToggleCard: on("lunade:toggle-card"),
 	onLauncher: on("lunade:launcher"),
 	onScreen: on("lunade:screen"),

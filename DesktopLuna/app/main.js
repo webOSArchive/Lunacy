@@ -267,10 +267,26 @@ function popOut(id) {
 	if (!c || c.popped) { return; }
 	shell.contentView.removeChildView(c.view);
 	if (shown === id) { shown = null; }
+	// It starts as the card was, at the device's size and the way it is held, and from there is a
+	// window like any other: resized freely, its page following (the page hears each change as a
+	// resize, and a change between wide and tall as the device turning, for that window alone).
 	const r = cardRect();
-	const win = new BaseWindow({ width: r.width, height: r.height, useContentSize: true, title: c.title, backgroundColor: "#000000" });
+	const win = new BaseWindow({ width: r.width, height: r.height, useContentSize: true, title: c.title, backgroundColor: "#000000",
+		resizable: true, minWidth: 320, minHeight: 240 });
 	win.contentView.addChildView(c.view);
 	c.view.setBounds({ x: 0, y: 0, width: r.width, height: r.height });
+	let tall = r.height > r.width;
+	win.on("resize", async () => {
+		const [w, h] = win.getContentSize();
+		if ((h > w) !== tall) {
+			tall = h > w;
+			// The way it is held first, then the size (orient), then the host's word of it.
+			await orient(c.view.webContents, tall ? "up" : "right");
+			tell(c.view.webContents, "orientation", tall ? "up" : "right");
+		}
+		const [w2, h2] = win.getContentSize();
+		c.view.setBounds({ x: 0, y: 0, width: w2, height: h2 });
+	});
 	c.view.setVisible(true);
 	c.popped = win;
 	win.on("closed", () => removeCard(id, true));
@@ -322,6 +338,8 @@ ipcMain.handle("lunade:appmenu", () => {
 	if (c) { askLaunch(c.appId, { "palm-command": "open-app-menu" }); }
 	return true;
 });
+// The bezel's rotate button: wide to tall and back (F6 to F9 pick each of the four ways up).
+ipcMain.handle("lunade:rotate", () => { turn(portrait() ? "right" : "up"); return true; });
 ipcMain.handle("lunade:back", () => { const c = shown && cards.get(shown); if (c) { tell(c.view.webContents, "back", String(Date.now())); } return true; });
 ipcMain.on("lunade:next-window", (e, json) => {
 	let attrs = {};
@@ -376,7 +394,7 @@ ipcMain.on("lunade:page", (e, page) => {
 	pageIds.set(e.sender.id, page);
 	// What this view's page is (its type, its focus) goes to each page it loads.
 	const t = told.get(e.sender.id) || {};
-	for (const what of ["type", "active", "focus"]) { if (t[what] !== undefined) { postTell(page, what, t[what]); } }
+	for (const what of ["type", "active", "focus", "orientation"]) { if (t[what] !== undefined) { postTell(page, what, t[what]); } }
 });
 
 /** What the host's shell asks of the screen (DesktopShell.take), for as long as Luna DE runs. */
@@ -422,15 +440,28 @@ async function followHost() {
 /** An entry's icon as a URL the shell page can load. */
 function withIcon(a) { return Object.assign(a, { icon: host + a.icon, splash: host + a.splash }); }
 
-/** The device turned: the window takes the screen's new shape, and every page hears of it. */
-function turn(to) {
+/**
+ * PalmSystem.screenOrientation set in a page, before its view takes its new shape: Enyo 1 reads
+ * the property when the page's own resize event arrives (enyo.sendOrientationChange), so it has
+ * to be there first, as on Android (AppWindow.setScreenOrientation). The host then calls
+ * Mojo.screenOrientationChanged, which can come after.
+ */
+function orient(wc, to) {
+	if (wc.isDestroyed()) { return Promise.resolve(); }
+	return wc.executeJavaScript("if(window.PalmSystem){PalmSystem.screenOrientation=" + JSON.stringify(to) + "}", false).catch(() => {});
+}
+
+/** The device turned: every page is told how it is held, then the window and the cards take the screen's new shape. */
+async function turn(to) {
 	if (to === orientation || !shell) { return; }
 	orientation = to;
+	const here = [...cards.values()].filter((c) => !c.popped);
+	await Promise.all(here.map((c) => orient(c.view.webContents, to)));
 	const size = screenSize();
 	shell.setResizable(true);
 	shell.setContentSize(size.width, size.height + BEZEL);
 	shell.setResizable(false);
-	for (const c of cards.values()) { if (!c.popped) { c.view.setBounds(cardRect()); } }
+	for (const c of here) { c.view.setBounds(cardRect()); }
 	send("lunade:screen", { width: size.width, height: size.height, orientation });
 	net.fetch(host + "/orientation?v=" + to, { method: "POST" }).catch(() => {});
 }

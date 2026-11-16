@@ -207,8 +207,10 @@ function patchesMissing(manifest) {
 		fail("AndroidLuna/local-assets is older than this checkout's framework patches (" + missing[0] + (missing.length > 1 ? " and " + (missing.length - 1) + " more" : "") +
 			"): run AndroidLuna/fetch-assets.sh again (--desktop for Luna DE's part alone).");
 	}
+	// --configure-on-demand: only the host and LunaCore are set up, not the Android projects, so a
+	// machine building Luna DE needs no Android SDK.
 	say("building the host");
-	run(path.join(REPO, HOST_WIN ? "gradlew.bat" : "gradlew"), ["--console=plain", "-q", ":DesktopLuna:host:installDist"], { cwd: REPO, shell: HOST_WIN });
+	run(path.join(REPO, HOST_WIN ? "gradlew.bat" : "gradlew"), ["--console=plain", "-q", "--configure-on-demand", ":DesktopLuna:host:installDist"], { cwd: REPO, shell: HOST_WIN });
 	fs.rmSync(STAGE, { recursive: true, force: true });
 	fs.mkdirSync(STAGE, { recursive: true });
 	const nodeHome = await node12();

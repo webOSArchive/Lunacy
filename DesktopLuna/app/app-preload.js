@@ -34,7 +34,11 @@
 	N.engineMajor = function () { return parseInt(process.versions.chrome, 10) || -1; };
 	window.LunacyNative = N;
 	// The main process names a page by this id when the host asks for it to be closed.
-	try { require("electron").ipcRenderer.send("lunade:page", page); } catch (e) {}
+	var ipc = null;
+	try { ipc = require("electron").ipcRenderer; ipc.send("lunade:page", page); } catch (e) {}
+	// What the page is about to open (window.open's attributes: a card, a dashboard, a popup
+	// alert) is Electron's to place, so it hears of it before the open reaches it.
+	N.nextWindow = function (attributesJson) { if (ipc) { try { ipc.sendSync("lunade:next-window", String(attributesJson)); } catch (e) {} } return null; };
 	window.addEventListener("load", function () { N.lunadeLoaded(); });
 
 	function poll() {

@@ -9,12 +9,14 @@
 	--status: 28px;        /* StatusBar.HEIGHT */
 	--ql: 100px;           /* QuickLaunch.HEIGHT */
 	--bezel: 44px;
+	--w: 1024px;           /* the screen, which shell.js sets as the device turns */
+	--h: 768px;
 }
 html, body { margin: 0; height: 100%; background: #0d0d0d; overflow: hidden; user-select: none; }
 body { font-family: Prelude, sans-serif; color: #fff; }
 
 #screen {
-	position: relative; width: 1024px; height: 768px; overflow: hidden;
+	position: relative; width: var(--w); height: var(--h); overflow: hidden;
 	background: #000 url("../../AndroidLuna/src/main/assets/luna/wallpapers/22.jpg") center / cover no-repeat;   /* Luna.DEFAULT_WALLPAPER */
 }
 
@@ -25,7 +27,8 @@ body { font-family: Prelude, sans-serif; color: #fff; }
 	display: flex; align-items: center; justify-content: space-between; font-size: 14px;
 }
 #title { display: flex; align-items: center; height: 100%; padding: 0 8px 0 10px; font-weight: bold; text-shadow: 0 1px 1px #000; }
-#title .arrow { width: 15px; height: 26px; margin-left: 7px;   /* menu-arrow.png, as StatusBar draws it */
+body.maximized #title { cursor: pointer; }   /* the app menu, as the TouchPad's title opened it */
+#title .arrow, #notes .arrow { width: 15px; height: 26px; margin-left: 7px;   /* menu-arrow.png, as StatusBar draws it */
 	background: url("../../AndroidLuna/src/main/assets/luna/images/statusBar/menu-arrow.png") 0 0 / 15px 26px no-repeat; }
 #status-right { display: flex; align-items: center; gap: 8px; padding-right: 10px; height: 100%; }
 #status-right .icon { width: 22px; height: 20px; background: center / contain no-repeat; }
@@ -43,22 +46,22 @@ body { font-family: Prelude, sans-serif; color: #fff; }
 body.maximized #pill, body.launcher #pill { opacity: 0; pointer-events: none; }
 
 /* ---- the cards ---- */
-#cards { position: absolute; left: 0; top: var(--status); width: 1024px; height: 740px; z-index: 10; }
+#cards { position: absolute; left: 0; top: var(--status); width: var(--w); height: calc(var(--h) - var(--status)); z-index: 10; }
 .card {
-	position: absolute; left: 0; top: 0; width: 1024px; height: 740px; transform-origin: 50% 50%;
+	position: absolute; left: 0; top: 0; width: var(--w); height: calc(var(--h) - var(--status)); transform-origin: 50% 50%;
 	border-radius: 9px; overflow: hidden; background: #000;
 	box-shadow: 0 5px 20px rgba(0,0,0,0.7);
 	will-change: transform;
 }
 .card.animate { transition: transform 300ms cubic-bezier(0.165, 0.84, 0.44, 1), opacity 300ms; }
-.card .picture { position: absolute; inset: 0; width: 1024px; height: 740px; display: block; }
+.card .picture { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 /* In the card view a card is a picture to touch, not a page: the cover takes the mouse. */
 .card .cover { position: absolute; inset: 0; z-index: 2; }
 body.maximized .card { border-radius: 0; }
 
 /* ---- the launcher ---- */
 #launcher {
-	position: absolute; left: 0; top: var(--status); width: 1024px; height: calc(768px - var(--status)); z-index: 25;
+	position: absolute; left: 0; top: var(--status); width: var(--w); height: calc(var(--h) - var(--status)); z-index: 25;
 	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/launcher-bg.png");
 	display: flex; flex-direction: column;
 }
@@ -73,7 +76,7 @@ body.maximized .card { border-radius: 0; }
 #tabs button.selected { color: #fff;
 	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/tab-selected-bg.png") center / 100% 100%; }
 #grid {
-	flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(6, 1fr); grid-auto-rows: 116px;
+	flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(var(--columns, 6), 1fr); grid-auto-rows: 116px;
 	padding: 18px 20px calc(var(--ql) + 10px); align-content: start;
 }
 .tile { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; cursor: pointer;
@@ -106,6 +109,43 @@ body.maximized #quicklaunch { transform: translateY(100%); }
 #menu button:hover { background: rgba(255,255,255,0.12); }
 
 /* ---- Luna DE's bezel: the home button a TouchPad had below its screen ---- */
-#bezel { width: 1024px; height: var(--bezel); background: linear-gradient(#1a1a1a, #0b0b0b); display: flex; align-items: center; justify-content: center; }
+#bezel { width: var(--w); height: var(--bezel); background: linear-gradient(#1a1a1a, #0b0b0b); display: flex; align-items: center; justify-content: center; }
 #home { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #555; background: radial-gradient(#2a2a2a, #111); cursor: pointer; }
 #home:hover { border-color: #888; }
+
+/* ---- notifications (Docs/luna-shell-reference.md section 5; Notifications.kt's measurements):
+   a banner's text and the dashboards' icons in the status bar, left of the system's own; the
+   dashboards in a drop-down under them (content 320 wide, rows 52 high); a popup alert below. ---- */
+#notes { display: flex; align-items: center; height: 100%; padding-left: 8px; cursor: pointer;
+	background: url("../../AndroidLuna/src/main/assets/luna/images/statusBar/status-bar-separator.png") left center no-repeat; }
+#notes[hidden] { display: none; }
+#notes .arrow { margin-left: 4px; }
+#note-icons { display: flex; align-items: center; gap: 4px; }
+#note-icons img { width: 20px; height: 20px; object-fit: contain; }
+#banner { display: flex; align-items: center; gap: 5px; max-width: 520px; margin-right: 8px; font-size: 16px; white-space: nowrap; overflow: hidden; }
+#banner[hidden] { display: none; }
+#banner-icon { width: 24px; height: 24px; object-fit: contain; flex: none; }
+#banner-text { overflow: hidden; text-overflow: ellipsis; }
+#banner.in { animation: banner-in 1000ms cubic-bezier(0.215, 0.61, 0.355, 1) both; }       /* SHOW_MS, OutCubic */
+#banner.out { animation: banner-out 1000ms linear both; }                                  /* HIDE_MS, to 0.25 */
+@keyframes banner-in { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes banner-out { from { opacity: 1; } to { opacity: 0.25; } }
+
+#dashboards, #alert { position: absolute; z-index: 45; box-sizing: border-box; }
+#dashboards[hidden], #alert[hidden] { display: none; }
+#dashboards {
+	width: 342px; padding: 0 11px 15px;                                                   /* CONTENT_W + 2 x SIDE, BOTTOM */
+	border-style: solid; border-width: 0 0 24px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/menu-dropdown-bg.png") 0 24 24 24 fill / 0 24px 24px 24px stretch;
+	animation: fade-in 200ms linear both;                                                  /* statusBarMenuFadeDuration */
+}
+#dashboards .row { height: 52px; position: relative; }
+#dashboards .row + .row { border-top: 2px solid transparent; border-image: url("../../AndroidLuna/src/main/assets/luna/images/menu-divider.png") 2 0 0 0 stretch; }
+#dashboards .row .dismiss { position: absolute; right: -6px; top: 14px; width: 24px; height: 24px; border: 0; border-radius: 12px;
+	background: rgba(0,0,0,0.55); color: #fff; font: bold 14px sans-serif; cursor: pointer; z-index: 2; opacity: 0; }
+#dashboards .row:hover .dismiss { opacity: 1; }
+#alert {
+	width: 360px; padding: 20px;                                                           /* WIDTH + 2 x FRAME */
+	border-style: solid; border-width: 20px; padding: 0;
+	border-image: url("../../AndroidLuna/src/main/assets/luna/images/popup-bg.png") 20 fill / 20px stretch;
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }

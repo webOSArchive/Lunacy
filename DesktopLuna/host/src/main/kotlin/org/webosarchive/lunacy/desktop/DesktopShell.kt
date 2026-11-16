@@ -55,8 +55,51 @@ class DesktopShell(
     }
 
     fun systemBanner(appId: String, message: String) {
-        events.add(event("banner").put("appId", appId).put("message", message))
+        events.add(event("banner").put("id", nextBanner.getAndIncrement()).put("appId", appId).put("message", message).put("params", "").put("icon", ""))
     }
+
+    // ---- the screen ----
+
+    /** How the device is held: "right" and "left" are the TouchPad's landscape, "up" and "down" its portrait (Docs/spike-1.md). */
+    @Volatile var orientation = "right"
+        private set
+    val portrait get() = orientation == "up" || orientation == "down"
+
+    /** The device turned (Electron's window did): every page hears it. */
+    fun turn(to: String) {
+        if (to !in listOf("up", "down", "left", "right") || to == orientation) return
+        orientation = to
+        main.post { windows.values.forEach { it.setScreenOrientation(to) } }
+    }
+
+    /** Something Electron tells one page, by its page id: its type, its focus, the back gesture. */
+    fun tell(pageId: String, what: String, value: String) {
+        val w = windows[pageId] ?: run { pendingTypes[pageId] = value.takeIf { what == "type" } ?: return; return }
+        when (what) {
+            "type" -> w.type = value.ifEmpty { null }
+            "active" -> main.post { w.setStageActive(value == "true") }
+            "focus" -> main.post { w.sendFocus(value == "true") }
+            "back" -> main.post { w.sendBack() }
+        }
+    }
+
+    /** A window's type told before its page made its first native call. */
+    val pendingTypes = ConcurrentHashMap<String, String>()
+
+    // ---- banners ----
+
+    private val nextBanner = java.util.concurrent.atomic.AtomicInteger(1)
+
+    /** PalmSystem.addBannerMessage from [w]: its id, as the page gets it back. */
+    fun banner(w: DesktopWindow, message: String, params: String, icon: String): Int {
+        val id = nextBanner.getAndIncrement()
+        events.add(event("banner").put("id", id).put("page", w.pageId).put("appId", w.appId).put("message", message)
+            .put("params", params).put("icon", icon))
+        return id
+    }
+    fun removeBanner(id: Int) { events.add(event("banner-remove").put("id", id)) }
+    fun clearBanners(w: DesktopWindow) { events.add(event("banner-clear").put("appId", w.appId)) }
+    fun activate(w: DesktopWindow) { events.add(event("activate").put("page", w.pageId)) }
 
     // ---- the apps that are running ----
 

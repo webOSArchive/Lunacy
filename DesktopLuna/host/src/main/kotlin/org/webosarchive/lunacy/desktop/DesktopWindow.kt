@@ -25,13 +25,16 @@ import java.util.concurrent.atomic.AtomicInteger
  * or not at all; the network shim and WebSQL aren't offered yet, so net.js and websql.js stand
  * aside (Docs/luna-de.md).
  */
-class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus, private val main: DesktopScheduler) : org.webosarchive.lunacy.card.RunningWindow {
+class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus, private val main: DesktopScheduler,
+                    private val shell: DesktopShell) : org.webosarchive.lunacy.card.RunningWindow {
     private val profile = DeviceProfile.TOUCHPAD
     private val outbox = LinkedBlockingQueue<String>()
     private val calls = HashMap<Int, Bus.Call>()   // on the main thread only
     override val pid = nextPid.getAndIncrement()
     @Volatile private var closed = false
-    @Volatile var portrait = false
+    private val portrait get() = shell.portrait
+    /** The window's type as its opener named it ("card", "dashboard", "popupalert"...), or null for an app's first window. */
+    @Volatile var type: String? = null
 
     /**
      * The network shim's native half (net.js): an app's cross-origin XHR sent from here, as the
@@ -66,7 +69,13 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
         "lunadeLoaded", "stageReady", "pageDrawn" -> { main.post { pageUp() }; "null" }
         "lunadeResult" -> { val t = a.optInt(0); val v = a.optBoolean(1); main.post { results.remove(t)?.invoke(v) }; "null" }
         "clipboardHasText" -> "false"
-        "addBanner" -> "0"
+        // PalmSystem.addBannerMessage(message, launch params, icon ...): the shell shows it, and a
+        // tap on it launches the app with those params.
+        "addBanner" -> shell.banner(this, a.optString(0), a.optString(1), a.optString(2)).toString()
+        "removeBanner" -> { shell.removeBanner(a.optInt(0)); "null" }
+        "clearBanners" -> { shell.clearBanners(this); "null" }
+        // PalmSystem.activate(): the window asks to be brought forward.
+        "activate" -> { shell.activate(this); "null" }
         "pluginStart" -> "-1"
         "pluginCall" -> JSONObject.quote("{\"exception\":\"plugin not connected\"}")
         "webViewCreate" -> "-1"
@@ -104,11 +113,68 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
     }
 
     private fun pageUp() {
-        if (pageLoaded) return
-        pageLoaded = true
-        val waiting = waitingRelaunches.toList()
-        waitingRelaunches.clear()
-        waiting.forEach { (params, done) -> relaunch(params, done) }
+        if (!pageLoaded) {
+            pageLoaded = true
+            val waiting = waitingRelaunches.toList()
+            waitingRelaunches.clear()
+            waiting.forEach { (params, done) -> relaunch(params, done) }
+        }
+        if (!pageReady) {
+            pageReady = true
+            // Until now it believed itself inactive, which is how a page starts.
+            if (active || focusPending) deliverActive() else told = false
+            focusPending = false
+        }
+    }
+
+    // ---- what the shell tells the page (AppWindow's, on Android) ----
+
+    private var active = false
+    private var told: Boolean? = null
+    private var pageReady = false
+    private var focusPending = false
+
+    /** Calls a lifecycle hook the way LunaSysMgr did: a function on the page's Mojo object. */
+    private fun callMojo(fn: String, argsJson: String = "") {
+        if (!closed) outbox.add("(function(){try{if(window.Mojo&&Mojo.$fn){Mojo.$fn($argsJson);}}catch(e){console.error('Mojo.$fn: '+e);}})()")
+    }
+
+    /**
+     * Focus, as LunaSysMgr gave it: PalmSystem.isActivated, which Enyo reads to find the active
+     * window, then Mojo.stageActivated or stageDeactivated; each change told once, and not before
+     * the page has said it is ready (AppWindow.setStageActive). On the main thread.
+     */
+    fun setStageActive(on: Boolean) {
+        active = on
+        if (pageReady) deliverActive()
+    }
+
+    /**
+     * A dashboard's focus: told when it is added and each time the drop-down opens or closes,
+     * whether or not that changes anything (AppWindow.sendFocus).
+     */
+    fun sendFocus(on: Boolean) {
+        active = on
+        told = null
+        if (pageReady) deliverActive() else focusPending = true
+    }
+
+    private fun deliverActive() {
+        if (told == active) return
+        told = active
+        if (!closed) outbox.add("if(window.PalmSystem){PalmSystem.isActivated=$active}")
+        callMojo(if (active) "stageActivated" else "stageDeactivated")
+    }
+
+    /** The screen turned: PalmSystem.screenOrientation first, then Mojo.screenOrientationChanged. */
+    fun setScreenOrientation(orientation: String) {
+        if (!closed) outbox.add("if(window.PalmSystem){PalmSystem.screenOrientation=${JSONObject.quote(orientation)}}")
+        callMojo("screenOrientationChanged", JSONObject.quote(orientation))
+    }
+
+    /** The webOS back gesture: an ESC key event, which Enyo and Mojo turn into "back". */
+    fun sendBack() {
+        if (!closed) outbox.add("(function(){function k(t){var e=document.createEvent('Events');e.initEvent(t,true,true);e.keyCode=27;e.which=27;(document.activeElement||document).dispatchEvent(e);}k('keydown');k('keyup');})()")
     }
 
     fun close() {
@@ -130,7 +196,7 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
 
     private fun width() = if (portrait) 768 else 1024
     private fun height() = if (portrait) 1024 else 768
-    private fun screenOrientation() = if (portrait) "up" else "right"
+    private fun screenOrientation() = shell.orientation
 
     /** ShellActivity.deviceInfo's answer for a TouchPad's screen, the card the whole of it. */
     private fun deviceInfo(): String {
@@ -141,9 +207,9 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
             "platformVersionMinor" to d.platformVersionMinor, "platformVersionDot" to d.platformVersionDot,
             "carrierName" to d.carrierName,
             "serialNumber" to DeviceProfile.serialFor(d, "lunade:" + System.getProperty("user.name")),
-            "screenWidth" to 1024, "screenHeight" to 768,
-            "minimumCardWidth" to 1024, "minimumCardHeight" to d.minimumCardHeight,
-            "maximumCardWidth" to 1024, "maximumCardHeight" to 768 - d.positiveSpaceTopPadding,
+            "screenWidth" to width(), "screenHeight" to height(),
+            "minimumCardWidth" to width(), "minimumCardHeight" to d.minimumCardHeight,
+            "maximumCardWidth" to width(), "maximumCardHeight" to height() - d.positiveSpaceTopPadding,
             "touchableRows" to d.touchableRows,
             "keyboardAvailable" to d.keyboardAvailable, "keyboardSlider" to d.keyboardSlider,
             "keyboardType" to d.keyboardType,

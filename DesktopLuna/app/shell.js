@@ -4,11 +4,19 @@
 // shell-logic moves (AppLifecycle, CardHost's decisions) replace that with LunaCore's.
 "use strict";
 (function () {
-	var W = 1024, AREA = 740, STATUS = 28;                 // the card area, below the status bar
-	var RESERVE = 48, ORIGIN = 0.40, GAP = 30;             // CardLayer.Params: PILL_RESERVE, ORIGIN_RATIO, GAP
-	var ACTIVE = (AREA - RESERVE) * 0.55 / AREA;           // ACTIVE_RATIO, as activeScale() works it out
-	var OTHER = (AREA - RESERVE) * 0.50 / AREA;            // NON_ACTIVE_RATIO
-	var ORIGIN_Y = RESERVE + (AREA - RESERVE) * ORIGIN;    // originY() within the card area
+	var STATUS = 28, RESERVE = 48, ORIGIN = 0.40, GAP = 30; // StatusBar.HEIGHT; CardLayer.Params: PILL_RESERVE, ORIGIN_RATIO, GAP
+	var W, H, AREA, ACTIVE, OTHER, ORIGIN_Y;
+	/** The screen's size, and what follows from it: the card area below the status bar and CardLayer's ratios. */
+	function measure(w, h) {
+		W = w; H = h; AREA = h - STATUS;
+		ACTIVE = (AREA - RESERVE) * 0.55 / AREA;           // ACTIVE_RATIO, as activeScale() works it out
+		OTHER = (AREA - RESERVE) * 0.50 / AREA;            // NON_ACTIVE_RATIO
+		ORIGIN_Y = RESERVE + (AREA - RESERVE) * ORIGIN;    // originY() within the card area
+		document.documentElement.style.setProperty("--w", w + "px");
+		document.documentElement.style.setProperty("--h", h + "px");
+		document.documentElement.style.setProperty("--columns", w >= 1024 ? 6 : 4);
+	}
+	measure(1024, 768);
 	var TAP = 25, THROW_DISTANCE = -50, THROW_VELOCITY = -1.1;   // TAP_RADIUS; THROW_*, px and px/ms
 	var cards = [], active = -1, maximized = false;
 	var $ = function (id) { return document.getElementById(id); };
@@ -38,9 +46,11 @@
 		});
 	}
 
+	/** The status bar's title: the app's own name while its card is up, as the TouchPad showed it (not the page's title). */
 	function setTitle() {
-		$("title-text").textContent = maximized && cards[active] ? cards[active].title : "Luna DE";
+		$("title-text").textContent = maximized && cards[active] ? (appTitles[cards[active].appId] || cards[active].title) : "Luna DE";
 	}
+	var appTitles = {};
 
 	/** A card comes up: its picture grows to the screen, then its live view takes over. */
 	function maximize(i) {
@@ -187,7 +197,7 @@
 			m.appendChild(b);
 		});
 		m.style.left = Math.min(x, W - 220) + "px";
-		m.style.top = Math.min(y, 768 - 220) + "px";
+		m.style.top = Math.min(y, H - 220) + "px";
 		m.hidden = false;
 	}
 	document.addEventListener("pointerdown", function (e) { if (!$("menu").contains(e.target)) { $("menu").hidden = true; } }, true);
@@ -245,7 +255,105 @@
 		else if (maximized) { cardView(); }
 	}
 	$("home").addEventListener("click", home);
-	document.addEventListener("keydown", function (e) { if (e.key === "F1") { e.preventDefault(); home(); } });
+	document.addEventListener("keydown", function (e) {
+		if (e.key === "F1") { e.preventDefault(); home(); }
+		// Left and Right switch cards in the card view (the SDK emulator's keys).
+		else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !maximized && cards.length && $("launcher").hidden) {
+			active = Math.max(0, Math.min(cards.length - 1, active + (e.key === "ArrowRight" ? 1 : -1)));
+			layout(true);
+		} else if (e.key === "Enter" && !maximized && cards[active] && $("launcher").hidden) { maximize(active); }
+	});
+	// Home (the emulator's key): the card on the screen down to the card view, and up again.
+	function toggleCard() {
+		if (!$("launcher").hidden) { closeLauncher(); }
+		else if (maximized) { cardView(); }
+		else if (cards[active]) { maximize(active); }
+	}
+	// The title is the app menu's, while a card is up (the TouchPad's status bar).
+	$("title").addEventListener("click", function () { if (maximized) { window.lunade.appMenu(); } });
+
+	// ---- notifications: banners, the dashboards' drop-down, popup alerts ----
+
+	var panels = [], dashOpen = false, banners = [], bannerOn = null, bannerTimer = null;
+	var HOLD_ALONE = 5000, HOLD_QUEUED = 2000, SHOW_MS = 1000, HIDE_MS = 1000;   // Notifications.kt
+
+	function dashboards() { return panels.filter(function (p) { return p.kind === "dashboard"; }); }
+
+	/** The status bar's notification group: there while a banner shows or a dashboard is open. */
+	function drawNotes() {
+		var d = dashboards(), icons = $("note-icons");
+		icons.innerHTML = "";
+		d.forEach(function (p) { var i = document.createElement("img"); i.alt = ""; i.src = p.icon; icons.appendChild(i); });
+		$("notes").hidden = !d.length && !bannerOn;
+		$("notes").querySelector(".arrow").style.display = d.length ? "" : "none";
+		if (!d.length) { dashOpen = false; }
+		placePanels();
+	}
+
+	/** Where each dashboard and alert is on the screen: the frames drawn here, the live views laid over them by main.js. */
+	function placePanels() {
+		var rects = [], d = dashboards(), box = $("dashboards");
+		box.hidden = !(dashOpen && d.length);
+		if (!box.hidden) {
+			box.innerHTML = "";
+			d.forEach(function (p) {
+				var row = document.createElement("div"); row.className = "row";
+				var x = document.createElement("button"); x.className = "dismiss"; x.textContent = "\u00d7"; x.title = "Dismiss";
+				x.addEventListener("click", function () { window.lunade.close(p.id); });
+				row.appendChild(x); box.appendChild(row);
+			});
+			var right = W - $("notes").getBoundingClientRect().right;
+			box.style.right = Math.max(0, right - 11) + "px";
+			box.style.top = STATUS + "px";
+			[].forEach.call(box.children, function (row, i) {
+				var r = row.getBoundingClientRect();
+				rects.push({ id: d[i].id, x: r.left, y: r.top + (i ? 2 : 0), width: 320, height: 52 });
+			});
+		}
+		var alerts = panels.filter(function (p) { return p.kind === "popupalert"; }), a = alerts[alerts.length - 1], frame = $("alert");
+		frame.hidden = !a;
+		if (a) {
+			frame.style.height = (a.height + 40) + "px";
+			frame.style.right = "8px";
+			frame.style.top = (STATUS + (box.hidden ? 4 : box.getBoundingClientRect().height + 4)) + "px";
+			var f = frame.getBoundingClientRect();
+			rects.push({ id: a.id, x: f.left + 20, y: f.top + 20, width: 320, height: a.height });
+		}
+		window.lunade.place(rects, dashOpen && d.length > 0);
+	}
+
+	$("notes").addEventListener("click", function () {
+		if (bannerOn && bannerOn.appId) { var b = bannerOn; endBanner(); window.lunade.launch({ id: b.appId, params: parse(b.params) }); return; }
+		if (dashboards().length) { dashOpen = !dashOpen; placePanels(); }
+	});
+	document.addEventListener("pointerdown", function (e) {
+		if (dashOpen && !$("dashboards").contains(e.target) && !$("notes").contains(e.target)) { dashOpen = false; placePanels(); }
+	}, true);
+
+	function parse(text) { try { return text ? JSON.parse(text) : undefined; } catch (e) { return undefined; } }
+
+	/** Banners one at a time: in over a second, held (longer when nothing waits), then faded and gone. */
+	function nextBanner() {
+		if (bannerOn || !banners.length) { return; }
+		bannerOn = banners.shift();
+		var el = $("banner");
+		$("banner-text").textContent = bannerOn.message;
+		$("banner-icon").src = bannerOn.icon || "";
+		$("banner-icon").style.display = bannerOn.icon ? "" : "none";
+		el.hidden = false; el.className = "in";
+		drawNotes();
+		bannerTimer = setTimeout(function () {
+			el.className = "out";
+			bannerTimer = setTimeout(endBanner, HIDE_MS);
+		}, SHOW_MS + (banners.length ? HOLD_QUEUED : HOLD_ALONE));
+	}
+	function endBanner() {
+		clearTimeout(bannerTimer);
+		bannerOn = null;
+		$("banner").hidden = true; $("banner").className = "";
+		drawNotes();
+		nextBanner();
+	}
 
 	// The card view slides with the wheel, as with a finger.
 	$("cards").addEventListener("wheel", function (e) {
@@ -270,26 +378,50 @@
 	window.lunade.onCardAdded(added);
 	window.lunade.onCardReady(ready);
 	window.lunade.onCardRemoved(removed);
-	window.lunade.onCardTitle(function (d) { var i = cardIndex(d.id); if (i >= 0) { cards[i].title = d.title; setTitle(); } });
 	window.lunade.onShow(function (d) { var i = cardIndex(d.id); if (i >= 0) { maximize(i); } });
-	window.lunade.shell().then(function (s) {
-		pages = s.pages;
-		var tabs = $("tabs");
-		pages.forEach(function (p, i) {
-			var b = document.createElement("button");
-			b.textContent = p.title;
-			b.addEventListener("click", function () { showPage(i); });
-			tabs.appendChild(b);
-		});
-		showPage(0);
-		var dock = $("dock");
-		s.dock.forEach(function (a) {
-			var b = document.createElement("button");
-			b.title = a.title;
-			b.appendChild(icon(a));
-			b.addEventListener("click", function () { launch(a); });
-			dock.appendChild(b);
-		});
-		window.lunade.ready();
+	window.lunade.onToggleCard(toggleCard);
+	window.lunade.onLauncher(function () { if ($("launcher").hidden) { openLauncher(); } else { closeLauncher(); } });
+	window.lunade.onScreen(function (d) {
+		measure(d.width, d.height);
+		if (maximized) { cards.forEach(function (k, j) { k.el.classList.remove("animate"); transform(k, j === active ? 0 : (j < active ? -1 : 1) * (W + GAP), 0, 1); }); }
+		else { layout(false); }
+		placePanels();
 	});
+	window.lunade.onPanelAdded(function (d) { panels.push(d); drawNotes(); });
+	window.lunade.onPanelRemoved(function (d) { panels = panels.filter(function (p) { return p.id !== d.id; }); drawNotes(); });
+	window.lunade.onBanner(function (d) { banners.push(d); nextBanner(); });
+	window.lunade.onBannerRemove(function (d) {
+		banners = banners.filter(function (b) { return d.id ? b.id !== d.id : b.appId !== d.appId; });
+		if (bannerOn && (d.id ? bannerOn.id === d.id : bannerOn.appId === d.appId)) { endBanner(); }
+	});
+
+	/** The launcher's pages and the quick-launch bar, drawn from what the host has installed. */
+	function loadApps(first) {
+		return window.lunade.shell().then(function (s) {
+			pages = s.pages;
+			pages.forEach(function (p) { p.apps.forEach(function (a) { appTitles[a.id] = a.title; }); });
+			s.dock.forEach(function (a) { appTitles[a.id] = a.title; });
+			var tabs = $("tabs");
+			tabs.innerHTML = "";
+			pages.forEach(function (p, i) {
+				var b = document.createElement("button");
+				b.textContent = p.title;
+				b.addEventListener("click", function () { showPage(i); });
+				tabs.appendChild(b);
+			});
+			showPage(first ? 0 : Math.min(page, pages.length - 1));
+			var dock = $("dock");
+			dock.innerHTML = "";
+			s.dock.forEach(function (a) {
+				var b = document.createElement("button");
+				b.title = a.title;
+				b.appendChild(icon(a));
+				b.addEventListener("click", function () { launch(a); });
+				dock.appendChild(b);
+			});
+		});
+	}
+	// An app installed or removed: the launcher draws what there is now.
+	window.lunade.onApps(function () { loadApps(false); });
+	loadApps(true).then(function () { window.lunade.ready(); });
 })();

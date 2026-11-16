@@ -162,7 +162,9 @@ fun main(args: Array<String>) {
     http.createContext("/native") { ex -> ex.use {
         val q = query(ex)
         val app = q["app"].orEmpty()
-        val w = windows.computeIfAbsent(q["w"].orEmpty()) { DesktopWindow(it, app, bus, main) }
+        val w = windows.computeIfAbsent(q["w"].orEmpty()) { id ->
+            DesktopWindow(id, app, bus, main, shell).also { n -> shell.pendingTypes.remove(id)?.let { n.type = it.ifEmpty { null } } }
+        }
         if (w.appId != app) { send(ex, 403, "text/plain", "another app's page".toByteArray()); return@use }
         val args = runCatching { JSONArray(ex.requestBody.readBytes().toString(Charsets.UTF_8)) }.getOrDefault(JSONArray())
         send(ex, 200, "application/json; charset=utf-8", w.invoke(q["m"].orEmpty(), args).toByteArray())
@@ -188,6 +190,17 @@ fun main(args: Array<String>) {
         val q = query(ex)
         val params = q["params"]?.takeIf { it.isNotEmpty() }?.let { runCatching { JSONObject(it) }.getOrNull() }
         shell.launch(q["id"].orEmpty(), params)
+        send(ex, 204, "text/plain", ByteArray(0))
+    } }
+
+    // What Electron tells a page (its type, its focus, the back gesture), and the device turning.
+    http.createContext("/window") { ex -> ex.use {
+        val q = query(ex)
+        shell.tell(q["w"].orEmpty(), q["do"].orEmpty(), q["v"].orEmpty())
+        send(ex, 204, "text/plain", ByteArray(0))
+    } }
+    http.createContext("/orientation") { ex -> ex.use {
+        shell.turn(query(ex)["v"].orEmpty())
         send(ex, 204, "text/plain", ByteArray(0))
     } }
 

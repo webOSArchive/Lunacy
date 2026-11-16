@@ -1,13 +1,8 @@
 package org.webosarchive.lunacy.card
 
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.os.BatteryManager
-import android.os.Handler
-import android.os.Looper
 import org.json.JSONObject
+import org.webosarchive.lunacy.core.BatteryWatch
+import org.webosarchive.lunacy.core.Platform
 
 /**
  * What an activity's requirements are measured against, as webOS's activity manager watched
@@ -16,12 +11,13 @@ import org.json.JSONObject
  * manager can see which activities' requirements it meets before and after.
  */
 class ActivityRequirements(
-    private val context: Context,
+    /** The host's battery, or null where there is none to watch. */
+    private val battery: BatteryWatch?,
     /** The activity manager's own name, which it watches the connection manager as. */
     private val service: String,
     private val onChange: (change: () -> Unit) -> Unit,
 ) {
-    private val main = Handler(Looper.getMainLooper())
+    private val main = Platform.scheduler
     private lateinit var bus: Bus
 
     private var netStatus: JSONObject? = null
@@ -77,23 +73,8 @@ class ActivityRequirements(
         }
     }
 
-    private var batteryReceiver: BroadcastReceiver? = null
-
     private fun watchBattery() {
-        val r = object : BroadcastReceiver() {
-            override fun onReceive(c: Context, i: Intent) {
-                onChange {
-                    val level = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1); val scale = i.getIntExtra(BatteryManager.EXTRA_SCALE, 100)
-                    batteryPercent = if (level < 0 || scale <= 0) -1 else level * 100 / scale
-                    charger = when (i.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)) {
-                        BatteryManager.BATTERY_PLUGGED_USB -> "usb"; BatteryManager.BATTERY_PLUGGED_WIRELESS -> "inductive"
-                        BatteryManager.BATTERY_PLUGGED_AC -> "usb"; else -> null
-                    }
-                }
-            }
-        }
-        batteryReceiver = r
-        context.registerReceiver(r, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        battery?.start { percent, plugged -> onChange { batteryPercent = percent; charger = plugged } }
     }
 
     /** Starts watching the network and the battery. */
@@ -104,7 +85,7 @@ class ActivityRequirements(
     }
 
     fun stop() {
-        batteryReceiver?.let { context.unregisterReceiver(it) }; batteryReceiver = null
+        battery?.stop()
         networkWatch?.cancel(); networkWatch = null
     }
 

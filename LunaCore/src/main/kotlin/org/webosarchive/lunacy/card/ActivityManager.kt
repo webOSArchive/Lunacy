@@ -1,11 +1,12 @@
 package org.webosarchive.lunacy.card
 
-import android.content.Context
-import android.os.Handler
-import android.os.Looper
-import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
+import org.webosarchive.lunacy.core.BatteryWatch
+import org.webosarchive.lunacy.core.Log
+import org.webosarchive.lunacy.core.ScopedScheduler
+import org.webosarchive.lunacy.core.PowerTimers
+import org.webosarchive.lunacy.core.keyNames
 
 /**
  * palm://com.palm.activitymanager: webOS's scheduler of work. An activity runs when its
@@ -29,14 +30,14 @@ import org.json.JSONObject
  *
  * Main thread throughout.
  */
-class ActivityManager(private val context: Context, private val power: Power) {
+class ActivityManager(private val battery: BatteryWatch?, private val power: PowerTimers) {
     private lateinit var bus: Bus
-    private val main = Handler(Looper.getMainLooper())
+    private val main = ScopedScheduler()
     /**
      * The network and the battery, as requirements see them. A change re-evaluates every activity
      * that has requirements, and starts those it has just met.
      */
-    private val requirements: ActivityRequirements = ActivityRequirements(context, SERVICE) { change ->
+    private val requirements: ActivityRequirements = ActivityRequirements(battery, SERVICE) { change ->
         val before = activities.values.associateWith { requirementsMet(it) }
         change()
         requirementsChanged(before)
@@ -221,7 +222,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
         spec.optJSONObject("callback")?.let { a.callback = url(it, "Callback") }
         spec.optJSONObject("trigger")?.let { a.trigger = parseTrigger(it) }
         spec.optJSONObject("schedule")?.let { a.schedule = Schedule.parse(it) }
-        spec.optJSONObject("requirements")?.let { r -> for (k in r.keys()) setRequirement(a, k, r.get(k)) }
+        spec.optJSONObject("requirements")?.let { r -> for (k in r.keyNames()) setRequirement(a, k, r.get(k)) }
         return a
     }
 
@@ -412,9 +413,9 @@ class ActivityManager(private val context: Context, private val power: Power) {
         val callback = when (val c = p.opt("callback")) { null -> a.callback; is JSONObject -> url(c, "Callback"); else -> throw SpecError("Activity callback may not be removed by Complete") }
         val metadata = when (val m = p.opt("metadata")) { null -> a.metadata; false -> null; is JSONObject -> m; else -> throw SpecError("Attempt to set metadata to a non-object type") }
         val reqs = JSONObject(a.requirements.toString())
-        p.optJSONObject("requirements")?.let { r -> for (k in r.keys()) { val v = r.get(k); if (v == false || v == JSONObject.NULL) reqs.remove(k) else reqs.put(k, v) } }
+        p.optJSONObject("requirements")?.let { r -> for (k in r.keyNames()) { val v = r.get(k); if (v == false || v == JSONObject.NULL) reqs.remove(k) else reqs.put(k, v) } }
         val probe = Activity(0, a.name, a.creator)
-        for (k in reqs.keys()) setRequirement(probe, k, reqs.get(k))
+        for (k in reqs.keyNames()) setRequirement(probe, k, reqs.get(k))
         if (schedule != a.schedule) schedule?.lastFinished = a.schedule?.lastFinished
         a.trigger = trigger; a.schedule = schedule; a.callback = callback; a.metadata = metadata; a.requirements = probe.requirements
     }
@@ -493,7 +494,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
         val r = runCatching { JSONObject(reply) }.getOrNull() ?: JSONObject()
         if (!r.has("returnValue") || r.optBoolean("returnValue")) return
         val text = r.optString("errorText")
-        if (text.startsWith(ServiceProcess.EXITED)) {
+        if (text.startsWith(Bus.SERVICE_EXITED)) {
             // The service went away mid-call (a crash, or its process ending): run it again
             // once it can, keeping the trigger and schedule, as webOS requeued a transient
             // failure. After a moment, so a service that dies at once doesn't spin.
@@ -631,7 +632,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
             activities[id]?.let { a -> a.schedule?.due = true; evaluate(a) }
         }
         val next = due.values.minOrNull()
-        if (next != null && next - now <= Power.EARLY_MS) power.soon(next)
+        if (next != null && next - now <= PowerTimers.EARLY_MS) power.soon(next)
         power.at(TIMER, next)
     }
 
@@ -655,7 +656,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
         a.requirements.put(name, v)
     }
 
-    private fun requirementsMet(a: Activity): Boolean = a.requirements.keys().asSequence().all { requirements.met(it, a.requirements.get(it)) }
+    private fun requirementsMet(a: Activity): Boolean = a.requirements.keyNames().asSequence().all { requirements.met(it, a.requirements.get(it)) }
 
     private fun requirementsChanged(before: Map<Activity, Boolean>) {
         for (a in activities.values.toList()) {
@@ -707,7 +708,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
         val o = JSONObject().put("activityId", a.id)
         if (a.callback != null) o.put("callback", JSONObject().put("serial", a.serial))
         if (a.trigger != null) o.put("trigger", a.fired ?: false)
-        if (a.requirements.length() > 0) o.put("requirements", JSONObject().also { r -> for (k in a.requirements.keys()) r.put(k, requirements.current(k)) })
+        if (a.requirements.length() > 0) o.put("requirements", JSONObject().also { r -> for (k in a.requirements.keyNames()) r.put(k, requirements.current(k)) })
         o.put("creator", a.creator).put("name", a.name)
         a.metadata?.let { o.put("metadata", it) }
         return o
@@ -747,7 +748,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
             a.callback?.let { o.put("callback", if (current) (if (a.serial != 0L) JSONObject().put("serial", a.serial) else JSONObject()) else it) }
             a.schedule?.let { o.put("schedule", it.toJson(current)) }
             a.trigger?.let { o.put("trigger", if (current) (a.fired ?: false) else it) }
-            if (a.requirements.length() > 0) o.put("requirements", if (current) JSONObject().also { r -> for (k in a.requirements.keys()) r.put(k, requirements.current(k)) } else a.requirements)
+            if (a.requirements.length() > 0) o.put("requirements", if (current) JSONObject().also { r -> for (k in a.requirements.keyNames()) r.put(k, requirements.current(k)) } else a.requirements)
         }
         return o
     }
@@ -865,7 +866,7 @@ class ActivityManager(private val context: Context, private val power: Power) {
     fun stop() {
         started = false
         requirements.stop()
-        main.removeCallbacksAndMessages(null)
+        main.cancelAll()
         for (a in activities.values) { a.triggerCall?.cancel(); a.triggerCall = null }
         activities.clear(); byName.clear(); queue.clear(); due.clear(); waitingForEnable.clear()
     }

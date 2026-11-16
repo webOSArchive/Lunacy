@@ -103,3 +103,68 @@ object AndroidLinks : org.webosarchive.lunacy.core.Links {
     override fun readlink(path: String): String? = runCatching { android.system.Os.readlink(path) }.getOrNull()
     override fun symlink(target: String, path: String) { android.system.Os.symlink(target, path) }
 }
+
+/** Android's battery broadcasts, as LunaCore's [org.webosarchive.lunacy.core.BatteryWatch]: what ActivityRequirements watched itself before LunaCore. */
+class AndroidBattery(private val context: android.content.Context) : org.webosarchive.lunacy.core.BatteryWatch {
+    private var receiver: android.content.BroadcastReceiver? = null
+
+    override fun start(onChange: (percent: Int, charger: String?) -> Unit) {
+        val r = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: android.content.Context, i: android.content.Intent) {
+                val level = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1); val scale = i.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100)
+                onChange(if (level < 0 || scale <= 0) -1 else level * 100 / scale,
+                    when (i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0)) {
+                        android.os.BatteryManager.BATTERY_PLUGGED_USB -> "usb"; android.os.BatteryManager.BATTERY_PLUGGED_WIRELESS -> "inductive"
+                        android.os.BatteryManager.BATTERY_PLUGGED_AC -> "usb"; else -> null
+                    })
+            }
+        }
+        receiver = r
+        context.registerReceiver(r, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+    }
+
+    override fun stop() {
+        receiver?.let { context.unregisterReceiver(it) }; receiver = null
+    }
+}
+
+/**
+ * Android's connectivity, as LunaCore's [org.webosarchive.lunacy.core.NetworkSource]: what
+ * ConnectionManager read itself before LunaCore. While Android keeps Lunacy off the network
+ * ([blocked]: Doze, see SleepWake) there is none.
+ */
+class AndroidNetwork(private val context: android.content.Context, private val blocked: () -> Boolean = { false }) : org.webosarchive.lunacy.core.NetworkSource {
+    private val cm = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+    private val wm = context.applicationContext.getSystemService(android.content.Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+    private var receiver: android.content.BroadcastReceiver? = null
+
+    @Suppress("DEPRECATION")
+    override fun current(): org.webosarchive.lunacy.core.NetworkSource.Network? {
+        val active = cm.activeNetworkInfo?.takeIf { !blocked() } ?: return null
+        if (!active.isConnected) return null
+        val wifi = if (active.type == android.net.ConnectivityManager.TYPE_WIFI) {
+            val info = wm.connectionInfo
+            val ip = info.ipAddress
+            org.webosarchive.lunacy.core.NetworkSource.Wifi(
+                "${ip and 0xff}.${ip shr 8 and 0xff}.${ip shr 16 and 0xff}.${ip shr 24 and 0xff}",
+                info.ssid.orEmpty().removeSurrounding("\""), info.bssid.orEmpty().uppercase(),
+                android.net.wifi.WifiManager.calculateSignalLevel(info.rssi, 3))
+        } else null
+        return org.webosarchive.lunacy.core.NetworkSource.Network(wifi, active.type == android.net.ConnectivityManager.TYPE_MOBILE)
+    }
+
+    override fun watch(onChange: () -> Unit) {
+        if (receiver != null) return
+        receiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(c: android.content.Context, i: android.content.Intent) = onChange()
+        }
+        context.registerReceiver(receiver, android.content.IntentFilter().apply {
+            addAction(android.net.ConnectivityManager.CONNECTIVITY_ACTION); addAction(android.net.wifi.WifiManager.RSSI_CHANGED_ACTION)
+        })
+    }
+
+    override fun unwatch() {
+        receiver?.let { context.unregisterReceiver(it) }
+        receiver = null
+    }
+}

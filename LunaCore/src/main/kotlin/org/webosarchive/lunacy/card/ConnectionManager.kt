@@ -1,29 +1,23 @@
 package org.webosarchive.lunacy.card
 
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
-import android.net.ConnectivityManager
-import android.net.wifi.WifiManager
 import org.json.JSONObject
+import org.webosarchive.lunacy.core.NetworkSource
 
 /**
  * palm://com.palm.connectionmanager/getstatus (also getStatus, as the TouchPad accepts both),
- * backed by Android's connectivity. The reply has the reference TouchPad's shape; a
- * subscription gets the status at once and again whenever it changes.
+ * backed by the host's connectivity ([NetworkSource]: Android's, or the desktop's interfaces).
+ * The reply has the reference TouchPad's shape; a subscription gets the status at once and again
+ * whenever it changes.
  *
- * While Android keeps Lunacy off the network to save power ([blocked]: Doze, see SleepWake),
- * the network is reported down, and up again when it is back. A TouchPad kept its Wi-Fi up
- * through a suspend, but its connections survived that; an app's don't survive Doze, and the
- * down and up is the signal webOS's services already reconnect on (luna-deltas A18).
+ * While Android keeps Lunacy off the network to save power (Doze, see SleepWake), its source
+ * reports no network, and the network is reported down, and up again when it is back. A TouchPad
+ * kept its Wi-Fi up through a suspend, but its connections survived that; an app's don't survive
+ * Doze, and the down and up is the signal webOS's services already reconnect on (luna-deltas A18).
  */
-class ConnectionManager(private val context: Context, private val blocked: () -> Boolean = { false }) {
-    private val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    private val wm = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+class ConnectionManager(private val net: NetworkSource) {
     private val subscribers = LinkedHashSet<Bus.Call>()  // main thread
     private var last = ""
-    private var receiver: BroadcastReceiver? = null
+    private var watching = false
 
     fun register(bus: Bus) {
         val h = Bus.CallHandler { call ->
@@ -44,13 +38,9 @@ class ConnectionManager(private val context: Context, private val blocked: () ->
     }
 
     private fun startWatching() {
-        if (receiver != null) return
-        receiver = object : BroadcastReceiver() {
-            override fun onReceive(c: Context, i: Intent) = changed()
-        }
-        context.registerReceiver(receiver, IntentFilter().apply {
-            addAction(ConnectivityManager.CONNECTIVITY_ACTION); addAction(WifiManager.RSSI_CHANGED_ACTION)
-        })
+        if (watching) return
+        watching = true
+        net.watch { changed() }
     }
 
     /** Tells subscribers the status, if it has changed. */
@@ -62,37 +52,35 @@ class ConnectionManager(private val context: Context, private val blocked: () ->
         subscribers.toList().forEach { it.reply(s) }
     }
 
-    /** The shell is gone: no more broadcasts for this one. */
+    /** The shell is gone: no more changes for this one. */
     fun stop() = stopWatching()
 
     private fun stopWatching() {
-        receiver?.let { context.unregisterReceiver(it) }
-        receiver = null
+        if (watching) net.unwatch()
+        watching = false
     }
 
-    @Suppress("DEPRECATION")
     fun status(): String {
-        val active = cm.activeNetworkInfo?.takeIf { !blocked() }
-        val online = active?.isConnected == true
+        val active = net.current()
+        val online = active != null
         val down = JSONObject().put("state", "disconnected")
-        val wifi = if (active?.isConnected == true && active.type == ConnectivityManager.TYPE_WIFI) {
-            val info = wm.connectionInfo
-            val ip = info.ipAddress
+        val w = active?.wifi
+        val wifi = if (w != null) {
             JSONObject().put("state", "connected")
-                .put("ipAddress", "${ip and 0xff}.${ip shr 8 and 0xff}.${ip shr 16 and 0xff}.${ip shr 24 and 0xff}")
+                .put("ipAddress", w.ipAddress)
                 // The TouchPad's Wi-Fi interface is eth0, and an app that shows it should see
                 // what a device showed. Android's own name for it is wlan0.
                 .put("interfaceName", "eth0")
-                .put("ssid", info.ssid.orEmpty().removeSurrounding("\""))
-                .put("bssid", info.bssid.orEmpty().uppercase())
-                .put("networkConfidenceLevel", when (WifiManager.calculateSignalLevel(info.rssi, 3)) { 2 -> "excellent"; 1 -> "fair"; else -> "poor" })
+                .put("ssid", w.ssid)
+                .put("bssid", w.bssid)
+                .put("networkConfidenceLevel", when (w.level) { 2 -> "excellent"; 1 -> "fair"; else -> "poor" })
                 .put("onInternet", "yes")
                 // The reference TouchPad answers true (measured 2026-10-07), and Android keeps
                 // Wi-Fi connected while the screen is off, so it is true here too. The mail
                 // services hold an IMAP IDLE (push) only over an interface that says so.
                 .put("isWakeOnWifiEnabled", true)
         } else down
-        val wan = if (active?.isConnected == true && active.type == ConnectivityManager.TYPE_MOBILE)
+        val wan = if (active?.mobile == true)
             JSONObject().put("state", "connected").put("onInternet", "yes") else JSONObject().put("state", "disconnected")
         return JSONObject().put("returnValue", true).put("isInternetConnectionAvailable", online)
             .put("wifi", wifi).put("wan", wan)

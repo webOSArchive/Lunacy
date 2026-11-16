@@ -107,7 +107,7 @@ class ShellActivity : Activity(), WindowHost {
     private val sleepWakeLazy = lazy { SleepWake(this, power) }
     private val sleepWake by sleepWakeLazy
     private val powerService by lazy { PowerService(this, power) }
-    private val activityManagerLazy = lazy { ActivityManager(this, power) }
+    private val activityManagerLazy = lazy { ActivityManager(org.webosarchive.lunacy.card.AndroidBattery(this), power) }
     private val activityManager by activityManagerLazy
     /** The shell's db8s and connection manager, closed with it ([onDestroy]). */
     private val closeOnDestroy = ArrayList<() -> Unit>()
@@ -1284,7 +1284,7 @@ class ShellActivity : Activity(), WindowHost {
             override fun pinStatus() = homeScreenPins.status()
             override fun pinToHome(app: AppInfo, icon: android.graphics.Bitmap?) = homeScreenPins.pin(app, icon)
         }).also { it.register(bus) }
-        val connections = ConnectionManager(this) { sleepWake.blocked }.also { it.register(bus) }
+        val connections = ConnectionManager(org.webosarchive.lunacy.card.AndroidNetwork(this) { sleepWake.blocked }).also { it.register(bus) }
         closeOnDestroy += connections::stop
         sleepWake.onBlockedChanged = connections::changed
         sleepWake.onBlocked = activityManager::networkBlocked

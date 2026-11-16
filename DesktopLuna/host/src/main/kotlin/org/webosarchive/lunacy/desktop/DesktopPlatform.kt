@@ -84,3 +84,70 @@ object DesktopLinks : org.webosarchive.lunacy.core.Links {
         java.nio.file.Files.createSymbolicLink(java.nio.file.Paths.get(path), java.nio.file.Paths.get(target))
     }
 }
+
+/**
+ * The desktop's network as webOS's connection manager reports it: the machine's first interface
+ * that is up with an address, shown as the TouchPad's Wi-Fi (a TouchPad had nothing else), at
+ * full signal and with no network name, which Java can't ask the host for. Checked every few
+ * seconds while something is subscribed.
+ */
+class DesktopNetwork(private val main: DesktopScheduler) : org.webosarchive.lunacy.core.NetworkSource {
+    private var tick: Runnable? = null
+
+    override fun current(): org.webosarchive.lunacy.core.NetworkSource.Network? {
+        val address = runCatching {
+            java.net.NetworkInterface.getNetworkInterfaces().asSequence()
+                .filter { it.isUp && !it.isLoopback && !it.isVirtual }
+                .flatMap { it.inetAddresses.asSequence() }
+                .firstOrNull { it is java.net.Inet4Address && !it.isLoopbackAddress && !it.isLinkLocalAddress }
+        }.getOrNull() ?: return null
+        return org.webosarchive.lunacy.core.NetworkSource.Network(
+            org.webosarchive.lunacy.core.NetworkSource.Wifi(address.hostAddress ?: "", "", "", 2), mobile = false)
+    }
+
+    override fun watch(onChange: () -> Unit) {
+        if (tick != null) return
+        val r = object : Runnable { override fun run() { onChange(); main.postDelayed(this, 5_000) } }
+        tick = r
+        main.postDelayed(r, 5_000)
+    }
+
+    override fun unwatch() { tick?.let { main.cancel(it) }; tick = null }
+}
+
+/** A desktop is on the mains: fully charged, on a charger, as the activity manager's requirements see it. */
+object DesktopBattery : org.webosarchive.lunacy.core.BatteryWatch {
+    override fun start(onChange: (percent: Int, charger: String?) -> Unit) = onChange(100, "usb")
+    override fun stop() {}
+}
+
+/**
+ * The activity manager's timers on the desktop: plain ones on the main thread. The machine going
+ * to sleep under Luna DE delays them until it is back, which is when [due] runs anyway; there is
+ * no CPU to keep up for an activity.
+ */
+class DesktopPower(private val main: DesktopScheduler) : org.webosarchive.lunacy.core.PowerTimers {
+    private val clients = ArrayList<() -> Unit>()
+    private val needs = HashMap<String, Long>()
+    private var armed: Runnable? = null
+
+    override fun onDue(f: () -> Unit) { clients += f }
+    private fun due() = clients.toList().forEach { it() }
+
+    override fun soon(time: Long) {
+        main.postDelayed({ due() }, (time - System.currentTimeMillis()).coerceAtLeast(0))
+    }
+
+    override fun at(client: String, time: Long?, wake: Boolean) {
+        if (time == null) needs.remove(client) else needs[client] = time
+        armed?.let { main.cancel(it) }
+        armed = null
+        val next = needs.values.minOrNull() ?: return
+        val r = Runnable { armed = null; due() }
+        armed = r
+        main.postDelayed(r, (next - System.currentTimeMillis()).coerceAtLeast(0))
+    }
+
+    override fun lock(id: Int) {}
+    override fun unlock(id: Int, debounce: Boolean) {}
+}

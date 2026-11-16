@@ -94,6 +94,9 @@ fun main(args: Array<String>) {
     main.call {
         db8.register(bus); tempdb.register(bus)
         systemService.register(bus)
+        org.webosarchive.lunacy.card.ConnectionManager(DesktopNetwork(main)).register(bus)
+        // After db8: the activity manager reads its persisted activities back as it registers.
+        org.webosarchive.lunacy.card.ActivityManager(DesktopBattery, DesktopPower(main)).register(bus)
         shell.configurator = org.webosarchive.lunacy.card.Configurator(files, db8, tempdb, webosRoot, bus)
         shell.applicationManager = org.webosarchive.lunacy.card.ApplicationManager(registry,
             org.webosarchive.lunacy.card.ContentHandlers(registry, webosRoot), addedLaunchPoints, files, packages, desktopRoot, shell)

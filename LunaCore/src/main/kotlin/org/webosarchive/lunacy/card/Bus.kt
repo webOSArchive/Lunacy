@@ -184,6 +184,9 @@ class Bus {
     }
 
     companion object {
+        /** How a call's error begins when the service's process went away under it (ServiceProcess). */
+        const val SERVICE_EXITED = "Service exited"
+
         /**
          * Whether a call stays open: "subscribe": true, or a db8 watch ("watch": true on find,
          * or the watch method). One rule for the bus, luna-send's relay and the pages' bridge.

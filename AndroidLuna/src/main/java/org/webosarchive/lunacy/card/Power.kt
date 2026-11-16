@@ -34,7 +34,7 @@ import android.os.PowerManager
  *
  * Main thread throughout.
  */
-class Power(private val app: Context) {
+class Power(private val app: Context) : org.webosarchive.lunacy.core.PowerTimers {
     private val main = Handler(Looper.getMainLooper())
     private val alarms = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
     private val lock = (app.getSystemService(Context.POWER_SERVICE) as PowerManager)
@@ -79,7 +79,7 @@ class Power(private val app: Context) {
     }
 
     /** [f] runs whatever of its own has fallen due; it is called on every timer and resume. */
-    fun onDue(f: () -> Unit) { clients += f }
+    override fun onDue(f: () -> Unit) { clients += f }
 
     /** Every client runs what has fallen due: a timer went off, or the device came back. */
     fun due() = clients.toList().forEach { it() }
@@ -88,14 +88,14 @@ class Power(private val app: Context) {
      * A time is a few seconds off ([EARLY_MS]): rather than let the device sleep and arm an
      * alarm that Doze may hold for minutes, stay awake and sweep again exactly then.
      */
-    fun soon(time: Long) {
+    override fun soon(time: Long) {
         val wait = (time - System.currentTimeMillis()).coerceAtLeast(0)
         hold(wait + GRACE_MS)
         main.postDelayed({ due() }, wait)
     }
 
     /** [client]'s next time (wall-clock ms), and whether it must wake the device; null for none. */
-    fun at(client: String, time: Long?, wake: Boolean = true) {
+    override fun at(client: String, time: Long?, wake: Boolean) {
         if (stopped) return
         if (time == null) needs.remove(client) else needs[client] = Need(time, wake)
         arm(wakeIntent, AlarmManager.RTC_WAKEUP, needs.values.filter { it.wake }.minOfOrNull { it.at })
@@ -108,7 +108,7 @@ class Power(private val app: Context) {
         else alarms.setExact(type, time, pi)
     }
 
-    fun lock(id: Int) { if (held.add(id)) apply() }
+    override fun lock(id: Int) { if (held.add(id)) apply() }
 
     /** Locks held by name for a time (com.palm.power's activities), and when each runs out. */
     private val named = HashMap<String, Runnable>()
@@ -124,7 +124,7 @@ class Power(private val app: Context) {
 
     fun unlock(key: String) { named.remove(key)?.let { main.removeCallbacks(it); apply() } }
 
-    fun unlock(id: Int, debounce: Boolean) {
+    override fun unlock(id: Int, debounce: Boolean) {
         if (!held.remove(id)) return
         if (debounce) hold(DEBOUNCE_MS) else apply()
     }
@@ -148,12 +148,6 @@ class Power(private val app: Context) {
         private const val LOCK_MS = 900_000L
         private const val DEBOUNCE_MS = 12_000L
         const val GRACE_MS = 5_000L
-        /**
-         * How near a time must be for [soon] to wait for it awake. Android delivers an alarm
-         * early when it batches it with another (a non-waking one went off 1.6 s early beside
-         * a waking one, Galaxy Tab A7 Lite in Doze); a sweep that then found nothing due
-         * re-armed, and in Doze the next delivery was a minute away.
-         */
-        const val EARLY_MS = 5_000L
+        const val EARLY_MS = org.webosarchive.lunacy.core.PowerTimers.EARLY_MS
     }
 }

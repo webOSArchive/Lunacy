@@ -164,7 +164,7 @@ class ServiceProcess(
 
     companion object {
         /** How an open call into a process that has gone is answered; the activity manager retries on it. */
-        const val EXITED = "Service exited"
+        const val EXITED = Bus.SERVICE_EXITED
         private val SYSLOG = Regex("^<([0-7])>([^:]{1,63}): (.*)$")
         private val PRIORITIES = listOf("emerg", "alert", "crit", "err", "warning", "notice", "info", "debug")
     }

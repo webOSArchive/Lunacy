@@ -53,3 +53,28 @@ object Platform {
         get() = currentCollation ?: throw IllegalStateException("LunaCore: no Collation set (Platform.collation)")
         set(value) { currentCollation = value }
 }
+
+/**
+ * A part of Lunacy's own posts to the main thread, which it can take back all at once when it
+ * stops: what a Handler of its own and removeCallbacksAndMessages(null) were on Android.
+ */
+class ScopedScheduler(private val base: Scheduler = Platform.scheduler) {
+    private val pending = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<Runnable, Boolean>())
+
+    private fun tracked(f: () -> Unit): Runnable {
+        lateinit var r: Runnable
+        r = Runnable { if (pending.remove(r)) f() }
+        pending.add(r)
+        return r
+    }
+
+    fun post(f: () -> Unit) { base.post(tracked(f)) }
+    fun postDelayed(f: () -> Unit, delayMs: Long) { base.postDelayed(tracked(f), delayMs) }
+
+    /** Everything posted and not yet run is dropped. */
+    fun cancelAll() {
+        val all = pending.toList()
+        pending.clear()
+        all.forEach { base.cancel(it) }
+    }
+}

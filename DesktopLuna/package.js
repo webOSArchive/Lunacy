@@ -12,9 +12,10 @@
 //   - a Java runtime of its own, cut with the JDK's jlink to the modules the host uses, so a
 //     user needs no Java;
 //   - the Node 12 that runs webOS JS services (nodejs.org's build, checked against its checksum);
-//   - Lunacy's assets, at the places they have in a checkout: AndroidLuna/src/main/assets,
-//     AndroidLuna/local-assets (what fetch-assets.sh fetched and patched; not its PDK part,
-//     which Luna DE doesn't run), CoreApps and the keyboard's art.
+//   - Lunacy's assets as one zip the host reads in place (zipAssets below): AndroidLuna/src/main/assets,
+//     AndroidLuna/local-assets (what fetch-assets.sh fetched and patched; not its PDK part or the
+//     TouchPad's ARM programs, which Luna DE doesn't run) and CoreApps; and loose, what the
+//     shell's page loads itself: Luna's pictures and fonts, and the keyboard's art.
 //
 // What it makes, by where it runs:
 //   - on a Mac: a dmg and a zip for Apple Silicon (arm64) and for Intel (x64), signed with the
@@ -221,15 +222,54 @@ async function foreignJmods(arch) {
 	return path.join(dir, "jmods");
 }
 
-/** A copy of a tree with its symbolic links followed: a Windows package can't hold a link. */
-function withoutLinks(from, to) {
+/**
+ * A copy of a tree with its symbolic links followed (a zip holds none), a later copy's files
+ * replacing an earlier's. skip(relative path, is a folder) leaves things out.
+ */
+function withoutLinks(from, to, skip, rel) {
 	// By hand: fs.cpSync's "dereference" leaves the links inside a tree as links.
 	fs.mkdirSync(to, { recursive: true });
 	for (const name of fs.readdirSync(from)) {
-		const a = path.join(from, name), b = path.join(to, name);
-		if (fs.statSync(a).isDirectory()) { withoutLinks(a, b); } else { fs.copyFileSync(a, b); }
+		const a = path.join(from, name), b = path.join(to, name), r = rel ? rel + "/" + name : name;
+		const dir = fs.statSync(a).isDirectory();
+		if (skip && skip(r, dir)) { continue; }
+		if (dir) { withoutLinks(a, b, skip, r); } else { fs.copyFileSync(a, b); }
 	}
 	return to;
+}
+
+/**
+ * The assets as one zip, which the host reads in place (LunaCore's ZipAssets), as Android reads
+ * the APK's: the checkout's three folders laid over each other as the host lays them
+ * (FolderAssets in the host's Main.kt: AndroidLuna/src/main/assets first, then local-assets,
+ * then CoreApps as apps/), so about twelve thousand small files are one for an installer to
+ * write, a virus scanner to read and a Mac's signature to seal. Stored, not compressed: the
+ * installer, dmg or zip around it compresses it once, and a stored entry is read by a seek.
+ *
+ * Left out: local-assets' PDK part, and the TouchPad's own programs and libraries under the
+ * ROM's /usr/bin and /usr/lib (ARM, run by Android's build only; the host hides them from the
+ * ROM's index, its ANDROID_ONLY_ROM), but for their NOTICE files, which stay with what they
+ * describe.
+ */
+function zipAssets() {
+	const tree = path.join(STAGE, "assets"), zip = path.join(STAGE, "assets.zip");
+	const native = /^rootfs\/usr\/(bin|lib)\//;
+	// Last wins here, so the folders go in from the last of the host's order to the first.
+	withoutLinks(path.join(REPO, "CoreApps"), path.join(tree, "apps"));
+	withoutLinks(ASSETS, tree, (r, dir) => r === "pdk" || (!dir && native.test(r) && !/\/NOTICE[^/]*$/.test(r)));
+	withoutLinks(path.join(REPO, "AndroidLuna", "src", "main", "assets"), tree);
+	// The folders the programs were in may be empty now.
+	(function prune(d) {
+		for (const e of fs.readdirSync(d, { withFileTypes: true })) { if (e.isDirectory()) { prune(path.join(d, e.name)); } }
+		if (native.test(path.relative(tree, d).split(path.sep).join("/") + "/") && !fs.readdirSync(d).length) { fs.rmdirSync(d); }
+	})(tree);
+	fs.rmSync(zip, { force: true });
+	run(jdkTool("jar"), ["--create", "--no-manifest", "--no-compress", "--file", zip, "-C", tree, "."], { stdio: ["ignore", "ignore", "inherit"] });
+	let files = 0;
+	(function count(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { if (e.isDirectory()) { count(path.join(d, e.name)); } else { files++; } } })(tree);
+	fs.rmSync(tree, { recursive: true, force: true });
+	say("assets.zip: " + files + " files, " + (fs.statSync(zip).size / 1048576).toFixed(0) + " MB");
+	return zip;
 }
 
 /**
@@ -305,8 +345,7 @@ function signingPlan() {
 	say("building the host");
 	run(path.join(REPO, HOST_OS === "win" ? "gradlew.bat" : "gradlew"), ["--console=plain", "-q", "--configure-on-demand", ":DesktopLuna:host:installDist"], { cwd: REPO, shell: HOST_OS === "win", env: Object.assign({}, process.env, { JAVA_HOME: JDK.home }) });
 	fs.rmSync(STAGE, { recursive: true, force: true });
-	// Windows keeps no symbolic links in a package: CoreApps' few are followed.
-	const coreApps = WIN ? withoutLinks(path.join(REPO, "CoreApps"), path.join(STAGE, "CoreApps")) : path.join(REPO, "CoreApps");
+	const assetsZip = zipAssets();
 
 	const builder = require("electron-builder");
 	const version = require("./package.json").version;
@@ -340,11 +379,13 @@ function signingPlan() {
 				copyright: "webOS Archive; GPL-3.0-or-later. Bundled webOS material ships as noted in its NOTICE files.",
 				directories: { output: OUT, buildResources: "build-resources" },
 				files: ["app/**", "package.json"],
-				// The same folders at the same places as in a checkout (main.js's REPO).
+				// The assets as one zip, which the host reads in place. Loose beside it, at the
+				// places they have in a checkout (main.js's REPO), only what the shell's own page
+				// loads straight from disk: Luna's fonts, pictures and wallpapers, and the
+				// keyboard's art.
 				extraResources: [
-					{ from: repo("AndroidLuna/src/main/assets"), to: "AndroidLuna/src/main/assets" },
-					{ from: repo("AndroidLuna/local-assets"), to: "AndroidLuna/local-assets", filter: ["**/*", "!pdk/**"] },
-					{ from: coreApps, to: "CoreApps" },
+					{ from: assetsZip, to: "assets.zip" },
+					{ from: repo("AndroidLuna/src/main/assets/luna"), to: "AndroidLuna/src/main/assets/luna" },
 					{ from: repo("LunaKeyboard/src/main/assets/keyboard"), to: "LunaKeyboard/src/main/assets/keyboard" },
 					{ from: nodeHome, to: "DesktopLuna/node" },
 					{ from: path.join(stage, "host"), to: "host" },

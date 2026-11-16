@@ -560,6 +560,29 @@ their services). What differed:
 - Three browser kinds differ in white space only; `/etc/openal` and the native programs under
   `/usr/bin` and `/usr/lib` are left out, being Android's.
 
+**The assets are one zip** (2026-11-16, from the Mac side's proposal). A package used to carry
+about 12,000 small asset files; an installer wrote each, a virus scanner read each and a Mac's
+signature sealed each. `package.js` now lays the checkout's three asset folders over each other,
+in the host's own order, into `assets.zip`, stored and not compressed (the dmg, installer or zip
+around it compresses once; a stored entry is read by a seek), and the host reads it in place
+through LunaCore's `ZipAssets` (`--assets`), as Android reads the APK's. A Linux package went
+from about 12,500 files to 511, a Windows one to 615. Loose beside the zip are only what the
+shell's own page loads from disk: `luna/` (fonts, pictures, wallpapers; about 22 MB, which the
+zip holds too, for apps) and the keyboard's art. A checkout still runs on its folders;
+`LUNA_DE_ASSETS=<zip>` tries a zip there.
+
+The zip leaves out the TouchPad's ARM programs and libraries under the ROM's `/usr/bin` and
+`/usr/lib` (38 MB that only the Android build runs), keeping their NOTICE files; the host hides
+those two folders from the ROM's index and links whatever assets it is given, so a checkout
+with the development machine's full assets behaves as a package does.
+
+Checked on Linux: every one of the zip's 9,650 files is byte for byte what the folders serve,
+and nothing the folders serve is missing from it; `ZipAssetsTest` holds the two readers to the
+same answers; the packaged build, on a fresh home folder, laid down the ROM (760 files, 15
+links, the same as from folders), opened Calendar, Contacts and Memos with every picture
+loaded, ran their services, and installed and started a Mojo app. Not measured here: the
+install and signing times on a Mac and on Windows, which are what it is for.
+
 Decisions, and why:
 
 - **The host is started directly** (`jre/bin/java -cp host/lib/*`), not through Gradle's launcher

@@ -77,6 +77,10 @@ function dataDir() {
 /** Starts the JVM host and resolves with its address once it listens. */
 function startHost() {
 	let bin, args = ["--repo", REPO, "--data", dataDir(), "--with-parent", "1"];
+	// A packaged Luna DE's assets are one zip beside the app (package.js); LUNA_DE_ASSETS names one
+	// for a checkout, to try a package's assets without packaging.
+	const zip = app.isPackaged ? path.join(process.resourcesPath, "assets.zip") : process.env.LUNA_DE_ASSETS;
+	if (zip) { args.push("--assets", zip); }
 	if (app.isPackaged) {
 		// Packaged: the Java runtime and the host's jars the package carries, started directly (no
 		// launcher script, so nothing on the machine's PATH or in its JAVA_HOME is needed). SQLite's

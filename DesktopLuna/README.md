@@ -104,8 +104,8 @@ build refuses assets older than the checkout's patches. (Lunacy's development ma
 
 `package.js` builds the
 host, fetches Node 12 (checked against nodejs.org's checksum), cuts a Java runtime with `jlink`
-so users need no Java, and hands electron-builder the app with Lunacy's assets at the places they
-have in a checkout. Another system's or processor's Java runtime is cut from Eclipse Temurin's
+so users need no Java, and hands electron-builder the app with Lunacy's assets as one zip the host reads in place
+(`assets.zip`; [Docs/luna-de.md](../Docs/luna-de.md), "Packaging"). Another system's or processor's Java runtime is cut from Eclipse Temurin's
 modules for it (from Adoptium, checked against its checksum), so one machine builds several.
 
 | Command | Built on | Output |

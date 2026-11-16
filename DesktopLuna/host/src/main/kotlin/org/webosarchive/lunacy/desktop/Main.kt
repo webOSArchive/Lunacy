@@ -27,7 +27,10 @@ import java.util.concurrent.Executors
  * client: it routes the app origins' requests here, naming the app from the request's origin
  * (rule 10). See Docs/luna-de.md.
  *
- *   luna-de-host --repo <Lunacy checkout> --data <folder> [--port <n>]
+ *   luna-de-host --repo <Lunacy checkout> --data <folder> [--port <n>] [--assets <zip>]
+ *
+ * --assets: the asset tree as one zip (a packaged Luna DE's, made by DesktopLuna/package.js), read
+ * in place as Android reads the APK's; without it, the checkout's own folders.
  *
  * Prints "LUNA-DE-HOST <port>" on standard output once it listens.
  */
@@ -52,11 +55,13 @@ fun main(args: Array<String>) {
     // what fetch-assets.sh laid down, and CoreApps as apps/.
     // Without the apps that are Android's side of Lunacy: Luna DE is a desktop environment that
     // reuses the Android work, not an Android one (codepoet, 2026-11-16).
-    val assets = org.webosarchive.lunacy.core.Without(FolderAssets(listOf(
+    val bundled: org.webosarchive.lunacy.core.Assets = opt["assets"]?.let { org.webosarchive.lunacy.core.ZipAssets(File(it)) } ?: FolderAssets(listOf(
         "" to File(repo, "AndroidLuna/src/main/assets"),
         "" to File(repo, "AndroidLuna/local-assets"),
         "apps/" to File(repo, "CoreApps"),
-    )), ANDROID_ONLY_APPS, ANDROID_ONLY_ROM)
+    ))
+    Log.i(Lunacy.TAG, "assets: " + (opt["assets"] ?: "the checkout's folders"))
+    val assets = org.webosarchive.lunacy.core.Without(bundled, ANDROID_ONLY_APPS, ANDROID_ONLY_ROM)
     // Native requests (the network shim's): the bundled CA certificates, and the host's own cookie
     // jar for now (Docs/luna-de.md: the Electron session's to come).
     org.webosarchive.lunacy.card.Http.init(assets, org.webosarchive.lunacy.core.MemoryCookies())
@@ -337,7 +342,11 @@ private val ANDROID_ONLY_APPS = setOf(
  * account; Google and Microsoft through Lunacy's sign-in page and OAuth service).
  */
 private val ANDROID_ONLY_ROM = listOf("org.webosarchive.lunacy.androidaccount", "org.webosarchive.lunacy.google",
-    "org.webosarchive.lunacy.microsoft", "org.webosarchive.lunacy.microsoft365").map { "usr/palm/public/accounts/$it" }
+    "org.webosarchive.lunacy.microsoft", "org.webosarchive.lunacy.microsoft365").map { "usr/palm/public/accounts/$it" } +
+    // The TouchPad's own programs and their libraries (the mail and messaging engines), which run
+    // on Android under the PDK runtime and nowhere on a desktop: a package leaves them out, and
+    // assets that have them (the development machine's) are read as if they hadn't.
+    listOf("usr/bin", "usr/lib")
 
 /** The wallpaper Lunacy shows until one is picked (Luna.DEFAULT_WALLPAPER on Android). */
 private const val DEFAULT_WALLPAPER = "22.jpg"

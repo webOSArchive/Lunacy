@@ -1,0 +1,30 @@
+1.0.1 (build 648) - checks by hand or by eye, 2026-11-16
+
+[PASS] The dashboard count fix is in the installed build, not only in the tree: the stylesheet
+       each device serves (global-notifications.css, read from a page over DevTools) has the
+       rule, on the Fold3, the Pixel Tablet, the Nexus 7 and the A7 Lite. On the Fold3,
+       SimpleChat's dashboard with a count of 16 lays it out on one line (measured in the page,
+       on main's build 645 with the same assets). Not seen by eye in 648: the Fold3's open
+       notification area shows codepoet's messages, so it was not screenshotted.
+[PASS] APK inventory seen failing four ways before it was trusted: an APK with no
+       assets/patches.applied; a patch added to the tree after the build; a patch changed after
+       the build; an asset changed to other content of the same size.
+[PASS] PDK sweep on the Fold3 (16 s): all 17 screenshots show what pdk-scenarios.txt asks for
+       (Fieldrunners' music not listened to).
+[PASS] PDK sweep on the Nexus 7 (30 s): the 7 installed apps start and draw (Keen, Where's My
+       Water, ScummVM, Quick Office's line; sample Temple Run 2, Plants vs. Zombies HD,
+       EMU7800 behind its first-run dialog). The 9 scenarios it lacks ran on the Fold3 and the
+       Pixel Tablet.
+[PASS] PDK sweep on the Pixel Tablet (qemu, 30 s): all 13 scenarios start and draw.
+[INFO] Pixel Tablet, sampled apps (not scenarios), under qemu:
+       - RoboCop exits 1 within seconds, at 30 s and again at 75 s. Known since 0.9.3
+         (codepoet: ignore).
+       - Cut the Rope was a white card at 30 s and its menu at 75 s: slow, not broken.
+       - Jungle Jewels draws its menu with white squares where the game-mode tiles belong, at
+         30 s and at 75 s. Not compared with 1.0 on the Pixel. Nothing in the PDK runtime
+         changed between 635 and 648 (the diff is ShellActivity's First Use step, the Android
+         account's page and one Mojo stylesheet rule).
+[    ] The Android account added by hand from Contacts' first screen on the fresh install
+       (test-plan section 9): the script made it over the bus from Contacts' page; the tap
+       itself is a person's.
+[    ] Rule 0 against the TouchPad, and everything else only a person sees (sections 7 to 14).

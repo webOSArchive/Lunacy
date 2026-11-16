@@ -79,10 +79,11 @@ phone mode the Pre3.
 #   fetch-assets run is in no build, and nothing else showed it (Mojo 0005, 2026-11-16).
 #   Seen failing: an APK without the list; a patch added to the tree after the build.
 
-# Tier 2, first: a fresh install, on one device with Android contacts (the Kyocera). ERASES
+# Tier 2, first: a fresh install, on the Galaxy Tab A7 Lite (never the Kyocera, which is
+# codepoet's F-Droid update test device and is not touched: codepoet, 2026-11-16). ERASES
 # Lunacy's data there; installs the candidate's debug build, finishes First Use over the bus,
 # adds the Android account, and runs device-test in that same run of Lunacy, unrestarted
-Workbench/fresh-install.sh 192.168.10.58:5555 out/AndroidLuna-arm64-debug.apk Docs/test-results/NNN/fresh-kyocera.txt
+Workbench/fresh-install.sh 192.168.10.27:5555 out/AndroidLuna-arm64-debug.apk Docs/test-results/NNN/fresh-a7lite.txt
 
 # Tier 2, on each device, the candidate installed and First Use done
 Workbench/device-test.sh 192.168.10.36:5555 NNN Docs/test-results/NNN/hp10g2.txt

@@ -73,7 +73,7 @@ more than one device is attached. The test devices:
 | Pixel Tablet (Android 17, arm64 only) | `192.168.10.153:5555` | `adb tcpip` as above (it answered on 5555 on 2026-10-03); wireless debugging's pairing port varies per reboot, so prefer tcpip |
 | HP 10 G2 (Android 5.0.1, the reference) | `192.168.10.36:5555` (it moves between .36 and .38; .36 on 2026-11-14) | `adb tcpip` over the cable after a reboot (it answered there on 2026-10-04) |
 | Galaxy Tab A7 Lite (Android 14) | `192.168.10.27:5555` | `adb tcpip` over the cable after a reboot (it moves between `.27` and `.29`; was `.27` until 2026-11-01) |
-| Kyocera A101BM (Android 12, arm64) | `192.168.10.58:5555` | `adb tcpip` over the cable after a reboot (it answered there on 2026-10-05 and 2026-11-14) |
+| Kyocera A101BM (Android 12, arm64) | `192.168.10.58:5555` | **Not to be touched** (codepoet, 2026-11-16): it is their F-Droid update test device, and holds a release installed through F-Droid. No installs, uninstalls or scripts |
 | Galaxy Z Fold3 (Android 15, foldable) | `192.168.10.175:44439` | wireless debugging, paired once on 2026-10-14; the connect port changes after a reboot, pairing holds |
 
 - `--es install <url or path>` installs a package through the same path the App Museum

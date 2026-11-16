@@ -68,8 +68,8 @@ API 21 gate.
   dashboards, alerts, pages with no window) in one place, each line with its time, app id, level
   and source, kept from when Luna DE started, with a filter and the levels to show. It stands in
   for `palm-log -f` until the SDK's tools reach Luna DE, and nothing is held back: there is no
-  system log level here to set. Right-clicking the button gives the
-  developer tools of each open card, and a switch to open them for every card (F12 still does one).
+  system log level here to set. Right-clicking the button lists the
+  open cards, to inspect one with Electron's developer tools (as F12 does).
 - **Installing by drag and drop.** An `.ipk` dropped on the window installs (checked
   2026-11-16 with a scripted drop; it had not worked before: the dropped list did not cross
   into the preload, so files now cross one at a time).

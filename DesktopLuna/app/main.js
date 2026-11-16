@@ -168,7 +168,6 @@ function addCard(view, appId, title) {
 	// window.close() from the page, or the page gone: the card goes.
 	view.webContents.on("destroyed", () => removeCard(id, false));
 	send("lunade:card-added", { id, appId, title: c.title });
-	if (toolsOn) { openTools(view.webContents); }
 	return c;
 }
 
@@ -469,31 +468,17 @@ ipcMain.handle("lunade:popout", (e, id) => { popOut(id); return true; });
 ipcMain.handle("lunade:devtools", (e, id) => { const c = cards.get(id); if (c) { c.view.webContents.openDevTools({ mode: "detach" }); } return true; });
 
 /**
- * The bezel's </> button opens the log; its right-click menu has the developer tools, a card at
- * a time, and a switch: while that is on, every card has its tools open, the ones already here
- * and each one that comes. Off closes them. (A menu of the system's own: one drawn in the shell
- * page would lie under a card that is up.)
+ * The bezel's </> button opens the log; its right-click menu inspects a card: Electron's own
+ * developer tools for that one page. (A menu of the system's own: one drawn in the shell page
+ * would lie under a card that is up.)
  */
-let toolsOn = false;
-function openTools(wc) { if (wc && !wc.isDestroyed() && !wc.isDevToolsOpened()) { wc.openDevTools({ mode: "detach", activate: false }); } }
 ipcMain.handle("lunade:tools-menu", () => {
 	const items = [...cards.values()].filter((c) => !c.view.webContents.isDestroyed()).map((c) => ({
-		label: "Developer tools: " + (c.title || c.appId), click: () => c.view.webContents.openDevTools({ mode: "detach" }) }));
-	if (!items.length) { items.push({ label: "Developer tools: no card is open", enabled: false }); }
-	items.push({ type: "separator" });
-	items.push({ label: "Developer tools for every card", type: "checkbox", checked: toolsOn, click: () => setTools(!toolsOn) });
+		label: "Inspect " + (c.title || c.appId), click: () => c.view.webContents.openDevTools({ mode: "detach" }) }));
+	if (!items.length) { items.push({ label: "No card is open to inspect", enabled: false }); }
 	Menu.buildFromTemplate(items).popup({ window: shell });
 	return true;
 });
-function setTools(on) {
-	toolsOn = on;
-	for (const c of cards.values()) {
-		const wc = c.view.webContents;
-		if (wc.isDestroyed()) { continue; }
-		if (toolsOn) { openTools(wc); } else if (wc.isDevToolsOpened()) { wc.closeDevTools(); }
-	}
-	return toolsOn;
-}
 
 /**
  * The log: every app page's console (cards, dashboards, alerts and the pages with no window),

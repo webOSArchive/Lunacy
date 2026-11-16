@@ -80,8 +80,16 @@ body.maximized .card { border-radius: 0; }
 	padding: 18px 20px calc(var(--ql) + 10px); align-content: start;
 }
 .tile { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; cursor: pointer;
-	border: 0; background: transparent; color: #fff; font: 14px Prelude, sans-serif; padding-top: 8px; border-radius: 8px; }
-.tile:active { background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/launcher-touch-feedback.png") center / contain no-repeat; }
+	border: 0; background: transparent; color: #fff; font: 14px Prelude, sans-serif; padding-top: 8px; border-radius: 8px; position: relative; }
+/* LunaCE's launch feedback: launcher-touch-feedback.png, 90 px, centred on the tapped icon until
+   its launch is done with it or 3 s run out (Launcher.Params.FEEDBACK, FEEDBACK_MS). */
+.tile.glow::before, #dock button.glow::before {
+	content: ""; position: absolute; width: 90px; height: 90px; left: 50%; margin-left: -45px; z-index: 0; pointer-events: none;
+	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/launcher-touch-feedback.png") center / 90px 90px no-repeat;
+}
+.tile.glow::before { top: -5px; }            /* the icon is 64 high, 8 px down the tile */
+#dock button.glow::before { top: -5px; }     /* the icon is centred in its 80 px button */
+.tile img, .tile span, #dock img { position: relative; z-index: 1; }
 .tile img { width: 64px; height: 64px; object-fit: contain; }
 .tile span { max-width: 150px; text-align: center; line-height: 1.15; text-shadow: 0 1px 2px #000; }
 
@@ -93,7 +101,7 @@ body.maximized .card { border-radius: 0; }
 }
 body.maximized #quicklaunch { transform: translateY(100%); }
 #dock { position: absolute; left: 0; right: 120px; top: 0; bottom: 0; display: flex; justify-content: space-around; align-items: flex-end; padding: 0 30px 10px; }
-#dock button { border: 0; background: transparent; padding: 0; cursor: pointer; width: 80px; height: 80px; }
+#dock button { border: 0; background: transparent; padding: 0; cursor: pointer; width: 80px; height: 80px; position: relative; }
 #dock img { width: 64px; height: 64px; object-fit: contain; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.5)); }
 #launcher-button {
 	position: absolute; right: 36px; bottom: 14px; width: 64px; height: 64px; border: 0; cursor: pointer;
@@ -149,3 +157,21 @@ body.maximized #quicklaunch { transform: translateY(100%); }
 	border-image: url("../../AndroidLuna/src/main/assets/luna/images/popup-bg.png") 20 fill / 20px stretch;
 }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---- the loading card (CardSplash; LunaSysMgr's CardLoading): loading-bg.png stretched to the
+   card, the app's splash icon in the middle, and loading-glow.png (342 px) behind it, pulsing
+   0 -> 1 -> 0 over a second, first 900 ms in, a second of quiet between; gone in 300 ms once the
+   app is ready. ---- */
+.card .splash {
+	position: absolute; inset: -3px; z-index: 1; display: flex; align-items: center; justify-content: center;
+	background: #2e2e2e url("../../AndroidLuna/src/main/assets/luna/images/loading-bg.png") center / 100% 100% no-repeat;
+	transition: opacity 300ms linear;
+}
+.card .splash.gone { opacity: 0; }
+.card .splash::before {
+	content: ""; position: absolute; left: 50%; top: 50%; width: 342px; height: 342px; margin: -171px 0 0 -171px; opacity: 0;
+	background: url("../../AndroidLuna/src/main/assets/luna/images/loading-glow.png") center / 342px 342px no-repeat;
+	animation: splash-pulse 2000ms linear 900ms infinite;
+}
+.card .splash img { position: relative; max-width: 192px; max-height: 192px; }
+@keyframes splash-pulse { 0% { opacity: 0; } 25% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }

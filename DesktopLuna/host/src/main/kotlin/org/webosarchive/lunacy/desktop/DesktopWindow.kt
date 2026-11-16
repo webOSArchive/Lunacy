@@ -66,7 +66,11 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
         "cancel" -> { val t = a.optInt(0); main.post { calls.remove(t)?.cancel() }; "null" }
         "log" -> { Log.i(Lunacy.TAG, "[$appId] palm ${a.optString(0)}"); "null" }
         // Luna DE's own: the page has loaded, and a script's answer (relaunch).
-        "lunadeLoaded", "stageReady", "pageDrawn" -> { main.post { pageUp() }; "null" }
+        "lunadeLoaded", "stageReady", "pageDrawn" -> {
+            // The app says its stage is ready (or its page has drawn): its card can come up.
+            if (method != "lunadeLoaded") shell.pageReady(this)
+            main.post { pageUp() }; "null"
+        }
         "lunadeResult" -> { val t = a.optInt(0); val v = a.optBoolean(1); main.post { results.remove(t)?.invoke(v) }; "null" }
         "clipboardHasText" -> "false"
         // PalmSystem.addBannerMessage(message, launch params, icon ...): the shell shows it, and a

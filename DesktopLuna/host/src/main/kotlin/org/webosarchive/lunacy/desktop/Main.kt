@@ -157,6 +157,14 @@ fun main(args: Array<String>) {
         if (bytes == null) send(ex, 404, "text/plain", ByteArray(0)) else send(ex, 200, "image/png", bytes)
     } }
 
+    // The icon for an app's loading card: its own `splashicon`, else its launcher icon
+    // (Luna.splashIcon; the shell page sizes it as LunaCE's CardLoading does).
+    http.createContext("/splash") { ex -> ex.use {
+        val app = registry.get(query(ex)["id"].orEmpty())
+        val bytes = (app?.openSplashIcon() ?: app?.openIcon())?.use { it.readBytes() }
+        if (bytes == null) send(ex, 404, "text/plain", ByteArray(0)) else send(ex, 200, "image/png", bytes)
+    } }
+
     // The page's native interface: POST /native?app=<from the origin>&w=<page>&m=<method>, the
     // arguments as a JSON array; the answer is the method's value as JSON.
     http.createContext("/native") { ex -> ex.use {
@@ -224,6 +232,7 @@ private const val DEFAULT_WALLPAPER = "22.jpg"
 private fun entryOf(a: org.webosarchive.lunacy.card.AppInfo) = JSONObject().put("id", a.id).put("title", a.title)
     .put("url", AppServer.appUrl(a.id, a.main, a.dir)).put("noWindow", a.noWindow)
     .put("icon", "/icon?id=" + java.net.URLEncoder.encode(a.id, "UTF-8"))
+    .put("splash", "/splash?id=" + java.net.URLEncoder.encode(a.id, "UTF-8")).put("splashOwn", a.splashIcon.isNotEmpty())
 
 private fun query(ex: HttpExchange): Map<String, String> =
     ex.requestURI.rawQuery.orEmpty().split('&').filter { it.isNotEmpty() }.associate {

@@ -50,7 +50,7 @@
 	function setTitle() {
 		$("title-text").textContent = maximized && cards[active] ? (appTitles[cards[active].appId] || cards[active].title) : "Luna DE";
 	}
-	var appTitles = {};
+	var appTitles = {}, appEntries = {};
 
 	/** A card comes up: its picture grows to the screen, then its live view takes over. */
 	function maximize(i) {
@@ -65,7 +65,17 @@
 			else { transform(k, (j < i ? -1 : 1) * (W + GAP), 0, 1); }
 		});
 		setTitle();
-		setTimeout(function () { if (maximized && cards[active] === c) { window.lunade.maximize(c.id); } }, 300);
+		setTimeout(function () { if (maximized && cards[active] === c) { showLive(c); } }, MAXIMIZE_MS);
+	}
+
+	/**
+	 * The card that is up shows its live page, once it has one that is ready: until then the
+	 * loading card stays on the screen. The splash fades out over the page (CardSplash.dismiss).
+	 */
+	function showLive(c) {
+		if (!c.id || !c.pageReady || !maximized || cards[active] !== c) { return; }
+		window.lunade.maximize(c.id);
+		if (c.splash) { var sp = c.splash; c.splash = null; sp.classList.add("gone"); setTimeout(function () { sp.remove(); }, 320); }
 	}
 
 	/** Down to the card view: the live card's picture taken first, so it shrinks from what was on the screen. */
@@ -75,21 +85,26 @@
 		document.body.classList.remove("maximized");
 		setTitle();
 		var done = function () { window.lunade.cardView(); layout(true); refreshPictures(c); };
-		if (!c) { done(); return; }
+		if (!c || !c.id || c.splash) { done(); return; }
 		window.lunade.snapshot(c.id).then(function (url) { if (url) { c.img.src = url; } done(); }, done);
 	}
 
 	/** Every card's picture taken again, but [skip]'s, just taken: a page goes on drawing while hidden. */
 	function refreshPictures(skip) {
 		cards.forEach(function (k) {
-			if (k === skip) { return; }
+			if (k === skip || !k.id || k.splash) { return; }
 			window.lunade.snapshot(k.id).then(function (url) { if (url) { k.img.src = url; } });
 		});
 	}
 
-	/** A card main.js has made (a launch, or an app's window.open): it comes in at the active place and waits for its page. */
-	function added(d) {
-		closeLauncher();
+	var MAXIMIZE_MS = 300, SLIDE_MS = 300;   // cardMaximizeDuration, cardSlideDuration (CardLayer.Params)
+
+	/**
+	 * A new card, in the shell's picture: its loading card with the app's splash icon (CardSplash),
+	 * coming up from below the screen into the card view (CardLayer.openLaunching). [entry] is the
+	 * app's launcher entry when the shell has it.
+	 */
+	function newCard(appId, title) {
 		var el = document.createElement("div");
 		el.className = "card";
 		var img = document.createElement("img");
@@ -97,35 +112,79 @@
 		img.alt = "";
 		var cover = document.createElement("div");
 		cover.className = "cover";
-		el.appendChild(img); el.appendChild(cover);
-		var c = { id: d.id, appId: d.appId, title: d.title, el: el, img: img };
+		el.appendChild(img);
+		var c = { id: 0, appId: appId, title: title, el: el, img: img, pageReady: false, splash: null, born: performance.now() };
+		var entry = appEntries[appId];
+		if (entry) {
+			var splash = document.createElement("div");
+			splash.className = "splash";
+			var icon = document.createElement("img");
+			icon.alt = "";
+			// Its own splashicon at SplashIconSize (192); else the launcher icon at half again, capped there.
+			icon.onload = function () {
+				var longest = Math.max(icon.naturalWidth, icon.naturalHeight) || 1;
+				var want = entry.splashOwn ? 192 : Math.min(192, longest * 1.5);
+				icon.style.width = Math.round(icon.naturalWidth * want / longest) + "px";
+				icon.style.height = Math.round(icon.naturalHeight * want / longest) + "px";
+			};
+			icon.src = entry.splash;
+			splash.appendChild(icon);
+			el.appendChild(splash);
+			c.splash = splash;
+		}
+		el.appendChild(cover);
 		if (maximized) { window.lunade.cardView(); maximized = false; document.body.classList.remove("maximized"); }
 		cards.splice(active + 1, 0, c);
 		$("cards").appendChild(el);
 		active = cards.indexOf(c);
+		// setActiveCardOffScreen: full size, its top at the bottom of the screen; then up into the card view.
 		el.classList.remove("animate");
-		transform(c, 0, AREA, ACTIVE);
+		transform(c, 0, AREA, 1);
 		el.getBoundingClientRect();
 		layout(true);
 		setTitle();
 		wire(c);
-		// Up once its page is in, or after a moment anyway.
-		c.timer = setTimeout(function () { ready({ id: c.id }); }, 2500);
+		return c;
 	}
 
+	/**
+	 * A tap on an app that has no card: its loading card is on the screen at once, before the
+	 * host has been asked, and takes the app's first card when main.js makes it. One that no
+	 * card ever claims (the app only raised a dashboard, or couldn't start) goes again.
+	 */
+	function launching(entry) {
+		if (cards.some(function (c) { return c.appId === entry.id; })) { return; }
+		var c = newCard(entry.id, entry.title);
+		c.waiting = setTimeout(function () { if (!c.id) { dropCard(c, false); } }, 10000);
+	}
+
+	/** A card main.js has made (a launch, or an app's window.open): it takes the loading card the tap put up, or comes in with its own. */
+	function added(d) {
+		closeLauncher();
+		clearGlow();
+		var c = cards.filter(function (k) { return !k.id && k.appId === d.appId; })[0] || newCard(d.appId, d.title);
+		clearTimeout(c.waiting);
+		c.id = d.id;
+		// Up once its page is in, or after a while anyway.
+		c.timer = setTimeout(function () { ready({ id: c.id }); }, 15000);
+	}
+
+	/** The card's page has loaded: the card maximizes by itself, as a launching card does (CardLayer.ready), and its page takes the splash's place. */
 	function ready(d) {
 		var i = cardIndex(d.id);
-		if (i < 0 || cards[i].up) { return; }
-		cards[i].up = true;
-		clearTimeout(cards[i].timer);
-		setTimeout(function () { var k = cardIndex(d.id); if (k >= 0) { maximize(k); } }, 150);
+		if (i < 0 || cards[i].pageReady) { return; }
+		var c = cards[i];
+		c.pageReady = true;
+		clearTimeout(c.timer);
+		if (maximized && cards[active] === c) { showLive(c); return; }
+		// Not before it has reached the card view: the launch is seen to arrive there first.
+		var wait = Math.max(0, SLIDE_MS - (performance.now() - c.born));
+		setTimeout(function () { var k = cards.indexOf(c); if (k >= 0 && !maximized) { maximize(k); } }, wait);
 	}
 
-	/** A card gone (closed here, by its page, or popped out): its picture leaves upwards. */
-	function removed(d) {
-		var i = cardIndex(d.id);
+	function dropCard(c, wasUp) {
+		var i = cards.indexOf(c);
 		if (i < 0) { return; }
-		var c = cards[i], wasUp = maximized && i === active;
 		c.el.classList.add("animate");
 		transform(c, 0, -AREA, wasUp ? 1 : ACTIVE);
 		c.el.style.opacity = "0";
@@ -137,7 +196,13 @@
 		setTitle();
 	}
 
-	function closeCard(i) { if (cards[i]) { window.lunade.close(cards[i].id); } }
+	/** A card gone (closed here, by its page, or popped out): its picture leaves upwards. */
+	function removed(d) {
+		var i = cardIndex(d.id);
+		if (i >= 0) { dropCard(cards[i], maximized && i === active); }
+	}
+
+	function closeCard(i) { if (!cards[i]) { return; } if (cards[i].id) { window.lunade.close(cards[i].id); } else { dropCard(cards[i], false); } }
 
 	/** A card's cover in the card view: tap to bring it up, flick up to close, drag sideways to slide, right-click for Luna DE's tools. */
 	function wire(c) {
@@ -225,13 +290,35 @@
 			t.title = a.id;
 			t.appendChild(icon(a));
 			var s = document.createElement("span"); s.textContent = a.title; t.appendChild(s);
-			t.addEventListener("click", function () { launch(a); });
+			t.addEventListener("click", function () { launch(a, t); });
 			grid.appendChild(t);
 		});
 	}
 
-	/** An app launched from the launcher or the bar: main.js starts it, or tells us its card to bring up. */
-	function launch(entry) { closeLauncher(); window.lunade.launch(entry); }
+	/**
+	 * An app launched from the launcher or the bar. What the person sees comes first, before
+	 * anything is asked of the host: the tapped icon glows, and an app with no card gets its loading
+	 * card. Then the host starts it, or relaunches it and has its card brought up.
+	 */
+	function launch(entry, tapped) {
+		glow(tapped);
+		window.lunade.launch(entry);
+		var running = cards.some(function (c) { return c.appId === entry.id; });
+		// The launcher stays, glowing, for the moment the icon needs to be seen (then the card).
+		setTimeout(function () { closeLauncher(); if (!running) { launching(entry); } }, tapped && !$("launcher").hidden ? 120 : 0);
+	}
+
+	var glowing = null, glowTimer = null;
+	function glow(el) {
+		clearGlow();
+		if (!el) { return; }
+		glowing = el; el.classList.add("glow");
+		glowTimer = setTimeout(clearGlow, 3000);   // IconFeedbackTimeout
+	}
+	function clearGlow() {
+		clearTimeout(glowTimer);
+		if (glowing) { glowing.classList.remove("glow"); glowing = null; }
+	}
 
 	function openLauncher() {
 		if (maximized) { cardView(); }
@@ -399,8 +486,8 @@
 	function loadApps(first) {
 		return window.lunade.shell().then(function (s) {
 			pages = s.pages;
-			pages.forEach(function (p) { p.apps.forEach(function (a) { appTitles[a.id] = a.title; }); });
-			s.dock.forEach(function (a) { appTitles[a.id] = a.title; });
+			pages.forEach(function (p) { p.apps.forEach(function (a) { appTitles[a.id] = a.title; appEntries[a.id] = a; }); });
+			s.dock.forEach(function (a) { appTitles[a.id] = a.title; appEntries[a.id] = a; });
 			var tabs = $("tabs");
 			tabs.innerHTML = "";
 			pages.forEach(function (p, i) {
@@ -416,7 +503,7 @@
 				var b = document.createElement("button");
 				b.title = a.title;
 				b.appendChild(icon(a));
-				b.addEventListener("click", function () { launch(a); });
+				b.addEventListener("click", function () { launch(a, b); });
 				dock.appendChild(b);
 			});
 		});

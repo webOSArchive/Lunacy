@@ -100,6 +100,8 @@ class DesktopShell(
     fun removeBanner(id: Int) { events.add(event("banner-remove").put("id", id)) }
     fun clearBanners(w: DesktopWindow) { events.add(event("banner-clear").put("appId", w.appId)) }
     fun activate(w: DesktopWindow) { events.add(event("activate").put("page", w.pageId)) }
+    /** [w]'s page called stageReady or drew: its loading card gives way to it. */
+    fun pageReady(w: DesktopWindow) { events.add(event("ready").put("page", w.pageId)) }
 
     // ---- the apps that are running ----
 

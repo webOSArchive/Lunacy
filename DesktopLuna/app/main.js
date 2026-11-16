@@ -142,8 +142,12 @@ function addCard(view, appId, title) {
 	adoptOpens(view.webContents);
 	tell(view.webContents, "type", "card");
 	view.webContents.on("page-title-updated", (e, t) => { c.title = t; send("lunade:card-title", { id, title: t }); });
-	// The card waits in the card view while its page loads, then comes up (CLAUDE.md, rule 0).
-	view.webContents.once("dom-ready", () => send("lunade:card-ready", { id }));
+	// The card waits in the card view with its splash while its page loads, then comes up
+	// (CLAUDE.md, rule 0). Ready is the page's first paint with something in it; a page that never
+	// says so is taken as ready when it has loaded.
+	c.ready = () => { if (!c.saidReady) { c.saidReady = true; send("lunade:card-ready", { id }); } };
+	view.webContents.once("did-finish-load", c.ready);
+	view.webContents.once("did-fail-load", c.ready);
 	// window.close() from the page, or the page gone: the card goes.
 	view.webContents.on("destroyed", () => removeCard(id, false));
 	send("lunade:card-added", { id, appId, title: c.title });
@@ -375,7 +379,11 @@ async function followHost() {
 						icon: ev.icon || (ev.appId ? host + "/icon?id=" + encodeURIComponent(ev.appId) : "") });
 				} else if (ev.type === "banner-remove") { send("lunade:banner-remove", { id: ev.id }); }
 				else if (ev.type === "banner-clear") { send("lunade:banner-remove", { appId: ev.appId }); }
-				else if (ev.type === "activate") {
+				else if (ev.type === "ready") {
+					// The app's own word that its stage is ready (PalmSystem.stageReady), as on Android.
+					const c = [...cards.values()].find((k) => pageIds.get(k.view.webContents.id) === ev.page);
+					if (c && c.ready) { c.ready(); }
+				} else if (ev.type === "activate") {
 					const c = [...cards.values()].find((k) => pageIds.get(k.view.webContents.id) === ev.page);
 					if (c) { send("lunade:show", { id: c.id }); }
 				}
@@ -385,7 +393,7 @@ async function followHost() {
 }
 
 /** An entry's icon as a URL the shell page can load. */
-function withIcon(a) { return Object.assign(a, { icon: host + a.icon }); }
+function withIcon(a) { return Object.assign(a, { icon: host + a.icon, splash: host + a.splash }); }
 
 /** The device turned: the window takes the screen's new shape, and every page hears of it. */
 function turn(to) {

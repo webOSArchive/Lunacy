@@ -25,6 +25,14 @@ API 21 gate.
 - One window as a TouchPad: the status bar, launcher, quick-launch bar, card view, and apps as
   cards. Memos, Clock and Calculator keep their data in db8; an app launches another through
   applicationManager; a running app is relaunched, not started twice.
+- **A launch answers at once** (codepoet, 2026-11-16: "the *appearance* of responding quickly to
+  user's actions matters"). The tapped icon glows (LunaCE's launch feedback, 90 px, up to 3 s), and
+  the loading card is on the screen from the tap, before the host has been asked for anything:
+  `loading-bg.png`, the app's `splashicon` at 192 px (else its launcher icon at half again), the
+  glow pulsing behind it (CardSplash's timings). It rises into the card view, and maximizes when
+  the app calls `stageReady` (or its page has loaded); the page then takes the splash's place over
+  300 ms. A headless app's loading card takes the first card the app opens. The timings are open
+  to refining; the order of what is seen is the TouchPad's.
 - **Notifications.** A page's `window.open` is placed by the kind it names: a card, a
   dashboard (in the status bar's drop-down, behind its app's icon) or a popup alert. Banners show
   in the status bar with the TouchPad's timings.

@@ -33,6 +33,13 @@ API 21 gate.
   the app calls `stageReady` (or its page has loaded); the page then takes the splash's place over
   300 ms. A headless app's loading card takes the first card the app opens. The timings are open
   to refining; the order of what is seen is the TouchPad's.
+- **Installing an app.** A package (.ipk) or an app's own folder (the one with appinfo.json) is
+  dropped on the window, chosen with Ctrl/Cmd+O (Shift for a folder), or named in
+  `LUNADE_INSTALL`. A package goes through Lunacy's package installer, as from the App Catalog; a
+  folder is copied in under its id, and dropped again to replace the copy. A banner says how it
+  went, and the app is on the launcher's Downloads tab. A right-click on an installed app's tile
+  offers Remove. (`palm-install` comes with milestone 5.)
+- **Pages say they are a TouchPad's browser**: the device's user agent, as Android sets it.
 - **Notifications.** A page's `window.open` is placed by the kind it names: a card, a
   dashboard (in the status bar's drop-down, behind its app's icon) or a popup alert. Banners show
   in the status bar with the TouchPad's timings.
@@ -79,6 +86,8 @@ API 21 gate.
   full signal with no network name; the machine counts as on the mains.
 - The shell's own lifecycle rules (which apps run, relaunch, an app ending with its last window)
   are written a second time, in `DesktopShell` and main.js, until AppLifecycle moves into LunaCore.
+- An app installed from its folder is a copy: an edit to the folder shows after it is dropped
+  again (a link to the folder would be read as outside the app's tree and refused).
 - A dashboard is dismissed with a small close button that shows under the pointer, not a swipe.
 
 **Not there yet, in the order planned:**

@@ -36,6 +36,11 @@ tap on the status bar's title opens the app's menu; banners and dashboards show 
 
 The first six are the old SDK emulator's keys.
 
+**Installing an app:** drop its `.ipk`, or its folder (the one holding `appinfo.json`), on the
+window; or press Ctrl/Cmd+O for a package, Ctrl/Cmd+Shift+O for a folder; or start with
+`LUNADE_INSTALL=<path>`. It appears on the launcher's Downloads tab. Drop a folder again after
+changing it; right-click an installed app's tile to remove it.
+
 **Wi-Fi** in the launcher's Settings is a developer's switch: it simulates the network connection
 being lost (apps are told, and their requests fail) until it is tapped again.
 

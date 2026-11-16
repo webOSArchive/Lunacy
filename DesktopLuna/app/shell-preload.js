@@ -1,7 +1,7 @@
 // The shell page's reach into Luna DE (main.js): the launcher's pages, launching, the cards'
 // live views (up, hidden, snapshots, closed, popped out), and what the main process tells it.
 "use strict";
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 const on = (channel) => (cb) => ipcRenderer.on(channel, (e, data) => cb(data));
 contextBridge.exposeInMainWorld("lunade", {
 	shell: () => ipcRenderer.invoke("lunade:shell"),
@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld("lunade", {
 	devTools: (id) => ipcRenderer.invoke("lunade:devtools", id),
 	reload: (id) => ipcRenderer.invoke("lunade:reload", id),
 	ready: () => ipcRenderer.send("lunade:ready"),
+	// Files dropped on the shell: their paths go to the main process to be installed.
+	install: (files) => ipcRenderer.invoke("lunade:install", Array.from(files).map((f) => webUtils.getPathForFile(f)).filter(Boolean)),
+	remove: (id) => ipcRenderer.invoke("lunade:remove", id),
 	place: (rects, dashboardsOpen) => ipcRenderer.invoke("lunade:place", rects, dashboardsOpen),
 	appMenu: () => ipcRenderer.invoke("lunade:appmenu"),
 	back: () => ipcRenderer.invoke("lunade:back"),

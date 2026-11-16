@@ -223,6 +223,54 @@ class DesktopShell(
         }
     }
 
+    /**
+     * What a developer hands Luna DE to install (a drop on its window, the file chooser,
+     * LUNADE_INSTALL): a package, installed as any package is, or an app's own folder (the one
+     * holding appinfo.json), which is copied in under its id as `palm-package` and an install
+     * would have put it. Dropping the folder again replaces the copy.
+     */
+    fun installPath(path: String) {
+        val f = File(path)
+        when {
+            f.isFile -> install(f.path)
+            f.isDirectory && File(f, "appinfo.json").isFile -> main.post { installFolder(f) }
+            f.isDirectory -> systemBanner("", "${f.name} has no appinfo.json: not an app's folder")
+            else -> systemBanner("", "Can't read $path")
+        }
+    }
+
+    private fun installFolder(dir: File) {
+        val info = runCatching { JSONObject(File(dir, "appinfo.json").readText()) }.getOrNull()
+        val id = info?.optString("id").orEmpty()
+        if (id.isEmpty() || !Regex("[A-Za-z0-9._-]+").matches(id) || ".." in id) { systemBanner("", "${dir.name}: its appinfo.json names no app id"); return }
+        systemBanner("", "Installing ${info!!.optString("title", id)}")
+        Thread({
+            val error = runCatching {
+                val dest = File(packages.root, "${org.webosarchive.lunacy.core.WebosPaths.APPS}/$id")
+                val staging = File(packages.root, "${org.webosarchive.lunacy.core.WebosPaths.APPS}/.$id.incoming")
+                staging.deleteRecursively()
+                // Not what a developer's folder carries beside the app: its repository and its tools' folders.
+                dir.copyRecursively(staging, overwrite = true)
+                listOf(".git", "node_modules").forEach { File(staging, it).deleteRecursively() }
+                dest.deleteRecursively()
+                if (!staging.renameTo(dest)) throw java.io.IOException("can't move it into place")
+            }.exceptionOrNull()
+            main.post {
+                if (error != null) { systemBanner("", "Couldn't install ${dir.name}: ${error.message}"); return@post }
+                windowsOf(id).forEach { closeWindow(it) }
+                appsChanged()
+                systemBanner(id, "${registry.get(id)?.title ?: id} installed")
+            }
+        }, "install-folder").start()
+    }
+
+    /** The launcher's Remove, for an app that was installed (never a bundled one). */
+    fun remove(appId: String) {
+        val app = registry.get(appId)
+        if (app == null || !app.userInstalled) { systemBanner("", "$appId isn't an installed app"); return }
+        removeInstalled(app) { error -> systemBanner("", if (error == null) "${app.title} removed" else "Couldn't remove ${app.title}: $error") }
+    }
+
     override fun removeInstalled(app: AppInfo, done: (String?) -> Unit) {
         windowsOf(app.id).forEach { closeWindow(it) }
         packages.remove(app.id, app.dir) { error ->

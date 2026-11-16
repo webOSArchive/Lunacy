@@ -10,7 +10,7 @@
 // Docs/luna-de.md). Which cards exist is decided here for now; AppLifecycle's move into LunaCore
 // takes that over.
 "use strict";
-const { app, BaseWindow, BrowserWindow, WebContentsView, ipcMain, net, session } = require("electron");
+const { app, BaseWindow, BrowserWindow, WebContentsView, dialog, ipcMain, net, session } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
@@ -341,6 +341,26 @@ ipcMain.handle("lunade:popout", (e, id) => { popOut(id); return true; });
 ipcMain.handle("lunade:devtools", (e, id) => { const c = cards.get(id); if (c) { c.view.webContents.openDevTools({ mode: "detach" }); } return true; });
 ipcMain.handle("lunade:reload", (e, id) => { const c = cards.get(id); if (c) { c.view.webContents.reload(); } return true; });
 
+/** A package (.ipk) or an app's folder handed to Luna DE: the host installs it and says how it went in a banner. */
+function install(file) {
+	if (!file) { return; }
+	net.fetch(host + "/install?" + new URLSearchParams({ path: file }).toString(), { method: "POST" })
+		.catch((err) => console.error("Luna DE: install " + file + ": " + err));
+}
+ipcMain.handle("lunade:install", (e, files) => { (files || []).forEach(install); return true; });
+ipcMain.handle("lunade:remove", (e, id) => {
+	net.fetch(host + "/remove?" + new URLSearchParams({ id }).toString(), { method: "POST" }).catch(() => {});
+	return true;
+});
+
+/** The file chooser, for a package (Ctrl/Cmd+O) or an app's folder (with Shift). */
+async function chooseInstall(folder) {
+	const r = await dialog.showOpenDialog(shell, folder
+		? { title: "Install an app from its folder", properties: ["openDirectory"] }
+		: { title: "Install a webOS package", properties: ["openFile", "multiSelections"], filters: [{ name: "webOS packages", extensions: ["ipk"] }] });
+	if (!r.canceled) { r.filePaths.forEach(install); }
+}
+
 function askLaunch(id, params) {
 	const q = new URLSearchParams({ id });
 	if (params) { q.set("params", JSON.stringify(params)); }
@@ -421,7 +441,11 @@ function turn(to) {
 // Luna DE's own: F12 for the DevTools of whatever has the keyboard, Ctrl/Cmd+R to reload it, and
 // F1 as a spare home button.
 const TURN = { F6: "up", F7: "down", F8: "right", F9: "left" };
+/** The user agent every app page gives: the device's own, which webOS apps look for (DeviceProfile.userAgent, from the host). */
+let deviceUserAgent = "";
 app.on("web-contents-created", (e, wc) => {
+	// Before anything loads in it; the shell's own page keeps Electron's.
+	if (deviceUserAgent && !(shell && wc === shell.webContents)) { wc.setUserAgent(deviceUserAgent); }
 	// A page that has gone is no longer one of its app's windows: the host is told here, by the
 	// main process, which always knows. (The page's own word, a beacon as it unloads, doesn't
 	// get out of a view that is being destroyed; the host then took the next launch of the app
@@ -432,9 +456,16 @@ app.on("web-contents-created", (e, wc) => {
 		if (page) { pageGone(page); }
 		pageIds.delete(id); told.delete(id); pendingAttributes.delete(id);
 	});
+	// A file dropped on an app's card would have the card load it; it is Luna DE's to install.
+	wc.on("will-navigate", (ev, url) => {
+		if (!url.startsWith("file:") || (shell && wc === shell.webContents)) { return; }
+		ev.preventDefault();
+		try { install(require("url").fileURLToPath(url)); } catch (err) {}
+	});
 	wc.on("before-input-event", (ev, input) => {
 		if (input.type !== "keyDown") { return; }
 		const isShell = shell && wc === shell.webContents;
+		if ((input.control || input.meta) && input.key.toLowerCase() === "o") { ev.preventDefault(); chooseInstall(input.shift); return; }
 		if (input.key === "F1" && shell) { ev.preventDefault(); send("lunade:home"); }
 		else if (input.key === "Home" && shell && !input.shift && !input.control && !isEditing(input)) { ev.preventDefault(); send("lunade:toggle-card"); }
 		else if (input.key === "End" && shell && !input.shift && !input.control && !isEditing(input)) { ev.preventDefault(); send("lunade:launcher"); }
@@ -456,10 +487,13 @@ app.whenReady().then(async () => {
 		return;
 	}
 	routeAppOrigins();
+	try { deviceUserAgent = (await (await net.fetch(host + "/shell")).json()).userAgent || ""; } catch (e) {}
 	openShell();
 	followHost();
 	// LUNADE_OPEN=<app id>[,<app id>...] launches those apps once the shell is ready.
 	ipcMain.once("lunade:ready", () => {
+		// LUNADE_INSTALL=<package or app folder>[<path separator><another>...] installs those first.
+		(process.env.LUNADE_INSTALL || "").split(path.delimiter).filter(Boolean).forEach((f) => install(path.resolve(f)));
 		if (!process.env.LUNADE_OPEN) { return; }
 		for (const id of process.env.LUNADE_OPEN.split(",")) { askLaunch(id); }
 	});

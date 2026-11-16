@@ -354,7 +354,7 @@ class AppServer(
      * `palmGetResource` ([RESOURCE_PARAM]) comes back as it is on disk.
      */
     private fun html(s: InputStream, resource: Boolean, app: String? = null): InputStream {
-        val text = HtmlTransforms.selfClosingTags(s.bufferedReader().readText())
+        val text = HtmlTransforms.selfClosingTags(servedText(s))
         return ByteArrayInputStream((if (resource) text else injectInto(JsTransforms.sloppyMode(text), app)).toByteArray())
     }
 
@@ -685,7 +685,7 @@ object JsTransforms {
         "((?:^|[{};>])(?:\\s|/\\*[\\s\\S]*?\\*/|//[^\\n]*\\n)*)([\"'])use strict\\2")
 
     fun apply(s: InputStream): InputStream =
-        ByteArrayInputStream(sloppyMode(s.bufferedReader().readText()).toByteArray())
+        ByteArrayInputStream(sloppyMode(servedText(s)).toByteArray())
 
     /**
      * `"use strict"` does nothing, as on the device: the directive becomes a string of the
@@ -719,7 +719,7 @@ object CssTransforms {
     private val selectorRule = Regex("([^{}]+)\\{([^{}]*)\\}")
 
     fun apply(s: InputStream): InputStream =
-        ByteArrayInputStream(mouseTargetIgnore(borderImageNeedsStyle(s.bufferedReader().readText())).toByteArray())
+        ByteArrayInputStream(mouseTargetIgnore(borderImageNeedsStyle(servedText(s))).toByteArray())
 
     /**
      * `-webkit-palm-mouse-target: ignore` is webOS's own property for "this element is not

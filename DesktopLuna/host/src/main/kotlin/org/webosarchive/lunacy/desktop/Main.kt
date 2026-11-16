@@ -165,6 +165,8 @@ fun main(args: Array<String>) {
         val out = JSONObject()
             .put("pages", JSONArray(pages.map { (d, p) -> JSONObject().put("designator", d).put("title", p.first).put("apps", JSONArray(p.second.map(::entry))) }))
             .put("dock", JSONArray(launcherPages.quickLaunch().mapNotNull { byId[it] }.map(::entry)))
+            // What every app's page says it is: the TouchPad's browser, as on Android (AppWindow).
+            .put("userAgent", org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD.userAgent)
         send(ex, 200, "application/json; charset=utf-8", out.toString().toByteArray())
     } }
 
@@ -214,6 +216,17 @@ fun main(args: Array<String>) {
         val q = query(ex)
         val params = q["params"]?.takeIf { it.isNotEmpty() }?.let { runCatching { JSONObject(it) }.getOrNull() }
         shell.launch(q["id"].orEmpty(), params)
+        send(ex, 204, "text/plain", ByteArray(0))
+    } }
+
+    // A package or an app's folder to install, and an installed app to remove (DesktopShell).
+    http.createContext("/install") { ex -> ex.use {
+        shell.installPath(query(ex)["path"].orEmpty())
+        send(ex, 204, "text/plain", ByteArray(0))
+    } }
+    http.createContext("/remove") { ex -> ex.use {
+        val id = query(ex)["id"].orEmpty()
+        main.post { shell.remove(id) }
         send(ex, 204, "text/plain", ByteArray(0))
     } }
 
@@ -271,6 +284,7 @@ private fun entryOf(a: org.webosarchive.lunacy.card.AppInfo) = JSONObject().put(
     .put("splash", "/splash?id=" + java.net.URLEncoder.encode(a.id, "UTF-8")).put("splashOwn", a.splashIcon.isNotEmpty())
     // A tile that is one of Luna DE's switches (Wi-Fi: the simulated network), not an app with a card.
     .put("switch", a.androidSettings == "wifi")
+    .put("removable", a.userInstalled)
 
 private fun query(ex: HttpExchange): Map<String, String> =
     ex.requestURI.rawQuery.orEmpty().split('&').filter { it.isNotEmpty() }.associate {

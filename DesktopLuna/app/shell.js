@@ -249,13 +249,17 @@
 	// ---- Luna DE's tools for a card ----
 
 	function showMenu(x, y, c) {
-		var m = $("menu");
-		m.innerHTML = "";
-		[["Open", function () { maximize(cards.indexOf(c)); }],
+		showItems(x, y, [["Open", function () { maximize(cards.indexOf(c)); }],
 		 ["Pop out to its own window", function () { window.lunade.popOut(c.id); }],
 		 ["DevTools", function () { window.lunade.devTools(c.id); }],
 		 ["Reload", function () { window.lunade.reload(c.id); }],
-		 ["Close", function () { closeCard(cards.indexOf(c)); }]].forEach(function (it) {
+		 ["Close", function () { closeCard(cards.indexOf(c)); }]]);
+	}
+
+	function showItems(x, y, items) {
+		var m = $("menu");
+		m.innerHTML = "";
+		items.forEach(function (it) {
 			var b = document.createElement("button");
 			b.textContent = it[0];
 			b.addEventListener("click", function () { m.hidden = true; it[1](); });
@@ -291,6 +295,11 @@
 			t.appendChild(icon(a));
 			var s = document.createElement("span"); s.textContent = a.title; t.appendChild(s);
 			t.addEventListener("click", function () { launch(a, t); });
+			// An installed app's tile: Luna DE's Remove, by the right button.
+			t.addEventListener("contextmenu", function (e) {
+				e.preventDefault();
+				if (a.removable) { showItems(e.clientX, e.clientY, [["Remove " + a.title, function () { window.lunade.remove(a.id); }]]); }
+			});
 			grid.appendChild(t);
 		});
 	}
@@ -451,6 +460,14 @@
 		active = Math.max(0, Math.min(cards.length - 1, active + (d > 0 ? 1 : -1)));
 		layout(true);
 	}, { passive: true });
+
+	// ---- installing: a package or an app's folder dropped on the device ----
+
+	document.addEventListener("dragover", function (e) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+	document.addEventListener("drop", function (e) {
+		e.preventDefault();
+		if (e.dataTransfer.files.length) { window.lunade.install(e.dataTransfer.files); }
+	});
 
 	// ---- the status bar's clock ----
 

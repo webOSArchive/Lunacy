@@ -96,6 +96,25 @@ fun main(args: Array<String>) {
     main.call {
         db8.register(bus); tempdb.register(bus)
         systemService.register(bus)
+        // Lunacy's own service, on its own name: the environment it really runs in. An app that
+        // asks whether it is on Lunacy (App Catalog does, to install through Lunacy's installer
+        // rather than look for Preware) finds it here as on Android. What that service does for
+        // Android (permissions, Android's settings and notifications) isn't offered.
+        bus.register(Lunacy.SERVICE, "system/getEnvironment") { _, _, reply ->
+            val profile = org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD
+            reply(JSONObject().put("returnValue", true)
+                .put("lunacy", JSONObject().put("version", "Luna DE").put("flavour", "desktop")
+                    .put("reportsWebOS", profile.versionString).put("reportsAs", profile.modelName)
+                    .put("enyo", "1.0").put("node", desktopRoot.node.path).put("apps", registry.apps.size)
+                    .put("services", shell.jsServices?.names() ?: JSONArray()))
+                .put("host", JSONObject().put("os", System.getProperty("os.name")).put("version", System.getProperty("os.version"))
+                    .put("arch", System.getProperty("os.arch")).put("java", System.getProperty("java.version")))
+                .put("webos", JSONObject().put("model", profile.modelName).put("version", profile.versionString))
+                .toString())
+        }
+        // webOS's downloader, which apps hand every file fetch to (App Catalog's Pivot, a podcast's
+        // episodes): it writes into the webOS tree.
+        org.webosarchive.lunacy.card.DownloadManager(webosRoot).register(bus)
         val network = DesktopNetwork(main)
         shell.network = network
         org.webosarchive.lunacy.card.Http.offline = { network.simulatedDown }

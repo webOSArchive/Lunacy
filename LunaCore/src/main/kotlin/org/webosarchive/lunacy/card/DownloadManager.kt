@@ -1,6 +1,6 @@
 package org.webosarchive.lunacy.card
 
-import android.util.Log
+import org.webosarchive.lunacy.core.Log
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException

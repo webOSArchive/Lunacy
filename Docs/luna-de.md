@@ -39,6 +39,9 @@ API 21 gate.
   folder is copied in under its id, and dropped again to replace the copy. A banner says how it
   went, and the app is on the launcher's Downloads tab. A right-click on an installed app's tile
   offers Remove. (`palm-install` comes with milestone 5.)
+- **App Catalog installs.** Lunacy's own service is on the bus (`org.webosarchive.lunacy`, with
+  `system/getEnvironment` answering for the desktop it runs on), which is how App Catalog knows to
+  install through Lunacy's installer; the download manager is in LunaCore and on the bus too.
 - **Pages say they are a TouchPad's browser**: the device's user agent, as Android sets it.
 - **Notifications.** A page's `window.open` is placed by the kind it names: a card, a
   dashboard (in the status bar's drop-down, behind its app's icon) or a popup alert. Banners show

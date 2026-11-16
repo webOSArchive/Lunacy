@@ -19,7 +19,8 @@ const readline = require("readline");
 // The Lunacy tree the host reads its assets from: the checkout this runs in, or, packaged
 // (DesktopLuna/package.js), the app's resources folder, which holds the same folders at the same
 // places, so the host's --repo and the shell's ../../AndroidLuna pictures hold in both.
-const REPO = app.isPackaged ? process.resourcesPath : path.resolve(__dirname, "..", "..");
+// LUNA_DE_REPO names another tree for the host's assets (a test of assets made elsewhere).
+const REPO = app.isPackaged ? process.resourcesPath : (process.env.LUNA_DE_REPO || path.resolve(__dirname, "..", ".."));
 
 const HOST_SUFFIX = ".media.cryptofs.apps";
 const IS_WIN = process.platform === "win32";

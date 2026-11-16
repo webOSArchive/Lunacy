@@ -543,6 +543,23 @@ under the app's resources folder, is a checkout in small: `AndroidLuna/src/main/
 development; and beside them `host/` (the jars) and `jre/` (a `jlink` runtime of 14 modules).
 About 240 MB on Linux.
 
+**Where the frameworks come from.** `AndroidLuna/local-assets` isn't in the repository (the
+frameworks are HP's and Palm's), so anyone building takes them from a TouchPad of their own, as the
+webOS CE project's builders do: `AndroidLuna/get-assets-from-touchpad.sh` reads the device over
+novacom, and `fetch-assets.sh --desktop` applies Lunacy's patches without the Android build's
+native parts. Checked 2026-11-16 against a TouchPad freshly flashed with webOS CE 3.1.0 (build
+600070): the frameworks (`fw/`, with all 26 patches applied) came out identical, file for file,
+to the development machine's, and Luna DE ran on the result (Calendar and Contacts opened, with
+their services). What differed:
+
+- *The palmprofile service.* The development machine's copy is HP's original, kept by the
+  Community Account Manager as `.stock` files on the older image its TouchPad had. Build 600070
+  carries the service already changed for the webOS Archive account, with no originals, so that
+  is what such a device gives (the script says so as it runs). **Open: which copy Luna DE should
+  ship** (codepoet).
+- Three browser kinds differ in white space only; `/etc/openal` and the native programs under
+  `/usr/bin` and `/usr/lib` are left out, being Android's.
+
 Decisions, and why:
 
 - **The host is started directly** (`jre/bin/java -cp host/lib/*`), not through Gradle's launcher

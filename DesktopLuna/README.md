@@ -86,17 +86,22 @@ npm install
 npm run dist        # output in DesktopLuna/dist/
 ```
 
-It needs a JDK 17 with `jlink`, and `AndroidLuna/local-assets`. That folder is made by
-`AndroidLuna/fetch-assets.sh` from `Workbench/vendor`, which only the machine Lunacy is developed
-on has (see [BUILDING.md](../BUILDING.md)), so **on any other machine bring it as one archive**:
+It needs a JDK 17 (with `jlink`), Node, and `AndroidLuna/local-assets`: the webOS frameworks
+and system files with Lunacy's patches applied. Those are HP's and Palm's, not Lunacy's to keep
+in its repository, so a builder takes them from a TouchPad of their own, once:
 
 ```
-npm run dist -- --make-assets                 # on the development machine: dist/lunade-assets.tar.gz
-npm run dist -- --assets lunade-assets.tar.gz # on the other: unpacks it, then builds
+AndroidLuna/get-assets-from-touchpad.sh    # a TouchPad running webOS CE 3.1.0, on the cable (novacom)
+AndroidLuna/fetch-assets.sh --desktop      # applies Lunacy's patches: Luna DE's part of local-assets
 ```
 
-The archive is the same for every system (about 23 MB) and is needed again only when the
-frameworks or their patches change. `package.js` builds the
+The first reads the device (and the webOS CE project's public repository for CE's own files)
+into `Workbench/vendor/`; the second needs GNU coreutils and GNU patch, which a Mac gets with
+`brew install coreutils gpatch`. Run the second again whenever `LunaRuntimes/` changes; the
+build refuses assets older than the checkout's patches. (Lunacy's development machine runs
+`fetch-assets.sh` without `--desktop`, which makes the Android build's native parts too.)
+
+`package.js` builds the
 host, fetches Node 12 for the machine (checked against nodejs.org's checksum), cuts a Java
 runtime with `jlink` so users need no Java, and hands electron-builder the app with Lunacy's
 assets at the places they have in a checkout. A package is for the system and processor it was

@@ -90,6 +90,13 @@ copies under each module's `build/outputs/apk/`; `out/` is the one to reach for.
 alone with `./gradlew :AndroidLuna:assembleDebug` or `./gradlew :LunaKeyboard:assembleDebug`,
 and `./gradlew clean` empties `out/` along with the modules' build folders.
 
+### Without `Workbench/vendor`: Luna DE only
+
+A checkout that hasn't Lunacy's `Workbench/vendor` can still make Luna DE's assets, from a
+TouchPad running webOS CE 3.1.0: `AndroidLuna/get-assets-from-touchpad.sh`, then
+`AndroidLuna/fetch-assets.sh --desktop` ([DesktopLuna/README.md](DesktopLuna/README.md),
+"Packaging"). The Android build's native parts need the rest of `Workbench/vendor`.
+
 ### What `fetch-assets.sh` does
 
 It fills `AndroidLuna/local-assets/`, which is **not committed**: the TouchPad's own Enyo 1.0 tree

@@ -168,38 +168,44 @@ function withoutLinks(from, to) {
 }
 
 /**
- * AndroidLuna/local-assets is made by fetch-assets.sh from Workbench/vendor, which only a machine
- * set up for Lunacy's own development has (the TouchPad's files and the upstream clones aren't in
- * the repository). It is the same on every system, so another machine takes it as one archive:
+ * AndroidLuna/local-assets: the webOS frameworks and system files, patched. They aren't Lunacy's
+ * to keep in its repository, so each builder makes them from a TouchPad of their own:
  *
- *   npm run dist -- --make-assets          there: writes dist/lunade-assets.tar.gz
- *   npm run dist -- --assets <that file>   here: unpacks it into AndroidLuna/local-assets, then builds
+ *   AndroidLuna/get-assets-from-touchpad.sh    takes the files from a TouchPad on the cable
+ *   AndroidLuna/fetch-assets.sh --desktop      applies Lunacy's patches: Luna DE's part of local-assets
  *
- * The archive leaves out the PDK part, which Luna DE doesn't run.
+ * (The development machine's own fetch-assets.sh, without --desktop, makes the Android build's
+ * too.) What is there must have been made with the framework patches this checkout has: its
+ * patches.applied is compared with LunaRuntimes/, and a difference stops the build, since a
+ * package made from older frameworks than its source says would be a quiet lie.
  */
 const ASSETS = path.join(REPO, "AndroidLuna", "local-assets");
-function makeAssets() {
-	if (!fs.existsSync(path.join(ASSETS, "rootfs.index"))) { fail("AndroidLuna/local-assets isn't there to archive: run AndroidLuna/fetch-assets.sh"); }
-	fs.mkdirSync(path.join(HERE, "dist"), { recursive: true });
-	const out = path.join(HERE, "dist", "lunade-assets.tar.gz");
-	run("tar", ["-czf", out, "--exclude=./pdk", "-C", ASSETS, "."]);
-	say("done: " + out + " (" + Math.round(fs.statSync(out).size / 1048576) + " MB, sha256 " + sha256(out) + ")");
-}
-function takeAssets(file) {
-	if (!file || !fs.existsSync(file)) { fail("--assets needs the archive --make-assets wrote; no file at " + file); }
-	say("AndroidLuna/local-assets from " + file);
-	fs.rmSync(ASSETS, { recursive: true, force: true });
-	fs.mkdirSync(ASSETS, { recursive: true });
-	run("tar", ["-xzf", path.resolve(file), "-C", ASSETS]);
+/** Every patch file in LunaRuntimes/ must be in the manifest with its own checksum; returns what isn't. */
+function patchesMissing(manifest) {
+	const have = {};
+	for (const line of manifest.split("\n")) { const m = /^([0-9a-f]{64})  (\S+)/.exec(line); if (m) { have[m[2]] = m[1]; } }
+	const missing = [], runtimes = path.join(REPO, "LunaRuntimes");
+	for (const set of fs.readdirSync(runtimes)) {
+		const dir = path.join(runtimes, set, "patches");
+		if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) { continue; }
+		// The manifest names only what fetch-assets applies: a set it has no line for at all (the PDK's) isn't its business.
+		if (!Object.keys(have).some((k) => k.startsWith("LunaRuntimes/" + set + "/"))) { continue; }
+		for (const name of fs.readdirSync(dir).filter((n) => n.endsWith(".patch"))) {
+			const rel = "LunaRuntimes/" + set + "/patches/" + name;
+			if (have[rel] !== sha256(path.join(dir, name))) { missing.push(rel); }
+		}
+	}
+	return missing;
 }
 
 (async () => {
-	if (process.argv.includes("--make-assets")) { return makeAssets(); }
-	const given = process.argv.indexOf("--assets");
-	if (given >= 0) { takeAssets(process.argv[given + 1]); }
 	if (!fs.existsSync(path.join(ASSETS, "rootfs.index"))) {
-		fail("AndroidLuna/local-assets isn't there. On the machine Lunacy is developed on, AndroidLuna/fetch-assets.sh makes it; " +
-			"on any other, bring it from there: `npm run dist -- --make-assets` on that machine, then `npm run dist -- --assets <the archive>` here.");
+		fail("AndroidLuna/local-assets isn't there. With a TouchPad (webOS CE 3.1.0) on the cable: AndroidLuna/get-assets-from-touchpad.sh, then AndroidLuna/fetch-assets.sh --desktop.");
+	}
+	const missing = fs.existsSync(path.join(ASSETS, "patches.applied")) ? patchesMissing(fs.readFileSync(path.join(ASSETS, "patches.applied"), "utf8")) : [];
+	if (missing.length) {
+		fail("AndroidLuna/local-assets is older than this checkout's framework patches (" + missing[0] + (missing.length > 1 ? " and " + (missing.length - 1) + " more" : "") +
+			"): run AndroidLuna/fetch-assets.sh again (--desktop for Luna DE's part alone).");
 	}
 	say("building the host");
 	run(path.join(REPO, HOST_WIN ? "gradlew.bat" : "gradlew"), ["--console=plain", "-q", ":DesktopLuna:host:installDist"], { cwd: REPO, shell: HOST_WIN });

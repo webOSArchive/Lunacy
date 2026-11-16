@@ -54,9 +54,12 @@ API 21 gate.
     `Mojo.keyboardShown(false)` in the card's page, and the card goes from 1024 x 449 back to
     1024 x 740. Nothing else is sent to the page: **an app learns of a real keyboard as the
     on-screen one going away**, which is what Luna DE's button does.
-  - Showing it, a moment before: `Mojo.keyboardShown(true)`, then the card resized to 449 high.
-    So that TouchPad's keyboard took 291 px, at the size it is set to; Luna DE's is the art's
-    340. Not yet matched: which size is the device's default, and offering the others.
+  - Showing it, a moment before: `Mojo.keyboardShown(true)`, then the card resized to 449 high:
+    a keyboard of 291 px. That TouchPad is set to the Small keyboard (its
+    `x_palm_virtualkeyboard_settings` reads `"keyboard size":-1`), and LunaCE's presets are XS
+    243, S (340 + 243) / 2 = 291, M the background's 340 (the default, size 0) and L 393
+    (TabletKeyboard.cpp). Luna DE has the four, chosen from the bezel keyboard button's right-click
+    menu and kept in the same preference; at S its card is 1024 x 449 too.
   - Hiding, LunaSysMgr's log has `keyboardShown(false)` before the resize back to 740. Luna DE
     (and AndroidLuna) resize first. The log is LunaSysMgr's order of calls, not what a page saw;
     to be settled with a probe page that records both.

@@ -11,7 +11,19 @@
 "use strict";
 (function () {
 	var ART = "../../LunaKeyboard/src/main/assets/keyboard/";
-	var HEIGHT = 340, ROW_HEIGHTS = [55, 70, 70, 70, 70], CORNER = 13;
+	// The art's own size, which is webOS's default ("M"). The other sizes (XS 243, S 291, L 393)
+	// are that drawing at another height, as LunaCE scaled it (TabletKeyboard::setKeyboardHeight):
+	// the keys keep their widths and take the height's share.
+	var FULL = 340, FULL_ROWS = [55, 70, 70, 70, 70], CORNER = 13;
+	var HEIGHT = FULL, ROW_HEIGHTS = FULL_ROWS.slice(), SCALE = 1;
+	function setHeight(h) {
+		HEIGHT = h; SCALE = h / FULL;
+		var keys = Math.round(h * 335 / FULL), used = 0;
+		ROW_HEIGHTS = FULL_ROWS.map(function (r, i) {
+			var v = i === FULL_ROWS.length - 1 ? keys - used : Math.round(r * SCALE);
+			used += v; return v;
+		});
+	}
 	var ACTIVE = "rgb(20,20,20)", FADED = "rgb(100,100,100)", FUNCTION = "rgb(210,210,210)";
 
 	// [weight, main, alt, altText]; a function key is [weight, "name"]. A negative weight is a
@@ -83,7 +95,7 @@
 	}
 
 	function label(text, cx, cy, color, size, bold) {
-		ctx.font = (bold ? "bold " : "") + size + "px Prelude, sans-serif";
+		ctx.font = (bold ? "bold " : "") + Math.round(size * SCALE) + "px Prelude, sans-serif";
 		ctx.fillStyle = color; ctx.textAlign = "center"; ctx.textBaseline = "middle";
 		ctx.fillText(text, cx, cy);
 	}
@@ -102,7 +114,12 @@
 		if (key.w < 0) { return; }
 		// LunaCE trims the bottom of the cap area, and nudges it down while the key is held.
 		var box = { x: z.x, y: z.y + (down ? 2 : 0), w: z.w, h: z.h - 4 }, cx = box.x + box.w / 2, cy = box.y + box.h / 2;
-		function icon(n) { var img = images[n]; if (img) { ctx.drawImage(img, Math.round(cx - img.width / 2), Math.round(cy - img.height / 2)); } }
+		function icon(n) {
+			var img = images[n];
+			if (!img) { return; }
+			var iw = img.width * SCALE, ih = img.height * SCALE;
+			ctx.drawImage(img, Math.round(cx - iw / 2), Math.round(cy - ih / 2), Math.round(iw), Math.round(ih));
+		}
 		switch (key.fn) {
 			case "trackball": icon("trackball"); return;
 			case "backspace": icon("icon-delete"); return;
@@ -113,7 +130,7 @@
 			case "emoji": label("☺", cx, cy, FUNCTION, 22, false); return;
 			case "return":
 				// Return's label sits small in the bottom right corner, as it did on webOS.
-				ctx.font = "bold 22px Prelude, sans-serif"; ctx.fillStyle = FUNCTION; ctx.textAlign = "right"; ctx.textBaseline = "alphabetic";
+				ctx.font = "bold " + Math.round(22 * SCALE) + "px Prelude, sans-serif"; ctx.fillStyle = FUNCTION; ctx.textAlign = "right"; ctx.textBaseline = "alphabetic";
 				ctx.fillText("Enter", box.x + box.w * 0.85, box.y + box.h * 0.8);
 				return;
 		}
@@ -188,12 +205,31 @@
 	window.lunade.onKeyboard(function (d) {
 		canvas.hidden = !d.show;
 		document.body.classList.toggle("keyboard", !!d.show);
+		if (d.height) { setHeight(d.height); }
 		if (d.show) { shift = 0; symbol = false; layout(); }
 	});
 	window.lunade.onScreen(function () { setTimeout(layout, 0); });
 
-	// The bezel's keyboard button: a real keyboard attached (lit), or not.
+	// The bezel's keyboard button: a real keyboard attached (lit), or not. Its right button
+	// offers the on-screen keyboard's sizes, webOS's four.
 	var button = document.getElementById("realkb");
+	button.addEventListener("contextmenu", function (e) {
+		e.preventDefault();
+		window.lunade.keyboardSize().then(function (now) {
+			var m = document.getElementById("menu");
+			m.innerHTML = "";
+			[["XS", -2], ["S", -1], ["M (webOS's default)", 0], ["L", 1]].forEach(function (it) {
+				var b = document.createElement("button");
+				b.textContent = (now.size === it[1] ? "\u2713 " : "\u2003") + "On-screen keyboard: " + it[0];
+				b.addEventListener("click", function () { m.hidden = true; window.lunade.keyboardSize(it[1]); });
+				m.appendChild(b);
+			});
+			var r = document.getElementById("screen").getBoundingClientRect();
+			m.style.left = "14px";
+			m.style.top = (r.height - 170) + "px";
+			m.hidden = false;
+		});
+	});
 	button.addEventListener("click", function () {
 		window.lunade.realKeyboard().then(function (real) {
 			button.classList.toggle("on", real);

@@ -252,6 +252,20 @@ fun main(args: Array<String>) {
         send(ex, 204, "text/plain", ByteArray(0))
     } }
 
+    // The on-screen keyboard's size, kept where webOS kept it: systemservice's
+    // x_palm_virtualkeyboard_settings, a JSON string whose "keyboard size" is -2 (XS), -1 (S),
+    // 0 (M, the default) or 1 (L), as read off the reference TouchPad (2026-11-16).
+    http.createContext("/keyboard-size") { ex -> ex.use {
+        val key = "x_palm_virtualkeyboard_settings"
+        fun settings() = runCatching { JSONObject(systemService.get(key) as? String ?: "{}") }.getOrDefault(JSONObject())
+        query(ex)["v"]?.toIntOrNull()?.let { size ->
+            val s = settings().put("keyboard size", size.coerceIn(-2, 1))
+            if (!s.has("layout")) s.put("layout", "English").put("language", "en_us")
+            main.call { bus.call("com.palm.systemui", "palm://com.palm.systemservice/setPreferences", JSONObject().put(key, s.toString()).toString(), privateBus = true) { } }
+        }
+        send(ex, 200, "application/json", JSONObject().put("size", settings().optInt("keyboard size", 0)).toString().toByteArray())
+    } }
+
     // What Electron tells a page (its type, its focus, the back gesture), and the device turning.
     http.createContext("/window") { ex -> ex.use {
         val q = query(ex)

@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("lunade", {
 	rotate: () => ipcRenderer.invoke("lunade:rotate"),
 	key: (key) => ipcRenderer.invoke("lunade:key", key),
 	realKeyboard: () => ipcRenderer.invoke("lunade:real-keyboard"),
+	keyboardSize: (size) => ipcRenderer.invoke("lunade:keyboard-size", size),
 	onKeyboard: on("lunade:keyboard"),
 	onToggleCard: on("lunade:toggle-card"),
 	onLauncher: on("lunade:launcher"),

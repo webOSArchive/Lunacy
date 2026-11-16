@@ -222,7 +222,11 @@ function focusCards() {
 // What the app hears is what LunaSysMgr told it (ShellChrome.watchKeyboard on Android):
 // Mojo.keyboardShown(true), then its window shrinks to the space above the keyboard, or, if it
 // asked not to be resized, Mojo.positiveSpaceChanged with that space; and the reverse.
-const KEYBOARD = 340;
+// Its four sizes are LunaCE's presets (TabletKeyboard: XS 243, S 291, M the art's 340, L 393),
+// chosen as on webOS and kept in the same preference (the host's /keyboard-size).
+const KEYBOARD_HEIGHTS = { "-2": 243, "-1": 291, "0": 340, "1": 393 };
+let keyboardSize = 0;
+let KEYBOARD = KEYBOARD_HEIGHTS[0];
 let realKeyboard = true;
 let keyboardCard = null;   // the card the keyboard is up for
 
@@ -233,7 +237,7 @@ function applyKeyboard() {
 	if (keyboardCard) { lowerKeyboard(keyboardCard, !want); }
 	keyboardCard = want ? c : null;
 	if (want) { raiseKeyboard(c); }
-	send("lunade:keyboard", { show: !!keyboardCard });
+	send("lunade:keyboard", { show: !!keyboardCard, height: KEYBOARD });
 }
 
 /** A lifecycle hook called the way LunaSysMgr did, a function on the page's Mojo object, here and now: before whatever follows it. */
@@ -270,7 +274,7 @@ function typeKey(key) {
 	if (!c || c.view.webContents.isDestroyed()) { return; }
 	const wc = c.view.webContents;
 	wc.focus();
-	if (key.hide) { lowerKeyboard(c, true); keyboardCard = null; send("lunade:keyboard", { show: false }); return; }
+	if (key.hide) { lowerKeyboard(c, true); keyboardCard = null; send("lunade:keyboard", { show: false, height: KEYBOARD }); return; }
 	const code = key.code || key.text;
 	wc.sendInputEvent({ type: "keyDown", keyCode: code });
 	if (key.text) { for (const ch of key.text) { wc.sendInputEvent({ type: "char", keyCode: ch }); } }
@@ -408,6 +412,17 @@ ipcMain.handle("lunade:appmenu", () => {
 // The bezel's rotate button: wide to tall and back (F6 to F9 pick each of the four ways up).
 ipcMain.handle("lunade:rotate", () => { turn(portrait() ? "right" : "up"); return true; });
 ipcMain.handle("lunade:key", (e, key) => { typeKey(key || {}); return true; });
+ipcMain.handle("lunade:keyboard-size", async (e, size) => {
+	if (size !== undefined && KEYBOARD_HEIGHTS[String(size)] && size !== keyboardSize) {
+		// Down at the old size and up at the new, so the app hears the change as it would on a device.
+		const c = keyboardCard;
+		if (c) { await lowerKeyboard(c, false); keyboardCard = null; }
+		keyboardSize = size; KEYBOARD = KEYBOARD_HEIGHTS[String(size)];
+		net.fetch(host + "/keyboard-size?v=" + size, { method: "POST" }).catch(() => {});
+		applyKeyboard();
+	}
+	return { size: keyboardSize, height: KEYBOARD };
+});
 // The bezel's keyboard button: a real keyboard there, or not.
 ipcMain.handle("lunade:real-keyboard", () => {
 	realKeyboard = !realKeyboard;
@@ -603,6 +618,10 @@ app.whenReady().then(async () => {
 	}
 	routeAppOrigins();
 	try { deviceUserAgent = (await (await net.fetch(host + "/shell")).json()).userAgent || ""; } catch (e) {}
+	try {
+		const k = await (await net.fetch(host + "/keyboard-size")).json();
+		if (KEYBOARD_HEIGHTS[String(k.size)]) { keyboardSize = k.size; KEYBOARD = KEYBOARD_HEIGHTS[String(k.size)]; }
+	} catch (e) {}
 	openShell();
 	followHost();
 	// LUNADE_OPEN=<app id>[,<app id>...] launches those apps once the shell is ready.

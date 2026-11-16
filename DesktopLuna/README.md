@@ -86,7 +86,7 @@ npm install
 npm run dist        # output in DesktopLuna/dist/
 ```
 
-It needs a JDK 17 (with `jlink`), Node, and `AndroidLuna/local-assets`: the webOS frameworks
+It needs a JDK 17 with `JAVA_HOME` set to it (17 to 22 will do; on a Mac `brew install --cask temurin@17`), Node, and `AndroidLuna/local-assets`: the webOS frameworks
 and system files with Lunacy's patches applied. Those are HP's and Palm's, not Lunacy's to keep
 in its repository, so a builder takes them from a TouchPad of their own, once:
 

@@ -207,6 +207,14 @@ function patchesMissing(manifest) {
 		fail("AndroidLuna/local-assets is older than this checkout's framework patches (" + missing[0] + (missing.length > 1 ? " and " + (missing.length - 1) + " more" : "") +
 			"): run AndroidLuna/fetch-assets.sh again (--desktop for Luna DE's part alone).");
 	}
+	// The JDK first: Gradle 8.9 runs on Java 17 to 22, the host is built for 17, and this JDK's
+	// jlink cuts the runtime the package carries. An older or newer one fails deep inside Gradle.
+	const java = require("child_process").spawnSync(jdkTool("java"), ["-version"], { encoding: "utf8" });
+	const major = Number((/version "(\d+)/.exec(String(java.stderr) + String(java.stdout)) || [])[1]);
+	if (!(major >= 17 && major <= 22)) {
+		fail("needs a JDK 17 (17 to 22 will do); `java` here is " + (java.error ? "not found" : "version " + (major === 1 ? 8 : major || "unknown")) +
+			". Install JDK 17 and set JAVA_HOME to it" + (MAC ? " (brew install --cask temurin@17; export JAVA_HOME=$(/usr/libexec/java_home -v 17))" : "") + ".");
+	}
 	// --configure-on-demand: only the host and LunaCore are set up, not the Android projects, so a
 	// machine building Luna DE needs no Android SDK.
 	say("building the host");

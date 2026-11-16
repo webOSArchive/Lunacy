@@ -583,6 +583,15 @@ links, the same as from folders), opened Calendar, Contacts and Memos with every
 loaded, ran their services, and installed and started a Mojo app. Not measured here: the
 install and signing times on a Mac and on Windows, which are what it is for.
 
+Checked on a Mac (Intel, 2026-11-16): `npm run dist -- --release` built both apps, each about
+700 files, and Apple notarised both with the zip inside; every check passed (47 and 46
+programs and libraries signed, hardened and timestamped; stapled; Gatekeeper accepting each as
+notarised), in under 13 minutes for both, most of it Apple's service. The Intel app, started on
+a fresh data folder, read its assets from the zip and opened Calendar with its services; the
+few files it asked for and didn't find are missing from the checkout's folders too. A Mac
+leaves its Finder's files (`.DS_Store` and the like) in any folder opened in it, and the first
+Mac-built zip carried three; the zip now leaves them out.
+
 Decisions, and why:
 
 - **The host is started directly** (`jre/bin/java -cp host/lib/*`), not through Gradle's launcher

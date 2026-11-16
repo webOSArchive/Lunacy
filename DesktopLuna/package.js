@@ -224,12 +224,15 @@ async function foreignJmods(arch) {
 
 /**
  * A copy of a tree with its symbolic links followed (a zip holds none), a later copy's files
- * replacing an earlier's. skip(relative path, is a folder) leaves things out.
+ * replacing an earlier's. skip(relative path, is a folder) leaves things out; so does the Finder's
+ * bookkeeping (.DS_Store, AppleDouble "._" files, a folder's custom icon), which a Mac leaves in
+ * any folder opened in it.
  */
 function withoutLinks(from, to, skip, rel) {
 	// By hand: fs.cpSync's "dereference" leaves the links inside a tree as links.
 	fs.mkdirSync(to, { recursive: true });
 	for (const name of fs.readdirSync(from)) {
+		if (name === ".DS_Store" || name.startsWith("._") || name === "Icon\r") { continue; }
 		const a = path.join(from, name), b = path.join(to, name), r = rel ? rel + "/" + name : name;
 		const dir = fs.statSync(a).isDirectory();
 		if (skip && skip(r, dir)) { continue; }

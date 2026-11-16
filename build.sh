@@ -8,8 +8,9 @@
 #                        out/Lunacy-<version>-gpl-sources.tar; options go to the release build
 #
 # Options:
-#   --fetch        run AndroidLuna/fetch-assets.sh first (release does by default)
-#   --no-fetch     use AndroidLuna/local-assets/ as it is (release only)
+#   --fetch        run AndroidLuna/fetch-assets.sh first (release does by default; debug does
+#                  when LunaRuntimes/ or the script is newer than local-assets/)
+#   --no-fetch     use AndroidLuna/local-assets/ as it is
 #   --test-apps    include the test apps (debug only; a release never carries them)
 #   --lint         run lint too (release always does: NewApi is fatal, minSdk 21 must hold)
 #   --test         run ./test.sh first, and stop on a failure (release always does)
@@ -64,7 +65,21 @@ if [ "$type" = release ]; then
         die "the tree has uncommitted changes, and a release carries the last commit's build number; commit first, or pass --allow-dirty"
     fi
 fi
-fetch=${fetch:-0}
+# A debug build takes local-assets/ as it is, unless what it is made from has changed since:
+# a patch under LunaRuntimes/ committed after the last fetch was in no build at all (Mojo 0005,
+# 2026-11-15: reported fixed, and the Fold3 still ran the stock stylesheet). rootfs.index is
+# written at the end of every fetch.
+if [ -z "$fetch" ]; then
+    fetch=0
+    stamp=AndroidLuna/local-assets/rootfs.index
+    if [ -f "$stamp" ]; then
+        newer=$(find LunaRuntimes AndroidLuna/fetch-assets.sh -type f -newer "$stamp" -print -quit)
+        if [ -n "$newer" ]; then
+            echo "== local-assets/ is older than $newer: fetching (--no-fetch skips this)"
+            fetch=1
+        fi
+    fi
+fi
 
 # The toolchain.
 java -version 2>&1 | grep -q 'version "17\.' || die "JDK 17 is needed (java -version says: $(java -version 2>&1 | head -1))"

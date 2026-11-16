@@ -64,6 +64,15 @@ API 21 gate.
     (and AndroidLuna) resize first. The log is LunaSysMgr's order of calls, not what a page saw;
     to be settled with a probe page that records both.
   - Not measured: the notification when the keyboard disconnects.
+- **Phone Zoom.** As a Pre3, the bezel's magnifying glass is the switch Lunacy has on a phone
+  ([phone.md](phone.md), "Fixed viewport, per app"), for the app whose card is up: its page is
+  laid out so the card's shorter side is 640 px and shown whole, scaled down (held tall, a
+  640 x 1010 page at 0.75; held wide, 1168 x 640), for an app written for a TouchPad's screen.
+  Changing it loads the card again. On by default for the same bundled apps as on Android (Clock,
+  Calculator, Memos, App Catalog); the switches are kept in `phone-zoom.json` in the data
+  folder, and an app's goes when the app is removed. Not done: Device Info's own Phone Zoom
+  list (`system/setFixedViewport` on Lunacy's service) and its width setting, and the list of
+  defaults is a copy of AndroidLuna's until FixedViewport moves into LunaCore.
 - **Logs.** The bezel's `</>` button opens the log window: every app page's console (cards,
   dashboards, alerts, pages with no window) in one place, each line with its time, app id, level
   and source, kept from when Luna DE started, with a filter and the levels to show. It stands in

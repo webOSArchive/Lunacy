@@ -194,6 +194,7 @@ fun main(args: Array<String>) {
                 .put("name", shell.device.deviceName).put("width", shell.screenWidth).put("height", shell.screenHeight)
                 .put("scale", shell.scale).put("orientation", shell.orientation)
                 .put("virtualKeyboard", shell.device == org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD))
+            .put("phoneZoom", shell.phoneZoom())
         send(ex, 200, "application/json; charset=utf-8", out.toString().toByteArray())
     } }
 
@@ -281,6 +282,12 @@ fun main(args: Array<String>) {
     http.createContext("/device") { ex -> ex.use {
         shell.setDevice(query(ex)["v"].orEmpty())
         send(ex, 204, "text/plain", ByteArray(0))
+    } }
+    // An app's Phone Zoom switch, from the bezel: v=1, v=0, or nothing for its default.
+    http.createContext("/phone-zoom") { ex -> ex.use {
+        val q = query(ex)
+        q["app"]?.takeIf { it.isNotEmpty() }?.let { shell.setPhoneZoom(it, when (q["v"]) { "1" -> true; "0" -> false; else -> null }) }
+        send(ex, 200, "application/json", shell.phoneZoom().toString().toByteArray())
     } }
     http.createContext("/orientation") { ex -> ex.use {
         shell.turn(query(ex)["v"].orEmpty())

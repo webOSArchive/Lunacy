@@ -270,7 +270,7 @@ async function raiseKeyboard(c) {
 	await callMojo(wc, "keyboardShown", "true");
 	if (keyboardCard !== c) { return; }
 	if (c.shrunk) { c.view.setBounds({ x: r.x, y: r.y, width: r.width, height: r.height - KEYBOARD }); }
-	else { callMojo(wc, "positiveSpaceChanged", Math.round(r.width / device.scale) + "," + Math.round((r.height - KEYBOARD) / device.scale)); }
+	else { callMojo(wc, "positiveSpaceChanged", Math.round(r.width / pageScale(wc)) + "," + Math.round((r.height - KEYBOARD) / pageScale(wc))); }
 }
 
 async function lowerKeyboard(c, blur) {
@@ -281,7 +281,7 @@ async function lowerKeyboard(c, blur) {
 	// Put away by the person (the hide key, a real keyboard arriving): the field's focus goes with it.
 	const unfocus = blur && c.wantsKeyboard;
 	if (unfocus) { c.wantsKeyboard = false; }
-	if (wasShrunk) { if (!c.popped) { c.view.setBounds(r); } } else { await callMojo(wc, "positiveSpaceChanged", Math.round(r.width / device.scale) + "," + Math.round(r.height / device.scale)); }
+	if (wasShrunk) { if (!c.popped) { c.view.setBounds(r); } } else { await callMojo(wc, "positiveSpaceChanged", Math.round(r.width / pageScale(wc)) + "," + Math.round(r.height / pageScale(wc))); }
 	await callMojo(wc, "keyboardShown", "false");
 	if (unfocus && !wc.isDestroyed()) { wc.executeJavaScript("window.__lunacyRemoveInputFocus&&__lunacyRemoveInputFocus()", false).catch(() => {}); }
 }
@@ -631,6 +631,8 @@ async function turn(to) {
 	shell.setResizable(false);
 	for (const c of here) {
 		const r = cardRect();
+		// A zoomed page's scale goes by the card's shorter side, which a turn changes.
+		try { c.view.webContents.setZoomFactor(pageScale(c.view.webContents)); } catch (e) {}
 		c.view.setBounds(c === keyboardCard && c.shrunk ? { x: r.x, y: r.y, width: r.width, height: r.height - KEYBOARD } : r);
 	}
 	send("lunade:screen", screenForShell());
@@ -645,11 +647,42 @@ async function turn(to) {
 const TURN = { F6: "up", F7: "down", F8: "right", F9: "left" };
 /** Every page is drawn at the device's scale: 1 on a TouchPad, 1.5 on a Pre3, whose pages are 320 px to its screen's 480. */
 function scalePage(wc) {
-	const set = () => { if (!wc.isDestroyed()) { try { wc.setZoomFactor(device.scale); } catch (e) {} } };
+	const set = () => { if (!wc.isDestroyed()) { try { wc.setZoomFactor(pageScale(wc)); } catch (e) {} } };
 	set();
 	wc.on("dom-ready", set);
 	wc.on("did-finish-load", set);
 }
+
+/**
+ * Phone Zoom, as Lunacy has it on a phone (Docs/phone.md, "Fixed viewport, per app"): an app with
+ * its switch on has its card's page laid out so the card's shorter side is 640 px and shown scaled
+ * down to fit, so an app written for a TouchPad's screen fits a Pre3's whole. The host keeps the
+ * switches (its DesktopShell.pageScale is this same sum, for cardSize); only as a Pre3, and only
+ * for cards in the main window.
+ */
+let phoneZoom = { width: 640, defaults: [], set: {} };
+const zoomOn = (appId) => !!appId && (appId in phoneZoom.set ? !!phoneZoom.set[appId] : phoneZoom.defaults.includes(appId));
+/** Screen px per page px in wc's page. */
+function pageScale(wc) {
+	if (device.id !== "pre3" || !wc || wc.isDestroyed()) { return device.scale; }
+	for (const p of panels.values()) { if (p.view.webContents === wc) { return device.scale; } }
+	for (const c of cards.values()) { if (c.view.webContents === wc && c.popped) { return device.scale; } }
+	let appId = null;
+	try { appId = appIdOf(wc.getURL()); } catch (e) {}
+	if (!zoomOn(appId)) { return device.scale; }
+	const r = cardRect();
+	return Math.min(device.scale, Math.min(r.width, r.height) / phoneZoom.width);
+}
+/** The bezel's Phone Zoom button, for the card that is up: its state, or (flip) the other one, the card loaded again at it. */
+ipcMain.handle("lunade:phone-zoom", async (e, id, flip) => {
+	const c = cards.get(id);
+	if (!c || device.id !== "pre3") { return null; }
+	if (flip) {
+		try { phoneZoom = await (await net.fetch(host + "/phone-zoom?app=" + encodeURIComponent(c.appId) + "&v=" + (zoomOn(c.appId) ? 0 : 1), { method: "POST" })).json(); } catch (err) {}
+		if (!c.view.webContents.isDestroyed()) { c.view.webContents.reload(); }
+	}
+	return zoomOn(c.appId);
+});
 
 /** What the host says of the device it is being, and what follows from it here. */
 async function readDevice() {
@@ -657,6 +690,7 @@ async function readDevice() {
 		const s = await (await net.fetch(host + "/shell")).json();
 		deviceUserAgent = s.userAgent || "";
 		if (s.device) { device = s.device; orientation = s.device.orientation || orientation; }
+		if (s.phoneZoom) { phoneZoom = s.phoneZoom; }
 	} catch (e) {}
 }
 

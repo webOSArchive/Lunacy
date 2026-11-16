@@ -1,5 +1,6 @@
 package org.webosarchive.lunacy.desktop
 
+import org.json.JSONArray
 import org.json.JSONObject
 import org.webosarchive.lunacy.card.AppFiles
 import org.webosarchive.lunacy.card.AppInfo
@@ -83,6 +84,45 @@ class DesktopShell(
         // Held the way the device names its screen: a TouchPad wide, a Pre3 tall.
         orientation = if (device.naturalLandscape) "right" else "up"
         Log.i(Lunacy.TAG, "device: ${device.modelNameAscii}")
+    }
+
+    // ---- phone zoom ----
+
+    /**
+     * Phone Zoom, as Lunacy has it on a phone (Docs/phone.md, "Fixed viewport, per app";
+     * AndroidLuna's FixedViewport): the one per-app switch the rules allow. An app with it on
+     * has its page laid out so the card's shorter side is [PHONE_ZOOM_WIDTH] px and shown
+     * scaled down to the card, so an app written for a TouchPad's screen fits a Pre3's whole.
+     * Only as a Pre3; what the app is told doesn't change. The user's switches are kept in
+     * phone-zoom.json; an app without one takes its default.
+     */
+    private val phoneZoomFile = File(data, "phone-zoom.json")
+    private val phoneZoomSet: JSONObject = try { JSONObject(phoneZoomFile.readText()) } catch (e: Exception) { JSONObject() }
+
+    fun phoneZoomOn(appId: String): Boolean = synchronized(phoneZoomSet) {
+        if (phoneZoomSet.has(appId)) phoneZoomSet.optBoolean(appId) else appId in PHONE_ZOOM_DEFAULT_ON
+    }
+
+    /** Sets an app's switch; null puts it back on its default (as when the app is removed). */
+    fun setPhoneZoom(appId: String, on: Boolean?) = synchronized(phoneZoomSet) {
+        if (on == null) phoneZoomSet.remove(appId) else phoneZoomSet.put(appId, on)
+        try { phoneZoomFile.writeText(phoneZoomSet.toString()) } catch (e: Exception) { Log.w(Lunacy.TAG, "phone zoom not saved: $e") }
+    }
+
+    /** For Electron, which scales the pages: the layout width, the defaults and the user's switches. */
+    fun phoneZoom(): JSONObject = synchronized(phoneZoomSet) {
+        JSONObject().put("width", PHONE_ZOOM_WIDTH).put("defaults", JSONArray(PHONE_ZOOM_DEFAULT_ON.toList())).put("set", JSONObject(phoneZoomSet.toString()))
+    }
+
+    /**
+     * Screen px per page px for [appId]'s card, held [portrait] or not: the device's scale, or
+     * less with Phone Zoom on (a Pre3 held tall: 480 / 640 = 0.75, a 640 x 1011 page).
+     */
+    fun pageScale(appId: String, portrait: Boolean): Double {
+        if (device != org.webosarchive.lunacy.card.DeviceProfile.PRE3 || !phoneZoomOn(appId)) return scale
+        val w = if (portrait) minOf(screenWidth, screenHeight) else maxOf(screenWidth, screenHeight)
+        val h = (if (portrait) maxOf(screenWidth, screenHeight) else minOf(screenWidth, screenHeight)) - device.positiveSpaceTopPadding
+        return minOf(scale, minOf(w, h).toDouble() / PHONE_ZOOM_WIDTH)
     }
 
     // ---- the screen ----
@@ -306,6 +346,7 @@ class DesktopShell(
 
     override fun removeInstalled(app: AppInfo, done: (String?) -> Unit) {
         windowsOf(app.id).forEach { closeWindow(it) }
+        setPhoneZoom(app.id, null)
         packages.remove(app.id, app.dir) { error ->
             appsChanged()
             done(error)
@@ -328,6 +369,16 @@ class DesktopShell(
     override fun forgetIcons(key: String) { events.add(event("apps")) }
     override val pdkAvailable get() = false
     override val freeBytes get() = data.usableSpace
+
+    companion object {
+        /** The page width Phone Zoom lays an app out at: Lunacy's default (FormFactor.appLayoutWidth). */
+        const val PHONE_ZOOM_WIDTH = 640
+        /**
+         * On by default for the bundled apps that draw a TouchPad's fixed screen: the same list
+         * as AndroidLuna's FixedViewport.DEFAULT_ON, to be one list when that moves into LunaCore.
+         */
+        val PHONE_ZOOM_DEFAULT_ON = setOf("com.palm.app.clock", "com.palm.calculator", "com.palm.app.notes", "com.palm.app.enyo-findapps")
+    }
 }
 
 /**
@@ -399,4 +450,5 @@ class DesktopRoot(override val root: File, override val hostScripts: File, priva
         /** The top folders whose absolute paths are webOS's (WebosRoot.ROOTS on Android). */
         val ROOTS = listOf("usr", "media", "bin", "sbin", "var", "etc", "tmp", "home", "opt", "lib")
     }
+
 }

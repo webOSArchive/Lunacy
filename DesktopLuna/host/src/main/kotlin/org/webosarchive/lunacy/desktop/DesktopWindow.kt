@@ -62,7 +62,7 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
         "deviceInfo" -> JSONObject.quote(deviceInfo())
         "screenSize" -> JSONObject.quote(JSONObject().put("width", width()).put("height", height()).toString())
         // In the page's own px: the device's over its scale (a Pre3's 480 is 320 to a page).
-        "cardSize" -> JSONObject.quote(JSONObject().put("width", Math.round(width() / shell.scale)).put("height", Math.round(height() / shell.scale)).put("scale", 1.0).toString())
+        "cardSize" -> JSONObject.quote(JSONObject().put("width", Math.round(width() / shell.pageScale(appId, portrait))).put("height", Math.round(height() / shell.pageScale(appId, portrait))).put("scale", 1.0).toString())
         "localeInfo" -> JSONObject.quote(localeInfo())
         // The TouchPad reports "right" held in landscape and "up" in portrait (Docs/spike-1.md).
         "screenOrientation" -> JSONObject.quote(screenOrientation())

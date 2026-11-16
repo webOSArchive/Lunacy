@@ -70,9 +70,18 @@
 	/** The status bar's title: the app's own name while its card is up, as the TouchPad showed it (not the page's title). */
 	function setTitle() {
 		$("popout").disabled = !(cards[active] && cards[active].id);
+		zoomState(false);
 		$("title-text").textContent = maximized && cards[active] ? (appTitles[cards[active].appId] || cards[active].title) : "Luna DE";
 	}
 	var appTitles = {}, appEntries = {};
+	/** The Phone Zoom button, for the card that is up: how its app's switch stands, or (flip) the other way. */
+	function zoomState(flip) {
+		var c = cards[active], b = $("zoom");
+		b.disabled = !(c && c.id);
+		if (b.disabled) { b.classList.remove("on"); return; }
+		window.lunade.phoneZoom(c.id, flip).then(function (on) { b.classList.toggle("on", !!on); });
+	}
+	$("zoom").addEventListener("click", function () { zoomState(true); });
 
 	/** A card comes up: its picture grows to the screen, then its live view takes over. */
 	function maximize(i) {

@@ -153,6 +153,15 @@ body.phone #device img { height: 21px; }
 #devtools:hover { opacity: 1; }
 /* A Pre3 has no keyboard button: the tools button takes its place. */
 body.phone #devtools { left: 56px; }
+/* As a Pre3 only: Phone Zoom for the app whose card is up. A magnifying glass, lit when on. */
+#zoom { display: none; position: absolute; left: 100px; top: 50%; width: 30px; height: 30px; margin-top: -15px; border: 0; background: transparent; cursor: pointer; opacity: 0.75; padding: 0; }
+body.phone #zoom { display: block; }
+#zoom::before { content: ""; position: absolute; left: 6px; top: 5px; width: 11px; height: 11px; border: 2px solid #aaa; border-radius: 50%; }
+#zoom::after { content: ""; position: absolute; left: 18px; top: 17px; width: 8px; height: 2px; background: #aaa; transform: rotate(45deg); transform-origin: 0 50%; }
+#zoom:hover { opacity: 1; }
+#zoom:disabled { opacity: 0.25; cursor: default; }
+#zoom.on::before { border-color: #9fd0ff; box-shadow: 0 0 6px rgba(120,180,255,0.9); }
+#zoom.on::after { background: #9fd0ff; }
 /* Beside it: whether a real keyboard is attached (lit) or not. A keyboard outline with its keys. */
 #realkb { position: absolute; left: 58px; top: 50%; width: 34px; height: 30px; margin-top: -15px; border: 0; background: transparent; cursor: pointer; opacity: 0.35; }
 #realkb.on { opacity: 0.85; }

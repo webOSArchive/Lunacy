@@ -59,7 +59,7 @@ fun main(args: Array<String>) {
     org.webosarchive.lunacy.card.Http.init(assets, org.webosarchive.lunacy.core.MemoryCookies())
     val installed = File(data, "cryptofs/apps").apply { mkdirs() }
     val webosRoot = File(data, "webos").apply { mkdirs() }
-    val files = AppFiles(assets, installed)
+    val files = AppFiles(assets, installed, webosRoot)
     val registry = AppRegistry(files)
     val server = AppServer(assets, files, webosRoot, File(data, "framework-art"))
     val bus = main.call { Bus() }
@@ -77,11 +77,29 @@ fun main(args: Array<String>) {
     // Android shell sets them up (ShellActivity.registerServices).
     val db8 = org.webosarchive.lunacy.card.Db8("com.palm.db", File(data, "db8.sqlite"), debuggable = true)
     val tempdb = org.webosarchive.lunacy.card.Db8("com.palm.tempdb", null)
+    // The system service: the time and zones, and preferences, kept in the data folder. What
+    // nobody has set is the desktop's own (its locale, a 12-hour clock) on a TouchPad.
+    val systemService = org.webosarchive.lunacy.card.SystemService(webosRoot, File(data, "systemservice.json"))
+    systemService.hostPreference = { key ->
+        org.webosarchive.lunacy.card.SystemService.devicePreference(key, java.util.Locale.getDefault(), false,
+            org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD.carrierCode, DEFAULT_WALLPAPER)
+    }
+    // The application manager: launch and open, the content handlers, the app and launch point
+    // lists, and installing packages (appinstaller, appInstallService), over Luna DE's shell.
+    val desktopRoot = DesktopRoot(webosRoot)
+    val packages = org.webosarchive.lunacy.card.Packages(installed, File(data, "cache/packages"), desktopRoot)
+    val addedLaunchPoints = org.webosarchive.lunacy.card.LaunchPoints(webosRoot, files)
+    val shell = DesktopShell(main, registry, files, packages, addedLaunchPoints, data)
+    val windows = shell.windows
     main.call {
         db8.register(bus); tempdb.register(bus)
-        org.webosarchive.lunacy.card.Configurator(files, db8, tempdb, webosRoot, bus).run()
+        systemService.register(bus)
+        shell.configurator = org.webosarchive.lunacy.card.Configurator(files, db8, tempdb, webosRoot, bus)
+        shell.applicationManager = org.webosarchive.lunacy.card.ApplicationManager(registry,
+            org.webosarchive.lunacy.card.ContentHandlers(registry, webosRoot), addedLaunchPoints, files, packages, desktopRoot, shell)
+            .also { it.register(bus) }
+        shell.configurator.run()
     }
-    val windows = ConcurrentHashMap<String, DesktopWindow>()
     Log.i(Lunacy.TAG, "Luna DE host: ${registry.apps.size} apps, data in $data")
 
     val http = HttpServer.create(InetSocketAddress(InetAddress.getLoopbackAddress(), opt["port"]?.toInt() ?: 0), 64)
@@ -157,8 +175,22 @@ fun main(args: Array<String>) {
 
     // A page has gone (Electron closed or reloaded it): its subscriptions end.
     http.createContext("/gone") { ex -> ex.use {
-        windows.remove(query(ex)["w"].orEmpty())?.close()
+        shell.gone(query(ex)["w"].orEmpty())
         send(ex, 204, "text/plain", ByteArray(0))
+    } }
+
+    // The shell launches an app (the launcher, the quick-launch bar, LUNADE_OPEN): through the
+    // same path as applicationManager/launch, so a running app is relaunched, not started twice.
+    http.createContext("/launch") { ex -> ex.use {
+        val q = query(ex)
+        val params = q["params"]?.takeIf { it.isNotEmpty() }?.let { runCatching { JSONObject(it) }.getOrNull() }
+        shell.launch(q["id"].orEmpty(), params)
+        send(ex, 204, "text/plain", ByteArray(0))
+    } }
+
+    // What Electron is to do next (DesktopShell's events): GET /events, held until there is some.
+    http.createContext("/events") { ex -> ex.use {
+        send(ex, 200, "application/json; charset=utf-8", JSONArray(shell.take(25_000)).toString().toByteArray())
     } }
 
     http.start()
@@ -170,6 +202,9 @@ fun main(args: Array<String>) {
  * An app as the shell launches it: its page's URL, and whether it has a window of its own or
  * starts headless and opens its cards itself (appinfo.json's noWindow, as Email and Calendar do).
  */
+/** The wallpaper Lunacy shows until one is picked (Luna.DEFAULT_WALLPAPER on Android). */
+private const val DEFAULT_WALLPAPER = "22.jpg"
+
 private fun entryOf(a: org.webosarchive.lunacy.card.AppInfo) = JSONObject().put("id", a.id).put("title", a.title)
     .put("url", AppServer.appUrl(a.id, a.main, a.dir)).put("noWindow", a.noWindow)
     .put("icon", "/icon?id=" + java.net.URLEncoder.encode(a.id, "UTF-8"))

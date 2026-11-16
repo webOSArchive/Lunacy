@@ -1,7 +1,8 @@
 package org.webosarchive.lunacy.card
 
-import android.os.Environment
 import org.json.JSONObject
+import org.webosarchive.lunacy.core.Log
+import org.webosarchive.lunacy.core.Platform
 import java.io.File
 
 /**
@@ -21,30 +22,16 @@ import java.io.File
  * narrows it further on later versions; until then apps see what they saw on webOS.
  */
 object UserFiles {
-    /** The folders a webOS device had, and Android's equivalent. */
-    private val MAPPED: Map<String, String> = mapOf(
-        "downloads" to Environment.DIRECTORY_DOWNLOADS,
-        "music" to Environment.DIRECTORY_MUSIC,
-        "photos" to Environment.DIRECTORY_PICTURES,
-        "documents" to "Documents",
-        "camera" to Environment.DIRECTORY_DCIM,
-        "video" to Environment.DIRECTORY_MOVIES,
-        // webOS's ringtones are Android notification sounds, in a folder of their own (Ringtones).
-        "ringtones" to Ringtones.ANDROID_DIR,
-        // webOS's wallpapers, in Android's pictures under a folder of their own (SharedMedia).
-        "wallpapers" to SharedMedia.WALLPAPERS_DIR,
-    )
-
     /** Lunacy's own /media/internal. */
     fun own(webosRoot: File): File = File(webosRoot, "media/internal")
 
     /** A mapped folder's real directory on Android, if that folder exists. */
     fun androidDir(name: String): File? =
-        MAPPED[name.lowercase()]?.let { Environment.getExternalStoragePublicDirectory(it) }?.takeIf { it.isDirectory }
+        Platform.hostFolders?.dir(name.lowercase())?.takeIf { it.isDirectory }
 
     /** The mapped folders this device actually has, as they appear under /media/internal. */
     fun mappedFolders(): List<Pair<String, File>> =
-        MAPPED.keys.sorted().mapNotNull { name -> androidDir(name)?.let { name to it } }
+        Platform.hostFolders?.names.orEmpty().sorted().mapNotNull { name -> androidDir(name)?.let { name to it } }
 
     /**
      * Resolves a path relative to /media/internal to a real file, or null if it climbs out of
@@ -124,42 +111,19 @@ object UserFiles {
             val before = out.size
             if (dir.listFiles() == null) counts += "$name unreadable" else { walk(dir, "/media/internal/$name", 0); counts += "$name ${out.size - before}" }
         }
-        val missing = MAPPED.keys.filter { k -> mappedFolders().none { it.first == k } }
+        val missing = Platform.hostFolders?.names.orEmpty().filter { k -> mappedFolders().none { it.first == k } }
         val summary = "${out.size} files; ${counts.joinToString(", ")}" +
             (if (missing.isEmpty()) "" else "; no folder for ${missing.sorted().joinToString(", ")}") +
             (if (out.size >= MAX_FILES) "; stopped at $MAX_FILES" else "")
         // Once, and again when it changes: a watched kind is walked every few seconds.
-        if (synchronized(lastSummary) { lastSummary.put(label, summary) } != summary) android.util.Log.i(AppServer.TAG, "$label: $summary")
+        if (synchronized(lastSummary) { lastSummary.put(label, summary) } != summary) Log.i(AppServer.TAG, "$label: $summary")
         return out
     }
 
     private val lastSummary = HashMap<String, String>()
 
-    /**
-     * What a user's Save a Log needs to tell why pictures are missing (LogExport), counts only:
-     * each mapped folder's Android path, whether Lunacy can read it and how many entries it
-     * has; the indexes' last results; whether the device has removable storage (an SD card,
-     * whose DCIM isn't mapped); and how many HEIC pictures DCIM/Camera holds (the index takes
-     * JPEG, PNG and BMP).
-     */
-    fun diagnose(context: android.content.Context): String {
-        val sb = StringBuilder()
-        for (name in MAPPED.keys.sorted()) {
-            val dir = Environment.getExternalStoragePublicDirectory(MAPPED.getValue(name))
-            val entries = dir.listFiles()
-            sb.append("$name -> ${dir.path}: ").append(when {
-                !dir.exists() -> "no such folder"
-                entries == null -> "can't be read"
-                else -> "${entries.size} entries"
-            }).append('\n')
-        }
-        synchronized(lastSummary) { for ((k, v) in lastSummary) sb.append("last $k: $v\n") }
-        val volumes = context.getExternalFilesDirs(null).count { it != null }
-        sb.append("storage volumes: $volumes").append(if (volumes > 1) " (removable storage present: its DCIM isn't mapped)" else "").append('\n')
-        val camera = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera").listFiles()
-        if (camera != null) sb.append("DCIM/Camera: ${camera.size} entries, ${camera.count { it.name.lowercase().let { n -> n.endsWith(".heic") || n.endsWith(".heif") } }} HEIC\n")
-        return sb.toString()
-    }
+    /** What each walk of the media folders last found, by its label: for a log a person sends (LogExport). */
+    fun lastSummaries(): Map<String, String> = synchronized(lastSummary) { LinkedHashMap(lastSummary) }
 
     private const val MAX_DEPTH = 12
     private const val MAX_FILES = 5000

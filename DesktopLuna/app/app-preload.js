@@ -14,7 +14,9 @@
 		"blockScreenTimeout", "fullScreen", "statusBarColor", "cookieWritten", "webViewCreate", "webViewCall",
 		"webViewPlace", "webViewCovered", "webViewDestroy", "pluginStart", "pluginCall", "pluginStop", "log",
 		"nextWindow", "addBanner", "paste", "clipboardHasText", "removeBanner", "clearBanners", "playSound",
-		"setClipboard", "copiedToClipboard", "netSend", "netResult", "netSendSync", "netAbort"];
+		"setClipboard", "copiedToClipboard", "netSend", "netResult", "netSendSync", "netAbort",
+		// Luna DE's own: the page has loaded, and a script's answer to the host (a relaunch's).
+		"lunadeLoaded", "lunadeResult"];
 
 	function invoke(method, args) {
 		var x = new XMLHttpRequest();
@@ -31,6 +33,9 @@
 	// This engine's own version, for the compat layer's engine-bound fixes.
 	N.engineMajor = function () { return parseInt(process.versions.chrome, 10) || -1; };
 	window.LunacyNative = N;
+	// The main process names a page by this id when the host asks for it to be closed.
+	try { require("electron").ipcRenderer.send("lunade:page", page); } catch (e) {}
+	window.addEventListener("load", function () { N.lunadeLoaded(); });
 
 	function poll() {
 		var x = new XMLHttpRequest();

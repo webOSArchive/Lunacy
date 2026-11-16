@@ -1,8 +1,7 @@
 package org.webosarchive.lunacy.card
 
-import android.os.Handler
-import android.os.Looper
-import android.util.Log
+import org.webosarchive.lunacy.core.Log
+import org.webosarchive.lunacy.core.Platform
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.Executors
@@ -14,7 +13,7 @@ import java.util.concurrent.Executors
  * /media/cryptofs/apps/usr/lib/ipkg/info. Installs run one at a time, off the main thread;
  * results come back on it. See Docs/architecture.md, "Package manager and App Catalog".
  */
-class Packages(val root: File, private val cache: File, private val webos: WebosRoot) {
+class Packages(val root: File, private val cache: File, private val webos: ScriptHost) {
     /** packageId is the control file's Package; appIds the folders of the apps it unpacked. */
     class Result(val source: String, val appIds: List<String>, val error: String?, val packageId: String = "")
 
@@ -22,7 +21,7 @@ class Packages(val root: File, private val cache: File, private val webos: Webos
     private val info = File(root, INFO)
 
     private val worker = Executors.newSingleThreadExecutor()
-    private val main = Handler(Looper.getMainLooper())
+    private val main = Platform.scheduler
 
     /**
      * source is an http(s) URL, a file:// URL or a path on the device. [progress] hears 0…100
@@ -165,11 +164,15 @@ class Packages(val root: File, private val cache: File, private val webos: Webos
      * code and what it printed, which the log gets line by line.
      */
     private fun run(pkg: String, name: String, body: ByteArray, args: List<String>): Pair<Int, List<String>> {
+        if (!webos.runsScripts) {
+            Log.w(AppServer.TAG, "script [$pkg $name] not run: this host doesn't run package scripts")
+            return 0 to listOf("not run: this host doesn't run package scripts")
+        }
         webos.prepare()
-        webos.lunaSend.start()
+        webos.startBus()
         val r = webos.root
         val file = File(r, "tmp/ipkg-$pkg.$name").apply { parentFile?.mkdirs(); writeText(webos.mapPaths(body.toString(Charsets.UTF_8))) }
-        val sh = File(r, "bin/sh").takeIf { it.exists() }?.path ?: "/system/bin/sh"
+        val sh = File(r, "bin/sh").takeIf { it.exists() }?.path ?: webos.fallbackShell
         val out = ArrayList<String>()
         val code = try {
             val pb = ProcessBuilder(listOf(sh, file.path) + args).directory(r).redirectErrorStream(true)

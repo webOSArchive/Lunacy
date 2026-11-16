@@ -25,11 +25,11 @@ import java.util.concurrent.atomic.AtomicInteger
  * or not at all; the network shim and WebSQL aren't offered yet, so net.js and websql.js stand
  * aside (Docs/luna-de.md).
  */
-class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus, private val main: DesktopScheduler) {
+class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus, private val main: DesktopScheduler) : org.webosarchive.lunacy.card.RunningWindow {
     private val profile = DeviceProfile.TOUCHPAD
     private val outbox = LinkedBlockingQueue<String>()
     private val calls = HashMap<Int, Bus.Call>()   // on the main thread only
-    private val pid = nextPid.getAndIncrement()
+    override val pid = nextPid.getAndIncrement()
     @Volatile private var closed = false
     @Volatile var portrait = false
 
@@ -62,6 +62,9 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
         "call" -> call(a.optInt(0), a.optString(1), a.optString(2)).toString()
         "cancel" -> { val t = a.optInt(0); main.post { calls.remove(t)?.cancel() }; "null" }
         "log" -> { Log.i(Lunacy.TAG, "[$appId] palm ${a.optString(0)}"); "null" }
+        // Luna DE's own: the page has loaded, and a script's answer (relaunch).
+        "lunadeLoaded", "stageReady", "pageDrawn" -> { main.post { pageUp() }; "null" }
+        "lunadeResult" -> { val t = a.optInt(0); val v = a.optBoolean(1); main.post { results.remove(t)?.invoke(v) }; "null" }
         "clipboardHasText" -> "false"
         "addBanner" -> "0"
         "pluginStart" -> "-1"
@@ -78,6 +81,34 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
         val all = arrayListOf(first)
         outbox.drainTo(all)
         return all
+    }
+
+    // ---- relaunch (AppWindow.relaunch) ----
+
+    private var pageLoaded = false
+    private val waitingRelaunches = ArrayList<Pair<String, (Boolean) -> Unit>>()
+    private val results = HashMap<Int, (Boolean) -> Unit>()
+    private var nextResult = 1
+
+    /**
+     * A relaunch goes to the app's page once it has loaded; one that comes while the page is
+     * still loading waits for it, as on Android. [done] hears whether the app handled it. On the
+     * main thread.
+     */
+    fun relaunch(params: String, done: (Boolean) -> Unit) {
+        if (!pageLoaded) { waitingRelaunches += params to done; return }
+        val token = nextResult++
+        results[token] = done
+        outbox.add("(function(){var r=false;try{r=window.${PageHooks.RELAUNCH}?${PageHooks.RELAUNCH}(${jsString(params)}):false}catch(e){console.error('relaunch: '+e)}" +
+            "LunacyNative.lunadeResult($token,r===true)})()")
+    }
+
+    private fun pageUp() {
+        if (pageLoaded) return
+        pageLoaded = true
+        val waiting = waitingRelaunches.toList()
+        waitingRelaunches.clear()
+        waiting.forEach { (params, done) -> relaunch(params, done) }
     }
 
     fun close() {

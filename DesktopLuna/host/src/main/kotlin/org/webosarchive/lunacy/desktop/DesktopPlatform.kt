@@ -51,6 +51,16 @@ object DesktopImages : Images {
         out.createGraphics().apply { drawImage(src.getScaledInstance(w, h, java.awt.Image.SCALE_SMOOTH), 0, 0, null); dispose() }
         ByteArrayOutputStream().also { ImageIO.write(out, "jpg", it) }.toByteArray()
     }.getOrNull()
+
+    override fun coverThumbnail(file: File, px: Int): ByteArray? = runCatching {
+        val src = ImageIO.read(file) ?: return null
+        val scale = maxOf(px.toDouble() / src.width, px.toDouble() / src.height)
+        val w = maxOf(1, Math.round(src.width * scale).toInt())
+        val h = maxOf(1, Math.round(src.height * scale).toInt())
+        val out = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
+        out.createGraphics().apply { drawImage(src.getScaledInstance(w, h, java.awt.Image.SCALE_SMOOTH), 0, 0, null); dispose() }
+        ByteArrayOutputStream().also { ImageIO.write(out, "jpg", it) }.toByteArray()
+    }.getOrNull()
 }
 
 /** ICU4J, as LunaCore's [org.webosarchive.lunacy.core.Collation]: db8's collated indexes sort as a device's do. */

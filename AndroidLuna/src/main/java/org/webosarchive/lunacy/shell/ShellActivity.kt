@@ -251,7 +251,14 @@ class ShellActivity : Activity(), WindowHost {
             this@ShellActivity.install(source, requester, onProgress, banners, onDone)
         override val pdkAvailable get() = pdkRuntime.available
         override val running: Map<String, List<AppWindow>> get() = lifecycle.apps
-        override fun closeWindow(window: AppWindow) = lifecycle.windowClosed(window)
+        override fun closeWindow(window: org.webosarchive.lunacy.card.RunningWindow) { (window as? AppWindow)?.let { lifecycle.windowClosed(it) } }
+        // An Android package goes to Android's installer, and a link, an email, a phone number or a
+        // map to Android's own apps (WebosLinks).
+        override fun openHostPackage(target: String): String? =
+            org.webosarchive.lunacy.card.WebosLinks.androidPackage(target, jsServices.root)?.let { org.webosarchive.lunacy.card.WebosLinks.open(this@ShellActivity, it) }
+        override fun openHostLink(appId: String, params: JSONObject?, target: String): String? =
+            org.webosarchive.lunacy.card.WebosLinks.intentFor(appId, params, target)?.let { org.webosarchive.lunacy.card.WebosLinks.open(this@ShellActivity, it) }
+        override val freeBytes get() = filesDir.usableSpace
         override fun appsChanged() = this@ShellActivity.appsChanged()
         override fun launchPointsChanged() { setLauncherApps(); showDock() }
         override fun showDock() = chrome.showDock()
@@ -1060,26 +1067,8 @@ class ShellActivity : Activity(), WindowHost {
      * X-Palm-Carrier is: the reference TouchPad answers "c090-01" for both. Help builds its
      * content URL from it (help.webosarchive.org/en-us/c090-01/index.json).
      */
-    private fun hostPreference(key: String): Any? {
-        val locale = resources.configuration.locale
-        val country = locale.country.lowercase().ifEmpty { "us" }
-        val region = JSONObject().put("countryCode", country)
-            .put("countryName", java.util.Locale("", country.uppercase()).getDisplayCountry(java.util.Locale.ENGLISH))
-        return when (key) {
-            "locale" -> JSONObject().put("languageCode", locale.language.lowercase().ifEmpty { "en" })
-                .put("countryCode", country).put("phoneRegion", region)
-            "region" -> region
-            "timeFormat" -> if (android.text.format.DateFormat.is24HourFormat(this)) "HH24" else "HH12"
-            "x_palm_carrier" -> profile.carrierCode
-            // A device always has a wallpaper preference: its factory default until one is
-            // picked, in this shape with no thumbnail (/etc/palm/defaultPreferences.txt on the
-            // reference TouchPad). Lunacy's default is the one it shows, which it ships into
-            // /media/internal/wallpapers. Email's compose window draws it behind the message.
-            "wallpaper" -> JSONObject().put("wallpaperName", Luna.DEFAULT_WALLPAPER)
-                .put("wallpaperFile", "/media/internal/wallpapers/${Luna.DEFAULT_WALLPAPER}").put("wallpaperThumbFile", "")
-            else -> null
-        }
-    }
+    private fun hostPreference(key: String): Any? = SystemService.devicePreference(key, resources.configuration.locale,
+        android.text.format.DateFormat.is24HourFormat(this), profile.carrierCode, Luna.DEFAULT_WALLPAPER)
 
     /**
      * PalmSystem's locale fields and clock format. webOS reported what the device was set to,
@@ -1360,7 +1349,7 @@ class ShellActivity : Activity(), WindowHost {
         securityPolicy = SecurityPolicy(bus, lockHost, java.io.File(filesDir, "securitypolicy.json"))
         securityPolicy.register()
         securityPolicy.load()
-        applicationManager = ApplicationManager(this, registry, handlers, addedLaunchPoints, files, packages, jsServices, webos, appManagerShell)
+        applicationManager = ApplicationManager(registry, handlers, addedLaunchPoints, files, packages, webos, appManagerShell)
             .also { it.register(bus) }
         val keys = Keys(this).also { it.register(bus) }
         // What Music plays is Android's media session too; its controls come back as webOS's media keys (NowPlaying).

@@ -26,8 +26,10 @@ import java.security.SecureRandom
  * (the webOS Community Account Manager patches the palmprofile service in place, as it does on
  * a TouchPad) is kept, and the log says so.
  */
-class WebosRoot(private val context: Context, private val bus: Bus, installed: File) {
-    val root = File(context.filesDir, "webos")
+class WebosRoot(private val context: Context, private val bus: Bus, installed: File) : ScriptHost {
+    override val root = File(context.filesDir, "webos")
+    override fun startBus() { lunaSend.start() }
+    override val fallbackShell get() = "/system/bin/sh"
     /** Lunacy's own scripts for Node: the service host, curl and luna-send. Not webOS's. */
     val host = File(context.filesDir, "jshost")
     val nativeDir: String = context.applicationInfo.nativeLibraryDir
@@ -40,7 +42,7 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
     private val rom = RomFiles(AndroidAssets(context.assets), root)
 
     /** Builds root/ once per run, and lays the ROM down again after each APK update. */
-    @Synchronized fun prepare() {
+    @Synchronized override fun prepare() {
         if (prepared) return
         val stamp = File(root, ".lunacy-apk")
         val apk = context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toString()
@@ -128,10 +130,10 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
      * word, a quoted string or an assignment. A URL's path (`file:///usr/…`) is left alone, so
      * a luna-send payload still names webOS paths.
      */
-    fun mapPaths(s: String): String = mapPaths(s, root.path)
+    override fun mapPaths(s: String): String = mapPaths(s, root.path)
 
     /** The environment a process in the webOS root gets, calling the bus as [caller]. */
-    fun environment(caller: String): Map<String, String> = mapOf(
+    override fun environment(caller: String): Map<String, String> = mapOf(
         "PATH" to listOf("usr/sbin", "usr/bin", "sbin", "bin").joinToString(":") { "${root.path}/$it" } + ":/system/bin",
         "HOME" to File(root, "home/root").path,
         "TMPDIR" to File(root, "tmp").path,

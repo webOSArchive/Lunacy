@@ -29,6 +29,9 @@ object Platform {
     /** Image decoding; null where the platform has none (an icon's size then isn't checked). */
     @Volatile var images: Images? = null
 
+    /** The host's folders mapped into /media/internal; null where there are none. */
+    @Volatile var hostFolders: HostFolders? = null
+
     @Volatile private var currentLinks: Links? = null
 
     /** Symbolic links, for the webOS root. */

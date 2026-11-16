@@ -121,7 +121,7 @@ open class AppWindow(
      * it - see [Native.deviceInfo] and [Native.screenSize].
      */
     val emulated: Boolean = false,
-) : WebView(context) {
+) : WebView(context), RunningWindow {
     /** A native web view is drawn without the parts the page draws over it (BrowserViews.Browser.holesInCard). */
     override fun drawChild(canvas: android.graphics.Canvas, child: android.view.View, drawingTime: Long): Boolean {
         val holes = (child as? BrowserViews.Browser)?.holesInCard()
@@ -188,7 +188,7 @@ open class AppWindow(
     /** The webOS device this window reports itself as. */
     private val profile = DeviceProfile.forScreen(context)
     /** This window's "process id": webOS gave one per window, and apps print it. */
-    val pid = nextPid.getAndIncrement()
+    override val pid = nextPid.getAndIncrement()
     /** enyo.WebView's native views in this window, made when a page first asks for one. */
     private val browserViews by lazy { BrowserViews(this, host.server.webosRoot, host.server) }
     @Volatile private var hasBrowserViews = false

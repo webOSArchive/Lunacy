@@ -1,7 +1,8 @@
 package org.webosarchive.lunacy.card
 
-import android.content.Context
 import org.json.JSONObject
+import org.webosarchive.lunacy.core.WebosPaths
+import org.webosarchive.lunacy.core.keyNames
 
 /**
  * webOS's application manager, `com.palm.applicationManager`, as LunaSysMgr answered it:
@@ -12,14 +13,12 @@ import org.json.JSONObject
  * starting an app, installing a package, the windows that are up - comes through [Shell].
  */
 class ApplicationManager(
-    private val context: Context,
     private val registry: AppRegistry,
     private val handlers: ContentHandlers,
     private val addedLaunchPoints: LaunchPoints,
     private val files: AppFiles,
     private val packages: Packages,
-    private val jsServices: JsServices,
-    private val webos: WebosRoot,
+    private val webos: ScriptHost,
     private val shell: Shell,
 ) {
     /** What the application manager asks of the shell. */
@@ -32,8 +31,20 @@ class ApplicationManager(
         /** Whether this build can run a PDK app. */
         val pdkAvailable: Boolean
         /** Running apps: app id to its windows, root first. */
-        val running: Map<String, List<AppWindow>>
-        fun closeWindow(window: AppWindow)
+        val running: Map<String, List<RunningWindow>>
+        fun closeWindow(window: RunningWindow)
+        /**
+         * A target that is the host's own kind of package (an .apk on Android), handed to the
+         * host's installer: the reply, or null if [target] isn't one.
+         */
+        fun openHostPackage(target: String): String? = null
+        /**
+         * A link, an email, a phone number, a map, for an app webOS had and Lunacy doesn't: the
+         * host's answer (Android's own apps, WebosLinks), or null where the host has none.
+         */
+        fun openHostLink(appId: String, params: JSONObject?, target: String): String? = null
+        /** Free space where packages are installed, in bytes. */
+        val freeBytes: Long
         /** The installed apps changed on disk: rescan, reconfigure, and tell the launcher. */
         fun appsChanged()
         /** The launcher and the dock after an added launch point came, went or changed. */
@@ -83,8 +94,8 @@ class ApplicationManager(
                 return@Handler
             }
             // An Android package goes to Android's installer (WebosLinks.androidPackage).
-            WebosLinks.androidPackage(target, jsServices.root)?.let {
-                reply(WebosLinks.open(context, it))
+            shell.openHostPackage(target)?.let {
+                reply(it)
                 return@Handler
             }
             if (target.startsWith("file:", true) || target.startsWith("/")) {
@@ -94,9 +105,8 @@ class ApplicationManager(
         }
         // A link, an email, a phone number, a map: webOS's own apps owned these and Lunacy
         // doesn't have them, so Android's answer instead. See WebosLinks.
-        val link = WebosLinks.intentFor(id, params, p.optString("target"))
-        if (link != null && registry.get(id) == null) {
-            reply(WebosLinks.open(context, link))
+        if (registry.get(id) == null) shell.openHostLink(id, params, p.optString("target"))?.let {
+            reply(it)
             return@Handler
         }
         // The App Museum installs through Preware (LuneOS's on LuneOS); Lunacy's package
@@ -170,7 +180,7 @@ class ApplicationManager(
             override fun isInstalled(appId: String) = registry.get(appId)?.userInstalled == true
         }).register(bus)
         // appinstaller's own installs and removals, which the SDK's palm-install makes.
-        AppInstallService.AppInstaller({ context.filesDir.usableSpace },
+        AppInstallService.AppInstaller({ shell.freeBytes },
             object : AppInstallService.PackageInstaller {
                 override fun installFile(file: java.io.File, done: (Packages.Result) -> Unit) =
                     shell.install(file.path, banners = false, onDone = done)
@@ -269,15 +279,15 @@ class ApplicationManager(
     private fun listPackages(): String {
         val list = org.json.JSONArray()
         for (app in registry.apps) {
-            if (app.androidComponent != null) continue
+            if (app.hostApp != null) continue
             val pkgDir = java.io.File(files.root, "usr/palm/packages/${app.id}")
             val info = runCatching { JSONObject(java.io.File(pkgDir, "packageinfo.json").readText()) }.getOrNull()
             val services = org.json.JSONArray()
             val ids = info?.optJSONArray("services") ?: org.json.JSONArray()
             for (i in 0 until ids.length()) {
                 val id = ids.optString(i)
-                val json = java.io.File(files.root, "${JsServices.SERVICES}/$id/services.json")
-                runCatching { JSONObject(json.readText()) }.getOrNull()?.let { services.put(JSONObject().put("id", id).also { o -> it.keys().forEach { k -> o.put(k, it.get(k)) } }) }
+                val json = java.io.File(files.root, "${WebosPaths.SERVICES}/$id/services.json")
+                runCatching { JSONObject(json.readText()) }.getOrNull()?.let { services.put(JSONObject().put("id", id).also { o -> it.keyNames().forEach { k -> o.put(k, it.get(k)) } }) }
             }
             val entry = app.listEntry()
             val icon = if (java.io.File(pkgDir, "icon.png").isFile) "/media/cryptofs/apps/usr/palm/packages/${app.id}/icon.png" else entry.optString("icon")

@@ -1,8 +1,9 @@
 package org.webosarchive.lunacy.card
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.util.Log
+import org.webosarchive.lunacy.core.Log
+import org.webosarchive.lunacy.core.keyNames
+import org.webosarchive.lunacy.core.Platform
+import org.webosarchive.lunacy.core.WebosPaths
 import org.json.JSONObject
 import java.io.File
 
@@ -21,7 +22,7 @@ import java.io.File
 class SystemService(private val webosRoot: File, private val store: File) {
     /** Called on the main thread when a stored preference changes. */
     var onPreferenceChanged: (String, Any?) -> Unit = { _, _ -> }
-    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val main = Platform.scheduler
     /** The wallpaper imports: a copy and two decodes, which stalled the shell when they ran on the bus's thread. */
     private val worker = java.util.concurrent.Executors.newSingleThreadExecutor()
 
@@ -310,7 +311,7 @@ class SystemService(private val webosRoot: File, private val store: File) {
 
     private fun setPreferences(call: Bus.Call) {
         val changed = ArrayList<String>()
-        for (k in call.params.keys()) {
+        for (k in call.params.keyNames()) {
             if (k == "subscribe") continue
             prefs.put(k, call.params.get(k))
             changed += k
@@ -412,7 +413,7 @@ class SystemService(private val webosRoot: File, private val store: File) {
         return "$base-$n$ext"
     }
 
-    private fun inside(f: File) = UserFiles.inside(f, webosRoot)
+    private fun inside(f: File) = WebosPaths.inside(f, webosRoot)
 
     /** A wallpaper is named by its file name in the store; anything with a path in it names none. */
     private fun wallpaperFile(name: String): File? =
@@ -421,23 +422,41 @@ class SystemService(private val webosRoot: File, private val store: File) {
     /** A small JPEG beside the wallpaper, as webOS's thumbs/ holds. */
     private fun thumbnail(source: File, dest: File) {
         try {
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(source.path, bounds)
-            var sample = 1
-            while (bounds.outWidth / sample > 2 * THUMB || bounds.outHeight / sample > 2 * THUMB) sample *= 2
-            val bmp = BitmapFactory.decodeFile(source.path, BitmapFactory.Options().apply { inSampleSize = sample })
-                ?: return
-            val scale = maxOf(THUMB.toFloat() / bmp.width, THUMB.toFloat() / bmp.height)
-            val thumb = Bitmap.createScaledBitmap(bmp, Math.round(bmp.width * scale), Math.round(bmp.height * scale), true)
-            dest.outputStream().use { thumb.compress(Bitmap.CompressFormat.JPEG, 80, it) }
-            if (thumb !== bmp) thumb.recycle()
-            bmp.recycle()
+            val jpeg = Platform.images?.coverThumbnail(source, THUMB) ?: return
+            dest.writeBytes(jpeg)
         } catch (e: Exception) {
             Log.w(AppServer.TAG, "thumbnail of ${source.name} failed: $e")
         }
     }
 
     companion object {
+        /**
+         * What a device answers for a preference nobody has set: systemservice's locale, region
+         * and timeFormat from the host's settings, the device's x_palm_carrier, and its factory
+         * wallpaper ([hostPreference]; ShellActivity's before LunaCore). The carrier code is the
+         * device's own, as X-Palm-Carrier is: the reference TouchPad answers "c090-01" for both.
+         * Help builds its content URL from it (help.webosarchive.org/en-us/c090-01/index.json).
+         */
+        fun devicePreference(key: String, locale: java.util.Locale, hour24: Boolean, carrierCode: String, defaultWallpaper: String): Any? {
+            val country = locale.country.lowercase().ifEmpty { "us" }
+            val region = JSONObject().put("countryCode", country)
+                .put("countryName", java.util.Locale("", country.uppercase()).getDisplayCountry(java.util.Locale.ENGLISH))
+            return when (key) {
+                "locale" -> JSONObject().put("languageCode", locale.language.lowercase().ifEmpty { "en" })
+                    .put("countryCode", country).put("phoneRegion", region)
+                "region" -> region
+                "timeFormat" -> if (hour24) "HH24" else "HH12"
+                "x_palm_carrier" -> carrierCode
+                // A device always has a wallpaper preference: its factory default until one is
+                // picked, in this shape with no thumbnail (/etc/palm/defaultPreferences.txt on the
+                // reference TouchPad). Lunacy's default is the one it shows, which it ships into
+                // /media/internal/wallpapers. Email's compose window draws it behind the message.
+                "wallpaper" -> JSONObject().put("wallpaperName", defaultWallpaper)
+                    .put("wallpaperFile", "/media/internal/wallpapers/$defaultWallpaper").put("wallpaperThumbFile", "")
+                else -> null
+            }
+        }
+
         const val SERVICE = "com.palm.systemservice"
         private const val THUMB = 160
         private const val NO_RULES = "Failed to retrieve results for specified timezones"

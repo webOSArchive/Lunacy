@@ -145,10 +145,11 @@ function removeCard(id, close) {
 	}
 }
 
-/** An app launched from the shell: its first card if it is running, else its page, as a card or headless. */
+/**
+ * An app the host says to start (DesktopShell's "launch" event): its page, as a card or headless.
+ * Whether it was running already is the host's to say; it relaunches a running app itself.
+ */
 function launch(entry) {
-	const running = [...cards.values()].find((c) => c.appId === entry.id && !c.popped);
-	if (running) { send("lunade:show", { id: running.id }); return; }
 	if (entry.noWindow) {
 		if (headless.has(entry.id)) { return; }
 		// The headless page opens its own cards (window.open); it is never on the screen.
@@ -202,7 +203,9 @@ ipcMain.handle("lunade:shell", async () => {
 	s.dock.forEach(withIcon);
 	return s;
 });
-ipcMain.handle("lunade:launch", (e, entry) => { launch(entry); return true; });
+// The shell asks for an app: the host decides (started, or relaunched and brought forward), as
+// it does for applicationManager/launch from an app.
+ipcMain.handle("lunade:launch", (e, entry) => { askLaunch(entry.id); return true; });
 // The shell brings a card up: its live view on the screen, every other hidden.
 ipcMain.handle("lunade:maximize", (e, id) => {
 	for (const c of cards.values()) { if (!c.popped) { c.view.setVisible(c.id === id); } }
@@ -226,6 +229,43 @@ ipcMain.handle("lunade:close", (e, id) => { removeCard(id, true); return true; }
 ipcMain.handle("lunade:popout", (e, id) => { popOut(id); return true; });
 ipcMain.handle("lunade:devtools", (e, id) => { const c = cards.get(id); if (c) { c.view.webContents.openDevTools({ mode: "detach" }); } return true; });
 ipcMain.handle("lunade:reload", (e, id) => { const c = cards.get(id); if (c) { c.view.webContents.reload(); } return true; });
+
+function askLaunch(id, params) {
+	const q = new URLSearchParams({ id });
+	if (params) { q.set("params", JSON.stringify(params)); }
+	net.fetch(host + "/launch?" + q.toString(), { method: "POST" }).catch((err) => console.error("Luna DE: launch " + id + ": " + err));
+}
+
+/** Each page's id, as its preload told the host (app-preload.js), by its webContents' id. */
+const pageIds = new Map();
+ipcMain.on("lunade:page", (e, page) => { pageIds.set(e.sender.id, page); });
+
+/** What the host's shell asks of the screen (DesktopShell.take), for as long as Luna DE runs. */
+async function followHost() {
+	for (;;) {
+		let events = [];
+		try { events = await (await net.fetch(host + "/events")).json(); }
+		catch (err) { if (!hostProcess || hostProcess.exitCode !== null) { return; } await new Promise((r) => setTimeout(r, 1000)); }
+		for (const ev of events) {
+			try {
+				if (ev.type === "launch") { launch(ev); }
+				else if (ev.type === "show") {
+					// The app's first card comes forward (a relaunch it didn't handle).
+					const c = [...cards.values()].find((k) => k.appId === ev.id && !k.popped);
+					if (c) { send("lunade:show", { id: c.id }); }
+				} else if (ev.type === "close") {
+					const c = [...cards.values()].find((k) => pageIds.get(k.view.webContents.id) === ev.page);
+					if (c) { removeCard(c.id, true); }
+					else {
+						const h = [...headless.values()].find((v) => pageIds.get(v.webContents.id) === ev.page);
+						if (h && !h.webContents.isDestroyed()) { h.webContents.close(); }
+					}
+				} else if (ev.type === "apps") { send("lunade:apps", {}); }
+				else if (ev.type === "banner") { send("lunade:banner", { appId: ev.appId, message: ev.message }); }
+			} catch (err) { console.error("Luna DE: " + ev.type + ": " + err); }
+		}
+	}
+}
 
 /** An entry's icon as a URL the shell page can load. */
 function withIcon(a) { return Object.assign(a, { icon: host + a.icon }); }
@@ -251,14 +291,11 @@ app.whenReady().then(async () => {
 	}
 	routeAppOrigins();
 	openShell();
+	followHost();
 	// LUNADE_OPEN=<app id>[,<app id>...] launches those apps once the shell is ready.
-	ipcMain.once("lunade:ready", async () => {
+	ipcMain.once("lunade:ready", () => {
 		if (!process.env.LUNADE_OPEN) { return; }
-		const apps = await (await net.fetch(host + "/apps")).json();
-		for (const id of process.env.LUNADE_OPEN.split(",")) {
-			const entry = apps.find((a) => a.id === id);
-			if (entry) { launch(entry); }
-		}
+		for (const id of process.env.LUNADE_OPEN.split(",")) { askLaunch(id); }
 	});
 });
 

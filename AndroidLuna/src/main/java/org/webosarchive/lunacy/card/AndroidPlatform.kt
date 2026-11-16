@@ -37,6 +37,22 @@ object AndroidImages : Images {
         bmp.recycle()
         return bytes.toByteArray()
     }
+
+    /** SystemService's wallpaper thumbnail, as it made it before LunaCore. */
+    override fun coverThumbnail(file: File, px: Int): ByteArray? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(file.path, bounds)
+        var sample = 1
+        while (bounds.outWidth / sample > 2 * px || bounds.outHeight / sample > 2 * px) sample *= 2
+        val bmp = BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+        val scale = maxOf(px.toFloat() / bmp.width, px.toFloat() / bmp.height)
+        val thumb = Bitmap.createScaledBitmap(bmp, Math.round(bmp.width * scale), Math.round(bmp.height * scale), true)
+        val bytes = java.io.ByteArrayOutputStream()
+        thumb.compress(Bitmap.CompressFormat.JPEG, 80, bytes)
+        if (thumb !== bmp) thumb.recycle()
+        bmp.recycle()
+        return bytes.toByteArray()
+    }
 }
 
 /** The WebViews' cookie jar, as LunaCore's [org.webosarchive.lunacy.core.Cookies]: native requests and pages share it. */

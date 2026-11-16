@@ -1,7 +1,7 @@
 package org.webosarchive.lunacy.card
 
-import android.os.Handler
-import android.os.Looper
+import org.webosarchive.lunacy.core.Platform
+import org.webosarchive.lunacy.core.keyNames
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.Executors
@@ -53,7 +53,7 @@ class AppInstallService(private val installer: Installer, private val icons: (St
         fun remove(id: String, done: (String?) -> Unit)
     }
 
-    private val main = Handler(Looper.getMainLooper())
+    private val main = Platform.scheduler
     private val worker = Executors.newSingleThreadExecutor()
     /** Installs the service knows about, by app id, with their details. Main thread. */
     private val apps = LinkedHashMap<String, JSONObject>()
@@ -84,7 +84,7 @@ class AppInstallService(private val installer: Installer, private val icons: (St
     private fun install(c: Bus.Call, local: Boolean) {
         val p = c.params
         val required = if (local) listOf("id", "version", "ipkUrl") else listOf("id", "version", "ipkUrl", "authToken")
-        val empty = p.keys().asSequence().any { k -> (p.opt(k) as? String)?.isEmpty() == true }
+        val empty = p.keyNames().asSequence().any { k -> (p.opt(k) as? String)?.isEmpty() == true }
         if (required.any { p.optString(it).isEmpty() } || empty) return c.reply(answer(false, "Bad parameter"))
         val id = p.getString("id")
         // "duplicate install command while current install has not completed, ignoring"

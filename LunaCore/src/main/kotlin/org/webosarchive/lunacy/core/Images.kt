@@ -13,4 +13,10 @@ interface Images {
 
     /** A JPEG of [file] whose short side is about [px], or null if it can't be read. */
     fun jpegThumbnail(file: File, px: Int): ByteArray?
+
+    /**
+     * A JPEG of [file] scaled, up or down, until it covers a [px] square (a wallpaper's
+     * thumbnail, as webOS's thumbs/ holds), or null if it can't be read.
+     */
+    fun coverThumbnail(file: File, px: Int): ByteArray?
 }

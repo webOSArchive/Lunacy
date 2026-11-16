@@ -1,6 +1,6 @@
 package org.webosarchive.lunacy.card
 
-import android.util.Log
+import org.webosarchive.lunacy.core.Log
 import org.json.JSONObject
 import java.io.File
 import java.io.InputStream
@@ -71,9 +71,8 @@ class LaunchPoints(private val webosRoot: File, private val files: AppFiles) {
     }
 
     private fun isImage(path: String): Boolean {
-        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        open(path)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
-        return bounds.outWidth > 0
+        val images = org.webosarchive.lunacy.core.Platform.images ?: return true
+        return open(path)?.use { images.size(it) } != null
     }
 
     /**

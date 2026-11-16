@@ -89,18 +89,18 @@ function startHost() {
 			if (lib) { native = ["-Dorg.sqlite.lib.path=" + path.join(hostDir, "native"), "-Dorg.sqlite.lib.name=" + lib]; }
 		} catch (e) {}
 		args = [...native, "-cp", path.join(hostDir, "lib", "*"), "org.webosarchive.lunacy.desktop.MainKt", ...args];
-	} else if (IS_WIN) {
-		// From a checkout on Windows: the machine's Java on the built jars, not Gradle's .bat (a
-		// command file takes a shell to start, which mangles a path with a space in it).
-		const java = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, "bin", "java.exe") : "java.exe";
-		const lib = path.join(__dirname, "..", "host", "build", "install", "luna-de-host", "lib");
-		if (!fs.existsSync(lib)) { throw new Error("No host at " + lib + ": run gradlew :DesktopLuna:host:installDist first"); }
-		bin = java;
-		args = ["-cp", path.join(lib, "*"), "org.webosarchive.lunacy.desktop.MainKt", ...args];
 	} else {
-		bin = path.join(__dirname, "..", "host", "build", "install", "luna-de-host", "bin", "luna-de-host");
+		// From a checkout: a Java 17 found for itself (find-jdk.js), whatever the machine's default
+		// is, on the built jars. Not Gradle's launcher, which takes the default Java (a Mac's may
+		// be 8, which can't run the host) and on Windows is a command file.
+		const jdk = require("./find-jdk.js").findJdk();
+		if (!jdk.home) { throw new Error("Luna DE's host needs Java 17 (to 22) and none was found; looked at: " + (jdk.seen.join("; ") || "nothing") + ". Set LUNA_DE_JDK to one."); }
+		const lib = path.join(__dirname, "..", "host", "build", "install", "luna-de-host", "lib");
+		if (!fs.existsSync(lib)) { throw new Error("No host at " + lib + ": run ./gradlew :DesktopLuna:host:installDist first"); }
+		bin = path.join(jdk.home, "bin", IS_WIN ? "java.exe" : "java");
+		args = ["-cp", path.join(lib, "*"), "org.webosarchive.lunacy.desktop.MainKt", ...args];
 	}
-	if (!fs.existsSync(bin) && path.isAbsolute(bin)) {
+	if (!fs.existsSync(bin)) {
 		throw new Error("No host at " + bin + (app.isPackaged ? ": this copy of Luna DE is incomplete" : ": run ./gradlew :DesktopLuna:host:installDist first"));
 	}
 	return new Promise((resolve, reject) => {

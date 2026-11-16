@@ -532,3 +532,39 @@ onto `luna-de`, and nothing goes back until the refactoring is done and proven (
    JVM: it's the smaller change and keeps the core byte-for-byte the code Android runs.
 6. Node on Apple Silicon and Windows on ARM: Node 12 x64 under translation, a Node 12 built
    for them, or a newer Node there with the difference recorded?
+
+## Packaging
+
+`DesktopLuna/package.js` (`npm run dist`) builds a self-contained Luna DE for the machine it
+runs on ([DesktopLuna/README.md](../DesktopLuna/README.md) has the steps). What a package holds,
+under the app's resources folder, is a checkout in small: `AndroidLuna/src/main/assets`,
+`AndroidLuna/local-assets` (not its PDK part), `CoreApps`, the keyboard's art and
+`DesktopLuna/node`, so the host's `--repo` and the shell's pictures are found as they are in
+development; and beside them `host/` (the jars) and `jre/` (a `jlink` runtime of 14 modules).
+About 240 MB on Linux.
+
+Decisions, and why:
+
+- **The host is started directly** (`jre/bin/java -cp host/lib/*`), not through Gradle's launcher
+  script, so nothing on the user's machine is consulted.
+- **SQLite's native library is taken out of its jar** and put in `host/native/`, the other
+  systems' dropped: a Mac's notarisation reads inside jars and refuses unsigned libraries there,
+  and outside the jar the library is signed with the rest.
+- **The host leaves with the window.** Its standard input is a pipe from Luna DE; when that
+  closes (quit, kill or crash) the host exits and stops its services. Found in the first packaged
+  run: a killed Luna DE had left its Java host and Node running.
+- **Linux runs without Chromium's sandbox helper**, as `npm start` does: the helper must be
+  setuid root, which an AppImage or a tarball can't deliver, and Chromium stops before the app's
+  own code when it finds it otherwise. The program people start is a two-line script that adds
+  `--no-sandbox`. A ratchet item: a `.deb` could install the helper properly.
+
+Not yet tried, and what to expect:
+
+- **macOS.** Signing and notarisation are configured (hardened runtime, with the entitlements
+  the Java runtime and Node need) and have never run. Node 12 exists for Macs only as an Intel
+  build, so on Apple Silicon the JS services need Rosetta; the rest is native.
+  `AndroidLuna/fetch-assets.sh` hasn't been run on a Mac either.
+- **Windows.** The package builds from the same script in principle; the host has never run on
+  Windows, and JS services there are unlikely to work as they are (the service host starts
+  `/bin/sh` and `curl` scripts). `fetch-assets.sh` needs a POSIX shell (Git Bash or WSL).
+- No icon of Luna DE's own yet (Electron's default), no auto-update, and the version is still 0.0.1.

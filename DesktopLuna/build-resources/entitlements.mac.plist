@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- What Luna DE's processes need under macOS's hardened runtime: Electron, the Java runtime that
+     runs the host and Node 12 all compile code as they run, and the Java runtime loads SQLite's
+     library, which carries Luna DE's signature rather than the runtime's. -->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.cs.allow-jit</key><true/>
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+	<key>com.apple.security.cs.disable-library-validation</key><true/>
+</dict>
+</plist>

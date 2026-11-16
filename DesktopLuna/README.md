@@ -75,3 +75,31 @@ sandbox.
 | `app/main.js` | Electron's main process: starts the host, routes the app origins (`*.media.cryptofs.apps`, and only those) to it, follows the host's shell events (an app to start, a card to bring forward or close, a banner), and keeps the cards, dashboards and alerts: each a native view over the shell, so that an app's `window.open` (a headless app opening its cards) makes a real window with its opener. |
 | `app/shell.html`, `shell.js`, `shell.css` | The shell, drawn from AndroidLuna's LunaCE images and measurements: status bar, launcher, quick-launch bar, card view (cards shown as snapshots of their pages), the card menu. |
 | `app/app-preload.js` | `window.LunacyNative` in an app's page: synchronous requests to the page's own origin, and a long poll for the bus's replies. |
+
+## Packaging
+
+One command builds the distributable for the machine it runs on, with nothing copied by hand:
+
+```
+cd DesktopLuna
+npm install
+npm run dist        # output in DesktopLuna/dist/
+```
+
+It needs what a build already needs (a JDK 17 with `jlink`, and `AndroidLuna/local-assets`
+from `AndroidLuna/fetch-assets.sh`; see [BUILDING.md](../BUILDING.md)). `package.js` builds the
+host, fetches Node 12 for the machine (checked against nodejs.org's checksum), cuts a Java
+runtime with `jlink` so users need no Java, and hands electron-builder the app with Lunacy's
+assets at the places they have in a checkout. A package is for the system and processor it was
+built on.
+
+| Built on | Output |
+|---|---|
+| Linux | `LunaDE-<version>-linux-x86_64.AppImage` and a `.tar.gz` |
+| macOS | a `.dmg` and a `.zip`; signed with the Developer ID in the keychain (or `CSC_LINK` and `CSC_KEY_PASSWORD`), and notarised when `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` are set |
+| Windows | an installer and a `.zip`; signed when `CSC_LINK` and `CSC_KEY_PASSWORD` name a certificate |
+
+Only the Linux package has been built and run (2026-11-16: the AppImage on a fresh home folder,
+with no Java or Node of the machine's, opened Calendar with its JS services). The Mac and
+Windows builds are written and not yet tried; see "Packaging" in
+[Docs/luna-de.md](../Docs/luna-de.md) for what to expect there.

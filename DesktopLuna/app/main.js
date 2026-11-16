@@ -16,7 +16,11 @@ const path = require("path");
 const fs = require("fs");
 const readline = require("readline");
 
-const REPO = path.resolve(__dirname, "..", "..");
+// The Lunacy tree the host reads its assets from: the checkout this runs in, or, packaged
+// (DesktopLuna/package.js), the app's resources folder, which holds the same folders at the same
+// places, so the host's --repo and the shell's ../../AndroidLuna pictures hold in both.
+const REPO = app.isPackaged ? process.resourcesPath : path.resolve(__dirname, "..", "..");
+
 const HOST_SUFFIX = ".media.cryptofs.apps";
 const IS_WIN = process.platform === "win32";
 // The TouchPad's screen, the only device for now (codepoet, 2026-11-15): 1024 x 768 held in
@@ -71,12 +75,27 @@ function dataDir() {
 
 /** Starts the JVM host and resolves with its address once it listens. */
 function startHost() {
-	const bin = path.join(__dirname, "..", "host", "build", "install", "lunade-host", "bin", IS_WIN ? "lunade-host.bat" : "lunade-host");
+	let bin, args = ["--repo", REPO, "--data", dataDir(), "--with-parent", "1"];
+	if (app.isPackaged) {
+		// Packaged: the Java runtime and the host's jars the package carries, started directly (no
+		// launcher script, so nothing on the machine's PATH or in its JAVA_HOME is needed). SQLite's
+		// native library sits beside the jars, out of its jar, where a Mac's signing can reach it.
+		const hostDir = path.join(process.resourcesPath, "host");
+		bin = path.join(process.resourcesPath, "jre", "bin", IS_WIN ? "java.exe" : "java");
+		let native = [];
+		try {
+			const lib = fs.readdirSync(path.join(hostDir, "native"))[0];
+			if (lib) { native = ["-Dorg.sqlite.lib.path=" + path.join(hostDir, "native"), "-Dorg.sqlite.lib.name=" + lib]; }
+		} catch (e) {}
+		args = [...native, "-cp", path.join(hostDir, "lib", "*"), "org.webosarchive.lunacy.desktop.MainKt", ...args];
+	} else {
+		bin = path.join(__dirname, "..", "host", "build", "install", "lunade-host", "bin", IS_WIN ? "lunade-host.bat" : "lunade-host");
+	}
 	if (!fs.existsSync(bin)) {
-		throw new Error("No host at " + bin + ": run ./gradlew :DesktopLuna:host:installDist first");
+		throw new Error("No host at " + bin + (app.isPackaged ? ": this copy of Luna DE is incomplete" : ": run ./gradlew :DesktopLuna:host:installDist first"));
 	}
 	return new Promise((resolve, reject) => {
-		hostProcess = spawn(bin, ["--repo", REPO, "--data", dataDir()], { stdio: ["ignore", "pipe", "inherit"] });
+		hostProcess = spawn(bin, args, { stdio: ["pipe", "pipe", "inherit"], shell: !app.isPackaged && IS_WIN });
 		hostProcess.on("exit", (code) => { if (!host) { reject(new Error("host exited " + code)); } else { app.quit(); } });
 		readline.createInterface({ input: hostProcess.stdout }).on("line", (line) => {
 			const m = /^LUNADE-HOST (\d+)$/.exec(line);

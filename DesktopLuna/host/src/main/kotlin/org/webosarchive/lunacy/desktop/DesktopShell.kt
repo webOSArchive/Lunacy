@@ -400,7 +400,7 @@ class DesktopRoot(override val root: File, override val hostScripts: File, priva
      */
     override val node: File by lazy {
         val named = System.getenv("LUNADE_NODE")?.takeIf { it.isNotEmpty() }?.let { File(it) }
-        val fetched = File(repo, "DesktopLuna/node/bin/node")
+        val fetched = File(repo, "DesktopLuna/node/bin/node").let { if (it.isFile) it else File(repo, "DesktopLuna/node/bin/node.exe").takeIf { exe -> exe.isFile } ?: it }
         when {
             named != null -> named
             fetched.isFile -> fetched

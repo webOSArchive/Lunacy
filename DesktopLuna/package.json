@@ -7,9 +7,13 @@
   "main": "app/main.js",
   "license": "GPL-3.0-or-later",
   "scripts": {
-    "start": "electron . --no-sandbox"
+    "start": "electron . --no-sandbox",
+    "dist": "node package.js"
   },
   "devDependencies": {
-    "electron": "44.9.3"
-  }
+    "electron": "44.9.3",
+    "electron-builder": "26.18.0"
+  },
+  "author": "webOS Archive",
+  "homepage": "https://github.com/webOSArchive/Lunacy"
 }

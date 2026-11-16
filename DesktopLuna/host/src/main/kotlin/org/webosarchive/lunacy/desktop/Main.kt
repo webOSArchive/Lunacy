@@ -300,6 +300,16 @@ fun main(args: Array<String>) {
     } }
 
     http.start()
+    // Started by Luna DE's window (--with-parent 1): the host's standard input is a pipe only that
+    // process holds, so its end is the window's, however it went (quit, killed, crashed), and
+    // the host goes too, taking its services with it (the shutdown hook above). Without this a
+    // killed Luna DE left its host and their Node running.
+    if (opt["with-parent"] == "1") {
+        Thread({
+            try { while (System.`in`.read() >= 0) { /* nothing is ever sent */ } } catch (e: Exception) { }
+            kotlin.system.exitProcess(0)
+        }, "parent-watch").apply { isDaemon = true }.start()
+    }
     println("LUNADE-HOST ${http.address.port}")
     System.out.flush()
 }

@@ -1,3 +1,4 @@
 node_modules/
 host/build/
 node/
+dist/

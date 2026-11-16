@@ -316,9 +316,27 @@
 		return img;
 	}
 
+	// A phone's tab bar scrolls sideways (Docs/phone.md): by a drag along it, as a finger did, or
+	// by the mouse's wheel. A drag that moved isn't a tap on the tab it ended over.
+	var tabDragged = false;
+	(function () {
+		var tabs = $("tabs"), down = false, startX = 0, startScroll = 0;
+		tabs.addEventListener("pointerdown", function (e) { down = true; tabDragged = false; startX = e.clientX; startScroll = tabs.scrollLeft; });
+		window.addEventListener("pointermove", function (e) {
+			if (!down) { return; }
+			if (Math.abs(e.clientX - startX) > 6) { tabDragged = true; }
+			if (tabDragged) { tabs.scrollLeft = startScroll - (e.clientX - startX); }
+		});
+		window.addEventListener("pointerup", function () { down = false; setTimeout(function () { tabDragged = false; }, 0); });
+		tabs.addEventListener("wheel", function (e) { tabs.scrollLeft += e.deltaX || e.deltaY; e.preventDefault(); }, { passive: false });
+	})();
+
 	function showPage(n) {
 		page = n;
 		[].forEach.call($("tabs").children, function (b, i) { b.classList.toggle("selected", i === n); });
+		// The chosen tab comes fully into view (Launcher.Phone's TAB_SCROLL_MS, 250 ms).
+		var chosen = $("tabs").children[n];
+		if (chosen && chosen.scrollIntoView) { chosen.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" }); }
 		var grid = $("grid");
 		grid.innerHTML = "";
 		(pages[n] ? pages[n].apps : []).forEach(function (a) {
@@ -569,7 +587,7 @@
 			pages.forEach(function (p, i) {
 				var b = document.createElement("button");
 				b.textContent = p.title;
-				b.addEventListener("click", function () { showPage(i); });
+				b.addEventListener("click", function () { if (!tabDragged) { showPage(i); } });
 				tabs.appendChild(b);
 			});
 			showPage(first ? 0 : Math.min(page, pages.length - 1));

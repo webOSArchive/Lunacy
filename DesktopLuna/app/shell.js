@@ -14,7 +14,8 @@
 		ORIGIN_Y = RESERVE + (AREA - RESERVE) * ORIGIN;    // originY() within the card area
 		document.documentElement.style.setProperty("--w", w + "px");
 		document.documentElement.style.setProperty("--h", h + "px");
-		document.documentElement.style.setProperty("--columns", w >= 1024 ? 6 : w >= 700 ? 4 : 3);
+		// A phone: as many 84 px cells as fit between 6 px margins (Launcher.Phone).
+		document.documentElement.style.setProperty("--columns", document.body.classList.contains("phone") ? Math.max(1, Math.floor((w - 12) / 84)) : w >= 1024 ? 6 : w >= 700 ? 4 : 3);
 		layoutDock();
 	}
 	/**

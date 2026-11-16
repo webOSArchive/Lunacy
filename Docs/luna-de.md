@@ -161,6 +161,11 @@ API 21 gate.
   again (a link to the folder would be read as outside the app's tree and refused).
 - The on-screen keyboard has no press-and-hold alternates, no caret dragging from its trackball,
   no emoji layer and no auto-capitalisation yet; its Enter key always says "Enter".
+- As a Pre3, the launcher follows AndroidLuna's phone rules too (Launcher.Phone: a 40 px tab bar
+  of 150 px tabs that scrolls sideways, 84 x 112 cells, 56 px icons, 13 px bold labels; three
+  columns held tall, six held wide). Not carried over: a phone's two permanent tabs, groups and
+  edit mode, which Luna DE's launcher hasn't got on either device. The status bar is the
+  TouchPad's 28 px at the Pre3's scale of 1.5, which is what AndroidLuna draws on a phone.
 - As a Pre3, the quick-launch bar and Just Type's pill follow AndroidLuna's phone rules (a 95 px
   bar, four apps and the launcher button in five equal slots, icons at 78 % of a slot; the pill
   three quarters of the short side). The rest of the shell is still the TouchPad's drawn at the phone's size (its status bar, launcher,

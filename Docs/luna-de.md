@@ -64,6 +64,11 @@ API 21 gate.
     (and AndroidLuna) resize first. The log is LunaSysMgr's order of calls, not what a page saw;
     to be settled with a probe page that records both.
   - Not measured: the notification when the keyboard disconnects.
+- **Logs.** The bezel's `</>` button opens the developer tools of the card that is up: its
+  console is where an app's logs are, until the SDK's palm-log reaches Luna DE.
+- **Installing by drag and drop.** An `.ipk` dropped on the window installs (checked
+  2026-11-16 with a scripted drop; it had not worked before: the dropped list did not cross
+  into the preload, so files now cross one at a time).
 - **Two devices.** The bezel's device button (a picture of the device) makes Luna DE an HP
   TouchPad or an HP Pre3, from LunaCore's measured profiles: the Pre3 is HP webOS 2.2.4 on a
   480 x 800 screen named tall, drawn at its ScaleFactor of 1.5, so a page lays out 320 wide and

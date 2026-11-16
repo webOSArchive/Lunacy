@@ -15,7 +15,12 @@ contextBridge.exposeInMainWorld("lunade", {
 	reload: (id) => ipcRenderer.invoke("lunade:reload", id),
 	ready: () => ipcRenderer.send("lunade:ready"),
 	// Files dropped on the shell: their paths go to the main process to be installed.
-	install: (files) => ipcRenderer.invoke("lunade:install", Array.from(files).map((f) => webUtils.getPathForFile(f)).filter(Boolean)),
+	// One File at a time: a File crosses into this world as itself, a FileList doesn't.
+	install: (file) => {
+		let path = "";
+		try { path = webUtils.getPathForFile(file); } catch (e) {}
+		return path ? ipcRenderer.invoke("lunade:install", [path]) : Promise.resolve(false);
+	},
 	remove: (id) => ipcRenderer.invoke("lunade:remove", id),
 	place: (rects, dashboardsOpen) => ipcRenderer.invoke("lunade:place", rects, dashboardsOpen),
 	appMenu: () => ipcRenderer.invoke("lunade:appmenu"),

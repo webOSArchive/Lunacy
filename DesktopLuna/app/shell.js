@@ -70,6 +70,7 @@
 	/** The status bar's title: the app's own name while its card is up, as the TouchPad showed it (not the page's title). */
 	function setTitle() {
 		$("popout").disabled = !(cards[active] && cards[active].id);
+		$("devtools").disabled = $("popout").disabled;
 		$("title-text").textContent = maximized && cards[active] ? (appTitles[cards[active].appId] || cards[active].title) : "Luna DE";
 	}
 	var appTitles = {}, appEntries = {};
@@ -375,6 +376,8 @@
 		else if (maximized) { cardView(); }
 	}
 	$("home").addEventListener("click", home);
+	// The developer tools of that same card, where its console's logs are.
+	$("devtools").addEventListener("click", function () { var c = cards[active]; if (c && c.id) { window.lunade.devTools(c.id); } });
 	// The bezel's other corner: the card that is up, or in front in the card view, popped out.
 	$("popout").addEventListener("click", function () { var c = cards[active]; if (c && c.id) { window.lunade.popOut(c.id); } });
 	// And the device itself: a TouchPad or a Pre3, by its picture.
@@ -508,7 +511,7 @@
 	document.addEventListener("dragover", function (e) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
 	document.addEventListener("drop", function (e) {
 		e.preventDefault();
-		if (e.dataTransfer.files.length) { window.lunade.install(e.dataTransfer.files); }
+		for (var i = 0; i < e.dataTransfer.files.length; i++) { window.lunade.install(e.dataTransfer.files[i]); }
 	});
 
 	// ---- the status bar's clock ----

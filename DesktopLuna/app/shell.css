@@ -145,6 +145,15 @@ body.maximized #quicklaunch { transform: translateY(100%); }
    other, a Pre3 being a good deal smaller than a TouchPad. */
 #device img { display: block; height: 32px; filter: drop-shadow(0 0 2px rgba(255,255,255,0.75)) drop-shadow(0 0 5px rgba(160,200,255,0.45)); }
 body.phone #device img { height: 21px; }
+/* Next along: the developer tools of the card that is up (or in front in the card view): its
+   console, which is where an app's logs are. Angle brackets, as a code button is drawn. */
+#devtools { position: absolute; left: 102px; top: 50%; width: 34px; height: 30px; margin-top: -15px; border: 0; background: transparent; cursor: pointer; opacity: 0.75;
+	color: #aaa; font: bold 15px/30px monospace; text-align: center; padding: 0; }
+#devtools::before { content: "</>"; }
+#devtools:hover { opacity: 1; }
+#devtools:disabled { opacity: 0.25; cursor: default; }
+/* A Pre3 has no keyboard button: the tools button takes its place. */
+body.phone #devtools { left: 56px; }
 /* Beside it: whether a real keyboard is attached (lit) or not. A keyboard outline with its keys. */
 #realkb { position: absolute; left: 58px; top: 50%; width: 34px; height: 30px; margin-top: -15px; border: 0; background: transparent; cursor: pointer; opacity: 0.35; }
 #realkb.on { opacity: 0.85; }

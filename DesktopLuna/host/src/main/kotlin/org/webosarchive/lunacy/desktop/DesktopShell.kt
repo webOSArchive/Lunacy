@@ -405,11 +405,21 @@ class DesktopRoot(override val root: File, override val hostScripts: File, priva
             named != null -> named
             fetched.isFile -> fetched
             else -> {
-                val onPath = System.getenv("PATH").orEmpty().split(File.pathSeparator).map { File(it, "node") }.firstOrNull { it.isFile && it.canExecute() }
+                val onPath = onPath("node")
                 if (onPath != null) Log.w(Lunacy.TAG, "js services: no Node 12 (run DesktopLuna/fetch-node.sh); using ${onPath.path}, which isn't the version Android runs")
                 onPath ?: fetched
             }
         }
+    }
+
+    /** [name] (or name.exe on Windows) on the machine's PATH. */
+    private fun onPath(name: String): File? = System.getenv("PATH").orEmpty().split(File.pathSeparator)
+        .flatMap { listOf(File(it, name), File(it, "$name.exe")) }.firstOrNull { it.isFile && it.canExecute() }
+
+    /** A POSIX shell on Windows: one on the PATH, or Git for Windows' in its usual places. */
+    private val windowsShell: File? by lazy {
+        onPath("sh") ?: listOf(System.getenv("ProgramFiles"), System.getenv("ProgramFiles(x86)"), System.getenv("LocalAppData")?.let { "$it\\Programs" })
+            .filterNotNull().flatMap { listOf(File(it, "Git\\bin\\sh.exe"), File(it, "Git\\usr\\bin\\sh.exe")) }.firstOrNull { it.isFile }
     }
 
     private var prepared = false
@@ -424,6 +434,9 @@ class DesktopRoot(override val root: File, override val hostScripts: File, priva
                 parentFile?.mkdirs(); delete()
                 writeText("#!/bin/sh\nexec \"${node.path}\" \"${File(hostScripts, "curl.js").path}\" \"\$@\"\n")
                 setExecutable(true, false)
+                // Windows runs no "#!" script: the same thing as a command file beside it, which
+                // its shell and Node's exec find by the name "curl".
+                if (WINDOWS) File(parentFile, "$name.cmd".substringAfterLast('/')).writeText("@\"${node.path}\" \"${File(hostScripts, "curl.js").path}\" %*\r\n")
             }
         }
         prepared = true
@@ -443,10 +456,13 @@ class DesktopRoot(override val root: File, override val hostScripts: File, priva
         "LUNACY_WEBOS_ROOT" to root.path,
         "LUNACY_WEBOS_DIRS" to ROOTS.joinToString("|"),
         // The root has no /bin/sh of its own here: a service's shell commands run in the machine's.
-        "LUNACY_SHELL" to "/bin/sh",
+        // Windows has none of its own: Git for Windows' sh if it is installed, else nothing, and a
+        // service's shell command fails as a command that couldn't start (the truth, rule 2).
+        "LUNACY_SHELL" to (if (WINDOWS) windowsShell?.path ?: "" else "/bin/sh"),
     )
 
     private companion object {
+        val WINDOWS = System.getProperty("os.name").orEmpty().startsWith("Windows")
         /** The top folders whose absolute paths are webOS's (WebosRoot.ROOTS on Android). */
         val ROOTS = listOf("usr", "media", "bin", "sbin", "var", "etc", "tmp", "home", "opt", "lib")
     }

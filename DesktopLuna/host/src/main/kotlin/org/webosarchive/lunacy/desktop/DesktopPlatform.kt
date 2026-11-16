@@ -73,15 +73,51 @@ object DesktopCollation : org.webosarchive.lunacy.core.Collation {
     }
 }
 
-/** java.nio.file, as LunaCore's [org.webosarchive.lunacy.core.Links]. */
+/**
+ * java.nio.file, as LunaCore's [org.webosarchive.lunacy.core.Links].
+ *
+ * Windows makes a symbolic link only for an administrator or with Developer Mode on. Where it
+ * refuses, a link to a folder becomes a junction (which anyone may make, and which stays live, as
+ * /media/cryptofs/apps must) and a link to a file a copy of it. A junction isn't a symbolic link
+ * to Java, so the ones made here are remembered ([record]) and answered for in [readlink]; a
+ * copied file isn't, and is laid down again whenever the ROM is.
+ */
 object DesktopLinks : org.webosarchive.lunacy.core.Links {
+    private val windows = System.getProperty("os.name").orEmpty().startsWith("Windows")
+    /** Where the junctions made in place of links are remembered: link path to the target it was asked for. */
+    @Volatile var record: File? = null
+    private fun recorded(): org.json.JSONObject = try { org.json.JSONObject(record!!.readText()) } catch (e: Exception) { org.json.JSONObject() }
+
+    /** A junction (or any reparse point that isn't a symbolic link): a directory that is "other" when not followed. */
+    private fun isJunction(p: java.nio.file.Path): Boolean = windows && runCatching {
+        java.nio.file.Files.readAttributes(p, java.nio.file.attribute.BasicFileAttributes::class.java, java.nio.file.LinkOption.NOFOLLOW_LINKS).isOther
+    }.getOrDefault(false)
+
     override fun readlink(path: String): String? = runCatching {
         val p = java.nio.file.Paths.get(path)
-        if (java.nio.file.Files.isSymbolicLink(p)) java.nio.file.Files.readSymbolicLink(p).toString() else null
+        if (java.nio.file.Files.isSymbolicLink(p)) java.nio.file.Files.readSymbolicLink(p).toString().replace(File.separatorChar, '/')
+        // A junction of ours: the target it stands for, or, unremembered, a name no target equals, so it is made again.
+        else if (isJunction(p)) synchronized(this) { recorded().optString(path).ifEmpty { "(junction)" } }
+        else null
     }.getOrNull()
 
     override fun symlink(target: String, path: String) {
-        java.nio.file.Files.createSymbolicLink(java.nio.file.Paths.get(path), java.nio.file.Paths.get(target))
+        val link = java.nio.file.Paths.get(path)
+        try {
+            java.nio.file.Files.createSymbolicLink(link, java.nio.file.Paths.get(target))
+            return
+        } catch (e: Exception) {
+            if (!windows) throw e
+        }
+        val real = (link.parent ?: link).resolve(target).normalize()
+        if (java.nio.file.Files.isDirectory(real)) {
+            val made = ProcessBuilder("cmd", "/c", "mklink", "/J", link.toString(), real.toString()).redirectErrorStream(true).start()
+            val said = made.inputStream.bufferedReader().readText()
+            if (made.waitFor() != 0) throw java.io.IOException("no junction at $path for $target: ${said.trim()}")
+            synchronized(this) { record?.let { r -> r.parentFile?.mkdirs(); r.writeText(recorded().put(path, target).toString()) } }
+        } else {
+            java.nio.file.Files.copy(real, link, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        }
     }
 }
 

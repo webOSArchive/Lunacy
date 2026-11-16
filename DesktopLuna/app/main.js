@@ -88,14 +88,22 @@ function startHost() {
 			if (lib) { native = ["-Dorg.sqlite.lib.path=" + path.join(hostDir, "native"), "-Dorg.sqlite.lib.name=" + lib]; }
 		} catch (e) {}
 		args = [...native, "-cp", path.join(hostDir, "lib", "*"), "org.webosarchive.lunacy.desktop.MainKt", ...args];
+	} else if (IS_WIN) {
+		// From a checkout on Windows: the machine's Java on the built jars, not Gradle's .bat (a
+		// command file takes a shell to start, which mangles a path with a space in it).
+		const java = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, "bin", "java.exe") : "java.exe";
+		const lib = path.join(__dirname, "..", "host", "build", "install", "lunade-host", "lib");
+		if (!fs.existsSync(lib)) { throw new Error("No host at " + lib + ": run gradlew :DesktopLuna:host:installDist first"); }
+		bin = java;
+		args = ["-cp", path.join(lib, "*"), "org.webosarchive.lunacy.desktop.MainKt", ...args];
 	} else {
-		bin = path.join(__dirname, "..", "host", "build", "install", "lunade-host", "bin", IS_WIN ? "lunade-host.bat" : "lunade-host");
+		bin = path.join(__dirname, "..", "host", "build", "install", "lunade-host", "bin", "lunade-host");
 	}
-	if (!fs.existsSync(bin)) {
+	if (!fs.existsSync(bin) && path.isAbsolute(bin)) {
 		throw new Error("No host at " + bin + (app.isPackaged ? ": this copy of Luna DE is incomplete" : ": run ./gradlew :DesktopLuna:host:installDist first"));
 	}
 	return new Promise((resolve, reject) => {
-		hostProcess = spawn(bin, args, { stdio: ["pipe", "pipe", "inherit"], shell: !app.isPackaged && IS_WIN });
+		hostProcess = spawn(bin, args, { stdio: ["pipe", "pipe", "inherit"] });
 		hostProcess.on("exit", (code) => { if (!host) { reject(new Error("host exited " + code)); } else { app.quit(); } });
 		readline.createInterface({ input: hostProcess.stdout }).on("line", (line) => {
 			const m = /^LUNADE-HOST (\d+)$/.exec(line);

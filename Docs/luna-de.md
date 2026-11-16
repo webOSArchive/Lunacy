@@ -564,7 +564,23 @@ Not yet tried, and what to expect:
   the Java runtime and Node need) and have never run. Node 12 exists for Macs only as an Intel
   build, so on Apple Silicon the JS services need Rosetta; the rest is native.
   `AndroidLuna/fetch-assets.sh` hasn't been run on a Mac either.
-- **Windows.** The package builds from the same script in principle; the host has never run on
-  Windows, and JS services there are unlikely to work as they are (the service host starts
-  `/bin/sh` and `curl` scripts). `fetch-assets.sh` needs a POSIX shell (Git Bash or WSL).
-- No icon of Luna DE's own yet (Electron's default), no auto-update, and the version is still 0.0.1.
+- **Windows.** The package is built (2026-11-16, from Linux with `--win`: a 273 MB zip whose
+  `Luna DE.exe`, Java runtime, `node.exe` and SQLite library are all Windows x64 programs) and
+  **has never been started**: everything below is written from reading the code, not from a run.
+  What was changed for it:
+  - *Links.* Windows makes a symbolic link only for an administrator or with Developer Mode. Where
+    it refuses, `DesktopLinks` makes a junction for a folder (`/media/cryptofs/apps`, a
+    framework's `version/1.0`), which anyone may make, and copies a file. The junctions are
+    remembered in `links.json` in the data folder.
+  - *The package holds no links*: CoreApps' six are followed when it is staged.
+  - *Paths.* A webOS path made from a real one has forward slashes whatever the host's has
+    (`UserFiles.webosPath`). The service host maps webOS paths by putting the root in front,
+    which Windows accepts with either slash.
+  - *Starting the host.* By `java.exe` directly, packaged or from a checkout, never Gradle's `.bat`.
+  - *JS services.* `node.exe` is found; `curl` is also written as `curl.cmd`. A service's shell
+    commands are POSIX: they run in Git for Windows' `sh.exe` if that is installed, and fail
+    as commands that couldn't start if it isn't.
+  Expect the first run to show what reading missed. Not handled at all: `fetch-assets.sh` on
+  Windows (the cross-build avoids needing it), the installer without Wine or a Windows build,
+  and signing.
+- No auto-update, and the version is still 0.0.1.

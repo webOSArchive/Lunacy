@@ -17,14 +17,27 @@
 //     which Luna DE doesn't run), CoreApps and the keyboard's art.
 //
 // A package is for the system and processor it was built on: a Mac's on a Mac (signed and
-// notarised there when the usual CSC_* and APPLE_* variables are set), Windows' on Windows,
-// Linux's on Linux. Output: DesktopLuna/dist/.
+// notarised there when the usual CSC_* and APPLE_* variables are set), Linux's on Linux, and
+// Windows' on Windows. Windows' can also be made on Linux or a Mac:
+//
+//   npm run dist -- --win
+//
+// which needs no Windows machine and no fetch-assets.sh run there: nothing in the package is
+// compiled for Windows here, its three native parts are fetched (node.exe from nodejs.org; the
+// Windows modules of the same JDK version this machine's jlink is, from Adoptium, which jlink
+// cuts a Windows runtime from) or taken from a jar (SQLite's .dll). It is unsigned; sign the
+// installer on Windows afterwards, or build there with CSC_LINK set. Output: DesktopLuna/dist/.
 "use strict";
 const fs = require("fs"), path = require("path"), os = require("os"), https = require("https"), crypto = require("crypto");
 const { execFileSync } = require("child_process");
 
 const HERE = __dirname, REPO = path.resolve(HERE, "..");
-const WIN = process.platform === "win32", MAC = process.platform === "darwin";
+const HOST_WIN = process.platform === "win32";
+// What the package is for: this machine, or Windows on x64 with --win.
+const CROSS_WIN = process.argv.includes("--win") && !HOST_WIN;
+const WIN = HOST_WIN || CROSS_WIN, MAC = process.platform === "darwin" && !CROSS_WIN;
+const ARCH = CROSS_WIN ? "x64" : process.arch;
+const CACHE = path.join(HERE, "build", "cache");
 const STAGE = path.join(HERE, "build", "package");
 const NODE_VERSION = "v12.22.12";
 // What the host and its libraries use of the JDK (java.desktop for ImageIO, jdk.crypto.ec for
@@ -52,18 +65,20 @@ const sha256 = (file) => crypto.createHash("sha256").update(fs.readFileSync(file
 
 /** The JDK tool by name: JAVA_HOME's, else the PATH's. */
 function jdkTool(name) {
-	const exe = name + (WIN ? ".exe" : "");
+	const exe = name + (HOST_WIN ? ".exe" : "");
 	const home = process.env.JAVA_HOME && path.join(process.env.JAVA_HOME, "bin", exe);
 	return home && fs.existsSync(home) ? home : exe;
 }
 
 /** Node 12 for this machine into DesktopLuna/node/bin, as fetch-node.sh does it (and Windows' too). */
 async function node12() {
-	const bin = path.join(HERE, "node", "bin", WIN ? "node.exe" : "node");
-	try { if (execFileSync(bin, ["--version"]).toString().trim() === NODE_VERSION) { say("node/ already holds Node " + NODE_VERSION); return; } } catch (e) {}
+	// Another system's Node is kept apart from this machine's own (DesktopLuna/node, which `npm start` uses).
+	const home = CROSS_WIN ? path.join(STAGE, "node") : path.join(HERE, "node");
+	const bin = path.join(home, "bin", WIN ? "node.exe" : "node");
+	if (!CROSS_WIN) { try { if (execFileSync(bin, ["--version"]).toString().trim() === NODE_VERSION) { say("node/ already holds Node " + NODE_VERSION); return home; } } catch (e) {} }
 	// nodejs.org built Node 12 for x64 on all three (an Apple Silicon Mac runs it under Rosetta), and for arm64 on Linux.
-	const arch = process.platform === "linux" && process.arch === "arm64" ? "arm64" : "x64";
-	if (process.arch !== "x64" && process.arch !== "arm64") { fail("no Node 12 build for " + process.arch); }
+	const arch = !WIN && !MAC && ARCH === "arm64" ? "arm64" : "x64";
+	if (ARCH !== "x64" && ARCH !== "arm64") { fail("no Node 12 build for " + ARCH); }
 	const base = "https://nodejs.org/dist/" + NODE_VERSION + "/";
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lunade-node-"));
 	const name = WIN ? "win-" + arch + "/node.exe" : "node-" + NODE_VERSION + "-" + (MAC ? "darwin" : "linux") + "-" + arch + ".tar.gz";
@@ -73,19 +88,20 @@ async function node12() {
 	await fetchTo(base + "SHASUMS256.txt", sums);
 	const line = fs.readFileSync(sums, "utf8").split("\n").find((l) => l.endsWith("  " + name));
 	if (!line || line.split(" ")[0] !== sha256(got)) { fail("the Node download doesn't match nodejs.org's checksum"); }
-	fs.rmSync(path.join(HERE, "node"), { recursive: true, force: true });
-	fs.mkdirSync(path.join(HERE, "node", "bin"), { recursive: true });
+	fs.rmSync(home, { recursive: true, force: true });
+	fs.mkdirSync(path.join(home, "bin"), { recursive: true });
 	if (WIN) {
 		fs.copyFileSync(got, bin);
-		await fetchTo("https://raw.githubusercontent.com/nodejs/node/" + NODE_VERSION + "/LICENSE", path.join(HERE, "node", "LICENSE"));
+		await fetchTo("https://raw.githubusercontent.com/nodejs/node/" + NODE_VERSION + "/LICENSE", path.join(home, "LICENSE"));
 	} else {
 		run("tar", ["-xzf", got, "-C", tmp]);
 		const dir = path.join(tmp, path.basename(name, ".tar.gz"));
 		fs.copyFileSync(path.join(dir, "bin", "node"), bin);
 		fs.chmodSync(bin, 0o755);
-		fs.copyFileSync(path.join(dir, "LICENSE"), path.join(HERE, "node", "LICENSE"));
+		fs.copyFileSync(path.join(dir, "LICENSE"), path.join(home, "LICENSE"));
 	}
 	fs.rmSync(tmp, { recursive: true, force: true });
+	return home;
 }
 
 /** The host's jars into the stage, SQLite's driver without its native libraries, this machine's beside them. */
@@ -93,7 +109,7 @@ function stageHost() {
 	const from = path.join(HERE, "host", "build", "install", "lunade-host", "lib"), to = path.join(STAGE, "host");
 	fs.mkdirSync(path.join(to, "lib"), { recursive: true });
 	fs.mkdirSync(path.join(to, "native"), { recursive: true });
-	const osName = WIN ? "Windows" : MAC ? "Mac" : "Linux", arch = process.arch === "arm64" ? "aarch64" : "x86_64";
+	const osName = WIN ? "Windows" : MAC ? "Mac" : "Linux", arch = ARCH === "arm64" ? "aarch64" : "x86_64";
 	for (const jar of fs.readdirSync(from)) {
 		if (!/^sqlite-jdbc-.*\.jar$/.test(jar)) { fs.copyFileSync(path.join(from, jar), path.join(to, "lib", jar)); continue; }
 		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lunade-sqlite-"));
@@ -109,22 +125,76 @@ function stageHost() {
 	}
 }
 
+/**
+ * The Windows modules of the JDK version this machine's jlink is, for jlink to cut a Windows
+ * runtime from (it insists the two match). Eclipse Temurin's build of that version, from
+ * Adoptium, checked against the checksum published beside it; kept in build/cache.
+ */
+async function windowsJmods() {
+	// java prints its settings on standard error.
+	const shown = require("child_process").spawnSync(jdkTool("java"), ["-XshowSettings:properties", "-version"], { encoding: "utf8" });
+	const runtime = (/java\.runtime\.version = (\S+)/.exec(String(shown.stderr) + String(shown.stdout)) || [])[1];
+	const m = /^(\d+(?:\.\d+)*)\+(\d+)/.exec(runtime || "");
+	if (!m) { fail("can't tell this JDK's version (java.runtime.version: " + runtime + ")"); }
+	const release = "jdk-" + m[1] + "+" + m[2], dir = path.join(CACHE, "windows-" + release);
+	if (fs.existsSync(path.join(dir, "jmods", "java.base.jmod"))) { say("Windows JDK modules: " + release + " (cached)"); return path.join(dir, "jmods"); }
+	const api = "https://api.adoptium.net/v3/assets/release_name/eclipse/" + encodeURIComponent(release) + "?architecture=x64&os=windows&image_type=jdk";
+	fs.mkdirSync(CACHE, { recursive: true });
+	const meta = path.join(CACHE, "windows-jdk.json");
+	await fetchTo(api, meta).catch((e) => fail("Adoptium has no Windows build of " + release + " (this machine's JDK version): " + e.message + ". Use a JDK whose version Temurin also released, or build on Windows."));
+	const pkg = JSON.parse(fs.readFileSync(meta, "utf8")).binaries[0].package;
+	const zip = path.join(CACHE, pkg.name);
+	say(pkg.link);
+	await fetchTo(pkg.link, zip);
+	if (sha256(zip) !== pkg.checksum) { fail("the Windows JDK download doesn't match Adoptium's checksum"); }
+	const tmp = fs.mkdtempSync(path.join(CACHE, "unzip-"));
+	run("unzip", ["-q", zip, "*/jmods/*", "*/legal/*", "-d", tmp]);
+	fs.rmSync(dir, { recursive: true, force: true });
+	fs.renameSync(path.join(tmp, fs.readdirSync(tmp)[0]), dir);
+	fs.rmSync(tmp, { recursive: true, force: true });
+	fs.rmSync(zip, { force: true });
+	return path.join(dir, "jmods");
+}
+
+/** A copy of a tree with its symbolic links followed: a Windows package can't hold a link. */
+function withoutLinks(from, to) {
+	// By hand: fs.cpSync's "dereference" leaves the links inside a tree as links.
+	fs.mkdirSync(to, { recursive: true });
+	for (const name of fs.readdirSync(from)) {
+		const a = path.join(from, name), b = path.join(to, name);
+		if (fs.statSync(a).isDirectory()) { withoutLinks(a, b); } else { fs.copyFileSync(a, b); }
+	}
+	return to;
+}
+
 (async () => {
 	if (!fs.existsSync(path.join(REPO, "AndroidLuna", "local-assets", "rootfs.index"))) {
 		fail("AndroidLuna/local-assets isn't there: run AndroidLuna/fetch-assets.sh first (BUILDING.md)");
 	}
 	say("building the host");
-	run(path.join(REPO, WIN ? "gradlew.bat" : "gradlew"), ["--console=plain", "-q", ":DesktopLuna:host:installDist"], { cwd: REPO, shell: WIN });
-	await node12();
+	run(path.join(REPO, HOST_WIN ? "gradlew.bat" : "gradlew"), ["--console=plain", "-q", ":DesktopLuna:host:installDist"], { cwd: REPO, shell: HOST_WIN });
 	fs.rmSync(STAGE, { recursive: true, force: true });
+	fs.mkdirSync(STAGE, { recursive: true });
+	const nodeHome = await node12();
 	stageHost();
-	say("a Java runtime of " + JAVA_MODULES.length + " modules (jlink)");
-	run(jdkTool("jlink"), ["--add-modules", JAVA_MODULES.join(","), "--strip-debug", "--no-man-pages", "--no-header-files", "--compress=2", "--output", path.join(STAGE, "jre")]);
+	say("a Java runtime of " + JAVA_MODULES.length + " modules (jlink)" + (CROSS_WIN ? ", for Windows" : ""));
+	const modulePath = CROSS_WIN ? ["--module-path", await windowsJmods()] : [];
+	run(jdkTool("jlink"), [...modulePath, "--add-modules", JAVA_MODULES.join(","), "--strip-debug", "--no-man-pages", "--no-header-files", "--compress=2", "--output", path.join(STAGE, "jre")]);
+	// Windows keeps no symbolic links in a package: CoreApps' few are followed.
+	const coreApps = WIN ? withoutLinks(path.join(REPO, "CoreApps"), path.join(STAGE, "CoreApps")) : path.join(REPO, "CoreApps");
 
 	const builder = require("electron-builder");
 	const version = require("./package.json").version;
 	const repo = (p) => path.join(REPO, p);
+	// Off Windows, the installer's own maker needs Wine (it runs a Windows program to write the
+	// uninstaller); without Wine the package is the zip alone, which is the whole app in a folder.
+	let crossTargets = ["zip"];
+	if (CROSS_WIN) {
+		try { execFileSync("wine", ["--version"], { stdio: "ignore" }); crossTargets = ["nsis", "zip"]; }
+		catch (e) { say("no Wine here, so no installer: the zip only (build on Windows, or install Wine, for the installer)"); }
+	}
 	await builder.build({
+		targets: CROSS_WIN ? builder.Platform.WINDOWS.createTarget(crossTargets, builder.Arch.x64) : undefined,
 		config: {
 			appId: "org.webosarchive.lunade",
 			productName: "Luna DE",
@@ -135,9 +205,9 @@ function stageHost() {
 			extraResources: [
 				{ from: repo("AndroidLuna/src/main/assets"), to: "AndroidLuna/src/main/assets" },
 				{ from: repo("AndroidLuna/local-assets"), to: "AndroidLuna/local-assets", filter: ["**/*", "!pdk/**"] },
-				{ from: repo("CoreApps"), to: "CoreApps" },
+				{ from: coreApps, to: "CoreApps" },
 				{ from: repo("LunaKeyboard/src/main/assets/keyboard"), to: "LunaKeyboard/src/main/assets/keyboard" },
-				{ from: path.join(HERE, "node"), to: "DesktopLuna/node" },
+				{ from: nodeHome, to: "DesktopLuna/node" },
 				{ from: path.join(STAGE, "host"), to: "host" },
 				{ from: path.join(STAGE, "jre"), to: "jre" },
 				{ from: repo("LICENSE"), to: "LICENSE.Lunacy" },

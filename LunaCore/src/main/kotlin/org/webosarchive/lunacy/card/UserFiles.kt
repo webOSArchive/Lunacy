@@ -54,14 +54,15 @@ object UserFiles {
         val canonical = file.canonicalPath
         val mine = own(webosRoot).canonicalPath
         if (canonical.startsWith(mine + File.separator)) {
-            return "/media/internal/" + canonical.removePrefix(mine + File.separator)
+            // A webOS path has forward slashes whatever the host's has (Luna DE on Windows).
+            return "/media/internal/" + canonical.removePrefix(mine + File.separator).replace(File.separatorChar, '/')
         }
         // The most specific folder: a wallpaper is /media/internal/wallpapers/x, not photos/webOS Wallpapers/x.
         for ((name, dir) in mappedFolders().sortedByDescending { it.second.canonicalPath.length }) {
             val root = dir.canonicalPath
             if (canonical == root) return "/media/internal/$name"
             if (canonical.startsWith(root + File.separator)) {
-                return "/media/internal/$name/" + canonical.removePrefix(root + File.separator)
+                return "/media/internal/$name/" + canonical.removePrefix(root + File.separator).replace(File.separatorChar, '/')
             }
         }
         return null

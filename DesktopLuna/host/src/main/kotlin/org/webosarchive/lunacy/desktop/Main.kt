@@ -46,6 +46,7 @@ fun main(args: Array<String>) {
     Platform.sql = org.webosarchive.lunacy.core.JdbcSql
     Platform.collation = DesktopCollation
     Platform.links = DesktopLinks
+    DesktopLinks.record = File(data, "links.json")
 
     // The same trees Gradle packages into the APK (AndroidLuna/build.gradle.kts): the assets,
     // what fetch-assets.sh laid down, and CoreApps as apps/.

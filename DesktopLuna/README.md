@@ -99,7 +99,15 @@ built on.
 | macOS | a `.dmg` and a `.zip`; signed with the Developer ID in the keychain (or `CSC_LINK` and `CSC_KEY_PASSWORD`), and notarised when `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` are set |
 | Windows | an installer and a `.zip`; signed when `CSC_LINK` and `CSC_KEY_PASSWORD` name a certificate |
 
-Only the Linux package has been built and run (2026-11-16: the AppImage on a fresh home folder,
-with no Java or Node of the machine's, opened Calendar with its JS services). The Mac and
-Windows builds are written and not yet tried; see "Packaging" in
-[Docs/luna-de.md](../Docs/luna-de.md) for what to expect there.
+**Windows from Linux or a Mac.** `npm run dist -- --win` makes the Windows package without a
+Windows machine: `LunaDE-<version>-win-x64.zip`, the whole app in a folder (unzip it and run
+`Luna DE.exe`). Nothing is compiled for Windows; its native parts are fetched (`node.exe`, and
+the Windows modules of this machine's JDK version, from Adoptium, both checked against published
+checksums) or come out of a jar. With Wine installed it makes the installer too. It is unsigned:
+Windows SmartScreen will warn until it is signed.
+
+Only the Linux package has been run (2026-11-16: the AppImage on a fresh home folder, with no
+Java or Node of the machine's, opened Calendar with its JS services). The Windows zip has been
+built, from Linux, and never started: no Windows machine has run Luna DE yet. The Mac build is
+written and not yet tried. See "Packaging" in [Docs/luna-de.md](../Docs/luna-de.md) for what to
+expect on each.

@@ -11,6 +11,14 @@ V=../Workbench/vendor
 L=local-assets
 T=local-test-apps
 rm -rf $L $T && mkdir -p $L/fw/enyo $L/apps $T/apps
+# Every patch this run applies, with its hash and the folder it went into, as a file the APK
+# carries (assets/patches.applied). A patch that doesn't apply stops this script, so a patch
+# listed here is in these assets; Workbench/apk-inventory.py holds each APK's list against
+# LunaRuntimes/. Why: Mojo 0005 was committed after a fetch and reported fixed, and no build
+# had it (2026-11-15).
+applied() {
+    echo "$(sha256sum < "$1" | cut -d' ' -f1)  ${1#../}  $2" >> "$HERE/$L/patches.applied"
+}
 # Enyo as the reference TouchPad has it: /usr/palm/frameworks/enyo/0.10 off the device
 # (webOS CE 3.1.0), the build HP shipped, with the libraries (networkproxy among them) and the
 # localized resources the Apache 2.0 release on GitHub lacks. That release is a slightly
@@ -22,6 +30,7 @@ for patch in ../LunaRuntimes/enyo-1.0/patches/*.patch; do
     [ -e "$patch" ] || continue
     (cd $L/fw/enyo/1.0 && patch -p1 --forward --silent --fuzz=0 --follow-symlinks < "$HERE/$patch") ||
         { echo "fetch-assets: $patch does not apply to the TouchPad's Enyo" >&2; exit 1; }
+    applied "$patch" "$L/fw/enyo/1.0"
     echo "enyo: applied $(basename "$patch")"
 done
 # webOS CE's accounts library, which Contacts and Calendar show on first launch: the
@@ -35,6 +44,7 @@ for patch in ../LunaRuntimes/enyo-accounts/patches/*.patch; do
     [ -e "$patch" ] || continue
     (cd $L/fw/enyo/1.0/framework/lib/accounts && patch -p1 --forward --silent --fuzz=0 < "$HERE/$patch") ||
         { echo "fetch-assets: $patch does not apply to webOS CE's accounts library" >&2; exit 1; }
+    applied "$patch" "$L/fw/enyo/1.0/framework/lib/accounts"
     echo "enyo accounts: applied $(basename "$patch")"
 done
 cat > $L/fw/enyo/1.0/NOTICE <<'NOTICE'
@@ -89,6 +99,7 @@ for patch in ../LunaRuntimes/mojo/patches/*.patch; do
     [ -e "$patch" ] || continue
     (cd $L/fw/mojo && patch -p1 --forward --silent --fuzz=0 --follow-symlinks < "$HERE/$patch") ||
         { echo "fetch-assets: $patch does not apply to the TouchPad's Mojo" >&2; exit 1; }
+    applied "$patch" "$L/fw/mojo"
     echo "mojo: applied $(basename "$patch")"
 done
 # webOS CE's copy of the contacts library's prebuilt builtin, with its AppPrefs fix (the
@@ -127,6 +138,7 @@ calendar_framework() {
         [ -e "$patch" ] || continue
         (cd "$1" && patch -p1 --forward --silent --fuzz=0 < "$HERE/$patch") ||
             { echo "fetch-assets: $patch does not apply to CE's calendar framework" >&2; exit 1; }
+        applied "$patch" "$1"
     done
 }
 calendar_framework $L/fw/frameworks/calendar
@@ -291,6 +303,7 @@ for patch in ../LunaRuntimes/photos-service/patches/*.patch; do
     [ -e "$patch" ] || continue
     (cd $R/usr/palm/services/com.palm.service.photos && patch -p1 --forward --silent --fuzz=0 < "$HERE/$patch") ||
         { echo "fetch-assets: $patch does not apply to the TouchPad's photos service" >&2; exit 1; }
+    applied "$patch" "$R/usr/palm/services/com.palm.service.photos"
 done
 cat > $R/usr/palm/services/com.palm.service.photos/NOTICE <<'NOTICE'
 Palm's photos service, copied from /usr/palm/services on the reference TouchPad (webOS CE

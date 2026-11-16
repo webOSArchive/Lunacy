@@ -13,7 +13,7 @@ Build under test:  0.9.x, build NNN, commit abcdef0
                    out/SHA256SUMS sha256 ...           (six APKs: release + debug, both
                                                         ABIs and the keyboard)
 Tier 1:            ./test.sh             N passed / 0 failed     (build.sh release ran it)
-                   apk-inventory         every APK: N files, 0 problems (build.sh ran it)
+                   apk-inventory         every APK: N files by content, N patches, 0 problems (build.sh ran it)
 Tier 2:            fresh-install.sh      one device, debug: N passed / 0 failed  test-results/NNN/fresh-<device>.txt
                    device-test.sh        per device, below; every device on build NNN
                    HP 10 G2   (debug)    N passed / 0 failed     test-results/NNN/hp10g2.txt
@@ -74,6 +74,10 @@ phone mode the Pre3.
 
 # Tier 1, after each build: what each APK holds against the tree (build.sh runs it, and
 # stops on a gap; by hand: Workbench/apk-inventory.py out/AndroidLuna-*.apk)
+#   Every file by content, and the APK's own list of applied framework patches
+#   (assets/patches.applied) against LunaRuntimes/: a patch committed after the last
+#   fetch-assets run is in no build, and nothing else showed it (Mojo 0005, 2026-11-16).
+#   Seen failing: an APK without the list; a patch added to the tree after the build.
 
 # Tier 2, first: a fresh install, on one device with Android contacts (the Kyocera). ERASES
 # Lunacy's data there; installs the candidate's debug build, finishes First Use over the bus,

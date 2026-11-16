@@ -132,7 +132,8 @@ if [ "$type" = release ]; then
 fi
 
 # What each Lunacy APK holds against what it was built from: every asset, bundled app, webOS
-# root file and native library, at its size here, and the configuration parses
+# root file and native library, with its content here, every framework patch in the tree applied
+# (the APK's own assets/patches.applied), and the configuration parses
 # (Workbench/apk-inventory.py). A gap fails the build before anything is checksummed.
 lunacy=(); for f in "${expected[@]}"; do case $f in AndroidLuna-*) lunacy+=("out/$f");; esac; done
 if [ ${#lunacy[@]} -gt 0 ]; then

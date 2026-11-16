@@ -64,6 +64,13 @@ API 21 gate.
     (and AndroidLuna) resize first. The log is LunaSysMgr's order of calls, not what a page saw;
     to be settled with a probe page that records both.
   - Not measured: the notification when the keyboard disconnects.
+- **Two devices.** The bezel's device button (a picture of the device) makes Luna DE an HP
+  TouchPad or an HP Pre3, from LunaCore's measured profiles: the Pre3 is HP webOS 2.2.4 on a
+  480 x 800 screen named tall, drawn at its ScaleFactor of 1.5, so a page lays out 320 wide and
+  the status bar's 28 px are the screen's 42 (its luna-platform.conf, read off the device
+  2026-11-16). An app there is told it is on a Pre3: deviceInfo, the user agent, the carrier.
+  It has no on-screen keyboard (VirtualKeyboardEnabled=false on the device), so the keyboard
+  button goes. Changing device closes the open apps, since a page is told its device once.
 - **Turning and resizing.** The bezel has a rotate button in its corner (wide and tall; F6 to F9
   pick each way up). A popped-out card starts at the device's size and is then freely resizable:
   its page hears each change as a resize, and a change between wide and tall as the device
@@ -136,6 +143,9 @@ API 21 gate.
   again (a link to the folder would be read as outside the app's tree and refused).
 - The on-screen keyboard has no press-and-hold alternates, no caret dragging from its trackball,
   no emoji layer and no auto-capitalisation yet; its Enter key always says "Enter".
+- As a Pre3, the shell is still the TouchPad's drawn at the phone's size (its status bar, launcher,
+  card view and the notifications' place at the top): the Pre3's own shell, which AndroidLuna has
+  for phones, isn't drawn here yet.
 - A dashboard is dismissed with a small close button that shows under the pointer, not a swipe.
 
 **Not there yet, in the order planned:**

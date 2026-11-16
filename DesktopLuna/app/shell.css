@@ -118,13 +118,21 @@ body.maximized #quicklaunch { transform: translateY(100%); }
 #menu button:hover { background: rgba(255,255,255,0.12); }
 
 /* ---- Luna DE's bezel: the home button a TouchPad had below its screen ---- */
-#bezel { width: var(--w); height: var(--bezel); background: linear-gradient(#1a1a1a, #0b0b0b); display: flex; align-items: center; justify-content: center; }
+#bezel { zoom: var(--unzoom, 1); width: calc(var(--w) / var(--unzoom, 1)); height: var(--bezel); background: linear-gradient(#1a1a1a, #0b0b0b); display: flex; align-items: center; justify-content: center; }
 #home { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #555; background: radial-gradient(#2a2a2a, #111); cursor: pointer; }
 #home:hover { border-color: #888; }
 /* Luna DE's own: turn the device, in the bezel's corner. A device outline with a turning arrow. */
 #bezel { position: relative; }
 #rotate { position: absolute; right: 14px; top: 50%; width: 30px; height: 30px; margin-top: -15px; border: 0; background: transparent; cursor: pointer; opacity: 0.7; }
 #rotate:hover { opacity: 1; }
+/* Left of the rotate button: which device this is, by its picture (images/, with their NOTICE). */
+#device { position: absolute; right: 54px; top: 50%; width: 36px; height: 36px; margin-top: -18px; border: 0; background: transparent; cursor: pointer; opacity: 0.85; padding: 0;
+	display: flex; align-items: center; justify-content: center; }
+#device:hover { opacity: 1; }
+/* Dark devices on a dark bezel: a soft light behind them. And each at its own size beside the
+   other, a Pre3 being a good deal smaller than a TouchPad. */
+#device img { display: block; height: 32px; filter: drop-shadow(0 0 2px rgba(255,255,255,0.75)) drop-shadow(0 0 5px rgba(160,200,255,0.45)); }
+body.phone #device img { height: 21px; }
 /* Beside it: whether a real keyboard is attached (lit) or not. A keyboard outline with its keys. */
 #realkb { position: absolute; left: 58px; top: 50%; width: 34px; height: 30px; margin-top: -15px; border: 0; background: transparent; cursor: pointer; opacity: 0.35; }
 #realkb.on { opacity: 0.85; }

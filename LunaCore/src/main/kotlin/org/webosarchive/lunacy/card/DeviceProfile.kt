@@ -163,10 +163,11 @@ enum class DeviceProfile(
         positiveSpaceTopPadding = 42,
         // The Pre3's deviceInfo has no carrierAvailable member at all.
         reportsCarrierAvailable = false,
-        // Not measured: the Pre3 was not connected when this was written. 0 is LunaSysMgr's
-        // other case (its source calls it "For Opal device"), and it is what a phone whose
-        // home button is below a portrait screen has. Read luna-platform.conf on a Pre3 and
-        // correct this, as the rest of this profile was corrected.
+        // The Pre3's luna-platform.conf has no HomeButtonOrientationAngle at all (read off the
+        // device 2026-11-16: its [UI] section holds TabletUi=true, PositiveSpaceTopPadding=42,
+        // PositiveSpaceBottomPadding=42, ScaleFactor=1.5 and AtlasEnabled=false, and
+        // [VirtualKeyboard] VirtualKeyboardEnabled=false), so LunaSysMgr's default stands: 0,
+        // which its source calls "For Opal device", a home button below a portrait screen.
         homeButtonOrientationAngle = 0,
     );
 

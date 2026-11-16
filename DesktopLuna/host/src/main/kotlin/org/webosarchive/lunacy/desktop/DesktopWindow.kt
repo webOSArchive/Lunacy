@@ -26,7 +26,8 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus, private val main: DesktopScheduler,
                     private val shell: DesktopShell) : org.webosarchive.lunacy.card.RunningWindow {
-    private val profile = DeviceProfile.TOUCHPAD
+    /** The device this page was started on. */
+    private val profile = shell.device
     private val outbox = LinkedBlockingQueue<String>()
     private val calls = HashMap<Int, Bus.Call>()   // on the main thread only
     override val pid = nextPid.getAndIncrement()
@@ -60,7 +61,8 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
     fun invoke(method: String, a: JSONArray): String = when (method) {
         "deviceInfo" -> JSONObject.quote(deviceInfo())
         "screenSize" -> JSONObject.quote(JSONObject().put("width", width()).put("height", height()).toString())
-        "cardSize" -> JSONObject.quote(JSONObject().put("width", width()).put("height", height()).put("scale", 1.0).toString())
+        // In the page's own px: the device's over its scale (a Pre3's 480 is 320 to a page).
+        "cardSize" -> JSONObject.quote(JSONObject().put("width", Math.round(width() / shell.scale)).put("height", Math.round(height() / shell.scale)).put("scale", 1.0).toString())
         "localeInfo" -> JSONObject.quote(localeInfo())
         // The TouchPad reports "right" held in landscape and "up" in portrait (Docs/spike-1.md).
         "screenOrientation" -> JSONObject.quote(screenOrientation())
@@ -236,8 +238,9 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
         return Bus.staysOpen(url, params)
     }
 
-    private fun width() = if (portrait) 768 else 1024
-    private fun height() = if (portrait) 1024 else 768
+    /** The screen as it is held, in the device's own px. */
+    private fun width() = if (portrait) minOf(shell.screenWidth, shell.screenHeight) else maxOf(shell.screenWidth, shell.screenHeight)
+    private fun height() = if (portrait) maxOf(shell.screenWidth, shell.screenHeight) else minOf(shell.screenWidth, shell.screenHeight)
     private fun screenOrientation() = ownOrientation ?: shell.orientation
 
     /** ShellActivity.deviceInfo's answer for a TouchPad's screen, the card the whole of it. */
@@ -249,9 +252,11 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
             "platformVersionMinor" to d.platformVersionMinor, "platformVersionDot" to d.platformVersionDot,
             "carrierName" to d.carrierName,
             "serialNumber" to DeviceProfile.serialFor(d, "lunade:" + System.getProperty("user.name")),
-            "screenWidth" to width(), "screenHeight" to height(),
-            "minimumCardWidth" to width(), "minimumCardHeight" to d.minimumCardHeight,
-            "maximumCardWidth" to width(), "maximumCardHeight" to height() - d.positiveSpaceTopPadding,
+            // The screen as the device names it, whichever way it is held: a TouchPad says
+            // 1024 x 768, a Pre3 480 x 800 (measured on both, Docs/pre3.md).
+            "screenWidth" to shell.screenWidth, "screenHeight" to shell.screenHeight,
+            "minimumCardWidth" to shell.screenWidth, "minimumCardHeight" to d.minimumCardHeight,
+            "maximumCardWidth" to shell.screenWidth, "maximumCardHeight" to shell.screenHeight - d.positiveSpaceTopPadding,
             "touchableRows" to d.touchableRows,
             "keyboardAvailable" to d.keyboardAvailable, "keyboardSlider" to d.keyboardSlider,
             "keyboardType" to d.keyboardType,

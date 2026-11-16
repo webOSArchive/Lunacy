@@ -62,6 +62,29 @@ class DesktopShell(
         events.add(event("banner").put("id", nextBanner.getAndIncrement()).put("appId", appId).put("message", message).put("params", "").put("icon", ""))
     }
 
+    // ---- the device ----
+
+    /**
+     * The webOS device Luna DE is being: a TouchPad (webOS CE 3.1.0, 1024 x 768) or a Pre3 (HP
+     * webOS 2.2.4, 480 x 800 at a scale of 1.5, so apps lay out 320 wide). Both profiles are
+     * LunaCore's, measured on the devices. A page is told its device once, as it starts, so
+     * Electron closes every app before it changes this.
+     */
+    @Volatile var device = org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD
+        private set
+
+    /** The screen as the device names it (deviceInfo's screenWidth and screenHeight), and the scale pages are drawn at. */
+    val screenWidth get() = if (device == org.webosarchive.lunacy.card.DeviceProfile.PRE3) 480 else 1024
+    val screenHeight get() = if (device == org.webosarchive.lunacy.card.DeviceProfile.PRE3) 800 else 768
+    val scale get() = if (device == org.webosarchive.lunacy.card.DeviceProfile.PRE3) 1.5 else 1.0
+
+    fun setDevice(name: String) {
+        device = if (name == "pre3") org.webosarchive.lunacy.card.DeviceProfile.PRE3 else org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD
+        // Held the way the device names its screen: a TouchPad wide, a Pre3 tall.
+        orientation = if (device.naturalLandscape) "right" else "up"
+        Log.i(Lunacy.TAG, "device: ${device.modelNameAscii}")
+    }
+
     // ---- the screen ----
 
     /** How the device is held: "right" and "left" are the TouchPad's landscape, "up" and "down" its portrait (Docs/spike-1.md). */

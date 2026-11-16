@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld("lunade", {
 	appMenu: () => ipcRenderer.invoke("lunade:appmenu"),
 	back: () => ipcRenderer.invoke("lunade:back"),
 	rotate: () => ipcRenderer.invoke("lunade:rotate"),
+	device: (id) => ipcRenderer.invoke("lunade:device", id),
+	screenNow: () => ipcRenderer.invoke("lunade:screen-now"),
 	key: (key) => ipcRenderer.invoke("lunade:key", key),
 	realKeyboard: () => ipcRenderer.invoke("lunade:real-keyboard"),
 	keyboardSize: (size) => ipcRenderer.invoke("lunade:keyboard-size", size),

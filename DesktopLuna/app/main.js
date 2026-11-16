@@ -22,11 +22,28 @@ const IS_WIN = process.platform === "win32";
 // The TouchPad's screen, the only device for now (codepoet, 2026-11-15): 1024 x 768 held in
 // landscape ("right", "left"), 768 x 1024 in portrait ("up", "down"). The card area is below its
 // 28 px status bar (StatusBar.HEIGHT).
-const STATUS = 28, BEZEL = 44;
+//
+// Or a Pre3's (HP webOS 2.2.4): 480 x 800, named tall, and drawn at its ScaleFactor of 1.5 (its
+// luna-platform.conf, read off the device 2026-11-16), so a page lays out 320 wide and the
+// status bar's 28 px are the screen's 42. The device is the host's to say (its /shell); the
+// window, its zoom and every measure here follow it. Sizes here are the screen's own px.
+const BEZEL = 44;
+let device = { id: "touchpad", name: "HP TouchPad", width: 1024, height: 768, scale: 1, virtualKeyboard: true };
 let orientation = "right";
 const portrait = () => orientation === "up" || orientation === "down";
-const screenSize = () => (portrait() ? { width: 768, height: 1024 } : { width: 1024, height: 768 });
-const cardRect = () => { const s = screenSize(); return { x: 0, y: STATUS, width: s.width, height: s.height - STATUS }; };
+const STATUS_CSS = 28;
+const statusPx = () => Math.round(STATUS_CSS * device.scale);
+const screenSize = () => {
+	const long = Math.max(device.width, device.height), short = Math.min(device.width, device.height);
+	return portrait() ? { width: short, height: long } : { width: long, height: short };
+};
+const cardRect = () => { const s = screenSize(); return { x: 0, y: statusPx(), width: s.width, height: s.height - statusPx() }; };
+/** What the shell page is told of the screen: in its own px, which are the device's over its scale. */
+const screenForShell = () => {
+	const s = screenSize();
+	return { width: Math.round(s.width / device.scale), height: Math.round(s.height / device.scale), orientation, device: device.id,
+		bezel: BEZEL / device.scale, virtualKeyboard: device.virtualKeyboard };
+};
 
 let host = null;          // "http://127.0.0.1:<port>"
 let hostProcess = null;
@@ -163,7 +180,7 @@ function addPanel(view, appId, kind, attrs) {
 	const p = { id, appId, kind, view, height: Number(attrs.height) || (kind === "dashboard" ? 52 : 100) };
 	panels.set(id, p);
 	view.setBackgroundColor("#00000000");
-	view.setBounds({ x: 0, y: STATUS, width: 320, height: p.height });
+	view.setBounds({ x: 0, y: statusPx(), width: 320, height: p.height });
 	view.setVisible(false);
 	shell.contentView.addChildView(view);
 	adoptOpens(view.webContents);
@@ -232,7 +249,8 @@ let keyboardCard = null;   // the card the keyboard is up for
 
 function applyKeyboard() {
 	const c = shown ? cards.get(shown) : null;
-	const want = !!(c && !c.popped && c.wantsKeyboard && !realKeyboard);
+	// A Pre3 has no on-screen keyboard at all (VirtualKeyboardEnabled=false in its luna-platform.conf): its keys are its own.
+	const want = !!(c && !c.popped && c.wantsKeyboard && !realKeyboard && device.virtualKeyboard);
 	if ((want ? c : null) === keyboardCard) { return; }
 	if (keyboardCard) { lowerKeyboard(keyboardCard, !want); }
 	keyboardCard = want ? c : null;
@@ -252,7 +270,7 @@ async function raiseKeyboard(c) {
 	await callMojo(wc, "keyboardShown", "true");
 	if (keyboardCard !== c) { return; }
 	if (c.shrunk) { c.view.setBounds({ x: r.x, y: r.y, width: r.width, height: r.height - KEYBOARD }); }
-	else { callMojo(wc, "positiveSpaceChanged", r.width + "," + (r.height - KEYBOARD)); }
+	else { callMojo(wc, "positiveSpaceChanged", Math.round(r.width / device.scale) + "," + Math.round((r.height - KEYBOARD) / device.scale)); }
 }
 
 async function lowerKeyboard(c, blur) {
@@ -263,7 +281,7 @@ async function lowerKeyboard(c, blur) {
 	// Put away by the person (the hide key, a real keyboard arriving): the field's focus goes with it.
 	const unfocus = blur && c.wantsKeyboard;
 	if (unfocus) { c.wantsKeyboard = false; }
-	if (wasShrunk) { if (!c.popped) { c.view.setBounds(r); } } else { await callMojo(wc, "positiveSpaceChanged", r.width + "," + r.height); }
+	if (wasShrunk) { if (!c.popped) { c.view.setBounds(r); } } else { await callMojo(wc, "positiveSpaceChanged", Math.round(r.width / device.scale) + "," + Math.round(r.height / device.scale)); }
 	await callMojo(wc, "keyboardShown", "false");
 	if (unfocus && !wc.isDestroyed()) { wc.executeJavaScript("window.__lunacyRemoveInputFocus&&__lunacyRemoveInputFocus()", false).catch(() => {}); }
 }
@@ -395,7 +413,9 @@ ipcMain.handle("lunade:place", (e, rects, dashboardsOpen) => {
 	const byId = new Map(rects.map((r) => [r.id, r]));
 	for (const p of panels.values()) {
 		const r = byId.get(p.id);
-		if (r) { p.view.setBounds({ x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }); }
+		// The shell's px are the page's; the screen's are those times the device's scale.
+		const k = device.scale;
+		if (r) { p.view.setBounds({ x: Math.round(r.x * k), y: Math.round(r.y * k), width: Math.round(r.width * k), height: Math.round(r.height * k) }); }
 		p.view.setVisible(!!r);
 		if (p.kind === "dashboard") { tell(p.view.webContents, "focus", String(!!dashboardsOpen)); }
 	}
@@ -561,7 +581,7 @@ async function turn(to) {
 		const r = cardRect();
 		c.view.setBounds(c === keyboardCard && c.shrunk ? { x: r.x, y: r.y, width: r.width, height: r.height - KEYBOARD } : r);
 	}
-	send("lunade:screen", { width: size.width, height: size.height, orientation });
+	send("lunade:screen", screenForShell());
 	net.fetch(host + "/orientation?v=" + to, { method: "POST" }).catch(() => {});
 }
 
@@ -571,11 +591,54 @@ async function turn(to) {
 // Luna DE's own: F12 for the DevTools of whatever has the keyboard, Ctrl/Cmd+R to reload it, and
 // F1 as a spare home button.
 const TURN = { F6: "up", F7: "down", F8: "right", F9: "left" };
+/** Every page is drawn at the device's scale: 1 on a TouchPad, 1.5 on a Pre3, whose pages are 320 px to its screen's 480. */
+function scalePage(wc) {
+	const set = () => { if (!wc.isDestroyed()) { try { wc.setZoomFactor(device.scale); } catch (e) {} } };
+	set();
+	wc.on("dom-ready", set);
+	wc.on("did-finish-load", set);
+}
+
+/** What the host says of the device it is being, and what follows from it here. */
+async function readDevice() {
+	try {
+		const s = await (await net.fetch(host + "/shell")).json();
+		deviceUserAgent = s.userAgent || "";
+		if (s.device) { device = s.device; orientation = s.device.orientation || orientation; }
+	} catch (e) {}
+}
+
+/**
+ * Luna DE becomes another device: every app is closed first (a page is told its device once, as
+ * it starts), then the host changes, and the window takes the new screen's size and scale.
+ */
+async function setDevice(id) {
+	if (id === device.id || !shell) { return device.id; }
+	for (const c of [...cards.values()]) { removeCard(c.id, true); }
+	for (const p of [...panels.values()]) { removePanel(p.id, true); }
+	for (const h of [...headless.values()]) { if (!h.webContents.isDestroyed()) { h.webContents.close(); } }
+	headless.clear();
+	keyboardCard = null;
+	await net.fetch(host + "/device?v=" + id, { method: "POST" }).catch(() => {});
+	await readDevice();
+	const size = screenSize();
+	shell.setResizable(true);
+	shell.setContentSize(size.width, size.height + BEZEL);
+	shell.setResizable(false);
+	try { shell.webContents.setZoomFactor(device.scale); } catch (e) {}
+	send("lunade:keyboard", { show: false, height: KEYBOARD });
+	send("lunade:screen", screenForShell());
+	return device.id;
+}
+ipcMain.handle("lunade:device", (e, id) => setDevice(id || (device.id === "touchpad" ? "pre3" : "touchpad")));
+ipcMain.handle("lunade:screen-now", () => screenForShell());
+
 /** The user agent every app page gives: the device's own, which webOS apps look for (DeviceProfile.userAgent, from the host). */
 let deviceUserAgent = "";
 app.on("web-contents-created", (e, wc) => {
 	// Before anything loads in it; the shell's own page keeps Electron's.
 	if (deviceUserAgent && !(shell && wc === shell.webContents)) { wc.setUserAgent(deviceUserAgent); }
+	scalePage(wc);
 	// A page that has gone is no longer one of its app's windows: the host is told here, by the
 	// main process, which always knows. (The page's own word, a beacon as it unloads, doesn't
 	// get out of a view that is being destroyed; the host then took the next launch of the app
@@ -617,7 +680,7 @@ app.whenReady().then(async () => {
 		return;
 	}
 	routeAppOrigins();
-	try { deviceUserAgent = (await (await net.fetch(host + "/shell")).json()).userAgent || ""; } catch (e) {}
+	await readDevice();
 	try {
 		const k = await (await net.fetch(host + "/keyboard-size")).json();
 		if (KEYBOARD_HEIGHTS[String(k.size)]) { keyboardSize = k.size; KEYBOARD = KEYBOARD_HEIGHTS[String(k.size)]; }

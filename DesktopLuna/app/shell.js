@@ -14,7 +14,7 @@
 		ORIGIN_Y = RESERVE + (AREA - RESERVE) * ORIGIN;    // originY() within the card area
 		document.documentElement.style.setProperty("--w", w + "px");
 		document.documentElement.style.setProperty("--h", h + "px");
-		document.documentElement.style.setProperty("--columns", w >= 1024 ? 6 : 4);
+		document.documentElement.style.setProperty("--columns", w >= 1024 ? 6 : w >= 700 ? 4 : 3);
 	}
 	measure(1024, 768);
 	var TAP = 25, THROW_DISTANCE = -50, THROW_VELOCITY = -1.1;   // TAP_RADIUS; THROW_*, px and px/ms
@@ -356,6 +356,19 @@
 	$("home").addEventListener("click", home);
 	// The bezel's other corner: the card that is up, or in front in the card view, popped out.
 	$("popout").addEventListener("click", function () { var c = cards[active]; if (c && c.id) { window.lunade.popOut(c.id); } });
+	// And the device itself: a TouchPad or a Pre3, by its picture.
+	$("device").addEventListener("click", function () { window.lunade.device(); });
+	/** The screen as main.js gives it (in this page's px), the device's picture, and what the device hasn't got. */
+	function applyScreen(d) {
+		measure(d.width, d.height);
+		document.body.classList.toggle("portrait", d.height > d.width);
+		document.body.classList.toggle("phone", d.device === "pre3");
+		// The bezel is Luna DE's own, not the device's screen: it keeps its size at any scale.
+		if (d.bezel) { document.documentElement.style.setProperty("--unzoom", String(d.bezel / 44)); }
+		$("device").querySelector("img").src = "images/device-" + (d.device || "touchpad") + ".png";
+		$("realkb").style.display = d.virtualKeyboard === false ? "none" : "";
+	}
+	window.lunade.screenNow().then(applyScreen);
 	// The bezel's corner: the device turned between wide and tall.
 	$("rotate").addEventListener("click", function () { window.lunade.rotate(); });
 	document.addEventListener("keydown", function (e) {
@@ -493,8 +506,7 @@
 	window.lunade.onToggleCard(toggleCard);
 	window.lunade.onLauncher(function () { if ($("launcher").hidden) { openLauncher(); } else { closeLauncher(); } });
 	window.lunade.onScreen(function (d) {
-		measure(d.width, d.height);
-		document.body.classList.toggle("portrait", d.height > d.width);
+		applyScreen(d);
 		if (maximized) { cards.forEach(function (k, j) { k.el.classList.remove("animate"); transform(k, j === active ? 0 : (j < active ? -1 : 1) * (W + GAP), 0, 1); }); }
 		else { layout(false); }
 		placePanels();

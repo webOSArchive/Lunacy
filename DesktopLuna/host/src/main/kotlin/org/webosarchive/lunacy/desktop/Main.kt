@@ -82,10 +82,6 @@ fun main(args: Array<String>) {
     // The system service: the time and zones, and preferences, kept in the data folder. What
     // nobody has set is the desktop's own (its locale, a 12-hour clock) on a TouchPad.
     val systemService = org.webosarchive.lunacy.card.SystemService(webosRoot, File(data, "systemservice.json"))
-    systemService.hostPreference = { key ->
-        org.webosarchive.lunacy.card.SystemService.devicePreference(key, java.util.Locale.getDefault(), false,
-            org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD.carrierCode, DEFAULT_WALLPAPER)
-    }
     // The application manager: launch and open, the content handlers, the app and launch point
     // lists, and installing packages (appinstaller, appInstallService), over Luna DE's shell.
     val desktopRoot = DesktopRoot(webosRoot, File(data, "jshost"), repo, rom)
@@ -93,6 +89,10 @@ fun main(args: Array<String>) {
     val addedLaunchPoints = org.webosarchive.lunacy.card.LaunchPoints(webosRoot, files)
     val shell = DesktopShell(main, registry, files, packages, addedLaunchPoints, data)
     val windows = shell.windows
+    systemService.hostPreference = { key ->
+        org.webosarchive.lunacy.card.SystemService.devicePreference(key, java.util.Locale.getDefault(), false,
+            shell.device.carrierCode, DEFAULT_WALLPAPER)
+    }
     main.call {
         db8.register(bus); tempdb.register(bus)
         systemService.register(bus)
@@ -101,7 +101,7 @@ fun main(args: Array<String>) {
         // rather than look for Preware) finds it here as on Android. What that service does for
         // Android (permissions, Android's settings and notifications) isn't offered.
         bus.register(Lunacy.SERVICE, "system/getEnvironment") { _, _, reply ->
-            val profile = org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD
+            val profile = shell.device
             reply(JSONObject().put("returnValue", true)
                 .put("lunacy", JSONObject().put("version", "Luna DE").put("flavour", "desktop")
                     .put("reportsWebOS", profile.versionString).put("reportsAs", profile.modelName)
@@ -188,7 +188,12 @@ fun main(args: Array<String>) {
             .put("pages", JSONArray(pages.map { (d, p) -> JSONObject().put("designator", d).put("title", p.first).put("apps", JSONArray(p.second.map(::entry))) }))
             .put("dock", JSONArray(launcherPages.quickLaunch().mapNotNull { byId[it] }.map(::entry)))
             // What every app's page says it is: the TouchPad's browser, as on Android (AppWindow).
-            .put("userAgent", org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD.userAgent)
+            .put("userAgent", shell.device.userAgent)
+            // The device Luna DE is being, for Electron to size and scale its window by.
+            .put("device", JSONObject().put("id", if (shell.device == org.webosarchive.lunacy.card.DeviceProfile.PRE3) "pre3" else "touchpad")
+                .put("name", shell.device.deviceName).put("width", shell.screenWidth).put("height", shell.screenHeight)
+                .put("scale", shell.scale).put("orientation", shell.orientation)
+                .put("virtualKeyboard", shell.device == org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD))
         send(ex, 200, "application/json; charset=utf-8", out.toString().toByteArray())
     } }
 
@@ -270,6 +275,11 @@ fun main(args: Array<String>) {
     http.createContext("/window") { ex -> ex.use {
         val q = query(ex)
         shell.tell(q["w"].orEmpty(), q["do"].orEmpty(), q["v"].orEmpty())
+        send(ex, 204, "text/plain", ByteArray(0))
+    } }
+    // Luna DE becomes another device (Electron has closed every app first).
+    http.createContext("/device") { ex -> ex.use {
+        shell.setDevice(query(ex)["v"].orEmpty())
         send(ex, 204, "text/plain", ByteArray(0))
     } }
     http.createContext("/orientation") { ex -> ex.use {

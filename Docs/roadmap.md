@@ -64,16 +64,51 @@ Every fix is on main, pushed:
    holds a luna-de debug APK: `./build.sh publish` clears it.
 2. `gradle.properties` to `versionName=1.0.1`, committed.
 3. `./test.sh`, then `./build.sh publish` (six APKs, the GPL tar, SHA256SUMS, the inventory).
-4. The fresh-install pass first, on the Kyocera (it erases Lunacy's data there):
-   `Workbench/fresh-install.sh 192.168.10.58:5555 out/AndroidLuna-arm64-debug.apk Docs/test-results/NNN/fresh-kyocera.txt`,
+4. The fresh-install pass first, on the Galaxy Tab A7 Lite (it erases Lunacy's data there; the
+   Kyocera is codepoet's F-Droid update test device and is not touched, codepoet, 2026-11-16):
+   `Workbench/fresh-install.sh 192.168.10.27:5555 out/AndroidLuna-arm64-debug.apk Docs/test-results/NNN/fresh-a7lite.txt`,
    then by hand: the Android account from Contacts' first screen (test-plan section 9).
-5. `device-test.sh` on the Fold3 and the Nexus 7 (the Fold3 and the Kyocera run luna-de builds
-   now: reinstall them from `out/`); the PDK sweep. The Pixel Tablet is codepoet's for 1.0.0
+5. `device-test.sh` on the Fold3 and the Nexus 7 (the Fold3 ran a luna-de build:
+   reinstall it from `out/`); the PDK sweep. The Pixel Tablet is codepoet's for 1.0.0
    testing: don't touch it unless they open it.
 6. The F-Droid feed (`Meta/fdroid/update-repo.sh`; codepoet uploads only `repo/` and `archive/`).
 7. Release notes: the three cases for 1.0.0 users of the Android account (mended by the update;
    already fine if Lunacy was restarted since First Use; add the account once more if it was
    never made).
+
+**The 1.0.1 round (2026-11-16):**
+
+```
+Build under test:  1.0.1, build 648, commit 1714852
+                   out/SHA256SUMS sha256 7a88175af80bc80dba20f8289af62959029fa45313a4109dde87d8c30f1e7dd8
+                                                       (six APKs: release + debug, both
+                                                        ABIs and the keyboard)
+Tier 1:            ./test.sh             10 passed / 0 failed / 1 skipped (build.sh release ran it)
+                   apk-inventory         every APK: 9762 or 9763 files by content, 26 patches,
+                                         0 problems (build.sh ran it)
+Tier 2:            fresh-install.sh      A7 Lite, debug: 43 passed / 0 failed  test-results/648/fresh-a7lite.txt
+                                         (3 test Android contacts -> the account, 3 people, 17 activities live)
+                   device-test.sh        every device on build 648
+                   Fold3      (debug)    50 passed / 0 failed     test-results/648/fold3.txt
+                   Pixel      (debug)    49 passed / 0 failed     test-results/648/pixel-tablet.txt
+                   Nexus 7    (debug)    42 passed / 0 failed     test-results/648/nexus7.txt
+                   pdk-sweep.sh          Fold3 17/17; Nexus 7 7/7 (9 not installed there);
+                                         Pixel 16/17: RoboCop exits, a sampled app, known since 0.9.3
+Tier 3:            test-results/648/human.txt; sections 7 to 14 are codepoet's, not run
+
+What this run does NOT decide, despite being green:
+                   - anything only a person sees: rule 0 is tier 3, never tier 2
+                   - a release build's in-page checks (they run on the debug build)
+                   - an account the round didn't sign in to
+                   - the count fix by eye in build 648 (measured in the page; the stylesheet
+                     checked on all four devices)
+                   - the update path from 1.0.0 through F-Droid (codepoet's, on the Kyocera)
+```
+
+The first 1.0.1 build of the day (647) was stopped: the inventory held an APK against
+`local-assets/`, which is how the count fix came to be in no build, so the check was made
+first (1714852) and the release built with it. Still to do: the F-Droid feed, the GitHub
+release, the release notes (step 7).
 
 **Then Luna DE**, on the `luna-de` branch (Docs/luna-de.md there): Lunacy on the desktop for
 webOS developers, in one Electron window running the shell, sharing LunaCore with this Android

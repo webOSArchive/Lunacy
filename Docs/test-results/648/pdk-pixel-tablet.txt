@@ -1,0 +1,23 @@
+[INFO] sample of 4 from 9 other PDK apps: com.gameduell.app.junglejewels com.apkenv.pvzhd com.apkenv.robocop com.apkenv.cuttherope 
+[PASS] org.scummvm.scummvm: started (.lunacy.start through libbusybox.so and libqemu-arm.so), still running after 30 s
+[PASS] com.ea.app.worms.pre.na.efigs: started (.lunacy.start.sh through libbusybox.so and libqemu-arm.so), still running after 30 s
+[PASS] com.cmdrkeen.game: started (clonekeen through libqemu-arm.so), still running after 30 s
+[PASS] com.subatomicstudios.fieldrunners: started (fieldrunners through libqemu-arm.so), still running after 30 s
+[PASS] com.bigfishgames.app.atlantisskypatrolhd: started (atlantisskypatrolhd through libqemu-arm.so), still running after 30 s
+[PASS] com.hyperdevbox.exzeus: started (exzeus through libqemu-arm.so), still running after 30 s
+[PASS] com.explusalpha.snes9x: started (s9x through libqemu-arm.so), still running after 30 s
+[PASS] com.apkenv.wheresmywater: started (apkenv through libqemu-arm.so), still running after 30 s
+[PASS] com.apkenv.fruitninja: started (apkenv through libqemu-arm.so), still running after 30 s
+[PASS] com.glu.app.ghero5: started (ghero5.exe through libqemu-arm.so), still running after 30 s
+[PASS] com.gameloft.app.hawx: started (hawx through libqemu-arm.so), still running after 30 s
+[PASS] com.gameloft.app.asphalt6: started (Asphalt6 through libqemu-arm.so), still running after 30 s
+[PASS] com.quickoffice.webos: started (qoservice through libqemu-arm.so), still running after 30 s
+[PASS] com.gameduell.app.junglejewels: started (tiltodemo through libqemu-arm.so), still running after 30 s
+[PASS] com.apkenv.pvzhd: started (apkenv through libqemu-arm.so), still running after 30 s
+[FAIL] com.apkenv.robocop: started, then within 30 s: pdk [com.apkenv.robocop]: exited 1
+[PASS] com.apkenv.cuttherope: started (apkenv through libqemu-arm.so), still running after 30 s
+===== 16 started, 1 failed, 0 not installed; judge the screenshots in Workbench/results/pdk-648-pixel against pdk-scenarios.txt =====
+[retry, 75 s] [PASS] com.apkenv.cuttherope: started (apkenv through libqemu-arm.so), still running after 75 s
+[retry, 75 s] [PASS] com.gameduell.app.junglejewels: started (tiltodemo through libqemu-arm.so), still running after 75 s
+[retry, 75 s] [FAIL] com.apkenv.robocop: started, then within 75 s: pdk [com.apkenv.robocop]: exited 1
+[retry, 75 s] ===== 2 started, 1 failed, 0 not installed; judge the screenshots in Workbench/results/pdk-648-pixel-retry against pdk-scenarios.txt =====

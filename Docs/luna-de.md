@@ -48,6 +48,9 @@ API 21 gate.
   the same `core.Sql` as db8, with the typed statements and SQLite's own error messages each
   platform has to give alike (`SqlError`). `WebSqlSuite` runs on both SQLites. Mojo's Depot and
   cookies work, and a Mojo app (SimpleChat) runs its scenes.
+- **powerd's service** (`com.palm.power`): PowerService is in LunaCore, its timeouts kept in a
+  file. A Mojo app's alarm fires and relaunches it; its banners and dashboards show as an Enyo
+  app's do.
 - **App Catalog installs.** Lunacy's own service is on the bus (`org.webosarchive.lunacy`, with
   `system/getEnvironment` answering for the desktop it runs on), which is how App Catalog knows to
   install through Lunacy's installer; the download manager is in LunaCore and on the bus too.

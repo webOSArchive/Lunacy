@@ -28,6 +28,11 @@ interface PowerTimers {
     /** The CPU kept up for the activity [id] until [unlock]. */
     fun lock(id: Int)
     fun unlock(id: Int, debounce: Boolean)
+    /** Holds [key] for [ms], replacing any hold it already had (com.palm.power's activities). */
+    fun lockFor(key: String, ms: Long)
+    fun unlock(key: String)
+    /** Keeps the CPU up for [ms] (a timeout that has just fired). */
+    fun hold(ms: Long)
 
     companion object {
         /**
@@ -37,5 +42,17 @@ interface PowerTimers {
          * re-armed, and in Doze the next delivery was a minute away.
          */
         const val EARLY_MS = 5_000L
+        /** How long the device is held awake for a timer that fired, as powerd held it. */
+        const val GRACE_MS = 5_000L
     }
+}
+
+/**
+ * A few named strings kept across restarts: Android's SharedPreferences (which hold what earlier
+ * Lunacys wrote), a file on the desktop. powerd's timeouts are kept in one.
+ */
+interface KeyedStore {
+    fun all(): Map<String, String>
+    fun put(key: String, value: String)
+    fun remove(key: String)
 }

@@ -167,4 +167,20 @@ class DesktopPower(private val main: DesktopScheduler) : org.webosarchive.lunacy
 
     override fun lock(id: Int) {}
     override fun unlock(id: Int, debounce: Boolean) {}
+    override fun lockFor(key: String, ms: Long) {}
+    override fun unlock(key: String) {}
+    override fun hold(ms: Long) {}
+}
+
+/** A JSON file of strings, as LunaCore's [org.webosarchive.lunacy.core.KeyedStore]. */
+class FileKeyedStore(private val file: File) : org.webosarchive.lunacy.core.KeyedStore {
+    private val values = HashMap<String, String>().also { m ->
+        runCatching { org.json.JSONObject(file.readText()) }.getOrNull()?.let { o ->
+            @Suppress("UNCHECKED_CAST") (o.keys() as Iterator<String>).forEach { k -> m[k] = o.optString(k) }
+        }
+    }
+    @Synchronized override fun all(): Map<String, String> = HashMap(values)
+    @Synchronized override fun put(key: String, value: String) { values[key] = value; save() }
+    @Synchronized override fun remove(key: String) { if (values.remove(key) != null) save() }
+    private fun save() { runCatching { file.parentFile?.mkdirs(); file.writeText(org.json.JSONObject(values as Map<*, *>).toString()) } }
 }

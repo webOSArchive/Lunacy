@@ -106,7 +106,7 @@ class ShellActivity : Activity(), WindowHost {
     /** Every sign of having been asleep or frozen, answered as a webOS resume. */
     private val sleepWakeLazy = lazy { SleepWake(this, power) }
     private val sleepWake by sleepWakeLazy
-    private val powerService by lazy { PowerService(this, power) }
+    private val powerService by lazy { PowerService(org.webosarchive.lunacy.card.AndroidKeyedStore(this, "power-timeouts"), power) }
     private val activityManagerLazy = lazy { ActivityManager(org.webosarchive.lunacy.card.AndroidBattery(this), power) }
     private val activityManager by activityManagerLazy
     /** The shell's db8s and connection manager, closed with it ([onDestroy]). */

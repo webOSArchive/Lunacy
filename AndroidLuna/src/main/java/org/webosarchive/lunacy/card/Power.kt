@@ -114,7 +114,7 @@ class Power(private val app: Context) : org.webosarchive.lunacy.core.PowerTimers
     private val named = HashMap<String, Runnable>()
 
     /** Holds [key] for [ms], replacing any hold it already had. */
-    fun lockFor(key: String, ms: Long) {
+    override fun lockFor(key: String, ms: Long) {
         named.remove(key)?.let { main.removeCallbacks(it) }
         val end = Runnable { named.remove(key); apply() }
         named[key] = end
@@ -122,7 +122,7 @@ class Power(private val app: Context) : org.webosarchive.lunacy.core.PowerTimers
         apply()
     }
 
-    fun unlock(key: String) { named.remove(key)?.let { main.removeCallbacks(it); apply() } }
+    override fun unlock(key: String) { named.remove(key)?.let { main.removeCallbacks(it); apply() } }
 
     override fun unlock(id: Int, debounce: Boolean) {
         if (!held.remove(id)) return
@@ -130,7 +130,7 @@ class Power(private val app: Context) : org.webosarchive.lunacy.core.PowerTimers
     }
 
     /** Keeps the CPU up for [ms]. */
-    fun hold(ms: Long) {
+    override fun hold(ms: Long) {
         holding++
         apply()
         main.postDelayed({ holding--; apply() }, ms)
@@ -147,7 +147,7 @@ class Power(private val app: Context) : org.webosarchive.lunacy.core.PowerTimers
         private const val LATE = "org.webosarchive.lunacy.POWER_LATE"
         private const val LOCK_MS = 900_000L
         private const val DEBOUNCE_MS = 12_000L
-        const val GRACE_MS = 5_000L
+        const val GRACE_MS = org.webosarchive.lunacy.core.PowerTimers.GRACE_MS
         const val EARLY_MS = org.webosarchive.lunacy.core.PowerTimers.EARLY_MS
     }
 }

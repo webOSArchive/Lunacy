@@ -120,7 +120,10 @@ fun main(args: Array<String>) {
         org.webosarchive.lunacy.card.Http.offline = { network.simulatedDown }
         org.webosarchive.lunacy.card.ConnectionManager(network).register(bus)
         // After db8: the activity manager reads its persisted activities back as it registers.
-        org.webosarchive.lunacy.card.ActivityManager(DesktopBattery, DesktopPower(main)).register(bus)
+        val power = DesktopPower(main)
+        org.webosarchive.lunacy.card.ActivityManager(DesktopBattery, power).register(bus)
+        // powerd's keyed timers (a Mojo app's refresh alarm) and its power activities, kept across restarts.
+        org.webosarchive.lunacy.card.PowerService(FileKeyedStore(File(data, "power-timeouts.json")), power).also { it.register(bus); it.enable() }
         shell.configurator = org.webosarchive.lunacy.card.Configurator(files, db8, tempdb, webosRoot, bus)
         shell.applicationManager = org.webosarchive.lunacy.card.ApplicationManager(registry,
             org.webosarchive.lunacy.card.ContentHandlers(registry, webosRoot), addedLaunchPoints, files, packages, desktopRoot, shell)

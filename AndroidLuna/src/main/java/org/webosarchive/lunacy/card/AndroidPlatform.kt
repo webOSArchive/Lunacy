@@ -273,3 +273,11 @@ class AndroidNetwork(private val context: android.content.Context, private val b
         receiver = null
     }
 }
+
+/** A SharedPreferences file of strings, as LunaCore's [org.webosarchive.lunacy.core.KeyedStore]: powerd's timeouts live in "power-timeouts", as before LunaCore. */
+class AndroidKeyedStore(context: android.content.Context, name: String) : org.webosarchive.lunacy.core.KeyedStore {
+    private val prefs = context.getSharedPreferences(name, android.content.Context.MODE_PRIVATE)
+    override fun all(): Map<String, String> = prefs.all.mapNotNull { (k, v) -> (v as? String)?.let { k to it } }.toMap()
+    override fun put(key: String, value: String) { prefs.edit().putString(key, value).apply() }
+    override fun remove(key: String) { prefs.edit().remove(key).apply() }
+}

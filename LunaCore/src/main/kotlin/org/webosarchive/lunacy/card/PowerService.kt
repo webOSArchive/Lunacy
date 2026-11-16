@@ -1,8 +1,10 @@
 package org.webosarchive.lunacy.card
 
-import android.content.Context
-import android.util.Log
 import org.json.JSONObject
+import org.webosarchive.lunacy.core.KeyedStore
+import org.webosarchive.lunacy.core.Log
+import org.webosarchive.lunacy.core.PowerTimers
+import org.webosarchive.lunacy.core.keyNames
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -44,9 +46,8 @@ import java.util.TimeZone
  *
  * Main thread throughout.
  */
-class PowerService(context: Context, private val power: Power) {
+class PowerService(private val prefs: KeyedStore, private val power: PowerTimers) {
     private lateinit var bus: Bus
-    private val prefs = context.getSharedPreferences("power-timeouts", Context.MODE_PRIVATE)
 
     private class Timeout(val owner: String, val key: String, val at: Long, val wake: Boolean,
                           val uri: String, val params: Any, val holdMs: Long) {
@@ -58,10 +59,10 @@ class PowerService(context: Context, private val power: Power) {
 
     fun register(bus: Bus) {
         this.bus = bus
-        for ((id, v) in prefs.all) {
-            val o = runCatching { JSONObject(v as String) }.getOrNull() ?: continue
+        for ((id, v) in prefs.all()) {
+            val o = runCatching { JSONObject(v) }.getOrNull() ?: continue
             timeouts[id] = Timeout(o.getString("owner"), o.getString("key"), o.getLong("at"), o.getBoolean("wake"),
-                o.getString("uri"), o.get("params"), o.optLong("holdMs", Power.GRACE_MS))
+                o.getString("uri"), o.get("params"), o.optLong("holdMs", PowerTimers.GRACE_MS))
         }
         bus.register(SERVICE, "timeout/set", Bus.CallHandler { set(it) })
         bus.register(SERVICE, "timeout/clear", Bus.CallHandler { clear(it) })
@@ -108,7 +109,7 @@ class PowerService(context: Context, private val power: Power) {
         val duration = p.opt("activity_duration_ms") as? Number
         // "$" keys are the bus's own, not parameters: Mojo adds "$activity" to an app's every
         // call, and the reference TouchPad sets the timeout with it, or any other "$" key.
-        val validKeys = p.keys().asSequence().all { it in PARAMS || it.startsWith("$") } && (duration == null || p.has("activity_id"))
+        val validKeys = p.keyNames().asSequence().all { it in PARAMS || it.startsWith("$") } && (duration == null || p.has("activity_id"))
         if (key.isNullOrEmpty() || uri.isNullOrEmpty() || !p.has("params") || at == null || !validKeys ||
             (p.has("wakeup") && p.opt("wakeup") !is Boolean) || (p.has("keep_existing") && p.opt("keep_existing") !is Boolean))
             return call.reply(failure("Invalid format for 'timeout/set'."))
@@ -116,9 +117,9 @@ class PowerService(context: Context, private val power: Power) {
         if (p.optBoolean("keep_existing") && timeouts.containsKey(id))
             return call.reply(JSONObject().put("returnValue", true).put("key", key).put("kept_existing", true).toString())
         val t = Timeout(call.appId, key, at, p.optBoolean("wakeup"), uri, p.get("params"),
-            duration?.toLong()?.coerceIn(0, 900_000) ?: Power.GRACE_MS)
+            duration?.toLong()?.coerceIn(0, 900_000) ?: PowerTimers.GRACE_MS)
         timeouts[id] = t
-        prefs.edit().putString(id, t.json()).apply()
+        prefs.put(id, t.json())
         call.reply(JSONObject().put("returnValue", true).put("key", key).toString())
         if (at <= now) due() else arm()
     }
@@ -126,7 +127,7 @@ class PowerService(context: Context, private val power: Power) {
     private fun clear(call: Bus.Call) {
         val key = call.params.opt("key") as? String ?: return call.reply(failure("Invalid parameters."))
         val id = "${call.appId}\u0000$key"
-        if (timeouts.remove(id) != null) { prefs.edit().remove(id).apply(); arm() }
+        if (timeouts.remove(id) != null) { prefs.remove(id); arm() }
         call.reply(JSONObject().put("returnValue", true).put("key", key).toString())
     }
 
@@ -136,15 +137,13 @@ class PowerService(context: Context, private val power: Power) {
         val now = System.currentTimeMillis()
         val fired = timeouts.filterValues { it.at <= now }
         if (fired.isNotEmpty()) {
-            val edit = prefs.edit()
             for ((id, t) in fired) {
-                timeouts.remove(id); edit.remove(id)
+                timeouts.remove(id); prefs.remove(id)
                 Log.i(AppServer.TAG, "power: timeout ${t.key} of ${t.owner} fired${if (now - t.at > 60_000) ", ${(now - t.at) / 1000} s late" else ""}")
                 power.hold(t.holdMs)
                 // The callback's payload is an object; any other "params" goes as an empty one.
                 bus.call(SERVICE, t.uri, (t.params as? JSONObject)?.toString() ?: "{}", privateBus = true) { reply -> if (!Bus.succeeded(reply)) Log.w(AppServer.TAG, "power: timeout ${t.key}: $reply") }
             }
-            edit.apply()
         }
         arm()
     }
@@ -153,7 +152,7 @@ class PowerService(context: Context, private val power: Power) {
     private fun failure(text: String) = JSONObject().put("returnValue", false).put("errorText", text).toString()
 
     private fun arm() {
-        timeouts.values.minOfOrNull { it.at }?.let { if (it - System.currentTimeMillis() <= Power.EARLY_MS) power.soon(it) }
+        timeouts.values.minOfOrNull { it.at }?.let { if (it - System.currentTimeMillis() <= PowerTimers.EARLY_MS) power.soon(it) }
         power.at(WAKE, timeouts.values.filter { it.wake }.minOfOrNull { it.at }, wake = true)
         power.at(LATE, timeouts.values.filter { !it.wake }.minOfOrNull { it.at }, wake = false)
     }

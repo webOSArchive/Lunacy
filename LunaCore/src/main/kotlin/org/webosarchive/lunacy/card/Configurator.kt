@@ -1,8 +1,9 @@
 package org.webosarchive.lunacy.card
 
-import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
+import org.webosarchive.lunacy.core.Log
+import org.webosarchive.lunacy.core.WebosPaths
 import java.io.File
 
 /**
@@ -46,8 +47,8 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
 
     private fun appKinds() {
         for (id in files.appIds()) {
-            configure("${Packages.APPS}/$id/configuration/db", db, id)
-            configure("${Packages.APPS}/$id/configuration/tempdb", tempdb, id)
+            configure("${WebosPaths.APPS}/$id/configuration/db", db, id)
+            configure("${WebosPaths.APPS}/$id/configuration/tempdb", tempdb, id)
         }
     }
 
@@ -73,16 +74,16 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
         if (system != null) defineTypes(File(system, "etc/palm/filecache_types").listFiles().orEmpty().filter { it.isFile }.mapNotNull { f ->
             runCatching { f.readText() }.getOrNull()
         })
-        for (id in files.appIds()) defineTypes(files.list("${Packages.APPS}/$id/configuration/filecache").mapNotNull { name ->
-            files.open("${Packages.APPS}/$id/configuration/filecache/$name")?.use { it.bufferedReader().readText() }
+        for (id in files.appIds()) defineTypes(files.list("${WebosPaths.APPS}/$id/configuration/filecache").mapNotNull { name ->
+            files.open("${WebosPaths.APPS}/$id/configuration/filecache/$name")?.use { it.bufferedReader().readText() }
         })
     }
 
     /** Services' kinds, from packages or the webOS root's /usr/palm/services; returns their activity files for later. */
     private fun serviceKinds(): List<ActivityFile> {
         val found = ArrayList<ActivityFile>()
-        (File(files.root, JsServices.SERVICES).listFiles().orEmpty().toList() +
-            (system?.let { File(it, JsServices.SERVICES).listFiles() }.orEmpty())).forEach { dir ->
+        (File(files.root, WebosPaths.SERVICES).listFiles().orEmpty().toList() +
+            (system?.let { File(it, WebosPaths.SERVICES).listFiles() }.orEmpty())).forEach { dir ->
             val cfg = File(dir, "configuration")
             if (!cfg.isDirectory) return@forEach
             configureFiles(File(cfg, "db"), db, dir.name)
@@ -96,7 +97,7 @@ class Configurator(private val files: AppFiles, private val db: Db8, private val
     private fun appActivities(): List<ActivityFile> {
         val found = ArrayList<ActivityFile>()
         for (id in files.appIds()) {
-            val dir = "${Packages.APPS}/$id/configuration/activities"
+            val dir = "${WebosPaths.APPS}/$id/configuration/activities"
             for (creator in files.list(dir)) for (name in files.list("$dir/$creator")) {
                 val text = files.open("$dir/$creator/$name")?.use { it.bufferedReader().readText() } ?: continue
                 found += ActivityFile("$dir/$creator/$name", "$APP_ID:$creator", text)

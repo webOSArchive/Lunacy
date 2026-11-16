@@ -36,6 +36,8 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
     private val installedDir = installed
     @Volatile private var prepared = false
     val lunaSend = LunaSendServer(bus, File(root, "var/run/luna-send.sock"))
+    /** The root's files, which LunaCore lays down (the ROM, the folders, the build info). */
+    private val rom = RomFiles(AndroidAssets(context.assets), root)
 
     /** Builds root/ once per run, and lays the ROM down again after each APK update. */
     @Synchronized fun prepare() {
@@ -45,121 +47,22 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
         if (!stamp.isFile || stamp.readText() != apk) {
             // Before the ROM, whose manifest this replaces: the tree the earlier scheme copied
             // wholesale on every update has nothing a script could have changed.
-            if (!File(root, ROM_MANIFEST).isFile) File(root, "usr").deleteRecursively()
-            syncRom()
+            if (!File(root, RomFiles.ROM_MANIFEST).isFile) File(root, "usr").deleteRecursively()
+            rom.syncRom()
             host.deleteRecursively()
-            copyAssets("lunacy/services", host)
+            rom.copyAssets("lunacy/services", host)
             installTools()
             stamp.writeText(apk)
         }
-        // The folders every TouchPad has, which scripts write into without making them.
-        // media/internal/.developer is developer mode's: the SDK's palm-install puts the
-        // package there before installing it, and every Lunacy is in developer mode.
-        for (d in listOf("media/internal", "media/internal/.developer", "tmp", "var/tmp", "var/run", "var/log", "var/palm", "var/luna/preferences", "var/luna/data", "var/preferences", "var/file-cache", "home/root", "bin", "usr/bin",
-                "sbin", "usr/sbin", "usr/lib", "usr/palm/applications", "usr/palm/services", "usr/palm/public",
-                "usr/palm/frameworks", "etc/palm", "etc/event.d", "etc/udev/rules.d")) File(root, d).mkdirs()
-        link(installedDir.path, File(root, "media/cryptofs/apps"))
+        rom.makeFolders(installedDir)
         writeBuildInfo()
         prepared = true
     }
 
-    /**
-     * `/etc/palm-build-info`, which the SDK's tools read before anything else to learn what
-     * they are talking to. A device's said `PRODUCT_VERSION_STRING=webOS CE 3.1.0` (the
-     * reference TouchPad); Lunacy's says it is Lunacy, and webos-sdk-redux recognises it by
-     * name rather than Lunacy passing itself off as a TouchPad (codepoet, 2026-10-05).
-     */
     private fun writeBuildInfo() {
         val info = context.packageManager.getPackageInfo(context.packageName, 0)
         @Suppress("DEPRECATION") val code = info.versionCode
-        val text = "PRODUCT_VERSION_STRING=Lunacy ${info.versionName}\nBUILDNAME=Lunacy\nBUILDNUMBER=$code\n"
-        val f = File(root, "etc/palm-build-info")
-        if (!f.isFile || f.readText() != text) { f.parentFile?.mkdirs(); f.writeText(text) }
-    }
-
-    // ---- the ROM ----
-
-    /** Lays assets/rootfs/ into root/, keeping files changed since the last APK laid them down. */
-    private fun syncRom() {
-        val manifest = File(root, ROM_MANIFEST)
-        val before = if (manifest.isFile) manifest.readLines().mapNotNull { l ->
-            l.split(' ', limit = 2).takeIf { it.size == 2 }?.let { it[1] to it[0] }
-        }.toMap() else emptyMap()
-        val now = LinkedHashMap<String, String>()
-        var kept = 0
-        // fetch-assets lists the ROM's files: walking it with AssetManager.list() instead took
-        // most of a minute on the HP tablet, because each call reads the APK's whole asset index.
-        val index = try { context.assets.open("$ROM.index").bufferedReader().readLines().filter { it.isNotBlank() } }
-            catch (e: IOException) { ArrayList<String>().also { l -> walkAssets(ROM) { l += it } } }
-        for (rel in index) {
-            // A file the index lists but the APK doesn't carry is skipped, not fatal: aapt drops
-            // some names by itself (dotfiles), and the shell must still start.
-            val bytes = try { context.assets.open("$ROM/$rel").use { it.readBytes() } }
-                catch (e: IOException) { Log.w(AppServer.TAG, "rootfs: $rel is listed but not in the APK"); continue }
-            val sum = sha1(bytes)
-            now[rel] = sum
-            val f = File(root, rel)
-            val onDisk = if (f.isFile) sha1(f.readBytes()) else null
-            val shipped = before[rel]
-            if (onDisk == null || onDisk == shipped || shipped == null) {
-                if (onDisk != sum) { f.parentFile?.mkdirs(); f.writeBytes(bytes) }
-            } else if (onDisk != sum) {
-                kept++
-                Log.i(AppServer.TAG, "rootfs: kept /$rel, changed since Lunacy shipped it")
-            }
-        }
-        // Files the ROM no longer has go too, unless something changed them.
-        for ((rel, sum) in before) if (rel !in now) {
-            val f = File(root, rel)
-            if (f.isFile && sha1(f.readBytes()) == sum) f.delete()
-        }
-        manifest.parentFile?.mkdirs()
-        manifest.writeText(now.entries.joinToString("") { "${it.value} ${it.key}\n" })
-        // The ROM's symlinks (fetch-assets' rootfs.links), made as the device had them -
-        // version/1.0 -> ../submission/48 - since an APK can't carry a link. An earlier ROM
-        // laid the link's target down in its place; that copy goes.
-        val links = try { context.assets.open("$ROM.links").bufferedReader().readLines() } catch (e: IOException) { emptyList() }
-        for (l in links) {
-            val (rel, target) = l.split(' ', limit = 2).takeIf { it.size == 2 } ?: continue
-            relink(relativePath(rel.substringBeforeLast('/', ""), target), File(root, rel))
-        }
-        Log.i(AppServer.TAG, "rootfs: ${now.size} files and ${links.size} links from the ROM, $kept kept as changed")
-    }
-
-    /** A symlink at [at] to [target], replacing whatever was there unless it is that link already. */
-    private fun relink(target: String, at: File) {
-        if (runCatching { Os.readlink(at.path) }.getOrNull() == target) return
-        if (runCatching { Os.readlink(at.path) }.isSuccess) at.delete()
-        else if (at.isDirectory) at.deleteRecursively()
-        else if (at.exists()) at.delete()
-        at.parentFile?.mkdirs()
-        Os.symlink(target, at.path)
-    }
-
-    /** [to] as a relative path from the folder [from], both relative to the root: ("a/b/version", "a/b/submission/48") is "../submission/48". */
-    private fun relativePath(from: String, to: String): String {
-        val f = if (from.isEmpty()) emptyList() else from.split('/')
-        val t = to.split('/')
-        var common = 0
-        while (common < f.size && common < t.size && f[common] == t[common]) common++
-        return (List(f.size - common) { ".." } + t.drop(common)).joinToString("/")
-    }
-
-    private fun walkAssets(dir: String, rel: String = "", each: (String) -> Unit) {
-        val path = if (rel.isEmpty()) dir else "$dir/$rel"
-        val children = context.assets.list(path).orEmpty()
-        if (children.isEmpty()) { if (rel.isNotEmpty()) each(rel); return }
-        children.forEach { walkAssets(dir, if (rel.isEmpty()) it else "$rel/$it", each) }
-    }
-
-    private fun sha1(b: ByteArray) = MessageDigest.getInstance("SHA-1").digest(b).joinToString("") { "%02x".format(it) }
-
-    private fun copyAssets(from: String, to: File) {
-        val children = context.assets.list(from).orEmpty()
-        if (children.isEmpty()) {
-            to.parentFile?.mkdirs()
-            context.assets.open(from).use { i -> to.outputStream().use { i.copyTo(it) } }
-        } else children.forEach { copyAssets("$from/$it", File(to, it)) }
+        rom.writeBuildInfo(info.versionName ?: "", code.toString())
     }
 
     // ---- commands ----
@@ -215,11 +118,7 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
         list.writeText(made.joinToString("") { "$it\n" })
     }
 
-    private fun link(target: String, at: File) {
-        if (at.exists() || runCatching { Os.readlink(at.path) }.isSuccess) return
-        at.parentFile?.mkdirs()
-        Os.symlink(target, at.path)
-    }
+    private fun link(target: String, at: File) = rom.link(target, at)
 
     // ---- processes in the webOS root ----
 
@@ -244,8 +143,6 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
     )
 
     companion object {
-        const val ROM = "rootfs"
-        const val ROM_MANIFEST = ".lunacy-rom"
         const val TOOLS_LIST = ".lunacy-tools"
         /**
          * The top folders whose absolute paths are webOS's; everything else (/data, /system,

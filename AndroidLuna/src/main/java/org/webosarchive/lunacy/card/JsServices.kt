@@ -136,5 +136,5 @@ class JsServices(private val bus: Bus, private val installed: File, private val 
         return { runCatching { f.inputStream() as java.io.InputStream }.getOrNull() }
     }
 
-    companion object { const val SERVICES = "usr/palm/services" }
+    companion object { const val SERVICES = org.webosarchive.lunacy.core.WebosPaths.SERVICES }
 }

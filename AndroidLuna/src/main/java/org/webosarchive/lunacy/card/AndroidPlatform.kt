@@ -81,3 +81,9 @@ object AndroidCollation : org.webosarchive.lunacy.core.Collation {
         return Comparator { a, b -> c.compare(a, b) }
     }
 }
+
+/** android.system.Os, as LunaCore's [org.webosarchive.lunacy.core.Links]. */
+object AndroidLinks : org.webosarchive.lunacy.core.Links {
+    override fun readlink(path: String): String? = runCatching { android.system.Os.readlink(path) }.getOrNull()
+    override fun symlink(target: String, path: String) { android.system.Os.symlink(target, path) }
+}

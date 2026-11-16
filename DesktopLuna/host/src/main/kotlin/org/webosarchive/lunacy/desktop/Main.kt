@@ -43,6 +43,9 @@ fun main(args: Array<String>) {
     val main = DesktopScheduler()
     Platform.scheduler = main
     Platform.images = DesktopImages
+    Platform.sql = org.webosarchive.lunacy.core.JdbcSql
+    Platform.collation = DesktopCollation
+    Platform.links = DesktopLinks
 
     // The same trees Gradle packages into the APK (AndroidLuna/build.gradle.kts): the assets,
     // what fetch-assets.sh laid down, and CoreApps as apps/.
@@ -60,6 +63,24 @@ fun main(args: Array<String>) {
     val registry = AppRegistry(files)
     val server = AppServer(assets, files, webosRoot, File(data, "framework-art"))
     val bus = main.call { Bus() }
+
+    // The webOS root, laid down as on Android (RomFiles): the ROM's /etc/palm and /usr/palm, the
+    // folders every TouchPad has, and /media/cryptofs/apps as a link to the installed packages.
+    val rom = org.webosarchive.lunacy.card.RomFiles(assets, webosRoot)
+    val romStamp = File(webosRoot, ".lunade-rom")
+    val romNow = runCatching { assets.open("rootfs.index").use { it.readBytes() }.contentHashCode().toString() }.getOrDefault("")
+    if (!romStamp.isFile || romStamp.readText() != romNow) { rom.syncRom(); romStamp.writeText(romNow) }
+    rom.makeFolders(installed)
+    rom.writeBuildInfo("Luna DE", "0")
+
+    // db8 and tempdb, with every app's, service's and the system's kinds (Configurator), as the
+    // Android shell sets them up (ShellActivity.registerServices).
+    val db8 = org.webosarchive.lunacy.card.Db8("com.palm.db", File(data, "db8.sqlite"), debuggable = true)
+    val tempdb = org.webosarchive.lunacy.card.Db8("com.palm.tempdb", null)
+    main.call {
+        db8.register(bus); tempdb.register(bus)
+        org.webosarchive.lunacy.card.Configurator(files, db8, tempdb, webosRoot, bus).run()
+    }
     val windows = ConcurrentHashMap<String, DesktopWindow>()
     Log.i(Lunacy.TAG, "Luna DE host: ${registry.apps.size} apps, data in $data")
 

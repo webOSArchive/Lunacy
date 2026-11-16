@@ -29,6 +29,13 @@ object Platform {
     /** Image decoding; null where the platform has none (an icon's size then isn't checked). */
     @Volatile var images: Images? = null
 
+    @Volatile private var currentLinks: Links? = null
+
+    /** Symbolic links, for the webOS root. */
+    var links: Links
+        get() = currentLinks ?: throw IllegalStateException("LunaCore: no Links set (Platform.links)")
+        set(value) { currentLinks = value }
+
     @Volatile private var currentSql: Sql? = null
 
     /** SQLite, for db8 and WebSQL. */

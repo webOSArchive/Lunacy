@@ -52,3 +52,25 @@ object DesktopImages : Images {
         ByteArrayOutputStream().also { ImageIO.write(out, "jpg", it) }.toByteArray()
     }.getOrNull()
 }
+
+/** ICU4J, as LunaCore's [org.webosarchive.lunacy.core.Collation]: db8's collated indexes sort as a device's do. */
+object DesktopCollation : org.webosarchive.lunacy.core.Collation {
+    override fun comparator(strength: String): Comparator<String> {
+        val c = com.ibm.icu.text.Collator.getInstance().apply {
+            this.strength = when (strength) { "primary" -> com.ibm.icu.text.Collator.PRIMARY; "secondary" -> com.ibm.icu.text.Collator.SECONDARY; else -> com.ibm.icu.text.Collator.TERTIARY }
+        }
+        return Comparator { a, b -> c.compare(a, b) }
+    }
+}
+
+/** java.nio.file, as LunaCore's [org.webosarchive.lunacy.core.Links]. */
+object DesktopLinks : org.webosarchive.lunacy.core.Links {
+    override fun readlink(path: String): String? = runCatching {
+        val p = java.nio.file.Paths.get(path)
+        if (java.nio.file.Files.isSymbolicLink(p)) java.nio.file.Files.readSymbolicLink(p).toString() else null
+    }.getOrNull()
+
+    override fun symlink(target: String, path: String) {
+        java.nio.file.Files.createSymbolicLink(java.nio.file.Paths.get(path), java.nio.file.Paths.get(target))
+    }
+}

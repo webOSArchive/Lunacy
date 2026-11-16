@@ -7,6 +7,9 @@ object WebosPaths {
     /** Where packages unpack their apps, under /media/cryptofs/apps (Packages.APPS on Android). */
     const val APPS = "usr/palm/applications"
 
+    /** Where JS services live, in the ROM and under /media/cryptofs/apps (JsServices.SERVICES on Android). */
+    const val SERVICES = "usr/palm/services"
+
     /**
      * Whether [f] is [root] or inside it, by their canonical paths: a link or a ".." can't take
      * it out, and a sibling whose name starts the same ("apps2" beside "apps") isn't inside.

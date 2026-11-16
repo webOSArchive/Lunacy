@@ -18,7 +18,7 @@ kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 
 application {
     mainClass.set("org.webosarchive.lunacy.desktop.MainKt")
-    applicationName = "lunade-host"
+    applicationName = "luna-de-host"
 }
 
 dependencies {

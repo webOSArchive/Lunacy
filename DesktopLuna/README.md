@@ -48,20 +48,20 @@ change between wide and tall as the device turning.
 
 **Installing an app:** drop its `.ipk`, or its folder (the one holding `appinfo.json`), on the
 window; or press Ctrl/Cmd+O for a package, Ctrl/Cmd+Shift+O for a folder; or start with
-`LUNADE_INSTALL=<path>`. It appears on the launcher's Downloads tab. Drop a folder again after
+`LUNA_DE_INSTALL=<path>`. It appears on the launcher's Downloads tab. Drop a folder again after
 changing it; right-click an installed app's tile to remove it.
 
 **Wi-Fi** in the launcher's Settings is a developer's switch: it simulates the network connection
 being lost (apps are told, and their requests fail) until it is tapped again.
 
-- `LUNADE_DATA=<folder>`: where Luna DE keeps its data (default: Electron's userData/data).
+- `LUNA_DE_DATA=<folder>`: where Luna DE keeps its data (default: Electron's userData/data).
   Installed apps go in `<folder>/cryptofs/apps/usr/palm/applications/<id>/` until `palm-install`
   works (milestone 5).
-- `LUNADE_OPEN=<app id>`: open that app at start.
+- `LUNA_DE_OPEN=<app id>`: open that app at start.
 
 The first test app, the Enyo 1 Sampler: `DesktopLuna/install-sampler.sh <data folder>` (it fetches
 webOS Archive's copy and points it at the system's Enyo), then
-`LUNADE_DATA=<data folder> LUNADE_OPEN=com.palmdts.enyo.stylematters npm start`.
+`LUNA_DE_DATA=<data folder> LUNA_DE_OPEN=com.palmdts.enyo.stylematters npm start`.
 
 `npm start` passes `--no-sandbox`: on this Linux setup Chromium's setuid sandbox helper would
 need root. **Ratchet item** for packaging (Docs/luna-de.md): the packaged app runs with the
@@ -109,12 +109,12 @@ built on.
 
 | Built on | Output |
 |---|---|
-| Linux | `LunaDE-<version>-linux-x86_64.AppImage` and a `.tar.gz` |
+| Linux | `luna-de-<version>-linux-x86_64.AppImage` and a `.tar.gz` |
 | macOS | a `.dmg` and a `.zip`; signed with the Developer ID in the keychain (or `CSC_LINK` and `CSC_KEY_PASSWORD`), and notarised when `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` are set |
 | Windows | an installer and a `.zip`; signed when `CSC_LINK` and `CSC_KEY_PASSWORD` name a certificate |
 
 **Windows from Linux or a Mac.** `npm run dist -- --win` makes the Windows package without a
-Windows machine: `LunaDE-<version>-win-x64.zip`, the whole app in a folder (unzip it and run
+Windows machine: `luna-de-<version>-win-x64.zip`, the whole app in a folder (unzip it and run
 `Luna DE.exe`). Nothing is compiled for Windows; its native parts are fetched (`node.exe`, and
 the Windows modules of this machine's JDK version, from Adoptium, both checked against published
 checksums) or come out of a jar. With Wine installed it makes the installer too. It is unsigned:

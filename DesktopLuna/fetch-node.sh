@@ -2,7 +2,7 @@
 # Fetches the Node that runs webOS JS services in Luna DE into DesktopLuna/node/: Node 12, the
 # major version nodejs-mobile gives Lunacy on Android (12.19), so a service behaves the same on
 # both (Docs/luna-de.md). Official builds exist for Linux and macOS on x64 (an Apple Silicon Mac
-# runs the x64 one under Rosetta) and Windows on x64; elsewhere set LUNADE_NODE to a Node 12.
+# runs the x64 one under Rosetta) and Windows on x64; elsewhere set LUNA_DE_NODE to a Node 12.
 #
 #   DesktopLuna/fetch-node.sh
 #
@@ -13,12 +13,12 @@ V=v12.22.12
 case "$(uname -s)" in
   Linux) os=linux ;;
   Darwin) os=darwin ;;
-  *) echo "fetch-node: no Node 12 build fetched for $(uname -s); set LUNADE_NODE to a Node 12" >&2; exit 1 ;;
+  *) echo "fetch-node: no Node 12 build fetched for $(uname -s); set LUNA_DE_NODE to a Node 12" >&2; exit 1 ;;
 esac
 case "$(uname -m)" in
   x86_64|amd64) arch=x64 ;;
   arm64|aarch64) if [ "$os" = darwin ]; then arch=x64; else arch=arm64; fi ;;
-  *) echo "fetch-node: no Node 12 build for $(uname -m); set LUNADE_NODE to a Node 12" >&2; exit 1 ;;
+  *) echo "fetch-node: no Node 12 build for $(uname -m); set LUNA_DE_NODE to a Node 12" >&2; exit 1 ;;
 esac
 name=node-$V-$os-$arch
 if [ -x node/bin/node ] && [ "$(node/bin/node --version 2>/dev/null)" = "$V" ]; then echo "fetch-node: node/ already holds Node $V"; exit 0; fi

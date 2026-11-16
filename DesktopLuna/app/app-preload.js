@@ -6,7 +6,7 @@
 (function () {
 	// Each load of a page is a page of its own: a reply meant for the last one never reaches this.
 	var page = Date.now().toString(36) + Math.random().toString(36).slice(2);
-	var base = location.origin + "/__lunade/";
+	var base = location.origin + "/__luna-de/";
 	// The methods AppWindow.Native has (AndroidLuna/.../card/AppWindow.kt).
 	var METHODS = ["deviceInfo", "call", "cancel", "stageReady", "pageDrawn", "screenOrientation",
 		"cardSize", "windowOrientation", "requestOrientation", "screenSize", "localeInfo", "processId",
@@ -17,7 +17,7 @@
 		"setClipboard", "copiedToClipboard", "netSend", "netResult", "netSendSync", "netAbort",
 		"sqlOpen", "sqlRequest", "sqlResult",
 		// Luna DE's own: the page has loaded, and a script's answer to the host (a relaunch's).
-		"lunadeLoaded", "lunadeResult"];
+		"pageLoaded", "scriptResult"];
 
 	function invoke(method, args) {
 		var x = new XMLHttpRequest();
@@ -36,11 +36,11 @@
 	window.LunacyNative = N;
 	// The main process names a page by this id when the host asks for it to be closed.
 	var ipc = null;
-	try { ipc = require("electron").ipcRenderer; ipc.send("lunade:page", page); } catch (e) {}
+	try { ipc = require("electron").ipcRenderer; ipc.send("luna-de:page", page); } catch (e) {}
 	// What the page is about to open (window.open's attributes: a card, a dashboard, a popup
 	// alert) is Electron's to place, so it hears of it before the open reaches it.
-	N.nextWindow = function (attributesJson) { if (ipc) { try { ipc.sendSync("lunade:next-window", String(attributesJson)); } catch (e) {} } return null; };
-	window.addEventListener("load", function () { N.lunadeLoaded(); });
+	N.nextWindow = function (attributesJson) { if (ipc) { try { ipc.sendSync("luna-de:next-window", String(attributesJson)); } catch (e) {} } return null; };
+	window.addEventListener("load", function () { N.pageLoaded(); });
 
 	function poll() {
 		var x = new XMLHttpRequest();
@@ -64,10 +64,10 @@
 	// The level is held as soon as the framework's script has run, before the app's own.
 	function loudMojo() {
 		var log = window.Mojo && window.Mojo.Log;
-		if (!log || log.__lunadeLoud) { return; }
+		if (!log || log.__loud) { return; }
 		try {
 			Object.defineProperty(log, "currentLogLevel", { get: function () { return 99; }, set: function () {}, configurable: true });
-			log.__lunadeLoud = true;
+			log.__loud = true;
 		} catch (e) {}
 	}
 	document.addEventListener("load", loudMojo, true);

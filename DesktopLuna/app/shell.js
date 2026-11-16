@@ -80,7 +80,7 @@
 		var c = cards[active], b = $("zoom");
 		b.disabled = !(c && c.id);
 		if (b.disabled) { b.classList.remove("on"); return; }
-		window.lunade.phoneZoom(c.id, flip).then(function (on) { b.classList.toggle("on", !!on); });
+		window.luna.phoneZoom(c.id, flip).then(function (on) { b.classList.toggle("on", !!on); });
 	}
 	$("zoom").addEventListener("click", function () { zoomState(true); });
 
@@ -106,7 +106,7 @@
 	 */
 	function showLive(c) {
 		if (!c.id || !c.pageReady || !maximized || cards[active] !== c) { return; }
-		window.lunade.maximize(c.id);
+		window.luna.maximize(c.id);
 		if (c.splash) { var sp = c.splash; c.splash = null; sp.classList.add("gone"); setTimeout(function () { sp.remove(); }, 320); }
 	}
 
@@ -116,16 +116,16 @@
 		maximized = false;
 		document.body.classList.remove("maximized");
 		setTitle();
-		var done = function () { window.lunade.cardView(); layout(true); refreshPictures(c); };
+		var done = function () { window.luna.cardView(); layout(true); refreshPictures(c); };
 		if (!c || !c.id || c.splash) { done(); return; }
-		window.lunade.snapshot(c.id).then(function (url) { if (url) { c.img.src = url; } done(); }, done);
+		window.luna.snapshot(c.id).then(function (url) { if (url) { c.img.src = url; } done(); }, done);
 	}
 
 	/** Every card's picture taken again, but [skip]'s, just taken: a page goes on drawing while hidden. */
 	function refreshPictures(skip) {
 		cards.forEach(function (k) {
 			if (k === skip || !k.id || k.splash) { return; }
-			window.lunade.snapshot(k.id).then(function (url) { if (url) { k.img.src = url; } });
+			window.luna.snapshot(k.id).then(function (url) { if (url) { k.img.src = url; } });
 		});
 	}
 
@@ -165,7 +165,7 @@
 			c.splash = splash;
 		}
 		el.appendChild(cover);
-		if (maximized) { window.lunade.cardView(); maximized = false; document.body.classList.remove("maximized"); }
+		if (maximized) { window.luna.cardView(); maximized = false; document.body.classList.remove("maximized"); }
 		cards.splice(active + 1, 0, c);
 		$("cards").appendChild(el);
 		active = cards.indexOf(c);
@@ -224,7 +224,7 @@
 		cards.splice(i, 1);
 		setTimeout(function () { c.el.remove(); }, 320);
 		if (active >= cards.length) { active = cards.length - 1; }
-		if (wasUp) { maximized = false; document.body.classList.remove("maximized"); window.lunade.cardView(); }
+		if (wasUp) { maximized = false; document.body.classList.remove("maximized"); window.luna.cardView(); }
 		layout(true);
 		setTitle();
 	}
@@ -235,7 +235,7 @@
 		if (i >= 0) { dropCard(cards[i], maximized && i === active); }
 	}
 
-	function closeCard(i) { if (!cards[i]) { return; } if (cards[i].id) { window.lunade.close(cards[i].id); } else { dropCard(cards[i], false); } }
+	function closeCard(i) { if (!cards[i]) { return; } if (cards[i].id) { window.luna.close(cards[i].id); } else { dropCard(cards[i], false); } }
 
 	/** A card's cover in the card view: tap to bring it up, flick up to close, drag sideways to slide, right-click for Luna DE's tools. */
 	function wire(c) {
@@ -283,9 +283,9 @@
 
 	function showMenu(x, y, c) {
 		showItems(x, y, [["Open", function () { maximize(cards.indexOf(c)); }],
-		 ["Pop out to its own window", function () { window.lunade.popOut(c.id); }],
-		 ["DevTools", function () { window.lunade.devTools(c.id); }],
-		 ["Reload", function () { window.lunade.reload(c.id); }],
+		 ["Pop out to its own window", function () { window.luna.popOut(c.id); }],
+		 ["DevTools", function () { window.luna.devTools(c.id); }],
+		 ["Reload", function () { window.luna.reload(c.id); }],
 		 ["Close", function () { closeCard(cards.indexOf(c)); }]]);
 	}
 
@@ -349,7 +349,7 @@
 			// An installed app's tile: Luna DE's Remove, by the right button.
 			t.addEventListener("contextmenu", function (e) {
 				e.preventDefault();
-				if (a.removable) { showItems(e.clientX, e.clientY, [["Remove " + a.title, function () { window.lunade.remove(a.id); }]]); }
+				if (a.removable) { showItems(e.clientX, e.clientY, [["Remove " + a.title, function () { window.luna.remove(a.id); }]]); }
 			});
 			grid.appendChild(t);
 		});
@@ -362,7 +362,7 @@
 	 */
 	function launch(entry, tapped) {
 		glow(tapped);
-		window.lunade.launch(entry);
+		window.luna.launch(entry);
 		// The Wi-Fi tile is Luna DE's network switch, not an app: nothing loads, so no loading card.
 		var running = cards.some(function (c) { return c.appId === entry.id; }) || entry.switch;
 		// The launcher stays, glowing, for the moment the icon needs to be seen (then the card).
@@ -404,12 +404,12 @@
 	}
 	$("home").addEventListener("click", home);
 	// The log window; and by right-click, the developer tools of a card.
-	$("devtools").addEventListener("click", function () { window.lunade.log(); });
-	$("devtools").addEventListener("contextmenu", function (e) { e.preventDefault(); window.lunade.toolsMenu(); });
+	$("devtools").addEventListener("click", function () { window.luna.log(); });
+	$("devtools").addEventListener("contextmenu", function (e) { e.preventDefault(); window.luna.toolsMenu(); });
 	// The bezel's other corner: the card that is up, or in front in the card view, popped out.
-	$("popout").addEventListener("click", function () { var c = cards[active]; if (c && c.id) { window.lunade.popOut(c.id); } });
+	$("popout").addEventListener("click", function () { var c = cards[active]; if (c && c.id) { window.luna.popOut(c.id); } });
 	// And the device itself: a TouchPad or a Pre3, by its picture.
-	$("device").addEventListener("click", function () { window.lunade.device(); });
+	$("device").addEventListener("click", function () { window.luna.device(); });
 	/** The screen as main.js gives it (in this page's px), the device's picture, and what the device hasn't got. */
 	function applyScreen(d) {
 		var wasPhone = document.body.classList.contains("phone");
@@ -422,9 +422,9 @@
 		$("device").querySelector("img").src = "images/device-" + (d.device || "touchpad") + ".png";
 		$("realkb").style.display = d.virtualKeyboard === false ? "none" : "";
 	}
-	window.lunade.screenNow().then(applyScreen);
+	window.luna.screenNow().then(applyScreen);
 	// The bezel's corner: the device turned between wide and tall.
-	$("rotate").addEventListener("click", function () { window.lunade.rotate(); });
+	$("rotate").addEventListener("click", function () { window.luna.rotate(); });
 	document.addEventListener("keydown", function (e) {
 		if (e.key === "F1") { e.preventDefault(); home(); }
 		// Left and Right switch cards in the card view (the SDK emulator's keys).
@@ -440,7 +440,7 @@
 		else if (cards[active]) { maximize(active); }
 	}
 	// The title is the app menu's, while a card is up (the TouchPad's status bar).
-	$("title").addEventListener("click", function () { if (maximized) { window.lunade.appMenu(); } });
+	$("title").addEventListener("click", function () { if (maximized) { window.luna.appMenu(); } });
 
 	// ---- notifications: banners, the dashboards' drop-down, popup alerts ----
 
@@ -469,7 +469,7 @@
 			d.forEach(function (p) {
 				var row = document.createElement("div"); row.className = "row";
 				var x = document.createElement("button"); x.className = "dismiss"; x.textContent = "\u00d7"; x.title = "Dismiss";
-				x.addEventListener("click", function () { window.lunade.close(p.id); });
+				x.addEventListener("click", function () { window.luna.close(p.id); });
 				row.appendChild(x); box.appendChild(row);
 			});
 			var right = W - $("notes").getBoundingClientRect().right;
@@ -489,11 +489,11 @@
 			var f = frame.getBoundingClientRect();
 			rects.push({ id: a.id, x: f.left + 20, y: f.top + 20, width: 320, height: a.height });
 		}
-		window.lunade.place(rects, dashOpen && d.length > 0);
+		window.luna.place(rects, dashOpen && d.length > 0);
 	}
 
 	$("notes").addEventListener("click", function () {
-		if (bannerOn && bannerOn.appId) { var b = bannerOn; endBanner(); window.lunade.launch({ id: b.appId, params: parse(b.params) }); return; }
+		if (bannerOn && bannerOn.appId) { var b = bannerOn; endBanner(); window.luna.launch({ id: b.appId, params: parse(b.params) }); return; }
 		if (dashboards().length) { dashOpen = !dashOpen; placePanels(); }
 	});
 	document.addEventListener("pointerdown", function (e) {
@@ -539,7 +539,7 @@
 	document.addEventListener("dragover", function (e) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
 	document.addEventListener("drop", function (e) {
 		e.preventDefault();
-		for (var i = 0; i < e.dataTransfer.files.length; i++) { window.lunade.install(e.dataTransfer.files[i]); }
+		for (var i = 0; i < e.dataTransfer.files.length; i++) { window.luna.install(e.dataTransfer.files[i]); }
 	});
 
 	// ---- the status bar's clock ----
@@ -552,33 +552,33 @@
 
 	// ---- start ----
 
-	window.lunade.onHome(home);
-	window.lunade.onCardAdded(added);
-	window.lunade.onCardReady(ready);
-	window.lunade.onCardRemoved(removed);
-	window.lunade.onShow(function (d) { var i = cardIndex(d.id); if (i >= 0) { maximize(i); } });
-	window.lunade.onToggleCard(toggleCard);
-	window.lunade.onLauncher(function () { if ($("launcher").hidden) { openLauncher(); } else { closeLauncher(); } });
-	window.lunade.onScreen(function (d) {
+	window.luna.onHome(home);
+	window.luna.onCardAdded(added);
+	window.luna.onCardReady(ready);
+	window.luna.onCardRemoved(removed);
+	window.luna.onShow(function (d) { var i = cardIndex(d.id); if (i >= 0) { maximize(i); } });
+	window.luna.onToggleCard(toggleCard);
+	window.luna.onLauncher(function () { if ($("launcher").hidden) { openLauncher(); } else { closeLauncher(); } });
+	window.luna.onScreen(function (d) {
 		applyScreen(d);
 		if (maximized) { cards.forEach(function (k, j) { k.el.classList.remove("animate"); transform(k, j === active ? 0 : (j < active ? -1 : 1) * (W + GAP), 0, 1); }); }
 		else { layout(false); }
 		placePanels();
 	});
-	window.lunade.onPanelAdded(function (d) { panels.push(d); drawNotes(); });
-	window.lunade.onPanelRemoved(function (d) { panels = panels.filter(function (p) { return p.id !== d.id; }); drawNotes(); });
-	window.lunade.onBanner(function (d) { banners.push(d); nextBanner(); });
-	window.lunade.onBannerRemove(function (d) {
+	window.luna.onPanelAdded(function (d) { panels.push(d); drawNotes(); });
+	window.luna.onPanelRemoved(function (d) { panels = panels.filter(function (p) { return p.id !== d.id; }); drawNotes(); });
+	window.luna.onBanner(function (d) { banners.push(d); nextBanner(); });
+	window.luna.onBannerRemove(function (d) {
 		banners = banners.filter(function (b) { return d.id ? b.id !== d.id : b.appId !== d.appId; });
 		if (bannerOn && (d.id ? bannerOn.id === d.id : bannerOn.appId === d.appId)) { endBanner(); }
 	});
 
 	// The simulated network (the Wi-Fi tile): the status bar's Wi-Fi icon shows it gone.
-	window.lunade.onNetwork(function (d) { document.querySelector("#status-right .wifi").classList.toggle("off", !d.online); });
+	window.luna.onNetwork(function (d) { document.querySelector("#status-right .wifi").classList.toggle("off", !d.online); });
 
 	/** The launcher's pages and the quick-launch bar, drawn from what the host has installed. */
 	function loadApps(first) {
-		return window.lunade.shell().then(function (s) {
+		return window.luna.shell().then(function (s) {
 			pages = s.pages;
 			pages.forEach(function (p) { p.apps.forEach(function (a) { appTitles[a.id] = a.title; appEntries[a.id] = a; }); });
 			s.dock.forEach(function (a) { appTitles[a.id] = a.title; appEntries[a.id] = a; });
@@ -605,6 +605,6 @@
 		});
 	}
 	// An app installed or removed: the launcher draws what there is now.
-	window.lunade.onApps(function () { loadApps(false); });
-	loadApps(true).then(function () { window.lunade.ready(); });
+	window.luna.onApps(function () { loadApps(false); });
+	loadApps(true).then(function () { window.luna.ready(); });
 })();

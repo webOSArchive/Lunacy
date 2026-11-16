@@ -298,7 +298,7 @@ class DesktopShell(
 
     /**
      * What a developer hands Luna DE to install (a drop on its window, the file chooser,
-     * LUNADE_INSTALL): a package, installed as any package is, or an app's own folder (the one
+     * LUNA_DE_INSTALL): a package, installed as any package is, or an app's own folder (the one
      * holding appinfo.json), which is copied in under its id as `palm-package` and an install
      * would have put it. Dropping the folder again replaces the copy.
      */
@@ -394,12 +394,12 @@ class DesktopRoot(override val root: File, override val hostScripts: File, priva
     override val runsScripts get() = false
 
     /**
-     * LUNADE_NODE if it is set, else the Node 12 DesktopLuna/fetch-node.sh fetched, else whatever
+     * LUNA_DE_NODE if it is set, else the Node 12 DesktopLuna/fetch-node.sh fetched, else whatever
      * `node` the machine has, with a warning: Palm's services were written for node 0.4, Lunacy's
      * host runs them on Node 12, and a newer Node isn't what Android runs.
      */
     override val node: File by lazy {
-        val named = System.getenv("LUNADE_NODE")?.takeIf { it.isNotEmpty() }?.let { File(it) }
+        val named = System.getenv("LUNA_DE_NODE")?.takeIf { it.isNotEmpty() }?.let { File(it) }
         val fetched = File(repo, "DesktopLuna/node/bin/node").let { if (it.isFile) it else File(repo, "DesktopLuna/node/bin/node.exe").takeIf { exe -> exe.isFile } ?: it }
         when {
             named != null -> named

@@ -82,12 +82,12 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
         "cancel" -> { val t = a.optInt(0); main.post { calls.remove(t)?.cancel() }; "null" }
         "log" -> { Log.i(Lunacy.TAG, "[$appId] palm ${a.optString(0)}"); "null" }
         // Luna DE's own: the page has loaded, and a script's answer (relaunch).
-        "lunadeLoaded", "stageReady", "pageDrawn" -> {
+        "pageLoaded", "stageReady", "pageDrawn" -> {
             // The app says its stage is ready (or its page has drawn): its card can come up.
-            if (method != "lunadeLoaded") shell.pageReady(this)
+            if (method != "pageLoaded") shell.pageReady(this)
             main.post { pageUp() }; "null"
         }
-        "lunadeResult" -> { val t = a.optInt(0); val v = a.optBoolean(1); main.post { results.remove(t)?.invoke(v) }; "null" }
+        "scriptResult" -> { val t = a.optInt(0); val v = a.optBoolean(1); main.post { results.remove(t)?.invoke(v) }; "null" }
         "clipboardHasText" -> "false"
         // PalmSystem.addBannerMessage(message, launch params, icon ...): the shell shows it, and a
         // tap on it launches the app with those params.
@@ -142,7 +142,7 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
         val token = nextResult++
         results[token] = done
         outbox.add("(function(){var r=false;try{r=window.${PageHooks.RELAUNCH}?${PageHooks.RELAUNCH}(${jsString(params)}):false}catch(e){console.error('relaunch: '+e)}" +
-            "LunacyNative.lunadeResult($token,r===true)})()")
+            "LunacyNative.scriptResult($token,r===true)})()")
     }
 
     private fun pageUp() {
@@ -251,7 +251,7 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
             "platformVersion" to d.platformVersion, "platformVersionMajor" to d.platformVersionMajor,
             "platformVersionMinor" to d.platformVersionMinor, "platformVersionDot" to d.platformVersionDot,
             "carrierName" to d.carrierName,
-            "serialNumber" to DeviceProfile.serialFor(d, "lunade:" + System.getProperty("user.name")),
+            "serialNumber" to DeviceProfile.serialFor(d, "luna-de:" + System.getProperty("user.name")),
             // The screen as the device names it, whichever way it is held: a TouchPad says
             // 1024 x 768, a Pre3 480 x 800 (measured on both, Docs/pre3.md).
             "screenWidth" to shell.screenWidth, "screenHeight" to shell.screenHeight,

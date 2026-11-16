@@ -80,7 +80,7 @@ async function node12() {
 	const arch = !WIN && !MAC && ARCH === "arm64" ? "arm64" : "x64";
 	if (ARCH !== "x64" && ARCH !== "arm64") { fail("no Node 12 build for " + ARCH); }
 	const base = "https://nodejs.org/dist/" + NODE_VERSION + "/";
-	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lunade-node-"));
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "luna-de-node-"));
 	const name = WIN ? "win-" + arch + "/node.exe" : "node-" + NODE_VERSION + "-" + (MAC ? "darwin" : "linux") + "-" + arch + ".tar.gz";
 	const got = path.join(tmp, path.basename(name)), sums = path.join(tmp, "SHASUMS256.txt");
 	say(base + name);
@@ -106,13 +106,13 @@ async function node12() {
 
 /** The host's jars into the stage, SQLite's driver without its native libraries, this machine's beside them. */
 function stageHost() {
-	const from = path.join(HERE, "host", "build", "install", "lunade-host", "lib"), to = path.join(STAGE, "host");
+	const from = path.join(HERE, "host", "build", "install", "luna-de-host", "lib"), to = path.join(STAGE, "host");
 	fs.mkdirSync(path.join(to, "lib"), { recursive: true });
 	fs.mkdirSync(path.join(to, "native"), { recursive: true });
 	const osName = WIN ? "Windows" : MAC ? "Mac" : "Linux", arch = ARCH === "arm64" ? "aarch64" : "x86_64";
 	for (const jar of fs.readdirSync(from)) {
 		if (!/^sqlite-jdbc-.*\.jar$/.test(jar)) { fs.copyFileSync(path.join(from, jar), path.join(to, "lib", jar)); continue; }
-		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lunade-sqlite-"));
+		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "luna-de-sqlite-"));
 		run(jdkTool("jar"), ["xf", path.join(from, jar)], { cwd: tmp });
 		const native = path.join(tmp, "org", "sqlite", "native", osName, arch);
 		const libs = fs.existsSync(native) ? fs.readdirSync(native) : [];
@@ -232,7 +232,7 @@ function patchesMissing(manifest) {
 	await builder.build({
 		targets: CROSS_WIN ? builder.Platform.WINDOWS.createTarget(crossTargets, builder.Arch.x64) : undefined,
 		config: {
-			appId: "org.webosarchive.lunade",
+			appId: "org.webosarchive.luna-de",
 			productName: "Luna DE",
 			copyright: "webOS Archive; GPL-3.0-or-later. Bundled webOS material ships as noted in its NOTICE files.",
 			directories: { output: "dist", buildResources: "build-resources" },
@@ -249,9 +249,9 @@ function patchesMissing(manifest) {
 				{ from: repo("LICENSE"), to: "LICENSE.Lunacy" },
 				{ from: repo("NOTICE"), to: "NOTICE.Lunacy" },
 			].filter((r) => fs.existsSync(r.from)),
-			artifactName: "LunaDE-${version}-${os}-${arch}.${ext}",
+			artifactName: "luna-de-${version}-${os}-${arch}.${ext}",
 			// The icon: Lunacy's moon (build-resources/make-icon.py).
-			linux: { target: ["AppImage", "tar.gz"], category: "Development", executableName: "lunade", icon: "build-resources/icon.png" },
+			linux: { target: ["AppImage", "tar.gz"], category: "Development", executableName: "luna-de", icon: "build-resources/icon.png" },
 			// Signed with the Developer ID in the keychain (or CSC_LINK), and notarised when
 			// APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID (or an APPLE_API_KEY set) are
 			// in the environment. The hardened runtime needs the JVM's and Node's entitlements.

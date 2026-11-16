@@ -178,13 +178,13 @@
 				return;
 			}
 			case "symbol": symbol = !symbol; return;
-			case "backspace": window.lunade.key({ code: "Backspace" }); return;
-			case "return": window.lunade.key({ code: "Return" }); return;
-			case "tab": window.lunade.key({ code: "Tab" }); return;
-			case "hide": window.lunade.key({ hide: true }); return;
+			case "backspace": window.luna.key({ code: "Backspace" }); return;
+			case "return": window.luna.key({ code: "Return" }); return;
+			case "tab": window.luna.key({ code: "Tab" }); return;
+			case "hide": window.luna.key({ hide: true }); return;
 			case "trackball": case "emoji": return;
 		}
-		window.lunade.key({ text: typed(key) });
+		window.luna.key({ text: typed(key) });
 		if (shift === 1) { shift = 0; }
 	}
 
@@ -202,26 +202,26 @@
 		draw();
 	});
 
-	window.lunade.onKeyboard(function (d) {
+	window.luna.onKeyboard(function (d) {
 		canvas.hidden = !d.show;
 		document.body.classList.toggle("keyboard", !!d.show);
 		if (d.height) { setHeight(d.height); }
 		if (d.show) { shift = 0; symbol = false; layout(); }
 	});
-	window.lunade.onScreen(function () { setTimeout(layout, 0); });
+	window.luna.onScreen(function () { setTimeout(layout, 0); });
 
 	// The bezel's keyboard button: a real keyboard attached (lit), or not. Its right button
 	// offers the on-screen keyboard's sizes, webOS's four.
 	var button = document.getElementById("realkb");
 	button.addEventListener("contextmenu", function (e) {
 		e.preventDefault();
-		window.lunade.keyboardSize().then(function (now) {
+		window.luna.keyboardSize().then(function (now) {
 			var m = document.getElementById("menu");
 			m.innerHTML = "";
 			[["XS", -2], ["S", -1], ["M (webOS's default)", 0], ["L", 1]].forEach(function (it) {
 				var b = document.createElement("button");
 				b.textContent = (now.size === it[1] ? "\u2713 " : "\u2003") + "On-screen keyboard: " + it[0];
-				b.addEventListener("click", function () { m.hidden = true; window.lunade.keyboardSize(it[1]); });
+				b.addEventListener("click", function () { m.hidden = true; window.luna.keyboardSize(it[1]); });
 				m.appendChild(b);
 			});
 			var r = document.getElementById("screen").getBoundingClientRect();
@@ -231,7 +231,7 @@
 		});
 	});
 	button.addEventListener("click", function () {
-		window.lunade.realKeyboard().then(function (real) {
+		window.luna.realKeyboard().then(function (real) {
 			button.classList.toggle("on", real);
 			button.title = real
 				? "A real keyboard is attached: the on-screen keyboard stays away. Click to take it away."

@@ -27,14 +27,14 @@ import java.util.concurrent.Executors
  * client: it routes the app origins' requests here, naming the app from the request's origin
  * (rule 10). See Docs/luna-de.md.
  *
- *   lunade-host --repo <Lunacy checkout> --data <folder> [--port <n>]
+ *   luna-de-host --repo <Lunacy checkout> --data <folder> [--port <n>]
  *
- * Prints "LUNADE-HOST <port>" on standard output once it listens.
+ * Prints "LUNA-DE-HOST <port>" on standard output once it listens.
  */
 fun main(args: Array<String>) {
     val opt = args.toList().windowed(2, 2, partialWindows = false).associate { it[0].removePrefix("--") to it[1] }
     val repo = File(opt["repo"] ?: error("--repo <Lunacy checkout> is required")).absoluteFile
-    val data = File(opt["data"] ?: File(System.getProperty("user.home"), ".lunade").path).absoluteFile
+    val data = File(opt["data"] ?: File(System.getProperty("user.home"), ".luna-de").path).absoluteFile
 
     Log.sink = Log.Sink { p, tag, msg, tr ->
         System.err.println("${"??VDIWE".getOrElse(p) { '?' }}/$tag: $msg")
@@ -70,7 +70,7 @@ fun main(args: Array<String>) {
     // The webOS root, laid down as on Android (RomFiles): the ROM's /etc/palm and /usr/palm, the
     // folders every TouchPad has, and /media/cryptofs/apps as a link to the installed packages.
     val rom = org.webosarchive.lunacy.card.RomFiles(assets, webosRoot)
-    val romStamp = File(webosRoot, ".lunade-rom")
+    val romStamp = File(webosRoot, ".luna-de-rom")
     val romNow = runCatching { assets.open("rootfs.index").use { it.readBytes() }.contentHashCode().toString() }.getOrDefault("")
     if (!romStamp.isFile || romStamp.readText() != romNow) { rom.syncRom(); romStamp.writeText(romNow) }
     rom.makeFolders(installed)
@@ -144,7 +144,7 @@ fun main(args: Array<String>) {
     Log.i(Lunacy.TAG, "Luna DE host: ${registry.apps.size} apps, data in $data")
 
     val http = HttpServer.create(InetSocketAddress(InetAddress.getLoopbackAddress(), opt["port"]?.toInt() ?: 0), 64)
-    http.executor = Executors.newCachedThreadPool { r -> Thread(r, "lunade-http").apply { isDaemon = true } }
+    http.executor = Executors.newCachedThreadPool { r -> Thread(r, "luna-de-http").apply { isDaemon = true } }
 
     // An app origin's file, as AppServer answers it: GET /serve?u=<the page's URL>.
     http.createContext("/serve") { ex -> ex.use {
@@ -239,7 +239,7 @@ fun main(args: Array<String>) {
         send(ex, 204, "text/plain", ByteArray(0))
     } }
 
-    // The shell launches an app (the launcher, the quick-launch bar, LUNADE_OPEN): through the
+    // The shell launches an app (the launcher, the quick-launch bar, LUNA_DE_OPEN): through the
     // same path as applicationManager/launch, so a running app is relaunched, not started twice.
     http.createContext("/launch") { ex -> ex.use {
         val q = query(ex)
@@ -311,7 +311,7 @@ fun main(args: Array<String>) {
             kotlin.system.exitProcess(0)
         }, "parent-watch").apply { isDaemon = true }.start()
     }
-    println("LUNADE-HOST ${http.address.port}")
+    println("LUNA-DE-HOST ${http.address.port}")
     System.out.flush()
 }
 

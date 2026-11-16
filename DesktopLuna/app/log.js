@@ -30,9 +30,9 @@
 	filter.addEventListener("input", refilter);
 	["debug", "info", "warning", "error"].forEach(function (l) { document.getElementById("lv-" + l).addEventListener("change", refilter); });
 	follow.addEventListener("change", bottom);
-	document.getElementById("clear").addEventListener("click", function () { window.lunadeLog.clear(); box.textContent = ""; });
-	window.lunadeLog.history().then(function (lines) {
+	document.getElementById("clear").addEventListener("click", function () { window.lunaLog.clear(); box.textContent = ""; });
+	window.lunaLog.history().then(function (lines) {
 		lines.forEach(add); bottom();
-		window.lunadeLog.onLine(function (line) { add(line); bottom(); });
+		window.lunaLog.onLine(function (line) { add(line); bottom(); });
 	});
 })();

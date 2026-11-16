@@ -61,7 +61,7 @@ const headless = new Map();
 /**
  * The windows that aren't cards, by id: { id, appId, kind, view, height }. A "dashboard" lives in
  * the status bar's drop-down and a "popupalert" under it, each a live view the shell places
- * (lunade:place); any other kind the shell doesn't draw (a dock-mode window) stays unseen.
+ * (luna-de:place); any other kind the shell doesn't draw (a dock-mode window) stays unseen.
  */
 const panels = new Map();
 /** What a page said of the window it is about to open (PalmSystem's nextWindow), by its webContents' id. */
@@ -71,7 +71,7 @@ const told = new Map();
 let shown = null;         // the card on the screen, or null in the card view
 
 function dataDir() {
-	return process.env.LUNADE_DATA || path.join(app.getPath("userData"), "data");
+	return process.env.LUNA_DE_DATA || path.join(app.getPath("userData"), "data");
 }
 
 /** Starts the JVM host and resolves with its address once it listens. */
@@ -93,12 +93,12 @@ function startHost() {
 		// From a checkout on Windows: the machine's Java on the built jars, not Gradle's .bat (a
 		// command file takes a shell to start, which mangles a path with a space in it).
 		const java = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, "bin", "java.exe") : "java.exe";
-		const lib = path.join(__dirname, "..", "host", "build", "install", "lunade-host", "lib");
+		const lib = path.join(__dirname, "..", "host", "build", "install", "luna-de-host", "lib");
 		if (!fs.existsSync(lib)) { throw new Error("No host at " + lib + ": run gradlew :DesktopLuna:host:installDist first"); }
 		bin = java;
 		args = ["-cp", path.join(lib, "*"), "org.webosarchive.lunacy.desktop.MainKt", ...args];
 	} else {
-		bin = path.join(__dirname, "..", "host", "build", "install", "lunade-host", "bin", "lunade-host");
+		bin = path.join(__dirname, "..", "host", "build", "install", "luna-de-host", "bin", "luna-de-host");
 	}
 	if (!fs.existsSync(bin) && path.isAbsolute(bin)) {
 		throw new Error("No host at " + bin + (app.isPackaged ? ": this copy of Luna DE is incomplete" : ": run ./gradlew :DesktopLuna:host:installDist first"));
@@ -107,7 +107,7 @@ function startHost() {
 		hostProcess = spawn(bin, args, { stdio: ["pipe", "pipe", "inherit"] });
 		hostProcess.on("exit", (code) => { if (!host) { reject(new Error("host exited " + code)); } else { app.quit(); } });
 		readline.createInterface({ input: hostProcess.stdout }).on("line", (line) => {
-			const m = /^LUNADE-HOST (\d+)$/.exec(line);
+			const m = /^LUNA-DE-HOST (\d+)$/.exec(line);
 			if (m && !host) { host = "http://127.0.0.1:" + m[1]; resolve(host); }
 			else { console.log("[host] " + line); }
 		});
@@ -126,8 +126,8 @@ function routeAppOrigins() {
 			return net.fetch(req, { bypassCustomProtocolHandlers: true });
 		}
 		const appId = u.hostname.slice(0, -HOST_SUFFIX.length);
-		if (u.pathname.startsWith("/__lunade/")) {
-			const what = u.pathname.slice("/__lunade/".length);
+		if (u.pathname.startsWith("/__luna-de/")) {
+			const what = u.pathname.slice("/__luna-de/".length);
 			const q = new URLSearchParams(u.search);
 			q.set("app", appId);
 			const init = { method: req.method };
@@ -186,16 +186,16 @@ function addCard(view, appId, title) {
 	shell.contentView.addChildView(view);
 	adoptOpens(view.webContents);
 	tell(view.webContents, "type", "card");
-	view.webContents.on("page-title-updated", (e, t) => { c.title = t; send("lunade:card-title", { id, title: t }); });
+	view.webContents.on("page-title-updated", (e, t) => { c.title = t; send("luna-de:card-title", { id, title: t }); });
 	// The card waits in the card view with its splash while its page loads, then comes up
 	// (CLAUDE.md, rule 0). Ready is the page's first paint with something in it; a page that never
 	// says so is taken as ready when it has loaded.
-	c.ready = () => { if (!c.saidReady) { c.saidReady = true; send("lunade:card-ready", { id }); } };
+	c.ready = () => { if (!c.saidReady) { c.saidReady = true; send("luna-de:card-ready", { id }); } };
 	view.webContents.once("did-finish-load", c.ready);
 	view.webContents.once("did-fail-load", c.ready);
 	// window.close() from the page, or the page gone: the card goes.
 	view.webContents.on("destroyed", () => removeCard(id, false));
-	send("lunade:card-added", { id, appId, title: c.title });
+	send("luna-de:card-added", { id, appId, title: c.title });
 	return c;
 }
 
@@ -215,7 +215,7 @@ function addPanel(view, appId, kind, attrs) {
 	tell(view.webContents, "type", kind === "dockmode" ? "dockMode" : kind);
 	if (kind === "dashboard") { tell(view.webContents, "focus", "false"); }
 	view.webContents.on("destroyed", () => removePanel(id, false));
-	send("lunade:panel-added", { id, appId, kind, height: p.height, icon: host + "/icon?id=" + encodeURIComponent(appId) });
+	send("luna-de:panel-added", { id, appId, kind, height: p.height, icon: host + "/icon?id=" + encodeURIComponent(appId) });
 }
 
 function removePanel(id, close) {
@@ -224,7 +224,7 @@ function removePanel(id, close) {
 	panels.delete(id);
 	try { if (shell) { shell.contentView.removeChildView(p.view); } } catch (e) {}
 	if (close && !p.view.webContents.isDestroyed()) { p.view.webContents.close(); }
-	send("lunade:panel-removed", { id });
+	send("luna-de:panel-removed", { id });
 	endIfLast(p.appId);
 }
 
@@ -283,7 +283,7 @@ function applyKeyboard() {
 	if (keyboardCard) { lowerKeyboard(keyboardCard, !want); }
 	keyboardCard = want ? c : null;
 	if (want) { raiseKeyboard(c); }
-	send("lunade:keyboard", { show: !!keyboardCard, height: KEYBOARD });
+	send("luna-de:keyboard", { show: !!keyboardCard, height: KEYBOARD });
 }
 
 /** A lifecycle hook called the way LunaSysMgr did, a function on the page's Mojo object, here and now: before whatever follows it. */
@@ -320,7 +320,7 @@ function typeKey(key) {
 	if (!c || c.view.webContents.isDestroyed()) { return; }
 	const wc = c.view.webContents;
 	wc.focus();
-	if (key.hide) { lowerKeyboard(c, true); keyboardCard = null; send("lunade:keyboard", { show: false, height: KEYBOARD }); return; }
+	if (key.hide) { lowerKeyboard(c, true); keyboardCard = null; send("luna-de:keyboard", { show: false, height: KEYBOARD }); return; }
 	const code = key.code || key.text;
 	wc.sendInputEvent({ type: "keyDown", keyCode: code });
 	if (key.text) { for (const ch of key.text) { wc.sendInputEvent({ type: "char", keyCode: ch }); } }
@@ -336,7 +336,7 @@ function removeCard(id, close) {
 	try { if (!c.popped && shell) { shell.contentView.removeChildView(c.view); } } catch (e) {}
 	if (close && !c.view.webContents.isDestroyed()) { c.view.webContents.close(); }
 	if (c.popped && !c.popped.isDestroyed()) { c.popped.close(); }
-	send("lunade:card-removed", { id });
+	send("luna-de:card-removed", { id });
 	endIfLast(c.appId);
 }
 
@@ -408,10 +408,10 @@ function popOut(id) {
 	c.view.setVisible(true);
 	c.popped = win;
 	win.on("closed", () => removeCard(id, true));
-	send("lunade:card-removed", { id });
+	send("luna-de:card-removed", { id });
 }
 
-ipcMain.handle("lunade:shell", async () => {
+ipcMain.handle("luna-de:shell", async () => {
 	const s = await (await net.fetch(host + "/shell")).json();
 	s.pages.forEach((p) => p.apps.forEach(withIcon));
 	s.dock.forEach(withIcon);
@@ -419,9 +419,9 @@ ipcMain.handle("lunade:shell", async () => {
 });
 // The shell asks for an app: the host decides (started, or relaunched and brought forward), as
 // it does for applicationManager/launch from an app.
-ipcMain.handle("lunade:launch", (e, entry) => { askLaunch(entry.id, entry.params); return true; });
+ipcMain.handle("luna-de:launch", (e, entry) => { askLaunch(entry.id, entry.params); return true; });
 // The shell brings a card up: its live view on the screen, every other hidden.
-ipcMain.handle("lunade:maximize", (e, id) => {
+ipcMain.handle("luna-de:maximize", (e, id) => {
 	for (const c of cards.values()) { if (!c.popped) { c.view.setVisible(c.id === id); } }
 	shown = cards.has(id) ? id : null;
 	if (shown) { cards.get(id).view.webContents.focus(); }
@@ -429,7 +429,7 @@ ipcMain.handle("lunade:maximize", (e, id) => {
 	return true;
 });
 // The card view: the live views hidden, the shell showing their snapshots.
-ipcMain.handle("lunade:cardview", () => {
+ipcMain.handle("luna-de:cardview", () => {
 	for (const c of cards.values()) { if (!c.popped) { c.view.setVisible(false); } }
 	shown = null;
 	shell.webContents.focus();
@@ -438,7 +438,7 @@ ipcMain.handle("lunade:cardview", () => {
 });
 // The shell places the dashboards and alerts it is showing: [{ id, x, y, width, height }], every
 // other one hidden. A dashboard hears its focus each time, as the drop-down opens and closes.
-ipcMain.handle("lunade:place", (e, rects, dashboardsOpen) => {
+ipcMain.handle("luna-de:place", (e, rects, dashboardsOpen) => {
 	const byId = new Map(rects.map((r) => [r.id, r]));
 	for (const p of panels.values()) {
 		const r = byId.get(p.id);
@@ -453,15 +453,15 @@ ipcMain.handle("lunade:place", (e, rects, dashboardsOpen) => {
 });
 // The status bar's title: the app menu of the card on the screen, opened as LunaSysMgr did, by
 // relaunching its app with {"palm-command":"open-app-menu"} (ShellChrome.toggleAppMenu).
-ipcMain.handle("lunade:appmenu", () => {
+ipcMain.handle("luna-de:appmenu", () => {
 	const c = shown && cards.get(shown);
 	if (c) { askLaunch(c.appId, { "palm-command": "open-app-menu" }); }
 	return true;
 });
 // The bezel's rotate button: wide to tall and back (F6 to F9 pick each of the four ways up).
-ipcMain.handle("lunade:rotate", () => { turn(portrait() ? "right" : "up"); return true; });
-ipcMain.handle("lunade:key", (e, key) => { typeKey(key || {}); return true; });
-ipcMain.handle("lunade:keyboard-size", async (e, size) => {
+ipcMain.handle("luna-de:rotate", () => { turn(portrait() ? "right" : "up"); return true; });
+ipcMain.handle("luna-de:key", (e, key) => { typeKey(key || {}); return true; });
+ipcMain.handle("luna-de:keyboard-size", async (e, size) => {
 	if (size !== undefined && KEYBOARD_HEIGHTS[String(size)] && size !== keyboardSize) {
 		// Down at the old size and up at the new, so the app hears the change as it would on a device.
 		const c = keyboardCard;
@@ -473,13 +473,13 @@ ipcMain.handle("lunade:keyboard-size", async (e, size) => {
 	return { size: keyboardSize, height: KEYBOARD };
 });
 // The bezel's keyboard button: a real keyboard there, or not.
-ipcMain.handle("lunade:real-keyboard", () => {
+ipcMain.handle("luna-de:real-keyboard", () => {
 	realKeyboard = !realKeyboard;
 	applyKeyboard();
 	return realKeyboard;
 });
-ipcMain.handle("lunade:back", () => { const c = shown && cards.get(shown); if (c) { tell(c.view.webContents, "back", String(Date.now())); } return true; });
-ipcMain.on("lunade:next-window", (e, json) => {
+ipcMain.handle("luna-de:back", () => { const c = shown && cards.get(shown); if (c) { tell(c.view.webContents, "back", String(Date.now())); } return true; });
+ipcMain.on("luna-de:next-window", (e, json) => {
 	let attrs = {};
 	try { attrs = JSON.parse(json) || {}; } catch (err) {}
 	const list = pendingAttributes.get(e.sender.id) || [];
@@ -487,21 +487,21 @@ ipcMain.on("lunade:next-window", (e, json) => {
 	pendingAttributes.set(e.sender.id, list);
 	e.returnValue = true;
 });
-ipcMain.handle("lunade:snapshot", async (e, id) => {
+ipcMain.handle("luna-de:snapshot", async (e, id) => {
 	const c = cards.get(id);
 	if (!c || c.view.webContents.isDestroyed()) { return null; }
 	try { return (await c.view.webContents.capturePage()).toDataURL(); } catch (err) { return null; }
 });
-ipcMain.handle("lunade:close", (e, id) => { if (panels.has(id)) { removePanel(id, true); } else { removeCard(id, true); } return true; });
-ipcMain.handle("lunade:popout", (e, id) => { popOut(id); return true; });
-ipcMain.handle("lunade:devtools", (e, id) => { const c = cards.get(id); if (c) { c.view.webContents.openDevTools({ mode: "detach" }); } return true; });
+ipcMain.handle("luna-de:close", (e, id) => { if (panels.has(id)) { removePanel(id, true); } else { removeCard(id, true); } return true; });
+ipcMain.handle("luna-de:popout", (e, id) => { popOut(id); return true; });
+ipcMain.handle("luna-de:devtools", (e, id) => { const c = cards.get(id); if (c) { c.view.webContents.openDevTools({ mode: "detach" }); } return true; });
 
 /**
  * The bezel's </> button opens the log; its right-click menu inspects a card: Electron's own
  * developer tools for that one page. (A menu of the system's own: one drawn in the shell page
  * would lie under a card that is up.)
  */
-ipcMain.handle("lunade:tools-menu", () => {
+ipcMain.handle("luna-de:tools-menu", () => {
 	const items = [...cards.values()].filter((c) => !c.view.webContents.isDestroyed()).map((c) => ({
 		label: "Inspect " + (c.title || c.appId), click: () => c.view.webContents.openDevTools({ mode: "detach" }) }));
 	if (!items.length) { items.push({ label: "No card is open to inspect", enabled: false }); }
@@ -534,7 +534,7 @@ function logLine(wc, level, message, line, source) {
 		app: appId, message: String(message), source: where ? where + ":" + line : "" };
 	logLines.push(entry);
 	if (logLines.length > LOG_MAX) { logLines.shift(); }
-	if (logWindow && !logWindow.isDestroyed()) { logWindow.webContents.send("lunade:log-line", entry); }
+	if (logWindow && !logWindow.isDestroyed()) { logWindow.webContents.send("luna-de:log-line", entry); }
 }
 function showLog() {
 	if (logWindow && !logWindow.isDestroyed()) { logWindow.show(); logWindow.focus(); return true; }
@@ -544,10 +544,10 @@ function showLog() {
 	logWindow.on("closed", () => { logWindow = null; });
 	return true;
 }
-ipcMain.handle("lunade:log", () => showLog());
-ipcMain.handle("lunade:log-history", () => logLines);
-ipcMain.handle("lunade:log-clear", () => { logLines.length = 0; return true; });
-ipcMain.handle("lunade:reload", (e, id) => { const c = cards.get(id); if (c) { c.view.webContents.reload(); } return true; });
+ipcMain.handle("luna-de:log", () => showLog());
+ipcMain.handle("luna-de:log-history", () => logLines);
+ipcMain.handle("luna-de:log-clear", () => { logLines.length = 0; return true; });
+ipcMain.handle("luna-de:reload", (e, id) => { const c = cards.get(id); if (c) { c.view.webContents.reload(); } return true; });
 
 /** A package (.ipk) or an app's folder handed to Luna DE: the host installs it and says how it went in a banner. */
 function install(file) {
@@ -555,8 +555,8 @@ function install(file) {
 	net.fetch(host + "/install?" + new URLSearchParams({ path: file }).toString(), { method: "POST" })
 		.catch((err) => console.error("Luna DE: install " + file + ": " + err));
 }
-ipcMain.handle("lunade:install", (e, files) => { (files || []).forEach(install); return true; });
-ipcMain.handle("lunade:remove", (e, id) => {
+ipcMain.handle("luna-de:install", (e, files) => { (files || []).forEach(install); return true; });
+ipcMain.handle("luna-de:remove", (e, id) => {
 	net.fetch(host + "/remove?" + new URLSearchParams({ id }).toString(), { method: "POST" }).catch(() => {});
 	return true;
 });
@@ -577,7 +577,7 @@ function askLaunch(id, params) {
 
 /** Each page's id, as its preload told the host (app-preload.js), by its webContents' id. */
 const pageIds = new Map();
-ipcMain.on("lunade:page", (e, page) => {
+ipcMain.on("luna-de:page", (e, page) => {
 	// The view's last page has gone (a reload, a navigation): the host forgets it.
 	const before = pageIds.get(e.sender.id);
 	if (before && before !== page) { pageGone(before); }
@@ -599,7 +599,7 @@ async function followHost() {
 				else if (ev.type === "show") {
 					// The app's first card comes forward (a relaunch it didn't handle).
 					const c = [...cards.values()].find((k) => k.appId === ev.id && !k.popped);
-					if (c) { send("lunade:show", { id: c.id }); }
+					if (c) { send("luna-de:show", { id: c.id }); }
 				} else if (ev.type === "close") {
 					const c = [...cards.values()].find((k) => pageIds.get(k.view.webContents.id) === ev.page);
 					if (c) { removeCard(c.id, true); }
@@ -607,13 +607,13 @@ async function followHost() {
 						const h = [...headless.values()].find((v) => pageIds.get(v.webContents.id) === ev.page);
 						if (h && !h.webContents.isDestroyed()) { h.webContents.close(); }
 					}
-				} else if (ev.type === "apps") { send("lunade:apps", {}); }
+				} else if (ev.type === "apps") { send("luna-de:apps", {}); }
 				else if (ev.type === "banner") {
-					send("lunade:banner", { id: ev.id, appId: ev.appId, message: ev.message, params: ev.params,
+					send("luna-de:banner", { id: ev.id, appId: ev.appId, message: ev.message, params: ev.params,
 						icon: ev.icon || (ev.appId ? host + "/icon?id=" + encodeURIComponent(ev.appId) : "") });
-				} else if (ev.type === "banner-remove") { send("lunade:banner-remove", { id: ev.id }); }
-				else if (ev.type === "banner-clear") { send("lunade:banner-remove", { appId: ev.appId }); }
-				else if (ev.type === "network") { send("lunade:network", { online: ev.online }); }
+				} else if (ev.type === "banner-remove") { send("luna-de:banner-remove", { id: ev.id }); }
+				else if (ev.type === "banner-clear") { send("luna-de:banner-remove", { appId: ev.appId }); }
+				else if (ev.type === "network") { send("luna-de:network", { online: ev.online }); }
 								else if (ev.type === "keyboard" || ev.type === "keyboard-resizes") {
 					const c = [...cards.values()].find((k) => pageIds.get(k.view.webContents.id) === ev.page);
 					if (c) {
@@ -627,7 +627,7 @@ async function followHost() {
 					if (c && c.ready) { c.ready(); }
 				} else if (ev.type === "activate") {
 					const c = [...cards.values()].find((k) => pageIds.get(k.view.webContents.id) === ev.page);
-					if (c) { send("lunade:show", { id: c.id }); }
+					if (c) { send("luna-de:show", { id: c.id }); }
 				}
 			} catch (err) { console.error("Luna DE: " + ev.type + ": " + err); }
 		}
@@ -664,7 +664,7 @@ async function turn(to) {
 		try { c.view.webContents.setZoomFactor(pageScale(c.view.webContents)); } catch (e) {}
 		c.view.setBounds(c === keyboardCard && c.shrunk ? { x: r.x, y: r.y, width: r.width, height: r.height - KEYBOARD } : r);
 	}
-	send("lunade:screen", screenForShell());
+	send("luna-de:screen", screenForShell());
 	net.fetch(host + "/orientation?v=" + to, { method: "POST" }).catch(() => {});
 }
 
@@ -703,7 +703,7 @@ function pageScale(wc) {
 	return Math.min(device.scale, Math.min(r.width, r.height) / phoneZoom.width);
 }
 /** The bezel's Phone Zoom button, for the card that is up: its state, or (flip) the other one, the card loaded again at it. */
-ipcMain.handle("lunade:phone-zoom", async (e, id, flip) => {
+ipcMain.handle("luna-de:phone-zoom", async (e, id, flip) => {
 	const c = cards.get(id);
 	if (!c || device.id !== "pre3") { return null; }
 	if (flip) {
@@ -741,12 +741,12 @@ async function setDevice(id) {
 	shell.setContentSize(size.width, size.height + BEZEL);
 	shell.setResizable(false);
 	try { shell.webContents.setZoomFactor(device.scale); } catch (e) {}
-	send("lunade:keyboard", { show: false, height: KEYBOARD });
-	send("lunade:screen", screenForShell());
+	send("luna-de:keyboard", { show: false, height: KEYBOARD });
+	send("luna-de:screen", screenForShell());
 	return device.id;
 }
-ipcMain.handle("lunade:device", (e, id) => setDevice(id || (device.id === "touchpad" ? "pre3" : "touchpad")));
-ipcMain.handle("lunade:screen-now", () => screenForShell());
+ipcMain.handle("luna-de:device", (e, id) => setDevice(id || (device.id === "touchpad" ? "pre3" : "touchpad")));
+ipcMain.handle("luna-de:screen-now", () => screenForShell());
 
 /** The user agent every app page gives: the device's own, which webOS apps look for (DeviceProfile.userAgent, from the host). */
 let deviceUserAgent = "";
@@ -776,9 +776,9 @@ app.on("web-contents-created", (e, wc) => {
 		if (input.type !== "keyDown") { return; }
 		const isShell = shell && wc === shell.webContents;
 		if ((input.control || input.meta) && input.key.toLowerCase() === "o") { ev.preventDefault(); chooseInstall(input.shift); return; }
-		if (input.key === "F1" && shell) { ev.preventDefault(); send("lunade:home"); }
-		else if (input.key === "Home" && shell && !input.shift && !input.control && !isEditing(input)) { ev.preventDefault(); send("lunade:toggle-card"); }
-		else if (input.key === "End" && shell && !input.shift && !input.control && !isEditing(input)) { ev.preventDefault(); send("lunade:launcher"); }
+		if (input.key === "F1" && shell) { ev.preventDefault(); send("luna-de:home"); }
+		else if (input.key === "Home" && shell && !input.shift && !input.control && !isEditing(input)) { ev.preventDefault(); send("luna-de:toggle-card"); }
+		else if (input.key === "End" && shell && !input.shift && !input.control && !isEditing(input)) { ev.preventDefault(); send("luna-de:launcher"); }
 		else if (TURN[input.key]) { ev.preventDefault(); turn(TURN[input.key]); }
 		else if (input.key === "Escape" && isShell && shown) { ev.preventDefault(); tell(cards.get(shown).view.webContents, "back", String(Date.now())); }
 		else if (input.key === "F12" || (input.control && input.shift && input.key.toLowerCase() === "i")) { ev.preventDefault(); wc.toggleDevTools(); }
@@ -804,12 +804,12 @@ app.whenReady().then(async () => {
 	} catch (e) {}
 	openShell();
 	followHost();
-	// LUNADE_OPEN=<app id>[,<app id>...] launches those apps once the shell is ready.
-	ipcMain.once("lunade:ready", () => {
-		// LUNADE_INSTALL=<package or app folder>[<path separator><another>...] installs those first.
-		(process.env.LUNADE_INSTALL || "").split(path.delimiter).filter(Boolean).forEach((f) => install(path.resolve(f)));
-		if (!process.env.LUNADE_OPEN) { return; }
-		for (const id of process.env.LUNADE_OPEN.split(",")) { askLaunch(id); }
+	// LUNA_DE_OPEN=<app id>[,<app id>...] launches those apps once the shell is ready.
+	ipcMain.once("luna-de:ready", () => {
+		// LUNA_DE_INSTALL=<package or app folder>[<path separator><another>...] installs those first.
+		(process.env.LUNA_DE_INSTALL || "").split(path.delimiter).filter(Boolean).forEach((f) => install(path.resolve(f)));
+		if (!process.env.LUNA_DE_OPEN) { return; }
+		for (const id of process.env.LUNA_DE_OPEN.split(",")) { askLaunch(id); }
 	});
 });
 

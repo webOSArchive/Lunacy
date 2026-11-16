@@ -96,7 +96,7 @@ API 21 gate.
   resize arrives, since Enyo reads it there.
 - **Installing an app.** A package (.ipk) or an app's own folder (the one with appinfo.json) is
   dropped on the window, chosen with Ctrl/Cmd+O (Shift for a folder), or named in
-  `LUNADE_INSTALL`. A package goes through Lunacy's package installer, as from the App Catalog; a
+  `LUNA_DE_INSTALL`. A package goes through Lunacy's package installer, as from the App Catalog; a
   folder is copied in under its id, and dropped again to replace the copy. A banner says how it
   went, and the app is on the launcher's Downloads tab. A right-click on an installed app's tile
   offers Remove. (`palm-install` comes with milestone 5.)
@@ -127,7 +127,7 @@ API 21 gate.
 - **JS services** run as on Android: JsServices and ServiceProcess (now in LunaCore) start each
   package's Node process on its first call, under Lunacy's own host.js. The Node is 12, the major
   version nodejs-mobile gives Android: `DesktopLuna/fetch-node.sh` fetches nodejs.org's build and
-  checks it against their checksums (`LUNADE_NODE` names another). The accounts services run, so
+  checks it against their checksums (`LUNA_DE_NODE` names another). The accounts services run, so
   Calendar, Contacts and Accounts open with the on-device account.
 - **No First Use.** At its first start Luna DE does what Lunacy's shell does when First Use ends:
   the profile account is made (createNovaAccount) and the activities the configurator holds back

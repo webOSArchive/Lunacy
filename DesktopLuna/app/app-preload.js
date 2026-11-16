@@ -15,6 +15,7 @@
 		"webViewPlace", "webViewCovered", "webViewDestroy", "pluginStart", "pluginCall", "pluginStop", "log",
 		"nextWindow", "addBanner", "paste", "clipboardHasText", "removeBanner", "clearBanners", "playSound",
 		"setClipboard", "copiedToClipboard", "netSend", "netResult", "netSendSync", "netAbort",
+		"sqlOpen", "sqlRequest", "sqlResult",
 		// Luna DE's own: the page has loaded, and a script's answer to the host (a relaunch's).
 		"lunadeLoaded", "lunadeResult"];
 

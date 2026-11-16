@@ -20,10 +20,9 @@ import java.util.concurrent.atomic.AtomicInteger
  * runs ([take], which the page's preload polls). A reload is a new page, so a reply meant for
  * the old one never reaches the new one.
  *
- * First light (2026-11-15) answers what an Enyo app needs to start: the device (a TouchPad,
- * 1024 x 768), the bus, the locale. The rest answers as a device with nothing behind it would,
- * or not at all; the network shim and WebSQL aren't offered yet, so net.js and websql.js stand
- * aside (Docs/luna-de.md).
+ * It answers what an app needs of the device (a TouchPad), the bus, the locale, the network shim
+ * and WebSQL. What it doesn't have behind it (plugins, native web views, the clipboard) answers as
+ * a device with nothing there would (Docs/luna-de.md).
  */
 class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus, private val main: DesktopScheduler,
                     private val shell: DesktopShell) : org.webosarchive.lunacy.card.RunningWindow {
@@ -47,6 +46,16 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
         if (!closed) outbox.add(PageHooks.call(PageHooks.NET_DONE, "$id"))
     }
 
+    /**
+     * WebSQL's native half (websql.js), which Electron's Chromium no longer has itself: one SQLite
+     * file per app and database name under the data folder, as on Android. Made at the page's
+     * first openDatabase.
+     */
+    private val sql by lazy {
+        org.webosarchive.lunacy.card.WebSql(shell.webSqlDir, appId, { 0 }, { id -> if (!closed) outbox.add(PageHooks.call(PageHooks.SQL_DONE, "$id")) })
+    }
+    @Volatile private var sqlUsed = false
+
     /** A method of window.LunacyNative, with its arguments; its value as JSON text. */
     fun invoke(method: String, a: JSONArray): String = when (method) {
         "deviceInfo" -> JSONObject.quote(deviceInfo())
@@ -64,6 +73,9 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
         "netResult" -> JSONObject.quote(net.result(a.optInt(0)))
         "netSendSync" -> JSONObject.quote(net.sendSync(a.optString(0)))
         "netAbort" -> { net.abort(a.optInt(0)); "null" }
+        "sqlOpen" -> { sqlUsed = true; JSONObject.quote(sql.open(a.optString(0), a.optString(1), a.optBoolean(3))) }
+        "sqlRequest" -> { sqlUsed = true; sql.request(a.optInt(0), a.optString(1)); "null" }
+        "sqlResult" -> JSONObject.quote(sql.result(a.optInt(0)))
         "call" -> call(a.optInt(0), a.optString(1), a.optString(2)).toString()
         "cancel" -> { val t = a.optInt(0); main.post { calls.remove(t)?.cancel() }; "null" }
         "log" -> { Log.i(Lunacy.TAG, "[$appId] palm ${a.optString(0)}"); "null" }
@@ -195,6 +207,7 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
     fun close() {
         closed = true
         net.reset()
+        if (sqlUsed) sql.close()
         main.post { calls.values.forEach { it.cancel() }; calls.clear() }
     }
 

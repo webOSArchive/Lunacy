@@ -224,9 +224,9 @@ open class AppWindow(
         net = NetShim(appId, settings.userAgentString, profile.carrierCode, { page }) { id ->
             main.post { if (!destroyed) evaluateJavascript(PageHooks.call(PageHooks.NET_DONE, "$id"), null) }
         }
-        sql = WebSql(context, appId, { page }) { id ->
+        sql = WebSql(java.io.File(context.filesDir, "websql"), appId, { page }, { id ->
             main.post { if (!destroyed) evaluateJavascript(PageHooks.call(PageHooks.SQL_DONE, "$id"), null) }
-        }
+        }, AndroidWebSqlMigration(context)::migrate)
         // 1 CSS px = 1 TouchPad px, as the shell uses; the layout width follows from it. On a
         // phone that may be scaled down ([fit]); the display's own size stands in for the
         // card's until it is laid out, and the viewport meta sets the scale for real.

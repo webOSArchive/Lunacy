@@ -44,6 +44,10 @@ API 21 gate.
   folder is copied in under its id, and dropped again to replace the copy. A banner says how it
   went, and the app is on the launcher's Downloads tab. A right-click on an installed app's tile
   offers Remove. (`palm-install` comes with milestone 5.)
+- **WebSQL** (`openDatabase`), which Electron's Chromium no longer has: WebSql is in LunaCore on
+  the same `core.Sql` as db8, with the typed statements and SQLite's own error messages each
+  platform has to give alike (`SqlError`). `WebSqlSuite` runs on both SQLites. Mojo's Depot and
+  cookies work, and a Mojo app (SimpleChat) runs its scenes.
 - **App Catalog installs.** Lunacy's own service is on the bus (`org.webosarchive.lunacy`, with
   `system/getEnvironment` answering for the desktop it runs on), which is how App Catalog knows to
   install through Lunacy's installer; the download manager is in LunaCore and on the bus too.
@@ -102,9 +106,7 @@ API 21 gate.
 1. **luna-send for a service's child processes** (LunaSendServer, a Unix socket on Android): a
    service that shells out to `luna-send` gets an error. With it, the question of package scripts
    (open question 2).
-2. **WebSQL's native half** (WebSql): `openDatabase` is absent in Luna DE until it moves, which
-   Mojo's Depot needs more than Enyo apps do. It is a rewrite of its storage calls, like db8's, and
-   gets the same two-platform suite first.
+2. *(Done 2026-11-16: WebSQL's native half is in LunaCore; see above.)*
 3. AppLifecycle and CardHost's decisions into LunaCore, replacing `DesktopShell`'s copy.
 4. Milestone 5's tools (Novacom, the novacomd `local` transport), then packaging.
 

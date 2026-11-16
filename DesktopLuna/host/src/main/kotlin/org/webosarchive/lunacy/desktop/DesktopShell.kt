@@ -45,6 +45,8 @@ class DesktopShell(
     lateinit var applicationManager: ApplicationManager
     var jsServices: org.webosarchive.lunacy.card.JsServices? = null
     var network: DesktopNetwork? = null
+    /** Where every app's WebSQL databases are kept (files/websql on Android). */
+    val webSqlDir get() = File(data, "websql")
 
     // ---- events to Electron ----
 

@@ -69,7 +69,56 @@ private class JdbcDb(private val c: Connection) : SqlDb {
         }
     }
 
+    override fun inTransaction() = depth > 0
     override fun close() { c.close() }
+
+    override fun select(sql: String, args: List<Any?>): SqlTable {
+        val st = try { c.prepareStatement(sql) } catch (e: java.sql.SQLException) { throw SqlError(SqlError.Kind.PREPARE, message(e)) }
+        try {
+            st.use {
+                bind(st, args.toTypedArray())
+                st.executeQuery().use { rs ->
+                    val meta = rs.metaData
+                    val columns = (1..meta.columnCount).map { meta.getColumnLabel(it) }
+                    val rows = ArrayList<List<Any?>>()
+                    while (rs.next()) rows += (1..columns.size).map { i ->
+                        when (val v = rs.getObject(i)) {
+                            null -> null
+                            is Long -> v
+                            is Int, is Short, is Byte -> (v as Number).toLong()
+                            is Number -> v.toDouble()
+                            is ByteArray -> String(v, Charsets.ISO_8859_1)
+                            else -> v.toString()
+                        }
+                    }
+                    return SqlTable(columns, rows)
+                }
+            }
+        } catch (e: java.sql.SQLException) { throw SqlError(kind(e), message(e)) }
+    }
+
+    override fun update(sql: String, args: List<Any?>): SqlChange {
+        val st = try { c.prepareStatement(sql) } catch (e: java.sql.SQLException) { throw SqlError(SqlError.Kind.PREPARE, message(e)) }
+        val changed = try {
+            st.use { bind(st, args.toTypedArray()); st.executeUpdate() }
+        } catch (e: java.sql.SQLException) { throw SqlError(kind(e), message(e)) }
+        val id = if (changed > 0) query("SELECT last_insert_rowid()") { it.next(); it.getLong(0) } else null
+        return SqlChange(changed, id)
+    }
+
+    /** SQLite's primary result code: 19 is a constraint, 13 a full disk. */
+    private fun kind(e: java.sql.SQLException) = when (e.errorCode and 0xff) {
+        19 -> SqlError.Kind.CONSTRAINT
+        13 -> SqlError.Kind.FULL
+        else -> SqlError.Kind.OTHER
+    }
+
+    /** SQLite's own text out of the driver's "[SQLITE_ERROR] SQL error or missing database (no such table: t)". */
+    private fun message(e: java.sql.SQLException): String {
+        val m = e.message ?: return e.toString()
+        val wrapped = Regex("""^\[SQLITE_[A-Z_]+]\s+.*?\((.*)\)\s*$""", RegexOption.DOT_MATCHES_ALL).find(m)
+        return wrapped?.groupValues?.get(1) ?: m
+    }
 
     private class Rows(private val rs: ResultSet) : SqlRows {
         override fun next() = rs.next()

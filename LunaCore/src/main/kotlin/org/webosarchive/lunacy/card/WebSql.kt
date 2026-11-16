@@ -1,18 +1,12 @@
 package org.webosarchive.lunacy.card
 
-import android.content.Context
-import android.database.Cursor
-import android.database.DatabaseUtils
-import android.database.sqlite.SQLiteConstraintException
-import android.database.sqlite.SQLiteCursor
-import android.database.sqlite.SQLiteDatabase
-import android.database.sqlite.SQLiteException
-import android.database.sqlite.SQLiteFullException
-import android.database.sqlite.SQLiteProgram
-import android.util.Base64
-import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
+import org.webosarchive.lunacy.core.Base64Codec
+import org.webosarchive.lunacy.core.Log
+import org.webosarchive.lunacy.core.Platform
+import org.webosarchive.lunacy.core.SqlDb
+import org.webosarchive.lunacy.core.SqlError
 import java.io.File
 import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
@@ -24,7 +18,8 @@ import java.util.concurrent.Executors
  * window's statements run in order on a thread of their own, as WebKit ran them, and never
  * on the main thread.
  *
- * Storage is one SQLite file per app and database name, under `files/websql/<app id>/`, so
+ * Storage is one SQLite file per app and database name, under `<dir>/<app id>/` (`files/websql` on
+ * Android), so
  * an app's data is the app's whichever origin its windows load from. The version lives
  * inside the file in WebKit's own `__WebKitDatabaseInfo__` table, which is also where a
  * database the WebView itself stored before it lost WebSQL keeps it: such a file is copied
@@ -39,17 +34,24 @@ import java.util.concurrent.Executors
  * gave it ("no such table: nosuchtable"; Docs/mojo.md).
  */
 class WebSql(
-    private val context: Context,
+    /** Where every app's databases are kept. */
+    private val dir: File,
     private val appId: String,
     /** Which page of the window is loaded: an earlier page's answers are dropped (see NetShim's). */
     private val page: () -> Int,
     private val deliver: (Int) -> Unit,
+    /**
+     * Brings in a database the host's own engine stored under [host] and [name] before it lost
+     * WebSQL, as the file [target] (Android's WebView; see AndroidWebSqlMigration). Null where
+     * there is none to bring.
+     */
+    private val migrate: ((target: File, host: String, name: String) -> Unit)? = null,
 ) {
     private val worker = Executors.newSingleThreadExecutor()
     // Typed as Map: ConcurrentHashMap.keySet() compiles to a KeySetView call Android 5 lacks.
     private val results: MutableMap<Int, String> = ConcurrentHashMap()
     /** Open databases by name, and the ones with a transaction open. Worker thread only. */
-    private val open = HashMap<String, SQLiteDatabase>()
+    private val open = HashMap<String, SqlDb>()
     private val inTransaction = HashMap<String, Boolean>()  // name -> readOnly
     /** The window is going: nothing more is answered. */
     @Volatile private var closed = false
@@ -73,7 +75,7 @@ class WebSql(
 
     private fun openOn(name: String, version: String, hasCreationCallback: Boolean): String {
         val db = open[name] ?: openFile(name).also { open[name] = it }
-        db.execSQL("CREATE TABLE IF NOT EXISTS $INFO_TABLE (key TEXT NOT NULL ON CONFLICT FAIL UNIQUE ON CONFLICT REPLACE, value TEXT NOT NULL ON CONFLICT FAIL)")
+        db.exec("CREATE TABLE IF NOT EXISTS $INFO_TABLE (key TEXT NOT NULL ON CONFLICT FAIL UNIQUE ON CONFLICT REPLACE, value TEXT NOT NULL ON CONFLICT FAIL)")
         val stored = readVersion(db)
         val r = JSONObject()
         if (stored == null) {
@@ -87,52 +89,23 @@ class WebSql(
         return r.put("version", stored).put("created", false).toString()
     }
 
-    private fun openFile(name: String): SQLiteDatabase {
-        val dir = File(context.filesDir, "websql/$appId").also { it.mkdirs() }
-        val file = File(dir, Base64.encodeToString(name.toByteArray(), Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP) + ".db")
+    private fun openFile(name: String): SqlDb {
+        val dir = File(dir, appId).also { it.mkdirs() }
+        // The name as a file's: URL-safe Base64 without padding (android.util.Base64's URL_SAFE | NO_PADDING | NO_WRAP).
+        val file = File(dir, Base64Codec.encode(name.toByteArray()).replace('+', '-').replace('/', '_').trimEnd('=') + ".db")
         // The WebView kept it under the app's own origin, worked out from its id rather than
         // taken from the page, which could name another app's (code review S14, rule 10).
         // Lowercased, as Chromium writes a host (and as location.host read it before): an app
         // id with capitals would otherwise miss its own database.
-        if (!file.exists()) migrate(file, appId.lowercase(java.util.Locale.ROOT) + AppServer.HOST_SUFFIX, name)
-        return SQLiteDatabase.openOrCreateDatabase(file, null)
+        if (!file.exists()) migrate?.invoke(file, appId.lowercase(java.util.Locale.ROOT) + AppServer.HOST_SUFFIX, name)
+        return Platform.sql.open(file)
     }
 
-    /**
-     * A database the WebView stored while it still had WebSQL: Chromium kept an index,
-     * `Databases.db`, mapping an origin (`https_host_0`) and a name to a numbered file in
-     * that origin's folder. Copied in whole, version table and all, so an app that kept its
-     * data in the WebView's WebSQL finds it after a WebView update takes WebSQL away.
-     */
-    private fun migrate(target: File, host: String, name: String) {
-        val data = context.filesDir.parentFile ?: return
-        val origin = "https_${host}_0"
-        for (dir in listOf("app_webview/Default/databases", "app_webview/databases", "app_websql/databases")) {
-            val base = File(data, dir)
-            val index = File(base, "Databases.db")
-            if (!index.isFile) continue
-            try {
-                SQLiteDatabase.openDatabase(index.path, null, SQLiteDatabase.OPEN_READONLY).use { idx ->
-                    idx.rawQuery("SELECT id FROM Databases WHERE origin = ? AND name = ?", arrayOf(origin, name)).use { c ->
-                        if (!c.moveToFirst()) return@use
-                        val source = File(base, "$origin/${c.getLong(0)}")
-                        if (!source.isFile) return@use
-                        source.copyTo(target)
-                        Log.i(AppServer.TAG, "websql [$appId] migrated \"$name\" from $dir (${source.length()} bytes)")
-                        return
-                    }
-                }
-            } catch (e: Exception) {
-                Log.w(AppServer.TAG, "websql [$appId] migrating \"$name\" from $dir: $e")
-            }
-        }
-    }
+    private fun readVersion(db: SqlDb): String? =
+        db.query("SELECT value FROM $INFO_TABLE WHERE key = ?", arrayOf(VERSION_KEY)) { c -> if (c.next()) c.getString(0) else null }
 
-    private fun readVersion(db: SQLiteDatabase): String? =
-        db.rawQuery("SELECT value FROM $INFO_TABLE WHERE key = ?", arrayOf(VERSION_KEY)).use { c -> if (c.moveToFirst()) c.getString(0) else null }
-
-    private fun writeVersion(db: SQLiteDatabase, version: String) =
-        db.execSQL("INSERT INTO $INFO_TABLE (key, value) VALUES (?, ?)", arrayOf(VERSION_KEY, version))
+    private fun writeVersion(db: SqlDb, version: String) =
+        db.exec("INSERT INTO $INFO_TABLE (key, value) VALUES (?, ?)", VERSION_KEY, version)
 
     /** Queues a request; deliver(id) is called when result(id) has its answer. */
     fun request(id: Int, request: String) {
@@ -185,10 +158,10 @@ class WebSql(
         }
     }
 
-    private fun begin(name: String, db: SQLiteDatabase, readOnly: Boolean, oldVersion: String?): JSONObject {
+    private fun begin(name: String, db: SqlDb, readOnly: Boolean, oldVersion: String?): JSONObject {
         if (inTransaction.containsKey(name)) rollback(name, db)
         try {
-            db.beginTransactionNonExclusive()
+            db.beginTransaction()
         } catch (e: Exception) {
             return error(DATABASE_ERR, "unable to begin transaction (${message(e)})")
         }
@@ -201,7 +174,7 @@ class WebSql(
         return ok()
     }
 
-    private fun commit(name: String, db: SQLiteDatabase, newVersion: String?): JSONObject {
+    private fun commit(name: String, db: SqlDb, newVersion: String?): JSONObject {
         if (!inTransaction.containsKey(name)) return error(DATABASE_ERR, "unable to commit transaction (none open)")
         try {
             if (newVersion != null) writeVersion(db, newVersion)
@@ -216,13 +189,13 @@ class WebSql(
         return ok()
     }
 
-    private fun rollback(name: String, db: SQLiteDatabase): JSONObject {
+    private fun rollback(name: String, db: SqlDb): JSONObject {
         if (inTransaction.remove(name) != null) runCatching { db.endTransaction() }
         return ok()
     }
 
     /** Runs the batch in order, stopping at the first failure: the page decides what follows it. */
-    private fun exec(name: String, db: SQLiteDatabase, statements: JSONArray): JSONObject {
+    private fun exec(name: String, db: SqlDb, statements: JSONArray): JSONObject {
         val readOnly = inTransaction[name] ?: return error(DATABASE_ERR, "no transaction is open")
         val results = JSONArray()
         for (i in 0 until statements.length()) {
@@ -238,12 +211,12 @@ class WebSql(
         return JSONObject().put("results", results)
     }
 
-    private fun statement(db: SQLiteDatabase, sql: String, args: JSONArray, readOnly: Boolean): JSONObject {
-        val type = DatabaseUtils.getSqlStatementType(sql)
+    private fun statement(db: SqlDb, sql: String, args: JSONArray, readOnly: Boolean): JSONObject {
+        val type = statementType(sql)
         // WebKit's authorizer refused these (DatabaseAuthorizer::allowAttach): a page could
         // otherwise open any file Lunacy can, its cookies among them.
-        if (type == DatabaseUtils.STATEMENT_ATTACH || attaches(sql)) throw SqlFailure(SYNTAX_ERR, "not authorized")
-        val query = type == DatabaseUtils.STATEMENT_SELECT || LEADS_WITH_ROWS.containsMatchIn(sql)
+        if (type == "ATT" || attaches(sql)) throw SqlFailure(SYNTAX_ERR, "not authorized")
+        val query = type == "SEL" || LEADS_WITH_ROWS.containsMatchIn(sql)
         if (readOnly && !query) throw SqlFailure(SYNTAX_ERR, "not authorized")
         val expected = parameterCount(sql)
         if (expected >= 0 && expected != args.length()) {
@@ -252,77 +225,43 @@ class WebSql(
         return if (query) select(db, sql, args) else update(db, sql, args)
     }
 
-    private fun select(db: SQLiteDatabase, sql: String, args: JSONArray): JSONObject {
-        // Prepared here (SQLiteQuery compiles as it is made), bound typed in the factory.
-        val cursor = try {
-            db.rawQueryWithFactory({ _, driver, editTable, q -> bind(q, args); SQLiteCursor(driver, editTable, q) }, sql, null, "")
-        } catch (e: Exception) {
-            throw SqlFailure(SYNTAX_ERR, message(e))
+    /** A page's arguments as SQLite takes them: null, an integer, a real, or text. */
+    private fun values(args: JSONArray): List<Any?> = (0 until args.length()).map { i ->
+        when (val v = args.opt(i)) {
+            null, JSONObject.NULL -> null
+            is Int -> v.toLong()
+            is Long -> v
+            is Number -> v.toDouble()
+            else -> v.toString()
         }
-        val rows = JSONArray()
+    }
+
+    private fun select(db: SqlDb, sql: String, args: JSONArray): JSONObject {
+        val t = try { db.select(sql, values(args)) } catch (e: SqlError) { throw SqlFailure(code(e), e.message ?: "") }
         val columns = JSONArray()
-        try {
-            cursor.use { c ->
-                for (col in c.columnNames) columns.put(col)
-                while (c.moveToNext()) {
-                    val row = JSONArray()
-                    for (i in 0 until c.columnCount) row.put(value(c, i))
-                    rows.put(row)
-                }
-            }
-        } catch (e: Exception) {
-            throw SqlFailure(stepCode(e), message(e))
-        }
+        for (col in t.columns) columns.put(col)
+        val rows = JSONArray()
+        for (r in t.rows) rows.put(JSONArray().also { row -> for (v in r) row.put(v ?: JSONObject.NULL) })
         return JSONObject().put("columns", columns).put("rows", rows).put("rowsAffected", 0).put("insertId", JSONObject.NULL)
     }
 
-    private fun update(db: SQLiteDatabase, sql: String, args: JSONArray): JSONObject {
-        val st = try { db.compileStatement(sql) } catch (e: Exception) { throw SqlFailure(SYNTAX_ERR, message(e)) }
-        val changed = try {
-            st.use { bind(it, args); it.executeUpdateDelete() }
-        } catch (e: Exception) {
-            throw SqlFailure(stepCode(e), message(e))
-        }
+    private fun update(db: SqlDb, sql: String, args: JSONArray): JSONObject {
+        val c = try { db.update(sql, values(args)) } catch (e: SqlError) { throw SqlFailure(code(e), e.message ?: "") }
         // WebKit set insertId whenever the statement changed rows: the last rowid inserted.
-        val insertId: Any = if (changed > 0) DatabaseUtils.longForQuery(db, "SELECT last_insert_rowid()", null) else JSONObject.NULL
-        return JSONObject().put("columns", JSONArray()).put("rows", JSONArray()).put("rowsAffected", changed).put("insertId", insertId)
+        return JSONObject().put("columns", JSONArray()).put("rows", JSONArray()).put("rowsAffected", c.rowsAffected)
+            .put("insertId", c.insertId ?: JSONObject.NULL)
     }
 
-    private fun bind(p: SQLiteProgram, args: JSONArray) {
-        for (i in 0 until args.length()) {
-            val v = args.opt(i)
-            when (v) {
-                null, JSONObject.NULL -> p.bindNull(i + 1)
-                is Int -> p.bindLong(i + 1, v.toLong())
-                is Long -> p.bindLong(i + 1, v)
-                is Number -> p.bindDouble(i + 1, v.toDouble())
-                else -> p.bindString(i + 1, v.toString())
-            }
-        }
+    /** WebKit's SQLStatement codes: failing to prepare is a syntax error, then the constraint, the full disk, the rest. */
+    private fun code(e: SqlError) = when (e.kind) {
+        SqlError.Kind.PREPARE -> SYNTAX_ERR
+        SqlError.Kind.CONSTRAINT -> CONSTRAINT_ERR
+        SqlError.Kind.FULL -> QUOTA_ERR
+        SqlError.Kind.OTHER -> DATABASE_ERR
     }
 
-    private fun value(c: Cursor, i: Int): Any = when (c.getType(i)) {
-        Cursor.FIELD_TYPE_NULL -> JSONObject.NULL
-        Cursor.FIELD_TYPE_INTEGER -> c.getLong(i)
-        Cursor.FIELD_TYPE_FLOAT -> c.getDouble(i)
-        Cursor.FIELD_TYPE_BLOB -> String(c.getBlob(i), Charsets.ISO_8859_1)
-        else -> c.getString(i)
-    }
-
-    private fun stepCode(e: Exception) = when (e) {
-        is SQLiteConstraintException -> CONSTRAINT_ERR
-        is SQLiteFullException -> QUOTA_ERR
-        else -> DATABASE_ERR
-    }
-
-    /**
-     * SQLite's own message, as the device gave it. Android appends its own "(code 1
-     * SQLITE_ERROR): , while compiling: …"; a page read the message against SQLite's text.
-     */
-    private fun message(e: Exception): String {
-        val m = e.message ?: return e.toString()
-        return ANDROID_SUFFIX.find(m)?.let { m.substring(0, it.range.first) } ?: m
-    }
+    /** An exception's text for a transaction that wouldn't begin or commit. */
+    private fun message(e: Exception): String = e.message ?: e.toString()
 
     private fun error(code: Int, message: String) = JSONObject().put("error", JSONObject().put("code", code).put("message", message))
     private fun ok() = JSONObject().put("ok", true)
@@ -339,7 +278,16 @@ class WebSql(
         const val INFO_TABLE = "__WebKitDatabaseInfo__"
         const val VERSION_KEY = "WebKitDatabaseVersionKey"
 
-        private val ANDROID_SUFFIX = Regex(""" \(code \d+""")
+        /**
+         * A statement's kind by its first three letters, as android.database.DatabaseUtils
+         * told them apart on Android 5 ("SEL", "ATT", ...): what decides which statements return
+         * rows and which a page may not run.
+         */
+        internal fun statementType(sql: String): String {
+            val t = sql.trim()
+            return if (t.length < 3) "" else t.substring(0, 3).uppercase(java.util.Locale.ROOT)
+        }
+
         /** Statements that return rows but which getSqlStatementType doesn't call SELECT. */
         private val LEADS_WITH_ROWS = Regex("""^\s*(WITH|PRAGMA|EXPLAIN)\b""", RegexOption.IGNORE_CASE)
         private val ATTACH = Regex("""^(?:\s|--[^\n]*(?:\n|$)|/\*.*?\*/)*(ATTACH|DETACH)\b""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))

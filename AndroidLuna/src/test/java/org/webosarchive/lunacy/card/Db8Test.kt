@@ -21,3 +21,10 @@ class Db8Test : Db8Suite() {
 class SqlTest : SqlSuite() {
     override fun install() = org.webosarchive.lunacy.shell.LunacyApplication.install()
 }
+
+/** LunaCore's [WebSqlSuite] on android.database.sqlite. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [33])
+class WebSqlNativeTest : WebSqlSuite() {
+    override fun install() = org.webosarchive.lunacy.shell.LunacyApplication.install()
+}

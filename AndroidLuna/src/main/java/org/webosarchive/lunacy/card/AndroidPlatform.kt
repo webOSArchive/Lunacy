@@ -82,10 +82,115 @@ private class AndroidSqlDb(private val db: android.database.sqlite.SQLiteDatabas
             })
         }
 
-    override fun beginTransaction() = db.beginTransaction()
+    // Non-exclusive, as WebSql began its transactions: two windows of one app share a file. db8,
+    // the only other user, has one connection and one thread, so it is the same to it.
+    override fun beginTransaction() = db.beginTransactionNonExclusive()
     override fun setTransactionSuccessful() = db.setTransactionSuccessful()
     override fun endTransaction() = db.endTransaction()
+    override fun inTransaction() = db.inTransaction()
     override fun close() = db.close()
+
+    // ---- WebSQL's statements, as WebSql ran them itself before LunaCore ----
+
+    override fun select(sql: String, args: List<Any?>): org.webosarchive.lunacy.core.SqlTable {
+        // Prepared here (SQLiteQuery compiles as it is made), bound typed in the factory.
+        val cursor = try {
+            db.rawQueryWithFactory({ _, driver, editTable, q -> bind(q, args); android.database.sqlite.SQLiteCursor(driver, editTable, q) }, sql, null, "")
+        } catch (e: Exception) {
+            throw org.webosarchive.lunacy.core.SqlError(org.webosarchive.lunacy.core.SqlError.Kind.PREPARE, message(e))
+        }
+        try {
+            cursor.use { c ->
+                val columns = c.columnNames.toList()
+                val rows = ArrayList<List<Any?>>()
+                while (c.moveToNext()) rows += (0 until c.columnCount).map { i ->
+                    when (c.getType(i)) {
+                        android.database.Cursor.FIELD_TYPE_NULL -> null
+                        android.database.Cursor.FIELD_TYPE_INTEGER -> c.getLong(i)
+                        android.database.Cursor.FIELD_TYPE_FLOAT -> c.getDouble(i)
+                        android.database.Cursor.FIELD_TYPE_BLOB -> String(c.getBlob(i), Charsets.ISO_8859_1)
+                        else -> c.getString(i)
+                    }
+                }
+                return org.webosarchive.lunacy.core.SqlTable(columns, rows)
+            }
+        } catch (e: Exception) {
+            throw org.webosarchive.lunacy.core.SqlError(stepKind(e), message(e))
+        }
+    }
+
+    override fun update(sql: String, args: List<Any?>): org.webosarchive.lunacy.core.SqlChange {
+        val st = try { db.compileStatement(sql) } catch (e: Exception) {
+            throw org.webosarchive.lunacy.core.SqlError(org.webosarchive.lunacy.core.SqlError.Kind.PREPARE, message(e))
+        }
+        val changed = try {
+            st.use { bind(it, args); it.executeUpdateDelete() }
+        } catch (e: Exception) {
+            throw org.webosarchive.lunacy.core.SqlError(stepKind(e), message(e))
+        }
+        val id = if (changed > 0) android.database.DatabaseUtils.longForQuery(db, "SELECT last_insert_rowid()", null) else null
+        return org.webosarchive.lunacy.core.SqlChange(changed, id)
+    }
+
+    private fun bind(p: android.database.sqlite.SQLiteProgram, args: List<Any?>) {
+        for ((i, v) in args.withIndex()) when (v) {
+            null -> p.bindNull(i + 1)
+            is Long -> p.bindLong(i + 1, v)
+            is Int -> p.bindLong(i + 1, v.toLong())
+            is Number -> p.bindDouble(i + 1, v.toDouble())
+            else -> p.bindString(i + 1, v.toString())
+        }
+    }
+
+    private fun stepKind(e: Exception) = when (e) {
+        is android.database.sqlite.SQLiteConstraintException -> org.webosarchive.lunacy.core.SqlError.Kind.CONSTRAINT
+        is android.database.sqlite.SQLiteFullException -> org.webosarchive.lunacy.core.SqlError.Kind.FULL
+        else -> org.webosarchive.lunacy.core.SqlError.Kind.OTHER
+    }
+
+    /**
+     * SQLite's own message, as the device gave it. Android appends its own "(code 1
+     * SQLITE_ERROR): , while compiling: …"; a page read the message against SQLite's text.
+     */
+    private fun message(e: Exception): String {
+        val m = e.message ?: return e.toString()
+        return ANDROID_SUFFIX.find(m)?.let { m.substring(0, it.range.first) } ?: m
+    }
+
+    private companion object { val ANDROID_SUFFIX = Regex(""" \(code \d+""") }
+}
+
+/** WebSQL databases Android's WebView stored itself, before it lost WebSQL: brought into Lunacy's own (WebSql's `migrate`). */
+class AndroidWebSqlMigration(private val context: android.content.Context) {
+    /**
+     * A database the WebView stored while it still had WebSQL: Chromium kept an index,
+     * `Databases.db`, mapping an origin (`https_host_0`) and a name to a numbered file in
+     * that origin's folder. Copied in whole, version table and all, so an app that kept its
+     * data in the WebView's WebSQL finds it after a WebView update takes WebSQL away.
+     */
+    fun migrate(target: File, host: String, name: String) {
+        val data = context.filesDir.parentFile ?: return
+        val origin = "https_${host}_0"
+        for (dir in listOf("app_webview/Default/databases", "app_webview/databases", "app_websql/databases")) {
+            val base = File(data, dir)
+            val index = File(base, "Databases.db")
+            if (!index.isFile) continue
+            try {
+                android.database.sqlite.SQLiteDatabase.openDatabase(index.path, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY).use { idx ->
+                    idx.rawQuery("SELECT id FROM Databases WHERE origin = ? AND name = ?", arrayOf(origin, name)).use { c ->
+                        if (!c.moveToFirst()) return@use
+                        val source = File(base, "$origin/${c.getLong(0)}")
+                        if (!source.isFile) return@use
+                        source.copyTo(target)
+                        org.webosarchive.lunacy.core.Log.i(AppServer.TAG, "websql [$host] migrated \"$name\" from $dir (${source.length()} bytes)")
+                        return
+                    }
+                }
+            } catch (e: Exception) {
+                org.webosarchive.lunacy.core.Log.w(AppServer.TAG, "websql [$host] migrating \"$name\" from $dir: $e")
+            }
+        }
+    }
 }
 
 /** java.text.Collator, which is ICU on Android, as LunaCore's [org.webosarchive.lunacy.core.Collation]. */

@@ -209,6 +209,73 @@ function postTell(page, what, value) {
 /** Which card has the focus: the one on the screen, or none in the card view. */
 function focusCards() {
 	for (const c of cards.values()) { tell(c.view.webContents, "active", String(c.id === shown)); }
+	applyKeyboard();
+}
+
+// ---- the virtual keyboard ----
+//
+// webOS's tablet keyboard, 340 px of the screen's foot (LunaKeyboard's art and LunaCE's keymap,
+// drawn by the shell page). It is up while the card on the screen wants it (a field has the
+// focus, or the app asked) and no real keyboard is there: a real one, as a Bluetooth keyboard
+// did on a TouchPad, keeps it away. Luna DE starts with one, since a desktop has one; the
+// bezel's keyboard button takes it away and brings it back, so an app can be seen both ways.
+// What the app hears is what LunaSysMgr told it (ShellChrome.watchKeyboard on Android):
+// Mojo.keyboardShown(true), then its window shrinks to the space above the keyboard, or, if it
+// asked not to be resized, Mojo.positiveSpaceChanged with that space; and the reverse.
+const KEYBOARD = 340;
+let realKeyboard = true;
+let keyboardCard = null;   // the card the keyboard is up for
+
+function applyKeyboard() {
+	const c = shown ? cards.get(shown) : null;
+	const want = !!(c && !c.popped && c.wantsKeyboard && !realKeyboard);
+	if ((want ? c : null) === keyboardCard) { return; }
+	if (keyboardCard) { lowerKeyboard(keyboardCard, !want); }
+	keyboardCard = want ? c : null;
+	if (want) { raiseKeyboard(c); }
+	send("lunade:keyboard", { show: !!keyboardCard });
+}
+
+/** A lifecycle hook called the way LunaSysMgr did, a function on the page's Mojo object, here and now: before whatever follows it. */
+function callMojo(wc, fn, args) {
+	if (wc.isDestroyed()) { return Promise.resolve(); }
+	return wc.executeJavaScript("(function(){try{if(window.Mojo&&Mojo." + fn + "){Mojo." + fn + "(" + (args || "") + ");}}catch(e){console.error('Mojo." + fn + ": '+e);}})()", false).catch(() => {});
+}
+
+async function raiseKeyboard(c) {
+	const r = cardRect(), wc = c.view.webContents;
+	c.shrunk = c.keyboardResizes !== false;
+	await callMojo(wc, "keyboardShown", "true");
+	if (keyboardCard !== c) { return; }
+	if (c.shrunk) { c.view.setBounds({ x: r.x, y: r.y, width: r.width, height: r.height - KEYBOARD }); }
+	else { callMojo(wc, "positiveSpaceChanged", r.width + "," + (r.height - KEYBOARD)); }
+}
+
+async function lowerKeyboard(c, blur) {
+	if (cards.get(c.id) !== c || c.view.webContents.isDestroyed()) { return; }
+	const r = cardRect(), wc = c.view.webContents;
+	const wasShrunk = c.shrunk;
+	c.shrunk = false;
+	// Put away by the person (the hide key, a real keyboard arriving): the field's focus goes with it.
+	const unfocus = blur && c.wantsKeyboard;
+	if (unfocus) { c.wantsKeyboard = false; }
+	if (wasShrunk) { if (!c.popped) { c.view.setBounds(r); } } else { await callMojo(wc, "positiveSpaceChanged", r.width + "," + r.height); }
+	await callMojo(wc, "keyboardShown", "false");
+	if (unfocus && !wc.isDestroyed()) { wc.executeJavaScript("window.__lunacyRemoveInputFocus&&__lunacyRemoveInputFocus()", false).catch(() => {}); }
+}
+
+/** A key of the virtual keyboard, typed into the card it is up for. */
+function typeKey(key) {
+	const c = keyboardCard;
+	if (!c || c.view.webContents.isDestroyed()) { return; }
+	const wc = c.view.webContents;
+	wc.focus();
+	if (key.hide) { lowerKeyboard(c, true); keyboardCard = null; send("lunade:keyboard", { show: false }); return; }
+	const code = key.code || key.text;
+	wc.sendInputEvent({ type: "keyDown", keyCode: code });
+	if (key.text) { for (const ch of key.text) { wc.sendInputEvent({ type: "char", keyCode: ch }); } }
+	else if (key.code === "Return") { wc.sendInputEvent({ type: "char", keyCode: "\r" }); }
+	wc.sendInputEvent({ type: "keyUp", keyCode: code });
 }
 
 function removeCard(id, close) {
@@ -340,6 +407,13 @@ ipcMain.handle("lunade:appmenu", () => {
 });
 // The bezel's rotate button: wide to tall and back (F6 to F9 pick each of the four ways up).
 ipcMain.handle("lunade:rotate", () => { turn(portrait() ? "right" : "up"); return true; });
+ipcMain.handle("lunade:key", (e, key) => { typeKey(key || {}); return true; });
+// The bezel's keyboard button: a real keyboard there, or not.
+ipcMain.handle("lunade:real-keyboard", () => {
+	realKeyboard = !realKeyboard;
+	applyKeyboard();
+	return realKeyboard;
+});
 ipcMain.handle("lunade:back", () => { const c = shown && cards.get(shown); if (c) { tell(c.view.webContents, "back", String(Date.now())); } return true; });
 ipcMain.on("lunade:next-window", (e, json) => {
 	let attrs = {};
@@ -424,7 +498,14 @@ async function followHost() {
 				} else if (ev.type === "banner-remove") { send("lunade:banner-remove", { id: ev.id }); }
 				else if (ev.type === "banner-clear") { send("lunade:banner-remove", { appId: ev.appId }); }
 				else if (ev.type === "network") { send("lunade:network", { online: ev.online }); }
-								else if (ev.type === "ready") {
+								else if (ev.type === "keyboard" || ev.type === "keyboard-resizes") {
+					const c = [...cards.values()].find((k) => pageIds.get(k.view.webContents.id) === ev.page);
+					if (c) {
+						if (ev.type === "keyboard") { c.wantsKeyboard = !!ev.show; } else { c.keyboardResizes = !!ev.resize; }
+						applyKeyboard();
+					}
+				}
+				else if (ev.type === "ready") {
 					// The app's own word that its stage is ready (PalmSystem.stageReady), as on Android.
 					const c = [...cards.values()].find((k) => pageIds.get(k.view.webContents.id) === ev.page);
 					if (c && c.ready) { c.ready(); }
@@ -461,7 +542,10 @@ async function turn(to) {
 	shell.setResizable(true);
 	shell.setContentSize(size.width, size.height + BEZEL);
 	shell.setResizable(false);
-	for (const c of here) { c.view.setBounds(cardRect()); }
+	for (const c of here) {
+		const r = cardRect();
+		c.view.setBounds(c === keyboardCard && c.shrunk ? { x: r.x, y: r.y, width: r.width, height: r.height - KEYBOARD } : r);
+	}
 	send("lunade:screen", { width: size.width, height: size.height, orientation });
 	net.fetch(host + "/orientation?v=" + to, { method: "POST" }).catch(() => {});
 }

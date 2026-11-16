@@ -92,6 +92,10 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
         "addBanner" -> shell.banner(this, a.optString(0), a.optString(1), a.optString(2)).toString()
         "removeBanner" -> { shell.removeBanner(a.optInt(0)); "null" }
         "clearBanners" -> { shell.clearBanners(this); "null" }
+        // The page wants the keyboard up or down (a field took or lost the focus, or the app
+        // said so), and whether its window is resized for it or told the space left instead.
+        "keyboard" -> { shell.keyboardWanted(this, a.optBoolean(0)); "null" }
+        "keyboardResizes" -> { shell.keyboardResizes(this, a.optBoolean(0)); "null" }
         // PalmSystem.activate(): the window asks to be brought forward.
         "activate" -> { shell.activate(this); "null" }
         "pluginStart" -> "-1"
@@ -198,6 +202,16 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
         if (!closed) outbox.add("if(window.PalmSystem){PalmSystem.screenOrientation=${JSONObject.quote(orientation)}}")
         callMojo("screenOrientationChanged", JSONObject.quote(orientation))
     }
+
+    /**
+     * The virtual keyboard came up or went down over this window, as LunaSysMgr told it
+     * (ShellChrome.watchKeyboard on Android): Mojo.keyboardShown, and for a window that isn't
+     * resized for the keyboard, Mojo.positiveSpaceChanged with the space left.
+     */
+    fun keyboardShown(shown: Boolean) = callMojo("keyboardShown", shown.toString())
+    fun positiveSpace(size: String) = callMojo("positiveSpaceChanged", size)
+    /** The keyboard was put away: the page's input focus goes with it, as on webOS (AppWindow.removeInputFocus). */
+    fun removeInputFocus() { if (!closed) outbox.add(PageHooks.call(PageHooks.REMOVE_INPUT_FOCUS)) }
 
     /** The webOS back gesture: an ESC key event, which Enyo and Mojo turn into "back". */
     fun sendBack() {

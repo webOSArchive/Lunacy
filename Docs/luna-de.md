@@ -33,6 +33,15 @@ API 21 gate.
   the app calls `stageReady` (or its page has loaded); the page then takes the splash's place over
   300 ms. A headless app's loading card takes the first card the app opens. The timings are open
   to refining; the order of what is seen is the TouchPad's.
+- **The keyboard.** webOS's tablet keyboard is in the shell, drawn from LunaKeyboard's art and
+  LunaCE's keymap at the art's own size (340 px: a 55 px number row and four of 70). It comes up
+  when a field takes the focus and no real keyboard is attached, and the app hears what
+  LunaSysMgr told it, in its order: `Mojo.keyboardShown(true)`, then its window shrinks to the
+  space above the keyboard (or `Mojo.positiveSpaceChanged`, for a window that asked not to be
+  resized); and the reverse when it goes, the field's focus going with it. Its keys type into the
+  card. **A real keyboard** is a button in the bezel: lit (as Luna DE starts, a desktop having
+  one) and the on-screen keyboard stays away, as it did with a Bluetooth keyboard on a TouchPad;
+  unlit and it comes up. So an app is seen both ways, and the change while it runs.
 - **Turning and resizing.** The bezel has a rotate button in its corner (wide and tall; F6 to F9
   pick each way up). A popped-out card starts at the device's size and is then freely resizable:
   its page hears each change as a resize, and a change between wide and tall as the device
@@ -103,6 +112,8 @@ API 21 gate.
   are written a second time, in `DesktopShell` and main.js, until AppLifecycle moves into LunaCore.
 - An app installed from its folder is a copy: an edit to the folder shows after it is dropped
   again (a link to the folder would be read as outside the app's tree and refused).
+- The on-screen keyboard has no press-and-hold alternates, no caret dragging from its trackball,
+  no emoji layer and no auto-capitalisation yet; its Enter key always says "Enter".
 - A dashboard is dismissed with a small close button that shows under the pointer, not a swipe.
 
 **Not there yet, in the order planned:**

@@ -85,6 +85,9 @@ class DesktopShell(
             "active" -> main.post { w.setStageActive(value == "true") }
             "focus" -> main.post { w.sendFocus(value == "true") }
             "back" -> main.post { w.sendBack() }
+            "keyboardShown" -> main.post { w.keyboardShown(value == "true") }
+            "positiveSpace" -> main.post { w.positiveSpace(value) }
+            "blur" -> main.post { w.removeInputFocus() }
             // A window of its own (popped out) turned between wide and tall as it was resized.
             "orientation" -> main.post { w.ownOrientation = value; w.setScreenOrientation(value) }
         }
@@ -107,6 +110,8 @@ class DesktopShell(
     fun removeBanner(id: Int) { events.add(event("banner-remove").put("id", id)) }
     fun clearBanners(w: DesktopWindow) { events.add(event("banner-clear").put("appId", w.appId)) }
     fun activate(w: DesktopWindow) { events.add(event("activate").put("page", w.pageId)) }
+    fun keyboardWanted(w: DesktopWindow, show: Boolean) { events.add(event("keyboard").put("page", w.pageId).put("show", show)) }
+    fun keyboardResizes(w: DesktopWindow, resize: Boolean) { events.add(event("keyboard-resizes").put("page", w.pageId).put("resize", resize)) }
     /** [w]'s page called stageReady or drew: its loading card gives way to it. */
     fun pageReady(w: DesktopWindow) { events.add(event("ready").put("page", w.pageId)) }
 

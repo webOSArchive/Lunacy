@@ -31,6 +31,7 @@ tap on the status bar's title opens the app's menu; banners and dashboards show 
 | Esc | The back gesture |
 | F6, F7, F8, F9 | Turn the device up, down, right, left (portrait is 768 x 1024) |
 | The bezel's right corner | Turn the device between wide and tall |
+| The bezel's keyboard button | A real keyboard attached (lit) or not: without one, webOS's on-screen keyboard comes up for a text field and the app is resized and told, as on a device |
 | The bezel's left corner | Pop the card out into a window of its own (also in a card's right-click menu, in the card view) |
 | F12 | DevTools for whatever has the keyboard |
 | Ctrl/Cmd+R | Reload the card |

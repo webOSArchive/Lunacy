@@ -125,6 +125,15 @@ body.maximized #quicklaunch { transform: translateY(100%); }
 #bezel { position: relative; }
 #rotate { position: absolute; right: 14px; top: 50%; width: 30px; height: 30px; margin-top: -15px; border: 0; background: transparent; cursor: pointer; opacity: 0.7; }
 #rotate:hover { opacity: 1; }
+/* Beside it: whether a real keyboard is attached (lit) or not. A keyboard outline with its keys. */
+#realkb { position: absolute; left: 58px; top: 50%; width: 34px; height: 30px; margin-top: -15px; border: 0; background: transparent; cursor: pointer; opacity: 0.35; }
+#realkb.on { opacity: 0.85; }
+#realkb:hover { opacity: 1; }
+#realkb::before { content: ""; position: absolute; left: 3px; top: 8px; width: 28px; height: 15px; border: 2px solid #aaa; border-radius: 3px; box-sizing: border-box;
+	background: radial-gradient(#aaa 1px, transparent 1.4px) 2px 1px / 4px 4px; }
+/* The virtual keyboard: the screen's foot, over the card area, under the status bar's menus. */
+#keyboard { position: absolute; left: 0; bottom: 0; z-index: 35; display: block; }
+#keyboard[hidden] { display: none; }
 /* And in the other corner: the card on the screen (or the one in front in the card view) popped
    out into a window of its own. A window outline with an arrow leaving it. */
 #popout { position: absolute; left: 14px; top: 50%; width: 30px; height: 30px; margin-top: -15px; border: 0; background: transparent; cursor: pointer; opacity: 0.7; }

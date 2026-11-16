@@ -48,6 +48,7 @@
 
 	/** The status bar's title: the app's own name while its card is up, as the TouchPad showed it (not the page's title). */
 	function setTitle() {
+		$("popout").disabled = !(cards[active] && cards[active].id);
 		$("title-text").textContent = maximized && cards[active] ? (appTitles[cards[active].appId] || cards[active].title) : "Luna DE";
 	}
 	var appTitles = {}, appEntries = {};
@@ -165,6 +166,7 @@
 		var c = cards.filter(function (k) { return !k.id && k.appId === d.appId; })[0] || newCard(d.appId, d.title);
 		clearTimeout(c.waiting);
 		c.id = d.id;
+		setTitle();
 		// Up once its page is in, or after a while anyway.
 		c.timer = setTimeout(function () { ready({ id: c.id }); }, 15000);
 	}
@@ -352,6 +354,8 @@
 		else if (maximized) { cardView(); }
 	}
 	$("home").addEventListener("click", home);
+	// The bezel's other corner: the card that is up, or in front in the card view, popped out.
+	$("popout").addEventListener("click", function () { var c = cards[active]; if (c && c.id) { window.lunade.popOut(c.id); } });
 	// The bezel's corner: the device turned between wide and tall.
 	$("rotate").addEventListener("click", function () { window.lunade.rotate(); });
 	document.addEventListener("keydown", function (e) {

@@ -30,7 +30,8 @@ tap on the status bar's title opens the app's menu; banners and dashboards show 
 | Left, Right, Enter | In the card view: the next card, and bring it up |
 | Esc | The back gesture |
 | F6, F7, F8, F9 | Turn the device up, down, right, left (portrait is 768 x 1024) |
-| The bezel's corner button | Turn the device between wide and tall |
+| The bezel's right corner | Turn the device between wide and tall |
+| The bezel's left corner | Pop the card out into a window of its own (also in a card's right-click menu, in the card view) |
 | F12 | DevTools for whatever has the keyboard |
 | Ctrl/Cmd+R | Reload the card |
 | F1 | A spare home button |

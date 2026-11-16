@@ -42,6 +42,25 @@ API 21 gate.
   card. **A real keyboard** is a button in the bezel: lit (as Luna DE starts, a desktop having
   one) and the on-screen keyboard stays away, as it did with a Bluetooth keyboard on a TouchPad;
   unlit and it comes up. So an app is seen both ways, and the change while it runs.
+  **Measured on the reference TouchPad, 2026-11-16** (ls-monitor and /var/log/messages while
+  codepoet connected the HP TouchPad Wireless Keyboard, Memos up with a field focused and the
+  on-screen keyboard showing):
+  - The kernel adds the input device, and `com.palm.bluetooth` answers its notification
+    subscribers `{"notification":"notifnconnected","profile":"hid","address":…,"name":"HP TouchPad
+    Wireless Keyboard","error":0}` (twice, 100 ms apart), then `{"notification":"notifnbattery",
+    …,"batterypercentage":41}`. The subscribers were all on the private bus: audiod, btmonitor,
+    hidavrcp, the system UI (`/hid/subscribenotifications`), the Phone app and the Bluetooth app.
+  - LunaSysMgr then logs "System request to hide the IME" and runs
+    `Mojo.keyboardShown(false)` in the card's page, and the card goes from 1024 x 449 back to
+    1024 x 740. Nothing else is sent to the page: **an app learns of a real keyboard as the
+    on-screen one going away**, which is what Luna DE's button does.
+  - Showing it, a moment before: `Mojo.keyboardShown(true)`, then the card resized to 449 high.
+    So that TouchPad's keyboard took 291 px, at the size it is set to; Luna DE's is the art's
+    340. Not yet matched: which size is the device's default, and offering the others.
+  - Hiding, LunaSysMgr's log has `keyboardShown(false)` before the resize back to 740. Luna DE
+    (and AndroidLuna) resize first. The log is LunaSysMgr's order of calls, not what a page saw;
+    to be settled with a probe page that records both.
+  - Not measured: the notification when the keyboard disconnects.
 - **Turning and resizing.** The bezel has a rotate button in its corner (wide and tall; F6 to F9
   pick each way up). A popped-out card starts at the device's size and is then freely resizable:
   its page hears each change as a resize, and a change between wide and tall as the device

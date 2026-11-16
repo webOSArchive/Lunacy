@@ -51,7 +51,9 @@ Every fix is on main, pushed:
   (c932b97). Its page left out the template First Launch needs. Someone who hit this on 1.0.0
   adds the account once more after updating (Accounts, or the app's account settings).
 - **A dashboard's two-digit count stays on one line** (f53b59a, Mojo patch 0005; the SDK
-  regenerated, webos-sdk-redux 772589a).
+  regenerated, webos-sdk-redux 772589a). No build carried it until 2026-11-16: debug builds
+  reused assets fetched before the patch, and the Fold3 still showed 16 as "1" over "6"
+  (codepoet). `build.sh debug` now fetches when a patch is newer than its assets (0e3edc9).
 - **Tests for it** (a2fdbfc): `Workbench/fresh-install.sh` (a clean install, First Use over the
   bus, the Android account, device-test in that same run), two device-test checks (every waiting
   activity is live; contacts have people), a test.sh check (account pages return their

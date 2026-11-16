@@ -1,41 +1,74 @@
 # Luna Desktop Edition (Luna DE): plan
 
-Status: **first light** (2026-11-15). Branch `luna-de`. Reviewed, and being built.
+Status: **runs Enyo apps with their data and the shell's notifications** (2026-11-16). Branch
+`luna-de`. Reviewed, and being built.
 
-## Where it stands (2026-11-15)
+## Where it stands (2026-11-16)
 
-- **Milestone 1, done.** `LunaCore`, with the API 21 gate (Animal Sniffer, run before every
-  Android build; it caught a Kotlin bridge to Java 8's `Map.getOrDefault` in AppServer on its
-  first day), AOSP's `org.json`, and `core.Log` and `core.Scheduler`, which `LunacyApplication`
-  sets to logcat and the main Looper in every process.
-- **Milestone 2, in part.** Moved, packages unchanged: `Bus`, `AppServer` and its transforms,
-  `AppInfo`/`AppFiles`/`AppRegistry`, `DeviceProfile`, `LaunchPoint`, `PageHooks`, `JsText`.
-  What they took from Android goes through `core.Assets`, `core.Images`, `core.WebosPaths` and
-  `ServerHooks`; Android keeps its call sites through extensions (`serve(Uri)`,
-  `androidComponent`, `DeviceProfile.nduid(context)`). db8 and WebSQL haven't moved.
-- **Milestone 3, first light.** `DesktopLuna/host` and `DesktopLuna/app` (Electron 44.9.3) on
-  Linux: a launcher of the installed apps, and each app in a 1024 x 768 window. codepoet then
-  asked for one window running the shell, with apps as cards in it, keeping the separate
-  window as a pop-out (milestone 3b, being built). Calculator and
-  the Enyo 1 Sampler run; bus calls go round with real errors (no services on the desktop yet).
-  How it's wired: [DesktopLuna/README.md](../DesktopLuna/README.md).
-- **Milestone 3b, first drawing.** One window as the device: the status bar, the launcher (its
-  pages, layout and placement from LunaCore's `LauncherPages`, which AndroidLuna's `LauncherStore`
-  now uses too), the quick-launch bar, apps as cards, the card view (tap, flick up to close,
-  slide), headless apps opening their own cards (Calendar), pop-out, the bezel's home button.
-  The cards' list is main.js's until AppLifecycle moves.
-- **The network.** `Http` and `NetShim` moved into LunaCore (cookies through `core.Cookies`,
-  Base64 through LunaCore's own codec, java.util.Base64 being Android 8's); the desktop's pages
-  get net.js's native half, so an app's XHR reaches any server, http or https, whatever its
-  CORS, as on the TouchPad, and http images load in a page. **Delta:** the shim's cookies are the
-  host's own jar, not the Electron session's, so a cookie a page sets with document.cookie
-  isn't sent on its native XHRs (and the reverse) until the host reads the session's.
-- **Next:** the services an Enyo app asks for first (systemservice's preferences and time,
-  applicationManager's launch and open), WebSQL (its native half: websql.js stands aside until
-  then), then db8, then milestone 5's tools.
-- **Ratchet items (desktop):** Electron runs with `--no-sandbox` in development (the Linux
-  setuid helper needs root); app windows share the page's world with the preload
-  (`contextIsolation: false`), as Android's WebView binding does.
+**In LunaCore now** (moved, packages unchanged, Android calling the same classes): the bus,
+AppServer and its transforms, the app registry, **db8** (on `core.Sql`: android.database.sqlite
+on Android, SQLite over JDBC on the desktop, with ICU's collation on both), the **Configurator**,
+the webOS root's files (`RomFiles`), **SystemService**, **ApplicationManager**, **Packages** and
+the install services, ContentHandlers, LaunchPoints, UserFiles, the **ActivityManager** with its
+schedule, triggers and requirements, **ConnectionManager**, Http and NetShim. What each took from
+Android is an interface in `org.webosarchive.lunacy.core` (`Sql`, `Collation`, `Links`, `Images`,
+`HostFolders`, `BatteryWatch`, `PowerTimers`, `NetworkSource`, `Scheduler`, `Cookies`), or a
+member of the class's own shell interface (`ApplicationManager.Shell`, `ScriptHost`).
+
+**Tests that hold the moves.** `Db8Suite` and `SqlSuite` (LunaCore/src/sharedTest) run on both
+SQLites: under Robolectric in AndroidLuna (`Db8Test`, `SqlTest`) and over JDBC in LunaCore
+(`Db8JdbcTest`, `SqlJdbcTest`). They cover the queries, a collated sort, nested transactions and
+their rollback, and a database file written the way 1.0 wrote it. `test.sh` runs both, with the
+API 21 gate.
+
+**Luna DE runs, on Linux:**
+- One window as a TouchPad: the status bar, launcher, quick-launch bar, card view, and apps as
+  cards. Memos, Clock and Calculator keep their data in db8; an app launches another through
+  applicationManager; a running app is relaunched, not started twice.
+- **Notifications.** A page's `window.open` is placed by the kind it names: a card, a
+  dashboard (in the status bar's drop-down, behind its app's icon) or a popup alert. Banners show
+  in the status bar with the TouchPad's timings.
+- **What the shell tells a page** is what AppWindow tells it on Android, by the same scripts:
+  activation (`Mojo.stageActivated`), the back gesture, the orientation.
+- **The app menu:** a tap on the status bar's title, as on the TouchPad.
+- **Keys, the old SDK emulator's:** End (launcher), Home (minimise and maximise the card), Left and
+  Right (cards), Esc (back), F6 to F9 (turn the device: the window becomes 768 x 1024). F12 is
+  DevTools, Ctrl/Cmd+R reloads, F1 is a spare home button.
+- **Services on the bus:** com.palm.db and tempdb, systemservice (time, zones, preferences),
+  applicationManager, appinstaller and appInstallService, connectionmanager, activitymanager.
+  Everything else answers "Service does not exist", as rule 2 asks.
+
+**Deltas, recorded:**
+- A card in the card view is a snapshot of its page, not the live page (a native view can't be
+  scaled).
+- The shim's cookies are the host's own jar, not the Electron session's.
+- **Package scripts don't run** (postinst, prerm): a package installs without them and the log
+  says so, until open question 2 is settled.
+- The network is the machine's first interface with an address, shown as the TouchPad's Wi-Fi at
+  full signal with no network name; the machine counts as on the mains.
+- The shell's own lifecycle rules (which apps run, relaunch, an app ending with its last window)
+  are written a second time, in `DesktopShell` and main.js, until AppLifecycle moves into LunaCore.
+- A dashboard is dismissed with a small close button that shows under the pointer, not a swipe.
+
+**Not there yet, in the order planned:**
+1. **JS services** (JsServices, ServiceProcess, luna-send): the accounts service and with it
+   Calendar's, Contacts' and Email's first screens, and any app that ships its own service. Needs
+   Node on the desktop (open question 6) and a luna-send socket for it.
+2. **WebSQL's native half** (WebSql): `openDatabase` is absent in Luna DE until it moves, which
+   Mojo's Depot needs more than Enyo apps do. It is a rewrite of its storage calls, like db8's, and
+   gets the same two-platform suite first.
+3. AppLifecycle and CardHost's decisions into LunaCore, replacing `DesktopShell`'s copy.
+4. Milestone 5's tools (Novacom, the novacomd `local` transport), then packaging.
+
+**Checked on Android** after these moves (2026-11-16, luna-de build 668): `device-test.sh` on the
+Fold3, installed over 1.0.1's data (three mail accounts, 231 contacts): 50 passed, 0 failed
+(`Docs/test-results/668/fold3.txt`). Still owed: `device-test.sh` on an Android 5 device, and
+`fresh-install.sh` (the Configurator, the activity manager and the package installer all moved,
+and a first run is where 1.0 broke).
+
+**Ratchet items (desktop):** Electron runs with `--no-sandbox` in development (the Linux
+setuid helper needs root); app windows share the page's world with the preload
+(`contextIsolation: false`), as Android's WebView binding does.
 
 ## Goals
 
@@ -302,7 +335,8 @@ Each step is a move or an addition. After each one, `test.sh` passes and
 `Workbench/device-test.sh` passes on the HP 10 G2 (API 21 and Chromium 37, where a too-new API
 shows), the Nexus 7, the Fold3 and the A7 Lite (mail and EAS, for the db8 and WebSQL moves),
 and on the Pixel Tablet when codepoet opens it, so Lunacy on Android can't regress. And
-`Workbench/fresh-install.sh` passes on the Kyocera: a clean install, First Use, the Android
+`Workbench/fresh-install.sh` passes on the Galaxy Tab A7 Lite (never the Kyocera, which is
+codepoet's F-Droid update test device): a clean install, First Use, the Android
 account, checked in that same run of Lunacy. The Configurator, First Use's end and the activity
 manager all move into LunaCore, and that first run is exactly where 1.0 broke without any
 round noticing (no contacts linker until a restart, 2026-11-15).

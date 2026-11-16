@@ -27,6 +27,10 @@ animalsniffer {
     sourceSets = listOf(project.sourceSets["main"])
 }
 
+// The suites both platforms run (src/sharedTest): here on SQLite over JDBC, and in AndroidLuna's
+// unit tests on android.database.sqlite (its build adds the same folder).
+sourceSets["test"].kotlin.srcDir("src/sharedTest/kotlin")
+
 dependencies {
     signature("net.sf.androidscents.signature:android-api-level-21:5.0.1_r2@signature")
     // Android's own org.json (AOSP's, as published by Vaadin): on Android the platform's always
@@ -35,4 +39,7 @@ dependencies {
     compileOnly("com.vaadin.external.google:android-json:0.0.20131108.vaadin1")
     testImplementation("com.vaadin.external.google:android-json:0.0.20131108.vaadin1")
     testImplementation("junit:junit:4.13.2")
+    // Luna DE's SQLite and collation, which the tests run db8 on (the host brings them at run time).
+    testImplementation("org.xerial:sqlite-jdbc:3.46.1.3")
+    testImplementation("com.ibm.icu:icu4j:75.1")
 }

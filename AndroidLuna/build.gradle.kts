@@ -157,3 +157,6 @@ dependencies {
 // LunaCore's API 21 gate runs with every Android build, not only `gradle check`: a class that
 // would crash Android 5 stops the APK (LunaCore/build.gradle.kts).
 tasks.named("preBuild") { dependsOn(":LunaCore:animalsnifferMain") }
+
+// The suites LunaCore runs on SQLite over JDBC run here on Android's SQLite too (Db8Test, SqlTest).
+android.sourceSets["test"].java.srcDir("../LunaCore/src/sharedTest/kotlin")

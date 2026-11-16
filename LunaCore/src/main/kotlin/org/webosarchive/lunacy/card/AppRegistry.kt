@@ -132,7 +132,7 @@ class AppInfo(
 }
 
 /** Whether dotted version [a] is above [b], compared number by number. */
-internal fun isNewerVersion(a: String, b: String): Boolean {
+fun isNewerVersion(a: String, b: String): Boolean {
     val x = a.split('.').map { it.toIntOrNull() ?: 0 }
     val y = b.split('.').map { it.toIntOrNull() ?: 0 }
     for (i in 0 until maxOf(x.size, y.size)) {

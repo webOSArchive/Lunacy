@@ -28,4 +28,18 @@ object Platform {
 
     /** Image decoding; null where the platform has none (an icon's size then isn't checked). */
     @Volatile var images: Images? = null
+
+    @Volatile private var currentSql: Sql? = null
+
+    /** SQLite, for db8 and WebSQL. */
+    var sql: Sql
+        get() = currentSql ?: throw IllegalStateException("LunaCore: no Sql set (Platform.sql)")
+        set(value) { currentSql = value }
+
+    @Volatile private var currentCollation: Collation? = null
+
+    /** Text sorting for db8's collated indexes. */
+    var collation: Collation
+        get() = currentCollation ?: throw IllegalStateException("LunaCore: no Collation set (Platform.collation)")
+        set(value) { currentCollation = value }
 }

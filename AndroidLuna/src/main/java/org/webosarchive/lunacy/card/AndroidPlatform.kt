@@ -44,3 +44,40 @@ object AndroidCookies : org.webosarchive.lunacy.core.Cookies {
     override fun get(url: String): String? = android.webkit.CookieManager.getInstance().getCookie(url)
     override fun set(url: String, setCookie: String) { android.webkit.CookieManager.getInstance().setCookie(url, setCookie) }
 }
+
+/** android.database.sqlite, as LunaCore's [org.webosarchive.lunacy.core.Sql]: what db8 called directly before LunaCore. */
+object AndroidSql : org.webosarchive.lunacy.core.Sql {
+    override fun open(file: File?): org.webosarchive.lunacy.core.SqlDb = AndroidSqlDb(
+        if (file != null) android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(file, null)
+        else android.database.sqlite.SQLiteDatabase.create(null))
+}
+
+private class AndroidSqlDb(private val db: android.database.sqlite.SQLiteDatabase) : org.webosarchive.lunacy.core.SqlDb {
+    override fun exec(sql: String, vararg args: Any?) {
+        if (args.isEmpty()) db.execSQL(sql) else db.execSQL(sql, args)
+    }
+
+    override fun <T> query(sql: String, args: Array<String>?, read: (org.webosarchive.lunacy.core.SqlRows) -> T): T =
+        db.rawQuery(sql, args).use { c ->
+            read(object : org.webosarchive.lunacy.core.SqlRows {
+                override fun next() = c.moveToNext()
+                override fun getString(column: Int): String? = c.getString(column)
+                override fun getLong(column: Int) = c.getLong(column)
+            })
+        }
+
+    override fun beginTransaction() = db.beginTransaction()
+    override fun setTransactionSuccessful() = db.setTransactionSuccessful()
+    override fun endTransaction() = db.endTransaction()
+    override fun close() = db.close()
+}
+
+/** java.text.Collator, which is ICU on Android, as LunaCore's [org.webosarchive.lunacy.core.Collation]. */
+object AndroidCollation : org.webosarchive.lunacy.core.Collation {
+    override fun comparator(strength: String): Comparator<String> {
+        val c = java.text.Collator.getInstance().apply {
+            this.strength = when (strength) { "primary" -> java.text.Collator.PRIMARY; "secondary" -> java.text.Collator.SECONDARY; else -> java.text.Collator.TERTIARY }
+        }
+        return Comparator { a, b -> c.compare(a, b) }
+    }
+}

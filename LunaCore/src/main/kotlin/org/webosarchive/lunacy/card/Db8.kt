@@ -1,15 +1,14 @@
 package org.webosarchive.lunacy.card
 
-import android.content.ContentValues
-import android.database.sqlite.SQLiteDatabase
-import android.os.Handler
-import android.os.Looper
-import android.util.Base64
-import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
+import org.webosarchive.lunacy.core.Base64Codec
+import org.webosarchive.lunacy.core.Log
+import org.webosarchive.lunacy.core.keyNames
+import org.webosarchive.lunacy.core.Lunacy
+import org.webosarchive.lunacy.core.Platform
+import org.webosarchive.lunacy.core.SqlDb
 import java.io.File
-import java.text.Collator
 import java.util.concurrent.Executors
 
 /**
@@ -22,7 +21,7 @@ import java.util.concurrent.Executors
 class Db8(private val service: String, file: File?,
            /** A debuggable build: the SDK's relay may purge (see "purge"). */
            private val debuggable: Boolean = false) {
-    private val db: SQLiteDatabase = if (file != null) SQLiteDatabase.openOrCreateDatabase(file, null) else SQLiteDatabase.create(null)
+    private val db: SqlDb = Platform.sql.open(file)
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "db8 $service").also { dbThread = it } }
     @Volatile private var dbThread: Thread? = null
     /**
@@ -30,7 +29,7 @@ class Db8(private val service: String, file: File?,
      * media library): never db8's thread, which every app and service is waiting on.
      */
     private val mirrorWorker = Executors.newSingleThreadExecutor { r -> Thread(r, "db8 $service mirrors") }
-    private val main = Handler(Looper.getMainLooper())
+    private val main = Platform.scheduler
     private val kinds = LinkedHashMap<String, Kind>()
     private val cache = HashMap<String, LinkedHashMap<String, JSONObject>>()  // kind -> id -> object
     private val watches = ArrayList<Watch>()
@@ -46,6 +45,8 @@ class Db8(private val service: String, file: File?,
     private val mirrors = HashMap<String, Mirror>()
     private var mirrorTicker: java.util.concurrent.ScheduledExecutorService? = null
     private var rev = 0L
+    /** Time that doesn't jump with the clock, as SystemClock.uptimeMillis was. */
+    private fun uptimeMillis() = System.nanoTime() / 1_000_000
     private var idCounter = 0L
 
     private class IndexProp(val name: String, val collate: String?, val default: Any? = null,
@@ -61,15 +62,15 @@ class Db8(private val service: String, file: File?,
     private class DbError(val code: Int, val text: String) : Exception(text)
 
     init {
-        db.execSQL("CREATE TABLE IF NOT EXISTS kinds (id TEXT PRIMARY KEY, spec TEXT)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS objects (id TEXT PRIMARY KEY, kind TEXT, json TEXT)")
-        db.execSQL("CREATE INDEX IF NOT EXISTS objects_kind ON objects (kind)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v INTEGER)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS permissions (kind TEXT, caller TEXT, ops TEXT, PRIMARY KEY (kind, caller))")
+        db.exec("CREATE TABLE IF NOT EXISTS kinds (id TEXT PRIMARY KEY, spec TEXT)")
+        db.exec("CREATE TABLE IF NOT EXISTS objects (id TEXT PRIMARY KEY, kind TEXT, json TEXT)")
+        db.exec("CREATE INDEX IF NOT EXISTS objects_kind ON objects (kind)")
+        db.exec("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v INTEGER)")
+        db.exec("CREATE TABLE IF NOT EXISTS permissions (kind TEXT, caller TEXT, ops TEXT, PRIMARY KEY (kind, caller))")
         // db8's RevTimestamp records: which revision the database was at, at each purge.
-        db.execSQL("CREATE TABLE IF NOT EXISTS revtimes (rev INTEGER PRIMARY KEY, ts INTEGER)")
-        runCatching { db.execSQL("ALTER TABLE permissions ADD COLUMN ops TEXT") }  // databases from before ops
-        db.rawQuery("SELECT spec FROM kinds", null).use { c -> while (c.moveToNext()) parseKind(JSONObject(c.getString(0))).let { kinds[it.id] = it } }
+        db.exec("CREATE TABLE IF NOT EXISTS revtimes (rev INTEGER PRIMARY KEY, ts INTEGER)")
+        runCatching { db.exec("ALTER TABLE permissions ADD COLUMN ops TEXT") }  // databases from before ops
+        db.query("SELECT spec FROM kinds") { c -> while (c.next()) parseKind(JSONObject(c.getString(0)!!)).let { kinds[it.id] = it } }
         rev = meta("rev"); idCounter = meta("ids")
         if (meta(NESTED_IDS) == 0L) giveNestedIds()
     }
@@ -84,15 +85,15 @@ class Db8(private val service: String, file: File?,
         var repaired = 0
         db.beginTransaction()
         try {
-            db.rawQuery("SELECT id, json FROM objects", null).use { c ->
-                while (c.moveToNext()) {
-                    val text = c.getString(1)
+            db.query("SELECT id, json FROM objects") { c ->
+                while (c.next()) {
+                    val text = c.getString(1)!!
                     if (!text.contains('[')) continue
                     val o = try { JSONObject(text) } catch (e: Exception) { continue }
                     assignIds(o)
                     val now = o.toString()
                     if (now != JSONObject(text).toString()) {
-                        db.update("objects", ContentValues().apply { put("json", now) }, "id = ?", arrayOf(c.getString(0)))
+                        db.exec("UPDATE objects SET json = ? WHERE id = ?", now, c.getString(0))
                         repaired++
                     }
                 }
@@ -196,9 +197,9 @@ class Db8(private val service: String, file: File?,
                         if (!o.has("_id")) o.put("_id", newId())
                         write(null, o)
                         added++
-                    } else if (!r.keys().asSequence().all { same(old.opt(it), r.opt(it)) }) {
+                    } else if (!r.keyNames().asSequence().all { same(old.opt(it), r.opt(it)) }) {
                         val o = JSONObject(old.toString())
-                        for (k in r.keys()) o.put(k, r.get(k))
+                        for (k in r.keyNames()) o.put(k, r.get(k))
                         o.put("_rev", nextRev())
                         write(old, o)
                         updated++
@@ -219,14 +220,14 @@ class Db8(private val service: String, file: File?,
      * found is written back here ([applyMirror]).
      */
     private fun refreshMirror(kind: String, m: Mirror) {
-        if (m.refreshing || (m.synced != 0L && android.os.SystemClock.uptimeMillis() - m.synced < MIRROR_MS)) return
+        if (m.refreshing || (m.synced != 0L && uptimeMillis() - m.synced < MIRROR_MS)) return
         m.refreshing = true
         try {
             mirrorWorker.execute {
                 val files = try { m.source() } catch (e: Exception) { Log.w(AppServer.TAG, "$service: mirror $kind: $e"); null }
                 work {
                     m.refreshing = false
-                    m.synced = android.os.SystemClock.uptimeMillis()
+                    m.synced = uptimeMillis()
                     if (files != null) applyMirror(kind, m, files)
                 }
             }
@@ -254,7 +255,7 @@ class Db8(private val service: String, file: File?,
                 val was = m.stamps[path]
                 if (was != null && stamps[path] != null && was != stamps[path]) { delOne(o, hard = true); rewritten += f; continue }
                 for (k in m.initial) f.remove(k)
-                if (f.keys().asSequence().any { k -> !same(o.opt(k), f.opt(k)) }) mergeOne(o, f)
+                if (f.keyNames().asSequence().any { k -> !same(o.opt(k), f.opt(k)) }) mergeOne(o, f)
             }
             for (f in byPath.values + rewritten) {
                 val o = JSONObject(f.toString()).put("_kind", kind).put("_id", newId()).put("_rev", nextRev())
@@ -272,7 +273,7 @@ class Db8(private val service: String, file: File?,
      */
     private fun identical(a: Any?, b: Any?): Boolean = when {
         a is JSONObject && b is JSONObject ->
-            a.length() == b.length() && a.keys().asSequence().all { b.has(it) && identical(a.opt(it), b.opt(it)) }
+            a.length() == b.length() && a.keyNames().asSequence().all { b.has(it) && identical(a.opt(it), b.opt(it)) }
         a is JSONArray && b is JSONArray -> a.length() == b.length() && (0 until a.length()).all { identical(a.opt(it), b.opt(it)) }
         a is Number && b is Number -> {
             val ai = a is Int || a is Long || a is Short || a is Byte
@@ -284,8 +285,8 @@ class Db8(private val service: String, file: File?,
 
     private fun same(a: Any?, b: Any?): Boolean = when {
         a is JSONObject && b is JSONObject -> {
-            val ka = a.keys().asSequence().filter { it != "_id" }.toSet()
-            ka == b.keys().asSequence().filter { it != "_id" }.toSet() && ka.all { same(a.opt(it), b.opt(it)) }
+            val ka = a.keyNames().asSequence().filter { it != "_id" }.toSet()
+            ka == b.keyNames().asSequence().filter { it != "_id" }.toSet() && ka.all { same(a.opt(it), b.opt(it)) }
         }
         a is JSONArray && b is JSONArray -> a.length() == b.length() && (0 until a.length()).all { same(a.opt(it), b.opt(it)) }
         a is Number && b is Number -> a.toDouble() == b.toDouble()
@@ -301,7 +302,7 @@ class Db8(private val service: String, file: File?,
         val m = mirrors[kind]
         val files = m?.let { runCatching { it.source() }.getOrNull() }
         return onDbThread(emptyMap()) {
-            if (m != null && files != null) { m.synced = android.os.SystemClock.uptimeMillis(); applyMirror(kind, m, files) }
+            if (m != null && files != null) { m.synced = uptimeMillis(); applyMirror(kind, m, files) }
             objects(kind).values.filter { !it.optBoolean("_del") }.associate { it.optString("path") to it.getString("_id") }
         }
     }
@@ -342,7 +343,7 @@ class Db8(private val service: String, file: File?,
      */
     fun registerPickerRelay(bus: Bus) {
         for (m in listOf("find", "search")) {
-            bus.register(LunacyService.SERVICE, "media/$m", Bus.CallHandler { call ->
+            bus.register(Lunacy.SERVICE, "media/$m", Bus.CallHandler { call ->
                 val from = call.params.optJSONObject("query")?.optString("from").orEmpty()
                 if (from !in PICKER_KINDS) return@CallHandler call.reply(error(-3963, "db: permission denied"))
                 work { handle(m, call, SYSTEM_UI) }
@@ -401,7 +402,7 @@ class Db8(private val service: String, file: File?,
         val old = kinds[id]
         if (caller != CONFIGURATOR && (!related(caller, owner) || (old != null && !related(caller, old.owner)))) throw DbError(-3963, "db: permission denied")
         val k = parseKind(p)
-        db.insertWithOnConflict("kinds", null, ContentValues().apply { put("id", id); put("spec", p.toString()) }, SQLiteDatabase.CONFLICT_REPLACE)
+        db.exec("INSERT OR REPLACE INTO kinds (id, spec) VALUES (?, ?)", id, p.toString())
         kinds[id] = k
         return ok()
     }
@@ -410,8 +411,8 @@ class Db8(private val service: String, file: File?,
         val id = typed<String>(caller, p, "id")
         val k = kind(id)
         if (!related(caller, k.owner)) throw DbError(-3963, "db: permission denied")
-        db.delete("objects", "kind = ?", arrayOf(id))
-        db.delete("kinds", "id = ?", arrayOf(id))
+        db.exec("DELETE FROM objects WHERE kind = ?", id)
+        db.exec("DELETE FROM kinds WHERE id = ?", id)
         kinds.remove(id); cache.remove(id)
         return ok()
     }
@@ -491,9 +492,9 @@ class Db8(private val service: String, file: File?,
     private fun permission(caller: String, k: Kind, op: String, seen: HashSet<String>): String? {
         if (!seen.add(k.id)) return null
         var exact: String? = null; var wild: String? = null; var wildLength = -1
-        db.rawQuery("SELECT caller, ops FROM permissions WHERE kind = ?", arrayOf(k.id)).use { c ->
-            while (c.moveToNext()) {
-                val who = c.getString(0)
+        db.query("SELECT caller, ops FROM permissions WHERE kind = ?", arrayOf(k.id)) { c ->
+            while (c.next()) {
+                val who = c.getString(0)!!
                 if (who == caller) exact = c.getString(1) ?: "{}"
                 else if (who.length > wildLength && who.endsWith("*") && caller.startsWith(who.dropLast(1))) {
                     wild = c.getString(1) ?: "{}"; wildLength = who.length
@@ -514,9 +515,8 @@ class Db8(private val service: String, file: File?,
             val pm = perms.getJSONObject(i)
             val k = kind(pm.optString("object"))
             if (caller != CONFIGURATOR && !related(caller, k.owner)) throw DbError(-3963, "db: permission denied")
-            db.insertWithOnConflict("permissions", null, ContentValues().apply {
-                put("kind", k.id); put("caller", pm.optString("caller")); put("ops", (pm.optJSONObject("operations") ?: JSONObject()).toString())
-            }, SQLiteDatabase.CONFLICT_REPLACE)
+            db.exec("INSERT OR REPLACE INTO permissions (kind, caller, ops) VALUES (?, ?, ?)",
+                k.id, pm.optString("caller"), (pm.optJSONObject("operations") ?: JSONObject()).toString())
         }
         return ok()
     }
@@ -525,7 +525,7 @@ class Db8(private val service: String, file: File?,
 
     private fun objects(kind: String): LinkedHashMap<String, JSONObject> = cache.getOrPut(kind) {
         val m = LinkedHashMap<String, JSONObject>()
-        db.rawQuery("SELECT id, json FROM objects WHERE kind = ? ORDER BY id", arrayOf(kind)).use { c -> while (c.moveToNext()) m[c.getString(0)] = JSONObject(c.getString(1)) }
+        db.query("SELECT id, json FROM objects WHERE kind = ? ORDER BY id", arrayOf(kind)) { c -> while (c.next()) m[c.getString(0)!!] = JSONObject(c.getString(1)!!) }
         m
     }
 
@@ -536,7 +536,7 @@ class Db8(private val service: String, file: File?,
      */
     private fun byId(id: String): JSONObject? {
         for (m in cache.values) m[id]?.let { return it }
-        val kind = db.rawQuery("SELECT kind FROM objects WHERE id = ?", arrayOf(id)).use { c -> if (c.moveToNext()) c.getString(0) else null }
+        val kind = db.query("SELECT kind FROM objects WHERE id = ?", arrayOf(id)) { c -> if (c.next()) c.getString(0) else null }
         return if (kind != null && kind in kinds) objects(kind)[id] else null
     }
 
@@ -581,7 +581,7 @@ class Db8(private val service: String, file: File?,
      * service tells an enabled capability by that _id, and calls its transport's onEnabled.
      */
     private fun assignIds(o: JSONObject) {
-        for (k in o.keys()) when (val v = o.get(k)) {
+        for (k in o.keyNames()) when (val v = o.get(k)) {
             is JSONArray -> for (i in 0 until v.length()) (v.opt(i) as? JSONObject)?.let { e ->
                 if (!e.has("_id")) e.put("_id", java.lang.Long.toHexString(nextRev()))
                 assignIds(e)
@@ -594,13 +594,13 @@ class Db8(private val service: String, file: File?,
 
     private fun store(o: JSONObject) {
         val id = o.getString("_id"); val kind = o.getString("_kind")
-        db.insertWithOnConflict("objects", null, ContentValues().apply { put("id", id); put("kind", kind); put("json", o.toString()) }, SQLiteDatabase.CONFLICT_REPLACE)
+        db.exec("INSERT OR REPLACE INTO objects (id, kind, json) VALUES (?, ?, ?)", id, kind, o.toString())
         objects(kind)[id] = o
     }
 
     /** The object's row gone, and its in-memory copy: what a purge (db8's hard delete) does to one object. */
     private fun erase(o: JSONObject) {
-        db.delete("objects", "id = ?", arrayOf(o.getString("_id")))
+        db.exec("DELETE FROM objects WHERE id = ?", o.getString("_id"))
         objects(o.getString("_kind")).remove(o.getString("_id"))
     }
 
@@ -704,7 +704,7 @@ class Db8(private val service: String, file: File?,
     }
 
     private fun deepMerge(into: JSONObject, from: JSONObject) {
-        for (k in from.keys()) {
+        for (k in from.keyNames()) {
             if (k == "_id" || k == "_rev" || k == "_kind") continue
             val v = from.get(k)
             val cur = into.opt(k)
@@ -946,11 +946,11 @@ class Db8(private val service: String, file: File?,
         }
     }
 
-    private val collators = HashMap<String, Collator>()
-    private fun collator(collate: String?): Collator? = when (collate) {
+    private val collators = HashMap<String, Comparator<String>>()
+    private fun collator(collate: String?): Comparator<String>? = when (collate) {
         null, "", "default", "identical" -> null
         // One per strength: a sort asked for a new instance per comparison before.
-        else -> collators.getOrPut(collate) { Collator.getInstance().apply { strength = when (collate) { "primary" -> Collator.PRIMARY; "secondary" -> Collator.SECONDARY; else -> Collator.TERTIARY } } }
+        else -> collators.getOrPut(collate) { Platform.collation.comparator(if (collate == "primary" || collate == "secondary") collate else "tertiary") }
     }
 
     private fun project(o: JSONObject, select: List<String>): JSONObject {
@@ -974,9 +974,9 @@ class Db8(private val service: String, file: File?,
         return cur.has(parts.last()) && cur.isNull(parts.last())
     }
 
-    private fun pageToken(offset: Int) = Base64.encodeToString("lunacy:$offset".toByteArray(), Base64.NO_WRAP or Base64.URL_SAFE)
+    private fun pageToken(offset: Int) = Base64Codec.encode("lunacy:$offset".toByteArray()).replace('+', '-').replace('/', '_')
     private fun pageOffset(token: String): Int =
-        runCatching { String(Base64.decode(token, Base64.URL_SAFE)) }.getOrNull()?.takeIf { it.startsWith("lunacy:") }
+        runCatching { String(Base64Codec.decode(token)) }.getOrNull()?.takeIf { it.startsWith("lunacy:") }
             ?.removePrefix("lunacy:")?.toIntOrNull() ?: throw DbError(-3978, "db: invalid page")
 
     // ---- watches ----
@@ -1034,21 +1034,21 @@ class Db8(private val service: String, file: File?,
         val now = System.currentTimeMillis()
         var count = 0
         transaction {
-            db.insert("revtimes", null, ContentValues().apply { put("rev", nextRev()); put("ts", now) })
-            val cut = db.rawQuery("SELECT rev, ts FROM revtimes WHERE ts <= ? ORDER BY ts DESC LIMIT 1",
-                arrayOf((now - windowDays * 86_400_000L).toString())).use { if (it.moveToFirst()) it.getLong(0) to it.getLong(1) else null }
+            db.exec("INSERT INTO revtimes (rev, ts) VALUES (?, ?)", nextRev(), now)
+            val cut = db.query("SELECT rev, ts FROM revtimes WHERE ts <= ? ORDER BY ts DESC LIMIT 1",
+                arrayOf((now - windowDays * 86_400_000L).toString())) { if (it.next()) it.getLong(0) to it.getLong(1) else null }
                 ?: return@transaction
             val gone = ArrayList<JSONObject>()
-            db.rawQuery("SELECT json FROM objects WHERE json LIKE '%\"_del\":true%'", null).use { c ->
-                while (c.moveToNext()) {
-                    val o = runCatching { JSONObject(c.getString(0)) }.getOrNull() ?: continue
+            db.query("SELECT json FROM objects WHERE json LIKE '%\"_del\":true%'") { c ->
+                while (c.next()) {
+                    val o = runCatching { JSONObject(c.getString(0)!!) }.getOrNull() ?: continue
                     if (o.optBoolean("_del") && o.optLong("_rev") <= cut.first) gone += o
                 }
             }
             gone.forEach { erase(it) }
             count = gone.size
             if (count > 0) setMeta(LAST_PURGED, cut.first + 1)
-            db.delete("revtimes", "ts <= ?", arrayOf(cut.second.toString()))
+            db.exec("DELETE FROM revtimes WHERE ts <= ?", cut.second)
         }
         if (count > 0) Log.i(AppServer.TAG, "$service: purged $count deleted objects")
         return count
@@ -1113,9 +1113,9 @@ class Db8(private val service: String, file: File?,
     }
 
     private fun nextRev(): Long { rev += 1; setMeta("rev", rev); return rev }
-    private fun meta(k: String): Long = db.rawQuery("SELECT v FROM meta WHERE k = ?", arrayOf(k)).use { if (it.moveToFirst()) it.getLong(0) else 0L }
+    private fun meta(k: String): Long = db.query("SELECT v FROM meta WHERE k = ?", arrayOf(k)) { if (it.next()) it.getLong(0) else 0L }
     private fun setMeta(k: String, v: Long) =
-        db.insertWithOnConflict("meta", null, ContentValues().apply { put("k", k); put("v", v) }, SQLiteDatabase.CONFLICT_REPLACE)
+        db.exec("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)", k, v)
 
     private inline fun transaction(f: () -> Unit) {
         db.beginTransaction()

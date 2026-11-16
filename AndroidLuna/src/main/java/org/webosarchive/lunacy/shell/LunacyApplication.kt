@@ -27,6 +27,8 @@ class LunacyApplication : Application() {
             }
             Platform.scheduler = AndroidScheduler()
             Platform.images = org.webosarchive.lunacy.card.AndroidImages
+            Platform.sql = org.webosarchive.lunacy.card.AndroidSql
+            Platform.collation = org.webosarchive.lunacy.card.AndroidCollation
         }
     }
 }

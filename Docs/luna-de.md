@@ -143,7 +143,9 @@ API 21 gate.
   again (a link to the folder would be read as outside the app's tree and refused).
 - The on-screen keyboard has no press-and-hold alternates, no caret dragging from its trackball,
   no emoji layer and no auto-capitalisation yet; its Enter key always says "Enter".
-- As a Pre3, the shell is still the TouchPad's drawn at the phone's size (its status bar, launcher,
+- As a Pre3, the quick-launch bar and Just Type's pill follow AndroidLuna's phone rules (a 95 px
+  bar, four apps and the launcher button in five equal slots, icons at 78 % of a slot; the pill
+  three quarters of the short side). The rest of the shell is still the TouchPad's drawn at the phone's size (its status bar, launcher,
   card view and the notifications' place at the top): the Pre3's own shell, which AndroidLuna has
   for phones, isn't drawn here yet.
 - A dashboard is dismissed with a small close button that shows under the pointer, not a swipe.

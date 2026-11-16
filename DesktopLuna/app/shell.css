@@ -37,13 +37,20 @@ body.maximized #title { cursor: pointer; }   /* the app menu, as the TouchPad's 
 #status-right .battery { width: 17px; background-image: url("../../AndroidLuna/src/main/assets/luna/images/statusBar/battery-charged.png"); }
 #clock { font-weight: bold; min-width: 42px; text-align: right; }
 
-/* ---- Just Type's pill, in the card view ---- */
+/* ---- Just Type's pill, in the card view: as AndroidLuna's JustType draws it. Three quarters of
+   the screen's short side wide, 50 high, 9 below the status bar; launcher3/search-field-bg-launcher.png
+   as a nine-slice with 40 px ends, the search button 15 px in from the right, the prompt in 18 px
+   italic 20 px in. ---- */
 #pill {
-	position: absolute; top: calc(var(--status) + 8px); left: 50%; width: 400px; height: 34px; margin-left: -200px; z-index: 20;
-	border-radius: 17px; background: rgba(40, 60, 120, 0.55); box-shadow: inset 0 1px 2px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.15);
-	display: flex; align-items: center; padding-left: 16px; box-sizing: border-box; font-style: italic; color: rgba(255,255,255,0.75);
+	position: absolute; top: calc(var(--status) + 9px); left: 50%; width: var(--pill-w, 576px); height: 50px; margin-left: calc(var(--pill-w, 576px) / -2); z-index: 20;
+	box-sizing: border-box; border-style: solid; border-width: 0 40px;
+	border-image: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/search-field-bg-launcher.png") 0 40 fill / 0 40px stretch;
+	display: flex; align-items: center; font: italic 18px Prelude, sans-serif; color: rgba(255,255,255,0.8);
 	transition: opacity 200ms linear;
 }
+#pill span { margin-left: -20px; white-space: nowrap; overflow: hidden; }
+#pill::after { content: ""; position: absolute; right: -25px; top: 9px; width: 32px; height: 32px;
+	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/search-button-launcher.png") center / 32px 32px no-repeat; }
 body.maximized #pill, body.launcher #pill { opacity: 0; pointer-events: none; }
 
 /* ---- the cards ---- */
@@ -89,7 +96,6 @@ body.maximized .card { border-radius: 0; }
 	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/launcher-touch-feedback.png") center / 90px 90px no-repeat;
 }
 .tile.glow::before { top: -5px; }            /* the icon is 64 high, 8 px down the tile */
-#dock button.glow::before { top: -5px; }     /* the icon is centred in its 80 px button */
 .tile img, .tile span, #dock img { position: relative; z-index: 1; }
 .tile img { width: 64px; height: 64px; object-fit: contain; }
 .tile span { max-width: 150px; text-align: center; line-height: 1.15; text-shadow: 0 1px 2px #000; }
@@ -101,14 +107,20 @@ body.maximized .card { border-radius: 0; }
 	transition: transform 300ms cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 body.maximized #quicklaunch { transform: translateY(100%); }
-#dock { position: absolute; left: 0; right: 120px; top: 0; bottom: 0; display: flex; justify-content: space-around; align-items: flex-end; padding: 0 30px 10px; }
-#dock button { border: 0; background: transparent; padding: 0; cursor: pointer; width: 80px; height: 80px; position: relative; }
-#dock img { width: 64px; height: 64px; object-fit: contain; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.5)); }
+/* The bar as AndroidLuna's QuickLaunch lays it out (shell.js's layoutDock sets the numbers). A
+   TouchPad: 100 high, 64 px icons centred 54 down in equal slots left of the launcher button, whose
+   centre is 64 from the right. A phone: 95 high, four apps and the launcher button in five equal
+   slots across the whole bar, each icon 59 px or 78 % of its slot if that is less, centred 51 down. */
+#dock { position: absolute; left: 0; width: var(--dock-w, 929px); top: 0; bottom: 0; display: flex; }
+#dock button { border: 0; background: transparent; padding: 0; cursor: pointer; flex: 1 1 0; min-width: 0; height: 100%; position: relative; }
+#dock img { position: absolute; left: 50%; top: var(--dock-y, 54px); width: var(--dock-icon, 64px); height: var(--dock-icon, 64px);
+	margin: calc(var(--dock-icon, 64px) / -2) 0 0 calc(var(--dock-icon, 64px) / -2); object-fit: contain; }
+#dock button.glow::before { top: calc(var(--dock-y, 54px) - 45px); }
 #launcher-button {
-	position: absolute; right: 36px; bottom: 14px; width: 64px; height: 64px; border: 0; cursor: pointer;
-	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/quicklaunch-button-launcher.png") 0 0 / 64px 128px no-repeat;
+	position: absolute; left: var(--dock-button-x, 928px); top: calc(var(--dock-y, 54px) - var(--dock-icon, 64px) / 2); width: var(--dock-icon, 64px); height: var(--dock-icon, 64px); border: 0; cursor: pointer;
+	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/quicklaunch-button-launcher.png") 0 0 / 100% 200% no-repeat;
 }
-#launcher-button:active, body.launcher #launcher-button { background-position: 0 -64px; }
+#launcher-button:active, body.launcher #launcher-button { background-position: 0 100%; }
 
 /* ---- a card's menu (right click in the card view): Luna DE's developer tools ---- */
 #menu { position: absolute; z-index: 60; min-width: 200px; padding: 6px 0; border-radius: 8px;

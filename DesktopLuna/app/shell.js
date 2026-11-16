@@ -15,6 +15,27 @@
 		document.documentElement.style.setProperty("--w", w + "px");
 		document.documentElement.style.setProperty("--h", h + "px");
 		document.documentElement.style.setProperty("--columns", w >= 1024 ? 6 : w >= 700 ? 4 : 3);
+		layoutDock();
+	}
+	/**
+	 * Just Type's pill and the quick-launch bar at this screen's size, by AndroidLuna's rules
+	 * (JustType, QuickLaunch): a phone's bar is 95 high and holds four apps and the launcher button
+	 * in five equal slots, its icons 59 px or 78 % of a slot; a tablet's is 100 high with 64 px
+	 * icons in the space left of the launcher button.
+	 */
+	function layoutDock() {
+		var root = document.documentElement.style, phone = document.body.classList.contains("phone");
+		var count = Math.max(1, document.querySelectorAll("#dock button").length);
+		root.setProperty("--pill-w", Math.round(Math.min(W, H) * 0.75) + "px");
+		if (phone) {
+			var slot = W / (count + 1), size = Math.min(59, slot * 0.78);
+			root.setProperty("--ql", "95px"); root.setProperty("--dock-y", "51px");
+			root.setProperty("--dock-w", (slot * count) + "px"); root.setProperty("--dock-icon", size + "px");
+			root.setProperty("--dock-button-x", (slot * count + (slot - size) / 2) + "px");
+		} else {
+			root.setProperty("--ql", "100px"); root.setProperty("--dock-y", "54px"); root.setProperty("--dock-icon", "64px");
+			root.setProperty("--dock-w", (W - 64 - 31) + "px"); root.setProperty("--dock-button-x", (W - 64 - 32) + "px");
+		}
 	}
 	measure(1024, 768);
 	var TAP = 25, THROW_DISTANCE = -50, THROW_VELOCITY = -1.1;   // TAP_RADIUS; THROW_*, px and px/ms
@@ -360,9 +381,11 @@
 	$("device").addEventListener("click", function () { window.lunade.device(); });
 	/** The screen as main.js gives it (in this page's px), the device's picture, and what the device hasn't got. */
 	function applyScreen(d) {
+		var wasPhone = document.body.classList.contains("phone");
+		document.body.classList.toggle("phone", d.device === "pre3");
 		measure(d.width, d.height);
 		document.body.classList.toggle("portrait", d.height > d.width);
-		document.body.classList.toggle("phone", d.device === "pre3");
+		if (wasPhone !== (d.device === "pre3") && pages.length) { loadApps(false); }
 		// The bezel is Luna DE's own, not the device's screen: it keeps its size at any scale.
 		if (d.bezel) { document.documentElement.style.setProperty("--unzoom", String(d.bezel / 44)); }
 		$("device").querySelector("img").src = "images/device-" + (d.device || "touchpad") + ".png";
@@ -539,7 +562,9 @@
 			showPage(first ? 0 : Math.min(page, pages.length - 1));
 			var dock = $("dock");
 			dock.innerHTML = "";
-			s.dock.forEach(function (a) {
+			setTimeout(layoutDock, 0);
+			// A phone's bar holds four (QuickLaunch.PHONE_MAX_ITEMS), a tablet's five.
+			s.dock.slice(0, document.body.classList.contains("phone") ? 4 : 5).forEach(function (a) {
 				var b = document.createElement("button");
 				b.title = a.title;
 				b.appendChild(icon(a));

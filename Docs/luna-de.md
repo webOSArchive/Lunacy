@@ -64,8 +64,12 @@ API 21 gate.
     (and AndroidLuna) resize first. The log is LunaSysMgr's order of calls, not what a page saw;
     to be settled with a probe page that records both.
   - Not measured: the notification when the keyboard disconnects.
-- **Logs.** The bezel's `</>` button opens the developer tools of the card that is up: its
-  console is where an app's logs are, until the SDK's palm-log reaches Luna DE.
+- **Logs.** The bezel's lines button opens the log window: every app page's console (cards,
+  dashboards, alerts, pages with no window) in one place, each line with its time, app id, level
+  and source, kept from when Luna DE started, with a filter and the levels to show. It stands in
+  for `palm-log -f` until the SDK's tools reach Luna DE, and nothing is held back: there is no
+  system log level here to set. The `</>` button is a switch: while on, every card opens with
+  its own developer tools (F12 still does one card).
 - **Installing by drag and drop.** An `.ipk` dropped on the window installs (checked
   2026-11-16 with a scripted drop; it had not worked before: the dropped list did not cross
   into the preload, so files now cross one at a time).
@@ -153,6 +157,9 @@ API 21 gate.
   three quarters of the short side). The rest of the shell is still the TouchPad's drawn at the phone's size (its status bar, launcher,
   card view and the notifications' place at the top): the Pre3's own shell, which AndroidLuna has
   for phones, isn't drawn here yet.
+- Mojo logs at every level. On a device `Mojo.Log` starts at errors only and an app raises it
+  with `logLevel` in its framework_config.json; Luna DE holds it at 99 whatever the app set, a
+  developer's tool being for seeing them (codepoet, 2026-11-16). Enyo's own level is 99 already.
 - A dashboard is dismissed with a small close button that shows under the pointer, not a swipe.
 
 **Not there yet, in the order planned:**

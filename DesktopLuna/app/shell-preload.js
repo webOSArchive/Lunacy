@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld("lunade", {
 	close: (id) => ipcRenderer.invoke("lunade:close", id),
 	popOut: (id) => ipcRenderer.invoke("lunade:popout", id),
 	devTools: (id) => ipcRenderer.invoke("lunade:devtools", id),
+	toggleDevTools: () => ipcRenderer.invoke("lunade:devtools-toggle"),
+	log: () => ipcRenderer.invoke("lunade:log"),
 	reload: (id) => ipcRenderer.invoke("lunade:reload", id),
 	ready: () => ipcRenderer.send("lunade:ready"),
 	// Files dropped on the shell: their paths go to the main process to be installed.

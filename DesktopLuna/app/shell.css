@@ -151,9 +151,15 @@ body.phone #device img { height: 21px; }
 	color: #aaa; font: bold 15px/30px monospace; text-align: center; padding: 0; }
 #devtools::before { content: "</>"; }
 #devtools:hover { opacity: 1; }
-#devtools:disabled { opacity: 0.25; cursor: default; }
+#devtools.on { opacity: 1; color: #9fd0ff; text-shadow: 0 0 6px rgba(120,180,255,0.8); }
+/* And the log window: lines of text, as a log is drawn. */
+#logs { position: absolute; left: 146px; top: 50%; width: 30px; height: 30px; margin-top: -15px; border: 0; background: transparent; cursor: pointer; opacity: 0.75; padding: 0; }
+#logs::before { content: ""; position: absolute; left: 6px; top: 8px; width: 18px; height: 2px; background: #aaa; box-shadow: 0 6px 0 #aaa, 0 12px 0 #aaa; }
+#logs::after { content: ""; position: absolute; left: 6px; top: 20px; width: 8px; height: 2px; background: #1c1c1c; margin-left: 10px; }
+#logs:hover { opacity: 1; }
 /* A Pre3 has no keyboard button: the tools button takes its place. */
 body.phone #devtools { left: 56px; }
+body.phone #logs { left: 100px; }
 /* Beside it: whether a real keyboard is attached (lit) or not. A keyboard outline with its keys. */
 #realkb { position: absolute; left: 58px; top: 50%; width: 34px; height: 30px; margin-top: -15px; border: 0; background: transparent; cursor: pointer; opacity: 0.35; }
 #realkb.on { opacity: 0.85; }

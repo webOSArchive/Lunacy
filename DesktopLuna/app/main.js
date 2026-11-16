@@ -168,6 +168,7 @@ function addCard(view, appId, title) {
 	// window.close() from the page, or the page gone: the card goes.
 	view.webContents.on("destroyed", () => removeCard(id, false));
 	send("lunade:card-added", { id, appId, title: c.title });
+	if (toolsOn) { openTools(view.webContents); }
 	return c;
 }
 
@@ -466,6 +467,61 @@ ipcMain.handle("lunade:snapshot", async (e, id) => {
 ipcMain.handle("lunade:close", (e, id) => { if (panels.has(id)) { removePanel(id, true); } else { removeCard(id, true); } return true; });
 ipcMain.handle("lunade:popout", (e, id) => { popOut(id); return true; });
 ipcMain.handle("lunade:devtools", (e, id) => { const c = cards.get(id); if (c) { c.view.webContents.openDevTools({ mode: "detach" }); } return true; });
+
+/**
+ * The bezel's </> button, a switch: while it is on, every card has its developer tools open, the
+ * ones already here and each one that comes. Off closes them.
+ */
+let toolsOn = false;
+function openTools(wc) { if (wc && !wc.isDestroyed() && !wc.isDevToolsOpened()) { wc.openDevTools({ mode: "detach", activate: false }); } }
+ipcMain.handle("lunade:devtools-toggle", () => {
+	toolsOn = !toolsOn;
+	for (const c of cards.values()) {
+		const wc = c.view.webContents;
+		if (wc.isDestroyed()) { continue; }
+		if (toolsOn) { openTools(wc); } else if (wc.isDevToolsOpened()) { wc.closeDevTools(); }
+	}
+	return toolsOn;
+});
+
+/**
+ * The log: every app page's console (cards, dashboards, alerts and the pages with no window),
+ * kept from the moment Luna DE starts, so the window can be opened after the fact and still
+ * show an app's start. It stands in for palm-log -f until the SDK's tools reach Luna DE, and
+ * holds back nothing: there is no system log level here to set.
+ */
+const LOG_MAX = 5000;
+const logLines = [];
+let logWindow = null;
+const LEVELS = ["debug", "info", "warning", "error"];
+function logLine(wc, level, message, line, source) {
+	if ((shell && wc === shell.webContents) || (logWindow && !logWindow.isDestroyed() && wc === logWindow.webContents)) { return; }
+	let appId = "";
+	try { appId = appIdOf(wc.getURL()) || ""; } catch (e) {}
+	if (!appId) { return; }   // a developer tools window, or anything else that isn't an app's
+	if (String(source || "").startsWith("node:electron")) { return; }   // Electron's own advice to its developers, not the app's
+	const now = new Date(), two = (n) => String(n).padStart(2, "0");
+	let where = String(source || "");
+	const cut = where.indexOf(HOST_SUFFIX);
+	if (cut >= 0) { where = where.slice(where.indexOf("/", cut)); }
+	const entry = { time: two(now.getHours()) + ":" + two(now.getMinutes()) + ":" + two(now.getSeconds()) + "." + String(now.getMilliseconds()).padStart(3, "0"),
+		level: typeof level === "number" ? LEVELS[level] || "info" : (LEVELS.includes(level) ? level : "info"),
+		app: appId, message: String(message), source: where ? where + ":" + line : "" };
+	logLines.push(entry);
+	if (logLines.length > LOG_MAX) { logLines.shift(); }
+	if (logWindow && !logWindow.isDestroyed()) { logWindow.webContents.send("lunade:log-line", entry); }
+}
+function showLog() {
+	if (logWindow && !logWindow.isDestroyed()) { logWindow.show(); logWindow.focus(); return true; }
+	logWindow = new BrowserWindow({ width: 900, height: 420, title: "Luna DE: logs", backgroundColor: "#16171a", autoHideMenuBar: true,
+		webPreferences: { preload: path.join(__dirname, "log-preload.js"), contextIsolation: true, sandbox: true } });
+	logWindow.loadFile(path.join(__dirname, "log.html"));
+	logWindow.on("closed", () => { logWindow = null; });
+	return true;
+}
+ipcMain.handle("lunade:log", () => showLog());
+ipcMain.handle("lunade:log-history", () => logLines);
+ipcMain.handle("lunade:log-clear", () => { logLines.length = 0; return true; });
 ipcMain.handle("lunade:reload", (e, id) => { const c = cards.get(id); if (c) { c.view.webContents.reload(); } return true; });
 
 /** A package (.ipk) or an app's folder handed to Luna DE: the host installs it and says how it went in a banner. */
@@ -639,6 +695,8 @@ app.on("web-contents-created", (e, wc) => {
 	// Before anything loads in it; the shell's own page keeps Electron's.
 	if (deviceUserAgent && !(shell && wc === shell.webContents)) { wc.setUserAgent(deviceUserAgent); }
 	scalePage(wc);
+	// Its console goes to the log.
+	wc.on("console-message", (ev) => { logLine(wc, ev.level, ev.message, ev.lineNumber, ev.sourceId); });
 	// A page that has gone is no longer one of its app's windows: the host is told here, by the
 	// main process, which always knows. (The page's own word, a beacon as it unloads, doesn't
 	// get out of a view that is being destroyed; the host then took the next launch of the app

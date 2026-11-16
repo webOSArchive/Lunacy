@@ -70,7 +70,6 @@
 	/** The status bar's title: the app's own name while its card is up, as the TouchPad showed it (not the page's title). */
 	function setTitle() {
 		$("popout").disabled = !(cards[active] && cards[active].id);
-		$("devtools").disabled = $("popout").disabled;
 		$("title-text").textContent = maximized && cards[active] ? (appTitles[cards[active].appId] || cards[active].title) : "Luna DE";
 	}
 	var appTitles = {}, appEntries = {};
@@ -377,7 +376,11 @@
 	}
 	$("home").addEventListener("click", home);
 	// The developer tools of that same card, where its console's logs are.
-	$("devtools").addEventListener("click", function () { var c = cards[active]; if (c && c.id) { window.lunade.devTools(c.id); } });
+	$("devtools").addEventListener("click", function () {
+		window.lunade.toggleDevTools().then(function (on) { $("devtools").classList.toggle("on", !!on); });
+	});
+	// And every app's console in one window.
+	$("logs").addEventListener("click", function () { window.lunade.log(); });
 	// The bezel's other corner: the card that is up, or in front in the card view, popped out.
 	$("popout").addEventListener("click", function () { var c = cards[active]; if (c && c.id) { window.lunade.popOut(c.id); } });
 	// And the device itself: a TouchPad or a Pre3, by its picture.

@@ -58,6 +58,21 @@
 	}
 	poll();
 
+	// Mojo logs everything here. On a device Mojo.Log starts at errors only and an app raises it
+	// in its framework_config.json (logLevel 99); Luna DE is a developer's tool, so info and
+	// warnings show whatever the app set (codepoet, 2026-11-16; a delta, in Docs/luna-de.md).
+	// The level is held as soon as the framework's script has run, before the app's own.
+	function loudMojo() {
+		var log = window.Mojo && window.Mojo.Log;
+		if (!log || log.__lunadeLoud) { return; }
+		try {
+			Object.defineProperty(log, "currentLogLevel", { get: function () { return 99; }, set: function () {}, configurable: true });
+			log.__lunadeLoud = true;
+		} catch (e) {}
+	}
+	document.addEventListener("load", loudMojo, true);
+	document.addEventListener("DOMContentLoaded", loudMojo);
+
 	window.addEventListener("pagehide", function () {
 		try { navigator.sendBeacon(base + "gone?w=" + page); } catch (e) {}
 	});

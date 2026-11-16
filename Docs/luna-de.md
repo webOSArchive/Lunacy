@@ -64,12 +64,12 @@ API 21 gate.
     (and AndroidLuna) resize first. The log is LunaSysMgr's order of calls, not what a page saw;
     to be settled with a probe page that records both.
   - Not measured: the notification when the keyboard disconnects.
-- **Logs.** The bezel's lines button opens the log window: every app page's console (cards,
+- **Logs.** The bezel's `</>` button opens the log window: every app page's console (cards,
   dashboards, alerts, pages with no window) in one place, each line with its time, app id, level
   and source, kept from when Luna DE started, with a filter and the levels to show. It stands in
   for `palm-log -f` until the SDK's tools reach Luna DE, and nothing is held back: there is no
-  system log level here to set. The `</>` button is a switch: while on, every card opens with
-  its own developer tools (F12 still does one card).
+  system log level here to set. Right-clicking the button gives the
+  developer tools of each open card, and a switch to open them for every card (F12 still does one).
 - **Installing by drag and drop.** An `.ipk` dropped on the window installs (checked
   2026-11-16 with a scripted drop; it had not worked before: the dropped list did not cross
   into the preload, so files now cross one at a time).

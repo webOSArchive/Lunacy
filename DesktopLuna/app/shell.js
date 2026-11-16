@@ -375,12 +375,9 @@
 		else if (maximized) { cardView(); }
 	}
 	$("home").addEventListener("click", home);
-	// The developer tools of that same card, where its console's logs are.
-	$("devtools").addEventListener("click", function () {
-		window.lunade.toggleDevTools().then(function (on) { $("devtools").classList.toggle("on", !!on); });
-	});
-	// And every app's console in one window.
-	$("logs").addEventListener("click", function () { window.lunade.log(); });
+	// The log window; and by right-click, the developer tools of a card.
+	$("devtools").addEventListener("click", function () { window.lunade.log(); });
+	$("devtools").addEventListener("contextmenu", function (e) { e.preventDefault(); window.lunade.toolsMenu(); });
 	// The bezel's other corner: the card that is up, or in front in the card view, popped out.
 	$("popout").addEventListener("click", function () { var c = cards[active]; if (c && c.id) { window.lunade.popOut(c.id); } });
 	// And the device itself: a TouchPad or a Pre3, by its picture.

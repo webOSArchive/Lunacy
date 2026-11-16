@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld("lunade", {
 	close: (id) => ipcRenderer.invoke("lunade:close", id),
 	popOut: (id) => ipcRenderer.invoke("lunade:popout", id),
 	devTools: (id) => ipcRenderer.invoke("lunade:devtools", id),
-	toggleDevTools: () => ipcRenderer.invoke("lunade:devtools-toggle"),
+	toolsMenu: () => ipcRenderer.invoke("lunade:tools-menu"),
 	log: () => ipcRenderer.invoke("lunade:log"),
 	reload: (id) => ipcRenderer.invoke("lunade:reload", id),
 	ready: () => ipcRenderer.send("lunade:ready"),

@@ -9,6 +9,7 @@ with an Electron window as each app's card. The plan, its goals and what is left
 
 ```sh
 ./gradlew :DesktopLuna:host:installDist      # the JVM host, from the top of the repository
+DesktopLuna/fetch-node.sh                    # once: Node 12 for webOS JS services, into DesktopLuna/node/
 cd DesktopLuna && npm install && npm start
 ```
 
@@ -34,6 +35,9 @@ tap on the status bar's title opens the app's menu; banners and dashboards show 
 | F1 | A spare home button |
 
 The first six are the old SDK emulator's keys.
+
+**Wi-Fi** in the launcher's Settings is a developer's switch: it simulates the network connection
+being lost (apps are told, and their requests fail) until it is tapped again.
 
 - `LUNADE_DATA=<folder>`: where Luna DE keeps its data (default: Electron's userData/data).
   Installed apps go in `<folder>/cryptofs/apps/usr/palm/applications/<id>/` until `palm-install`

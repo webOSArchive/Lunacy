@@ -43,8 +43,25 @@ API 21 gate.
   Right (cards), Esc (back), F6 to F9 (turn the device: the window becomes 768 x 1024). F12 is
   DevTools, Ctrl/Cmd+R reloads, F1 is a spare home button.
 - **Services on the bus:** com.palm.db and tempdb, systemservice (time, zones, preferences),
-  applicationManager, appinstaller and appInstallService, connectionmanager, activitymanager.
-  Everything else answers "Service does not exist", as rule 2 asks.
+  applicationManager, appinstaller and appInstallService, connectionmanager, activitymanager, and
+  **every JS service** in the ROM or an installed package. Anything else answers "Service does
+  not exist", as rule 2 asks.
+- **JS services** run as on Android: JsServices and ServiceProcess (now in LunaCore) start each
+  package's Node process on its first call, under Lunacy's own host.js. The Node is 12, the major
+  version nodejs-mobile gives Android: `DesktopLuna/fetch-node.sh` fetches nodejs.org's build and
+  checks it against their checksums (`LUNADE_NODE` names another). The accounts services run, so
+  Calendar, Contacts and Accounts open with the on-device account.
+- **No First Use.** At its first start Luna DE does what Lunacy's shell does when First Use ends:
+  the profile account is made (createNovaAccount) and the activities the configurator holds back
+  until then are sent.
+- **It is a desktop environment, not an Android one** (codepoet, 2026-11-16). What is Android's
+  side of Lunacy is left out: the launcher's Android tab, the Android account and its template,
+  Android's notifications, First Use, the Google and Microsoft sign-in templates, Lunacy's APK
+  updates, the screen saver's settings, and the tiles that only open one of Android's settings
+  (Bluetooth, Date & Time, Language). Where a tile has a use for a developer it gets one:
+  **Wi-Fi simulates a lost connection.** A tap, and the connection manager reports no network
+  (subscribers hear it at once), native requests fail, and the status bar shows it; another tap
+  brings it back. The machine's own network is untouched.
 
 **Deltas, recorded:**
 - A card in the card view is a snapshot of its page, not the live page (a native view can't be
@@ -52,6 +69,12 @@ API 21 gate.
 - The shim's cookies are the host's own jar, not the Electron session's.
 - **Package scripts don't run** (postinst, prerm): a package installs without them and the log
   says so, until open question 2 is settled.
+- **A JS service runs as the developer**, in Node on their own machine: webOS paths are pointed
+  into Luna DE's root (host.js), but nothing holds a service to it, and its shell commands run in
+  the machine's `/bin/sh` (the root has no busybox). It is the developer's own code, as it is in
+  any Node they run; a package from somewhere else deserves the same care as any script.
+- The mail transports (Palm's native IMAP, SMTP and EAS, built for Android's ARM) aren't there:
+  the Exchange account type is still offered, and adding one fails at its first call.
 - The network is the machine's first interface with an address, shown as the TouchPad's Wi-Fi at
   full signal with no network name; the machine counts as on the mains.
 - The shell's own lifecycle rules (which apps run, relaunch, an app ending with its last window)
@@ -59,9 +82,9 @@ API 21 gate.
 - A dashboard is dismissed with a small close button that shows under the pointer, not a swipe.
 
 **Not there yet, in the order planned:**
-1. **JS services** (JsServices, ServiceProcess, luna-send): the accounts service and with it
-   Calendar's, Contacts' and Email's first screens, and any app that ships its own service. Needs
-   Node on the desktop (open question 6) and a luna-send socket for it.
+1. **luna-send for a service's child processes** (LunaSendServer, a Unix socket on Android): a
+   service that shells out to `luna-send` gets an error. With it, the question of package scripts
+   (open question 2).
 2. **WebSQL's native half** (WebSql): `openDatabase` is absent in Luna DE until it moves, which
    Mojo's Depot needs more than Enyo apps do. It is a rewrite of its storage calls, like db8's, and
    gets the same two-platform suite first.
@@ -72,7 +95,9 @@ API 21 gate.
 Fold3, installed over 1.0.1's data (three mail accounts, 231 contacts): 50 passed, 0 failed
 (`Docs/test-results/668/fold3.txt`). Still owed: `device-test.sh` on an Android 5 device, and
 `fresh-install.sh` (the Configurator, the activity manager and the package installer all moved,
-and a first run is where 1.0 broke).
+and a first run is where 1.0 broke). **Since that check**, JsServices, ServiceProcess and SysLog moved too, and host.js and
+curl.js changed for every platform (a path already inside the root is left alone; the shell is the
+host's where the root has none): the unit tests pass, and no device has run them yet.
 
 **Ratchet items (desktop):** Electron runs with `--no-sandbox` in development (the Linux
 setuid helper needs root); app windows share the page's world with the preload

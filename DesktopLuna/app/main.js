@@ -359,6 +359,7 @@ function openShell() {
 	shell = new BrowserWindow({
 		width: size.width, height: size.height + BEZEL, useContentSize: true, resizable: false, title: "Luna DE",
 		backgroundColor: "#000000",
+		icon: path.join(__dirname, "images", "icon.png"),   // the taskbar's, on Linux and Windows; a Mac takes its bundle's
 		webPreferences: { preload: path.join(__dirname, "shell-preload.js"), contextIsolation: true, sandbox: true },
 	});
 	shell.removeMenu();
@@ -528,7 +529,7 @@ function logLine(wc, level, message, line, source) {
 }
 function showLog() {
 	if (logWindow && !logWindow.isDestroyed()) { logWindow.show(); logWindow.focus(); return true; }
-	logWindow = new BrowserWindow({ width: 900, height: 420, title: "Luna DE: logs", backgroundColor: "#16171a", autoHideMenuBar: true,
+	logWindow = new BrowserWindow({ width: 900, height: 420, icon: path.join(__dirname, "images", "icon.png"), title: "Luna DE: logs", backgroundColor: "#16171a", autoHideMenuBar: true,
 		webPreferences: { preload: path.join(__dirname, "log-preload.js"), contextIsolation: true, sandbox: true } });
 	logWindow.loadFile(path.join(__dirname, "log.html"));
 	logWindow.on("closed", () => { logWindow = null; });

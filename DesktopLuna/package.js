@@ -144,13 +144,14 @@ function stageHost() {
 				{ from: repo("NOTICE"), to: "NOTICE.Lunacy" },
 			].filter((r) => fs.existsSync(r.from)),
 			artifactName: "LunaDE-${version}-${os}-${arch}.${ext}",
-			linux: { target: ["AppImage", "tar.gz"], category: "Development", executableName: "lunade" },
+			// The icon: Lunacy's moon (build-resources/make-icon.py).
+			linux: { target: ["AppImage", "tar.gz"], category: "Development", executableName: "lunade", icon: "build-resources/icon.png" },
 			// Signed with the Developer ID in the keychain (or CSC_LINK), and notarised when
 			// APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID (or an APPLE_API_KEY set) are
 			// in the environment. The hardened runtime needs the JVM's and Node's entitlements.
-			mac: { target: ["dmg", "zip"], category: "public.app-category.developer-tools", hardenedRuntime: true, gatekeeperAssess: false,
+			mac: { icon: "build-resources/icon-mac.png", target: ["dmg", "zip"], category: "public.app-category.developer-tools", hardenedRuntime: true, gatekeeperAssess: false,
 				entitlements: "build-resources/entitlements.mac.plist", entitlementsInherit: "build-resources/entitlements.mac.plist" },
-			win: { target: ["nsis", "zip"] },
+			win: { target: ["nsis", "zip"], icon: "build-resources/icon.png" },
 			nsis: { oneClick: false, allowToChangeInstallationDirectory: true },
 			// Linux: a package can't count on Chromium's sandbox helper (an AppImage or a tarball
 			// can't carry a setuid-root file, and newer kernels' settings refuse the other kind;

@@ -2,3 +2,8 @@ device-touchpad.png, device-pre3.png: small pictures of an HP TouchPad and an HP
 bezel's device button. Supplied by codepoet (webOS Archive), 2026-11-16. Their origin and licence
 are to be confirmed by codepoet; until then treat them as the project's other device artwork is
 treated (abandonware, shipped with notice).
+
+icon.png: Luna DE's icon, Lunacy's moon with rounded corners, made by
+DesktopLuna/build-resources/make-icon.py from Meta/LunaRound.png (see Meta/NOTICE: codepoet had
+it made with ChatGPT for Lunacy, 2026-11-07). build-resources/icon.png and icon-mac.png are the
+same, for the packages.

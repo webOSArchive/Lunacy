@@ -38,7 +38,8 @@ bytes each time:
 
 ```sh
 ./build.sh debug                 # the shell for both ABIs and the keyboard, debug-signed
-./build.sh debug --fetch         # the same, after running fetch-assets.sh
+./build.sh debug --fetch         # the same, after running fetch-assets.sh (it runs by itself when
+                                 # LunaRuntimes/ or the script is newer than local-assets/)
 ./build.sh debug --test-apps     # a development build, with the test apps
 ./build.sh release               # signed with codepoet's key: fresh assets, clean build, lint
 ./build.sh publish               # a significant release: release, debug and the GPL source

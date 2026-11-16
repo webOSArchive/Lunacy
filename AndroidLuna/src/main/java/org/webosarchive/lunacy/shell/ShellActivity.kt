@@ -428,7 +428,9 @@ class ShellActivity : Activity(), WindowHost {
         SysLog.start(webos.root)
         Novacom(webos) { DeviceProfile.nduid(this) }.start()
         files = AppFiles(AndroidAssets(assets), installed, webos.root, java.io.File(applicationInfo.sourceDir))
-        jsServices = JsServices(bus, files.root, webos)
+        jsServices = JsServices(bus, files.root, webos) { spec, open ->
+            org.webosarchive.lunacy.card.Extractfs.read(spec, org.webosarchive.lunacy.card.Extractfs.Opener(open))?.bytes
+        }
         nativeServices = NativeServices(bus, webos) { pdkRuntime }
         server = AppServer(AndroidAssets(assets), files, jsServices.root, java.io.File(filesDir, "framework-art"), AndroidServerHooks)
         mediaServer = MediaServer(jsServices.root)

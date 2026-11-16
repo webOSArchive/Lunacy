@@ -385,7 +385,8 @@ async function followHost() {
 						icon: ev.icon || (ev.appId ? host + "/icon?id=" + encodeURIComponent(ev.appId) : "") });
 				} else if (ev.type === "banner-remove") { send("lunade:banner-remove", { id: ev.id }); }
 				else if (ev.type === "banner-clear") { send("lunade:banner-remove", { appId: ev.appId }); }
-				else if (ev.type === "ready") {
+				else if (ev.type === "network") { send("lunade:network", { online: ev.online }); }
+								else if (ev.type === "ready") {
 					// The app's own word that its stage is ready (PalmSystem.stageReady), as on Android.
 					const c = [...cards.values()].find((k) => pageIds.get(k.view.webContents.id) === ev.page);
 					if (c && c.ready) { c.ready(); }

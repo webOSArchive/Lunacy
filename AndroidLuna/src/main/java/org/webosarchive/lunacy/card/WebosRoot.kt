@@ -32,8 +32,9 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
     override val fallbackShell get() = "/system/bin/sh"
     /** Lunacy's own scripts for Node: the service host, curl and luna-send. Not webOS's. */
     val host = File(context.filesDir, "jshost")
+    override val hostScripts get() = host
     val nativeDir: String = context.applicationInfo.nativeLibraryDir
-    val node = File(nativeDir, "liblunacynode.so")
+    override val node = File(nativeDir, "liblunacynode.so")
     private val busybox = File(nativeDir, "libbusybox.so")
     private val installedDir = installed
     @Volatile private var prepared = false
@@ -133,6 +134,15 @@ class WebosRoot(private val context: Context, private val bus: Bus, installed: F
     override fun mapPaths(s: String): String = mapPaths(s, root.path)
 
     /** The environment a process in the webOS root gets, calling the bus as [caller]. */
+    /** A JS service's: its library path, Android's folders under /media/internal, and the screen for the photos service. */
+    override fun serviceEnvironment(name: String): Map<String, String> = environment(name) + buildMap {
+        put("LD_LIBRARY_PATH", nativeDir)
+        // /media/internal's folders that are Android's (UserFiles), as PDK apps get them.
+        put("LUNACY_MEDIA", UserFiles.mappedFolders().joinToString(":") { (name, dir) -> "$name=${dir.path}" })
+        // The screen's longer side in pixels, for the photos service's screennails (PhotoCache).
+        if (PhotoCache.screenPx > 0) put("LUNACY_SCREEN_PX", PhotoCache.screenPx.toString())
+    }
+
     override fun environment(caller: String): Map<String, String> = mapOf(
         "PATH" to listOf("usr/sbin", "usr/bin", "sbin", "bin").joinToString(":") { "${root.path}/$it" } + ":/system/bin",
         "HOME" to File(root, "home/root").path,

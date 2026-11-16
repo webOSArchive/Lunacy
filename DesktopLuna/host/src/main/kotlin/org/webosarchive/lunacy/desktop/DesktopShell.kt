@@ -43,6 +43,8 @@ class DesktopShell(
     private val events = LinkedBlockingQueue<JSONObject>()
     lateinit var configurator: Configurator
     lateinit var applicationManager: ApplicationManager
+    var jsServices: org.webosarchive.lunacy.card.JsServices? = null
+    var network: DesktopNetwork? = null
 
     // ---- events to Electron ----
 
@@ -138,6 +140,9 @@ class DesktopShell(
         }
         val app = registry.get(appId) ?: run { Log.w(Lunacy.TAG, "launch: no app $appId"); return }
         if (!app.isWeb) { systemBanner(appId, "${app.title} is a native app; Luna DE runs web apps"); return }
+        // On Android the Wi-Fi tile opens Android's Wi-Fi settings. Here it is a developer's switch:
+        // the connection lost, and back, so an app can be seen in both states (codepoet, 2026-11-16).
+        if (app.androidSettings == "wifi") { toggleNetwork(appId); return }
         if (app.androidSettings.isNotEmpty()) { systemBanner(appId, "${app.title} opens one of Android's settings; there is none on the desktop"); return }
         val root = windowsOf(appId).firstOrNull()
         if (root != null) {
@@ -154,6 +159,49 @@ class DesktopShell(
             (if (params != null) "?launchParams=" + URLEncoder.encode(params.toString(), "UTF-8").replace("+", "%20") else "")
         events.add(event("launch").put("id", app.id).put("title", app.title).put("url", url).put("noWindow", app.noWindow)
             .put("noCard", placement != Placement.CARD))
+    }
+
+    // ---- First Use ----
+
+    /**
+     * Luna DE has no First Use (Docs/luna-de.md, "Rule 0": a developer's tool starts ready), so
+     * what Lunacy's shell does when First Use ends is done at the first start: the flag that says
+     * it ran, and the profile account the accounts service makes (createNovaAccount), which
+     * Calendar, Contacts and Memos keep their on-device data on. Then the configurator runs again,
+     * for the activity files it holds back until both are done (ShellActivity.afterFirstUse).
+     */
+    fun finishFirstUse(webosRoot: File, bus: org.webosarchive.lunacy.card.Bus) {
+        val prefs = File(webosRoot, "var/luna/preferences")
+        val ranFirstUse = File(prefs, "ran-first-use")
+        val profileMade = File(prefs, "first-use-profile-created")
+        val configureAfter = !ranFirstUse.exists() || !profileMade.exists()
+        runCatching { prefs.mkdirs(); ranFirstUse.createNewFile() }
+        if (profileMade.exists()) { if (configureAfter) configurator.run(); return }
+        bus.call("", "palm://com.palm.accountservices/createNovaAccount", "{\"createDefaultAccount\":true}", privateBus = true) { r ->
+            Log.i(Lunacy.TAG, "firstuse-createDefaultAccount: $r")
+        }
+        // The service answers before the account is made, and writes the flag as it makes it.
+        var waited = 0
+        val check = object : Runnable {
+            override fun run() {
+                if (profileMade.exists()) { configurator.run(); return }
+                waited += 500
+                if (waited < 60_000) main.postDelayed(this, 500)
+                else Log.w(Lunacy.TAG, "first use: no profile account after a minute; activities held back until the next start")
+            }
+        }
+        main.postDelayed(check, 500)
+    }
+
+    // ---- the simulated network ----
+
+    private fun toggleNetwork(appId: String) {
+        val net = network ?: return
+        val down = !net.simulatedDown
+        net.simulateDown(down)
+        events.add(event("network").put("online", !down))
+        systemBanner(appId, if (down) "Network connection lost (simulated)" else "Network connection restored")
+        Log.i(Lunacy.TAG, "network: simulated ${if (down) "down" else "up"}")
     }
 
     // ---- packages ----
@@ -187,6 +235,7 @@ class DesktopShell(
         val before = registry.launchPoints.associateBy { it.id }
         registry.reload()
         configurator.run()
+        jsServices?.reload()
         val after = registry.launchPoints.associateBy { it.id }
         for ((id, app) in after) if (id !in before) applicationManager.launchPointChanged(app, "added")
         for ((id, app) in before) if (id !in after) applicationManager.launchPointChanged(app, "removed")
@@ -201,18 +250,69 @@ class DesktopShell(
 }
 
 /**
- * Luna DE's webOS root as [org.webosarchive.lunacy.card.ScriptHost]: it has no commands yet, and
- * package scripts aren't run (Docs/luna-de.md, open question 2: a script would run as the
- * developer on their own machine).
+ * Luna DE's webOS root as [org.webosarchive.lunacy.card.ScriptHost]: where JS services run, under
+ * a Node of Android's major version ([node]), with Lunacy's host scripts copied beside the root.
+ *
+ * Package scripts aren't run yet (Docs/luna-de.md, open question 2: a script would run as the
+ * developer on their own machine), and there is no luna-send for a service's child processes:
+ * one that shells out to it gets an error. curl is Lunacy's curl.js, as on Android.
  */
-class DesktopRoot(override val root: File) : org.webosarchive.lunacy.card.ScriptHost {
+class DesktopRoot(override val root: File, override val hostScripts: File, private val repo: File,
+                  private val rom: org.webosarchive.lunacy.card.RomFiles) : org.webosarchive.lunacy.card.ScriptHost {
     override val runsScripts get() = false
-    override fun prepare() {}
+
+    /**
+     * LUNADE_NODE if it is set, else the Node 12 DesktopLuna/fetch-node.sh fetched, else whatever
+     * `node` the machine has, with a warning: Palm's services were written for node 0.4, Lunacy's
+     * host runs them on Node 12, and a newer Node isn't what Android runs.
+     */
+    override val node: File by lazy {
+        val named = System.getenv("LUNADE_NODE")?.takeIf { it.isNotEmpty() }?.let { File(it) }
+        val fetched = File(repo, "DesktopLuna/node/bin/node")
+        when {
+            named != null -> named
+            fetched.isFile -> fetched
+            else -> {
+                val onPath = System.getenv("PATH").orEmpty().split(File.pathSeparator).map { File(it, "node") }.firstOrNull { it.isFile && it.canExecute() }
+                if (onPath != null) Log.w(Lunacy.TAG, "js services: no Node 12 (run DesktopLuna/fetch-node.sh); using ${onPath.path}, which isn't the version Android runs")
+                onPath ?: fetched
+            }
+        }
+    }
+
+    private var prepared = false
+
+    /** The host scripts copied out, and curl in the root's /usr/bin, once a run. */
+    @Synchronized override fun prepare() {
+        if (prepared) return
+        hostScripts.deleteRecursively()
+        rom.copyAssets("lunacy/services", hostScripts)
+        for (name in listOf("usr/bin/curl", "usr/bin/curl11")) {
+            File(root, name).apply {
+                parentFile?.mkdirs(); delete()
+                writeText("#!/bin/sh\nexec \"${node.path}\" \"${File(hostScripts, "curl.js").path}\" \"\$@\"\n")
+                setExecutable(true, false)
+            }
+        }
+        prepared = true
+    }
+
     override fun startBus() {}
+
     /** A webOS path as the file it is under the root; anything else is left as it is. */
     override fun mapPaths(s: String): String =
         if (ROOTS.any { s == "/$it" || s.startsWith("/$it/") }) File(root, s.trimStart('/')).path else s
-    override fun environment(caller: String): Map<String, String> = emptyMap()
+
+    override fun environment(caller: String): Map<String, String> = mapOf(
+        "PATH" to listOf("usr/sbin", "usr/bin", "sbin", "bin").joinToString(File.pathSeparator) { File(root, it).path } +
+            File.pathSeparator + System.getenv("PATH").orEmpty(),
+        "HOME" to File(root, "home/root").path,
+        "TMPDIR" to File(root, "tmp").path,
+        "LUNACY_WEBOS_ROOT" to root.path,
+        "LUNACY_WEBOS_DIRS" to ROOTS.joinToString("|"),
+        // The root has no /bin/sh of its own here: a service's shell commands run in the machine's.
+        "LUNACY_SHELL" to "/bin/sh",
+    )
 
     private companion object {
         /** The top folders whose absolute paths are webOS's (WebosRoot.ROOTS on Android). */

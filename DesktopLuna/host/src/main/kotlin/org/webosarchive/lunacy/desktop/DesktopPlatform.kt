@@ -93,8 +93,24 @@ object DesktopLinks : org.webosarchive.lunacy.core.Links {
  */
 class DesktopNetwork(private val main: DesktopScheduler) : org.webosarchive.lunacy.core.NetworkSource {
     private var tick: Runnable? = null
+    private var changed: (() -> Unit)? = null
+
+    /**
+     * The connection lost, for a developer to see their app without one (the Wi-Fi tile in Luna
+     * DE): the connection manager reports no network, its subscribers hear it at once, and native
+     * requests fail (Http.offline). The machine's own network is untouched.
+     */
+    @Volatile var simulatedDown = false
+        private set
+
+    /** On the main thread. */
+    fun simulateDown(down: Boolean) {
+        simulatedDown = down
+        changed?.invoke()
+    }
 
     override fun current(): org.webosarchive.lunacy.core.NetworkSource.Network? {
+        if (simulatedDown) return null
         val address = runCatching {
             java.net.NetworkInterface.getNetworkInterfaces().asSequence()
                 .filter { it.isUp && !it.isLoopback && !it.isVirtual }
@@ -106,13 +122,14 @@ class DesktopNetwork(private val main: DesktopScheduler) : org.webosarchive.luna
     }
 
     override fun watch(onChange: () -> Unit) {
+        changed = onChange
         if (tick != null) return
         val r = object : Runnable { override fun run() { onChange(); main.postDelayed(this, 5_000) } }
         tick = r
         main.postDelayed(r, 5_000)
     }
 
-    override fun unwatch() { tick?.let { main.cancel(it) }; tick = null }
+    override fun unwatch() { tick?.let { main.cancel(it) }; tick = null; changed = null }
 }
 
 /** A desktop is on the mains: fully charged, on a charger, as the activity manager's requirements see it. */

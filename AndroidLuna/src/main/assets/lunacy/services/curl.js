@@ -13,7 +13,8 @@ const { URL } = require("url");
 
 const ROOT = process.env.LUNACY_WEBOS_ROOT || "";
 const WEBOS = new RegExp("^/(" + (process.env.LUNACY_WEBOS_DIRS || "usr|media|bin|sbin|var|etc|tmp|home|opt|lib") + ")(/|$)");
-const real = (p) => (ROOT && WEBOS.test(p) ? ROOT + p : p);
+// A path already inside the root is real (the root itself can be under /home or /tmp on a desktop).
+const real = (p) => (ROOT && WEBOS.test(p) && p !== ROOT && p.indexOf(ROOT + "/") !== 0 ? ROOT + p : p);
 const USER_AGENT = "curl/7.88.1";  // the curl-tls13 package's version
 
 // Exit codes, as curl's.

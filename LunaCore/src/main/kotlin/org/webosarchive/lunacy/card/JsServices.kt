@@ -1,6 +1,7 @@
 package org.webosarchive.lunacy.card
 
-import android.util.Log
+import org.webosarchive.lunacy.core.Log
+import org.webosarchive.lunacy.core.Platform
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -14,8 +15,14 @@ import java.util.concurrent.Executors
  * and it ends when it exits (mojoservice's activityTimeout) or Lunacy stops it.
  * See Docs/architecture.md, "JS services".
  */
-class JsServices(private val bus: Bus, private val installed: File, private val webos: WebosRoot) {
-    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+class JsServices(private val bus: Bus, private val installed: File, private val webos: ScriptHost,
+                 /**
+                  * Reads an extractfs spec (webOS's thumbnailing filesystem) with a way to open webOS
+                  * paths, and gives the image's bytes: Extractfs on Android. Null where the host has
+                  * none, and a service's read then fails as a device's failed read did.
+                  */
+                 private val extract: ((spec: String, open: (String) -> (() -> java.io.InputStream?)?) -> ByteArray?)? = null) {
+    private val main = Platform.scheduler
     /** Lunacy's copy of the webOS filesystem that services see (frameworks, /media/internal, curl). */
     val root get() = webos.root
     private val worker = Executors.newSingleThreadExecutor()
@@ -91,16 +98,10 @@ class JsServices(private val bus: Bus, private val installed: File, private val 
         private val link = ServiceProcess(bus, name, "js service", worker, extractfs = ::extractfs, start = {
             webos.prepare()
             if (!webos.node.isFile) throw IOException("no Node runtime in this build (${webos.node.path})")
-            val pb = ProcessBuilder(webos.node.path, File(webos.host, "host.js").path, root.path, dir).directory(root)
-            pb.environment().apply {
-                // Its own luna-send calls, and its child processes', come from the service.
-                putAll(webos.environment(name))
-                put("LD_LIBRARY_PATH", webos.nativeDir)
-                // /media/internal's folders that are Android's (UserFiles), as PDK apps get them.
-                put("LUNACY_MEDIA", UserFiles.mappedFolders().joinToString(":") { (name, dir) -> "$name=${dir.path}" })
-                // The screen's longer side in pixels, for the photos service's screennails (PhotoCache).
-                if (PhotoCache.screenPx > 0) put("LUNACY_SCREEN_PX", PhotoCache.screenPx.toString())
-            }
+            val pb = ProcessBuilder(webos.node.path, File(webos.hostScripts, "host.js").path, root.path, dir).directory(root)
+            // Its own luna-send calls, and its child processes', come from the service; and what
+            // the host adds for a service (ScriptHost.serviceEnvironment).
+            pb.environment().putAll(webos.serviceEnvironment(name))
             pb.start()
         }, onEnded = { if (running[dir] == this) running.remove(dir) })
 
@@ -115,13 +116,13 @@ class JsServices(private val bus: Bus, private val installed: File, private val 
      * Replies on the main thread, with null where the device's read failed.
      */
     private fun extractfs(spec: String, reply: (String?) -> Unit) = thumbnailer.execute {
-        val result = Extractfs.read(spec, Extractfs.Opener(::openWebos))
+        val result = extract?.invoke(spec, ::openWebos)
         if (result == null) Log.i(AppServer.TAG, "extractfs: no image for $spec")
         val path = result?.let {
             val rel = "tmp/extractfs/${extracted++ % 16}"
-            runCatching { File(root, rel).apply { parentFile?.mkdirs() }.writeBytes(it.bytes); "/$rel" }.getOrNull()
+            runCatching { File(root, rel).apply { parentFile?.mkdirs() }.writeBytes(it); "/$rel" }.getOrNull()
         }
-        main.post { reply(path) }
+        main.post(Runnable { reply(path) })
     }
 
     /** An absolute webOS path as services see it: user storage (with Android's folders), installed packages, the rest of the tree. */

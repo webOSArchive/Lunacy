@@ -1,7 +1,6 @@
 package org.webosarchive.lunacy.card
 
-import android.os.SystemClock
-import android.util.Log
+import org.webosarchive.lunacy.core.Log
 import java.io.File
 import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
@@ -40,13 +39,11 @@ object SysLog {
         Thread({ while (true) write(queue.take()) }, "syslog").apply { isDaemon = true }.start()
     }
 
-    /** A page's console message, as LunaSysMgr logged it. level is Android's ConsoleMessage level. */
-    fun console(appId: String, level: android.webkit.ConsoleMessage.MessageLevel, message: String, source: String?, line: Int) {
-        val priority = when (level) {
-            android.webkit.ConsoleMessage.MessageLevel.WARNING -> "warning"
-            android.webkit.ConsoleMessage.MessageLevel.ERROR -> "crit"
-            else -> "notice"
-        }
+    /**
+     * A page's console message, as LunaSysMgr logged it. [priority] is syslog's: "warning" for
+     * console.warn, "crit" for console.error, "notice" for the rest.
+     */
+    fun console(appId: String, priority: String, message: String, source: String?, line: Int) {
         log(priority, "LunaSysMgr", "{LunaSysMgrJS}: $appId: ${message.replace('\n', ' ')}, ${webosSource(source)}:$line")
     }
 
@@ -56,13 +53,13 @@ object SysLog {
         // Android's clock has milliseconds; the TouchPad printed microseconds.
         val micros = (now % 1000) * 1000
         val time = synchronized(stamp) { stamp.format(Date(now)) }
-        queue.offer("$time.${"%06d".format(micros)}Z [${SystemClock.uptimeMillis() / 1000}] $HOST user.$priority $process: $text\n")
+        queue.offer("$time.${"%06d".format(micros)}Z [${System.nanoTime() / 1_000_000_000}] $HOST user.$priority $process: $text\n")
     }
 
     /** A page's URL as the file it was on webOS: Lunacy serves each app at its webOS path. */
     private fun webosSource(source: String?): String {
         if (source.isNullOrEmpty()) return ""
-        val path = runCatching { android.net.Uri.parse(source).path }.getOrNull() ?: return source
+        val path = runCatching { ServeUrl(source).path }.getOrNull() ?: return source
         return if (path.startsWith("/")) "file://$path" else source
     }
 

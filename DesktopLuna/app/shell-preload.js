@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("lunade", {
 	onPanelAdded: on("lunade:panel-added"),
 	onPanelRemoved: on("lunade:panel-removed"),
 	onBannerRemove: on("lunade:banner-remove"),
+	onNetwork: on("lunade:network"),
 	onHome: on("lunade:home"),
 	onCardAdded: on("lunade:card-added"),
 	onCardReady: on("lunade:card-ready"),

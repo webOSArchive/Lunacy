@@ -303,7 +303,8 @@
 	function launch(entry, tapped) {
 		glow(tapped);
 		window.lunade.launch(entry);
-		var running = cards.some(function (c) { return c.appId === entry.id; });
+		// The Wi-Fi tile is Luna DE's network switch, not an app: nothing loads, so no loading card.
+		var running = cards.some(function (c) { return c.appId === entry.id; }) || entry.switch;
 		// The launcher stays, glowing, for the moment the icon needs to be seen (then the card).
 		setTimeout(function () { closeLauncher(); if (!running) { launching(entry); } }, tapped && !$("launcher").hidden ? 120 : 0);
 	}
@@ -481,6 +482,9 @@
 		banners = banners.filter(function (b) { return d.id ? b.id !== d.id : b.appId !== d.appId; });
 		if (bannerOn && (d.id ? bannerOn.id === d.id : bannerOn.appId === d.appId)) { endBanner(); }
 	});
+
+	// The simulated network (the Wi-Fi tile): the status bar's Wi-Fi icon shows it gone.
+	window.lunade.onNetwork(function (d) { document.querySelector("#status-right .wifi").classList.toggle("off", !d.online); });
 
 	/** The launcher's pages and the quick-launch bar, drawn from what the host has installed. */
 	function loadApps(first) {

@@ -244,7 +244,11 @@ open class AppWindow(
                     return true
                 }
                 Log.i(AppServer.TAG, "[$appId] ${m.messageLevel()} ${m.sourceId()?.substringAfterLast('/')}:${m.lineNumber()} ${m.message()}")
-                SysLog.console(appId, m.messageLevel(), m.message(), m.sourceId(), m.lineNumber())
+                SysLog.console(appId, when (m.messageLevel()) {
+                    android.webkit.ConsoleMessage.MessageLevel.WARNING -> "warning"
+                    android.webkit.ConsoleMessage.MessageLevel.ERROR -> "crit"
+                    else -> "notice"
+                }, m.message(), m.sourceId(), m.lineNumber())
                 return true
             }
             override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {

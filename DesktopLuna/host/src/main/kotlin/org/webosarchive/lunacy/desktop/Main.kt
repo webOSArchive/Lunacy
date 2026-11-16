@@ -49,11 +49,13 @@ fun main(args: Array<String>) {
 
     // The same trees Gradle packages into the APK (AndroidLuna/build.gradle.kts): the assets,
     // what fetch-assets.sh laid down, and CoreApps as apps/.
-    val assets = FolderAssets(listOf(
+    // Without the apps that are Android's side of Lunacy: Luna DE is a desktop environment that
+    // reuses the Android work, not an Android one (codepoet, 2026-11-16).
+    val assets = org.webosarchive.lunacy.core.Without(FolderAssets(listOf(
         "" to File(repo, "AndroidLuna/src/main/assets"),
         "" to File(repo, "AndroidLuna/local-assets"),
         "apps/" to File(repo, "CoreApps"),
-    ))
+    )), ANDROID_ONLY_APPS, ANDROID_ONLY_ROM)
     // Native requests (the network shim's): the bundled CA certificates, and the host's own cookie
     // jar for now (Docs/luna-de.md: the Electron session's to come).
     org.webosarchive.lunacy.card.Http.init(assets, org.webosarchive.lunacy.core.MemoryCookies())
@@ -86,7 +88,7 @@ fun main(args: Array<String>) {
     }
     // The application manager: launch and open, the content handlers, the app and launch point
     // lists, and installing packages (appinstaller, appInstallService), over Luna DE's shell.
-    val desktopRoot = DesktopRoot(webosRoot)
+    val desktopRoot = DesktopRoot(webosRoot, File(data, "jshost"), repo, rom)
     val packages = org.webosarchive.lunacy.card.Packages(installed, File(data, "cache/packages"), desktopRoot)
     val addedLaunchPoints = org.webosarchive.lunacy.card.LaunchPoints(webosRoot, files)
     val shell = DesktopShell(main, registry, files, packages, addedLaunchPoints, data)
@@ -94,7 +96,10 @@ fun main(args: Array<String>) {
     main.call {
         db8.register(bus); tempdb.register(bus)
         systemService.register(bus)
-        org.webosarchive.lunacy.card.ConnectionManager(DesktopNetwork(main)).register(bus)
+        val network = DesktopNetwork(main)
+        shell.network = network
+        org.webosarchive.lunacy.card.Http.offline = { network.simulatedDown }
+        org.webosarchive.lunacy.card.ConnectionManager(network).register(bus)
         // After db8: the activity manager reads its persisted activities back as it registers.
         org.webosarchive.lunacy.card.ActivityManager(DesktopBattery, DesktopPower(main)).register(bus)
         shell.configurator = org.webosarchive.lunacy.card.Configurator(files, db8, tempdb, webosRoot, bus)
@@ -102,6 +107,16 @@ fun main(args: Array<String>) {
             org.webosarchive.lunacy.card.ContentHandlers(registry, webosRoot), addedLaunchPoints, files, packages, desktopRoot, shell)
             .also { it.register(bus) }
         shell.configurator.run()
+        // JS services: each package under /usr/palm/services, the ROM's and installed ones', in
+        // its own Node process, started by its first call (JsServices). /var/log/messages is
+        // where their logs and the apps' go, as on a device.
+        org.webosarchive.lunacy.card.SysLog.start(webosRoot)
+        desktopRoot.prepare()
+        val js = org.webosarchive.lunacy.card.JsServices(bus, installed, desktopRoot)
+        shell.jsServices = js
+        js.reload()
+        Runtime.getRuntime().addShutdownHook(Thread { runCatching { js.stopAll() } })
+        shell.finishFirstUse(webosRoot, bus)
     }
     Log.i(Lunacy.TAG, "Luna DE host: ${registry.apps.size} apps, data in $data")
 
@@ -136,7 +151,8 @@ fun main(args: Array<String>) {
         val apps = registry.launchPoints
         val byId = apps.associateBy { it.id }
         fun entry(a: org.webosarchive.lunacy.card.AppInfo) = entryOf(a)
-        val pages = launcherPages.initialPages.map { (d, name) -> d to (name to ArrayList<org.webosarchive.lunacy.card.AppInfo>()) }
+        // No "android" tab: on Android it holds Android's own apps (shell/AndroidApps).
+        val pages = launcherPages.initialPages.filter { (_, name) -> name != "android" }.map { (d, name) -> d to (name to ArrayList<org.webosarchive.lunacy.card.AppInfo>()) }
         val placed = HashSet<String>()
         for ((designator, ids) in launcherPages.defaultLayout) {
             val page = pages.firstOrNull { it.first == designator }?.second?.second ?: continue
@@ -226,6 +242,26 @@ fun main(args: Array<String>) {
  * An app as the shell launches it: its page's URL, and whether it has a window of its own or
  * starts headless and opens its cards itself (appinfo.json's noWindow, as Email and Calendar do).
  */
+/**
+ * Bundled apps Luna DE leaves out, each Android's side of Lunacy: the Android account and its
+ * template, Android's notifications as dashboards, First Use and the mail sign-in page (both made
+ * for Android), Lunacy's own APK updates, the screen saver's settings, and the tiles that only
+ * open one of Android's settings screens. Wi-Fi stays: here it turns a simulated network off and
+ * on (DesktopShell.launch).
+ */
+private val ANDROID_ONLY_APPS = setOf(
+    "org.webosarchive.lunacy.androidaccount", "org.webosarchive.lunacy.notifications", "org.webosarchive.lunacy.firstuse",
+    "org.webosarchive.lunacy.signin", "com.palm.app.updates", "com.palm.app.exhibitionpreferences",
+    "com.palm.app.bluetooth", "com.palm.app.languagepicker", "com.palm.app.dateandtime",
+)
+
+/**
+ * And of the ROM: the account templates that need Android to sign in or to sync (the Android
+ * account; Google and Microsoft through Lunacy's sign-in page and OAuth service).
+ */
+private val ANDROID_ONLY_ROM = listOf("org.webosarchive.lunacy.androidaccount", "org.webosarchive.lunacy.google",
+    "org.webosarchive.lunacy.microsoft", "org.webosarchive.lunacy.microsoft365").map { "usr/palm/public/accounts/$it" }
+
 /** The wallpaper Lunacy shows until one is picked (Luna.DEFAULT_WALLPAPER on Android). */
 private const val DEFAULT_WALLPAPER = "22.jpg"
 
@@ -233,6 +269,8 @@ private fun entryOf(a: org.webosarchive.lunacy.card.AppInfo) = JSONObject().put(
     .put("url", AppServer.appUrl(a.id, a.main, a.dir)).put("noWindow", a.noWindow)
     .put("icon", "/icon?id=" + java.net.URLEncoder.encode(a.id, "UTF-8"))
     .put("splash", "/splash?id=" + java.net.URLEncoder.encode(a.id, "UTF-8")).put("splashOwn", a.splashIcon.isNotEmpty())
+    // A tile that is one of Luna DE's switches (Wi-Fi: the simulated network), not an app with a card.
+    .put("switch", a.androidSettings == "wifi")
 
 private fun query(ex: HttpExchange): Map<String, String> =
     ex.requestURI.rawQuery.orEmpty().split('&').filter { it.isNotEmpty() }.associate {

@@ -47,8 +47,16 @@ for (const e of (process.env.LUNACY_MEDIA || "").split(":")) {
 	if (i > 0) { MEDIA[e.slice(0, i).toLowerCase()] = e.slice(i + 1); }
 }
 const exists0 = fs.existsSync;
+// The host's own shell, where the webOS root has no /bin/sh of its own (Luna DE, which has no
+// busybox): LUNACY_SHELL. Android's root has busybox's, and its fallback is /system/bin/sh.
+const HOST_SHELL = process.env.LUNACY_SHELL || "";
 function real(p) {
 	if (typeof p !== "string" || !WEBOS.test(p)) { return p; }
+	// A path already inside the root is real. On Android the root is under /data, which is no
+	// webOS folder; on a desktop it can be under /home or /tmp, which are, and a path the host
+	// built from the root (a module's own __dirname) came back mapped a second time.
+	if (p === ROOT || p.indexOf(ROOT + "/") === 0) { return p; }
+	if (HOST_SHELL && p === "/bin/sh" && !exists0(ROOT + p)) { return HOST_SHELL; }
 	const m = /^\/media\/internal\/([^\/]+)(\/.*)?$/.exec(path.posix.normalize(p));
 	const android = m && MEDIA[m[1].toLowerCase()];
 	if (android && !exists0(ROOT + "/media/internal/" + m[1])) { return android + (m[2] || ""); }
@@ -228,10 +236,10 @@ cp.execFileSync = function (file, args, opts) {
 };
 cp.exec = function (cmd, opts, cb) {
 	if (typeof opts === "function") { cb = opts; opts = {}; }
-	return exec0.call(cp, realAll(cmd), Object.assign(childOptions(opts), { shell: "/system/bin/sh" }), cb);
+	return exec0.call(cp, realAll(cmd), Object.assign(childOptions(opts), { shell: HOST_SHELL || "/system/bin/sh" }), cb);
 };
 cp.execSync = function (cmd, opts) {
-	return execSync0.call(cp, realAll(cmd), Object.assign(childOptions(opts), { shell: "/system/bin/sh" }));
+	return execSync0.call(cp, realAll(cmd), Object.assign(childOptions(opts), { shell: HOST_SHELL || "/system/bin/sh" }));
 };
 
 // ---- node 0.4 ----

@@ -25,4 +25,13 @@ interface ScriptHost {
     fun environment(caller: String): Map<String, String>
     /** The shell to use when the root has no /bin/sh. */
     val fallbackShell: String get() = "/bin/sh"
+
+    // ---- JS services (JsServices) ----
+
+    /** The Node that runs JS services: nodejs-mobile's on Android, a Node of the same major version on the desktop. */
+    val node: File
+    /** Lunacy's own scripts for Node: host.js (the service host), curl.js, luna-send.js. */
+    val hostScripts: File
+    /** A service's environment: [environment], and whatever else this host gives a service's process. */
+    fun serviceEnvironment(name: String): Map<String, String> = environment(name)
 }

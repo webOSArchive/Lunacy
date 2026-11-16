@@ -1,8 +1,7 @@
 package org.webosarchive.lunacy.card
 
-import android.os.Handler
-import android.os.Looper
-import android.util.Log
+import org.webosarchive.lunacy.core.Log
+import org.webosarchive.lunacy.core.Platform
 import org.json.JSONObject
 import java.io.IOException
 import java.io.OutputStream
@@ -42,7 +41,7 @@ class ServiceProcess(
      */
     private val actsForApps: Boolean = false,
 ) {
-    private val main = Handler(Looper.getMainLooper())
+    private val main = Platform.scheduler
     private var process: Process? = null
     private var stdin: OutputStream? = null
     var ended = false

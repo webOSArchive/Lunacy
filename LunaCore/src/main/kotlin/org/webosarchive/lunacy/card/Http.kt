@@ -51,6 +51,13 @@ object Http {
     fun init(assets: Assets, cookies: Cookies) { this.assets = assets; this.cookies = cookies }
 
     /**
+     * Whether the host is keeping Lunacy off the network: Luna DE's simulated lost connection, so
+     * that a developer can see their app without one (DesktopNetwork). A request made then fails
+     * as one does with no route. Android never sets it.
+     */
+    @Volatile var offline: () -> Boolean = { false }
+
+    /**
      * Sends the request and follows redirects as the TouchPad's WebKit did: 301/302/303 turn a
      * POST into a GET without its body (headers stay), and each hop sends the previous URL as
      * Referer. A hop to another protocol, host or port drops the request's own Authorization
@@ -59,6 +66,7 @@ object Http {
      * already read.
      */
     fun connect(req: Request, tracker: Tracker? = null): HttpURLConnection {
+        if (offline()) throw java.io.IOException("Network is unreachable")
         var url = URL(req.url)
         var method = req.method.uppercase()
         var body = req.body

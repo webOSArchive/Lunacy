@@ -19,6 +19,43 @@ interface Assets {
 }
 
 /**
+ * [base] without some of what it bundles: whole apps (`apps/<id>`) and paths of the webOS root's
+ * ROM (`rootfs/<path>`, dropped from `rootfs.index` too). Luna DE leaves out what is Android's
+ * side of Lunacy (the Android account and its template, Android's notifications, the shortcuts to
+ * Android's settings), which has nothing to stand on at a desktop.
+ */
+class Without(private val base: Assets, private val apps: Set<String>, private val romPaths: List<String> = emptyList()) : Assets {
+    private fun hidden(path: String): Boolean {
+        val p = path.trimStart('/')
+        if (p.startsWith("apps/")) return p.removePrefix("apps/").substringBefore('/') in apps
+        if (p.startsWith("rootfs/")) return romHidden(p.removePrefix("rootfs/"))
+        return false
+    }
+
+    private fun romHidden(rel: String) = romPaths.any { rel == it || rel.startsWith("$it/") }
+
+    override fun open(path: String): InputStream {
+        if (hidden(path)) throw IOException("no asset $path")
+        if (path.trimStart('/') == "rootfs.index" && romPaths.isNotEmpty()) {
+            val kept = base.open(path).bufferedReader().use { r -> r.readLines().filter { !romHidden(it) } }
+            return kept.joinToString("") { it + "\n" }.byteInputStream()
+        }
+        return base.open(path)
+    }
+
+    override fun list(path: String): Array<String>? {
+        if (hidden(path)) return null
+        val names = base.list(path) ?: return null
+        val p = path.trim('/')
+        return when {
+            p == "apps" -> names.filter { it !in apps }.toTypedArray()
+            p.startsWith("rootfs") -> names.filter { !hidden("$p/$it") }.toTypedArray()
+            else -> names
+        }
+    }
+}
+
+/**
  * Folders laid over each other as one asset tree, the first holding a path winning: Luna DE's
  * assets, from the same folders Gradle packages into the APK (AndroidLuna/src/main/assets,
  * local-assets, and CoreApps as apps/).

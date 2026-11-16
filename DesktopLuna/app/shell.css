@@ -33,6 +33,7 @@ body.maximized #title { cursor: pointer; }   /* the app menu, as the TouchPad's 
 #status-right { display: flex; align-items: center; gap: 8px; padding-right: 10px; height: 100%; }
 #status-right .icon { width: 22px; height: 20px; background: center / contain no-repeat; }
 #status-right .wifi { background-image: url("../../AndroidLuna/src/main/assets/luna/images/statusBar/wifi-3.png"); }
+#status-right .wifi.off { background-image: url("../../AndroidLuna/src/main/assets/luna/images/statusBar/wifi-0.png"); opacity: 0.6; }
 #status-right .battery { width: 17px; background-image: url("../../AndroidLuna/src/main/assets/luna/images/statusBar/battery-charged.png"); }
 #clock { font-weight: bold; min-width: 42px; text-align: right; }
 

@@ -225,6 +225,14 @@ Not every move is a pure one, and the plan doesn't pretend otherwise:
   by rotating, and the page renders at that width (rule 3). Other devices (Pre3, Veer, Pre,
   Pixi) come later as a device picker using `DeviceProfile`'s values (codepoet, 2026-11-15:
   "initial window sizes will be 1024x768 and 768x1024 to match touchpad").
+- **Keys: the old SDK emulator's, wherever they fit** (codepoet, 2026-11-15, from the SDK's
+  emulator documentation). End (Fn+Right Arrow on a Mac) opens and closes the launcher; Esc is
+  the back gesture, sent to the app as on Android; Home (Fn+Left Arrow) minimises the card to the
+  card view and maximises it again; Left and Right switch cards in the card view; F6, F7, F8 and F9
+  turn the device "up", "down", "right" and "left" (12, 6, 3 and 9 o'clock); F5 was "shake" there
+  (not implemented in the emulator either). Luna DE's own keys move out of their way: reload
+  becomes Ctrl/Cmd+R (F5 today), and the home button's F1 stays as a spare. F12 for DevTools is
+  Luna DE's own.
 - **DevTools** open in the window. That is the big improvement over the old emulator, and
   over `chrome://inspect` on a tablet.
 - **JS services** run under a Node the same major version as nodejs-mobile's (Node 12), so

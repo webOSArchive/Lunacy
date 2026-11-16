@@ -34,7 +34,51 @@ after 1.0.
 Before shipping 1.0, as for every release: the latest App Catalog bundled (6.3.2931 since
 2026-11-15, codepoet's package for 1.0).
 
-## Where things stand (2026-11-15)
+## Where things stand (2026-11-15, end of day)
+
+**1.0 is out** (build 635, released by codepoet; F-Droid feed verified). That evening two bugs
+turned up that live only in a fresh install's first run, which no round had covered: every
+round device had been set up long before and restarted since.
+
+**1.0.1, to be released 2026-11-16** (codepoet: "too embarrassing" to release the same night).
+Every fix is on main, pushed:
+- **Android contacts reach the Contacts list on a new install** (68d0f0e). The activity files
+  the configurator holds back until First Use (the contacts linker's watch among them) were
+  only sent at the next start of Lunacy, so a new install's Android contacts sat in db8 behind
+  an empty list. In every release since 2026-10-07. A 1.0.0 install is mended by the update
+  itself (checked: an in-place update made 250 people from 455 Android contacts).
+- **Adding the Android account from Contacts' or Calendar's first screen makes the account**
+  (c932b97). Its page left out the template First Launch needs. Someone who hit this on 1.0.0
+  adds the account once more after updating (Accounts, or the app's account settings).
+- **A dashboard's two-digit count stays on one line** (f53b59a, Mojo patch 0005; the SDK
+  regenerated, webos-sdk-redux 772589a).
+- **Tests for it** (a2fdbfc): `Workbench/fresh-install.sh` (a clean install, First Use over the
+  bus, the Android account, device-test in that same run), two device-test checks (every waiting
+  activity is live; contacts have people), a test.sh check (account pages return their
+  template), and `Workbench/apk-inventory.py`, which build.sh runs on every APK.
+
+**Releasing 1.0.1:**
+1. This checkout to main (`git checkout main`; the luna-de work is on its own branch). `out/`
+   holds a luna-de debug APK: `./build.sh publish` clears it.
+2. `gradle.properties` to `versionName=1.0.1`, committed.
+3. `./test.sh`, then `./build.sh publish` (six APKs, the GPL tar, SHA256SUMS, the inventory).
+4. The fresh-install pass first, on the Kyocera (it erases Lunacy's data there):
+   `Workbench/fresh-install.sh 192.168.10.58:5555 out/AndroidLuna-arm64-debug.apk Docs/test-results/NNN/fresh-kyocera.txt`,
+   then by hand: the Android account from Contacts' first screen (test-plan section 9).
+5. `device-test.sh` on the Fold3 and the Nexus 7 (the Fold3 and the Kyocera run luna-de builds
+   now: reinstall them from `out/`); the PDK sweep. The Pixel Tablet is codepoet's for 1.0.0
+   testing: don't touch it unless they open it.
+6. The F-Droid feed (`Meta/fdroid/update-repo.sh`; codepoet uploads only `repo/` and `archive/`).
+7. Release notes: the three cases for 1.0.0 users of the Android account (mended by the update;
+   already fine if Lunacy was restarted since First Use; add the account once more if it was
+   never made).
+
+**Then Luna DE**, on the `luna-de` branch (Docs/luna-de.md there): Lunacy on the desktop for
+webOS developers, in one Electron window running the shell, sharing LunaCore with this Android
+build. Main stays bug fixes only, each cherry-picked onto luna-de, until that work is done and
+proven (codepoet).
+
+## Earlier on 2026-11-15: 1.0
 
 **1.0 is being made (codepoet, 2026-11-15).** 0.9.7 was well received and stable, so the
 feature freeze (2026-11-09, at 0.9.5) was lifted for a few changes, all done and checked on

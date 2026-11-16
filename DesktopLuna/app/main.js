@@ -198,6 +198,9 @@ function tell(wc, what, value) {
 	const page = pageIds.get(wc.id);
 	if (page) { postTell(page, what, value); }
 }
+function pageGone(page) {
+	if (host) { net.fetch(host + "/gone?w=" + encodeURIComponent(page), { method: "POST" }).catch(() => {}); }
+}
 function postTell(page, what, value) {
 	const q = new URLSearchParams({ w: page, do: what, v: value });
 	net.fetch(host + "/window?" + q.toString(), { method: "POST" }).catch(() => {});
@@ -347,6 +350,9 @@ function askLaunch(id, params) {
 /** Each page's id, as its preload told the host (app-preload.js), by its webContents' id. */
 const pageIds = new Map();
 ipcMain.on("lunade:page", (e, page) => {
+	// The view's last page has gone (a reload, a navigation): the host forgets it.
+	const before = pageIds.get(e.sender.id);
+	if (before && before !== page) { pageGone(before); }
 	pageIds.set(e.sender.id, page);
 	// What this view's page is (its type, its focus) goes to each page it loads.
 	const t = told.get(e.sender.id) || {};
@@ -415,7 +421,16 @@ function turn(to) {
 // F1 as a spare home button.
 const TURN = { F6: "up", F7: "down", F8: "right", F9: "left" };
 app.on("web-contents-created", (e, wc) => {
-	wc.on("destroyed", () => { pageIds.delete(wc.id); told.delete(wc.id); pendingAttributes.delete(wc.id); });
+	// A page that has gone is no longer one of its app's windows: the host is told here, by the
+	// main process, which always knows. (The page's own word, a beacon as it unloads, doesn't
+	// get out of a view that is being destroyed; the host then took the next launch of the app
+	// for a relaunch of a window that wasn't there, and no card came.)
+	const id = wc.id;
+	wc.on("destroyed", () => {
+		const page = pageIds.get(id);
+		if (page) { pageGone(page); }
+		pageIds.delete(id); told.delete(id); pendingAttributes.delete(id);
+	});
 	wc.on("before-input-event", (ev, input) => {
 		if (input.type !== "keyDown") { return; }
 		const isShell = shell && wc === shell.webContents;

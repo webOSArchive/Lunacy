@@ -105,7 +105,15 @@ class DesktopShell(
 
     // ---- the apps that are running ----
 
-    private fun windowsOf(appId: String) = windows.values.filter { it.appId == appId }.sortedBy { it.pid }
+    /**
+     * [appId]'s windows, oldest first. A page that has stopped asking for its scripts has gone
+     * without anyone saying so (Electron tells us of every page it destroys; this is for the one
+     * it didn't): it is dropped here, so a launch never becomes a relaunch of a window that isn't there.
+     */
+    private fun windowsOf(appId: String): List<DesktopWindow> {
+        windows.values.filter { it.appId == appId && !it.alive }.forEach { Log.w(Lunacy.TAG, "$appId: a page stopped answering; forgotten"); gone(it.pageId) }
+        return windows.values.filter { it.appId == appId }.sortedBy { it.pid }
+    }
 
     override val running: Map<String, List<RunningWindow>>
         get() = windows.values.sortedBy { it.pid }.groupBy { it.appId }

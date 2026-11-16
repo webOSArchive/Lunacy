@@ -88,8 +88,17 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
         else -> "null"
     }
 
+    /** When the page last asked for its scripts: a live page asks again at once, every 25 s at most. */
+    @Volatile var lastPoll = System.currentTimeMillis()
+        private set
+    @Volatile private var polling = false
+    /** Whether the page is still there to take a script: it is waiting for one now, or asked not long ago. */
+    val alive get() = polling || System.currentTimeMillis() - lastPoll < STALE_MS
+
     /** The scripts waiting for the page, after waiting up to [ms] for the first. */
-    fun take(ms: Long): List<String> {
+    fun take(ms: Long): List<String> = try { polling = true; takeNow(ms) } finally { polling = false; lastPoll = System.currentTimeMillis() }
+
+    private fun takeNow(ms: Long): List<String> {
         val first = outbox.poll(ms, TimeUnit.MILLISECONDS) ?: return emptyList()
         val all = arrayListOf(first)
         outbox.drainTo(all)
@@ -236,5 +245,7 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
     companion object {
         /** Plausible process ids, in the range webOS apps started at (AppWindow's). */
         val nextPid = AtomicInteger(1183)
+        /** How long a page may go without asking for its scripts before it is taken for gone. */
+        const val STALE_MS = 60_000L
     }
 }

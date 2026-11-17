@@ -270,7 +270,10 @@ host's where the root has none). **2026-11-17, on the Fold3 again:** build 725 (
 merged in, those moves included) 50 passed, 0 failed (`Docs/test-results/725/fold3.txt`); build
 733 (AppLifecycle in LunaCore) 49 passed, 0 failed (`Docs/test-results/733/fold3.txt`; the one
 check fewer is the on-demand SMTP service, which that run reports as not started rather than
-ready). Still owed, as above: an Android 5 device and a fresh install.
+ready); build 737 (UniversalSearch in LunaCore) 50 passed, 0 failed
+(`Docs/test-results/737/fold3.txt`), and its Just Type lists read the same before and after
+the move (ten entries, each on or off as it was). Still owed, as above: an Android 5 device and
+a fresh install.
 
 **Ratchet items (desktop):** Electron runs with `--no-sandbox` in development (the Linux
 setuid helper needs root); app windows share the page's world with the preload

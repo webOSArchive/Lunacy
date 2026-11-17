@@ -83,18 +83,36 @@ class DesktopShell(
     @Volatile var device = org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD
         private set
 
+    /**
+     * As "this screen": a TouchPad at the size Luna DE's window is, as Lunacy is on an Android
+     * tablet (it fills the screen it finds, and tells apps of that screen in TouchPad px:
+     * ShellActivity.deviceInfo). The long and the short side in a page's px, which Electron
+     * gives as the window changes; null as a TouchPad or a Pre3 at their own sizes.
+     */
+    @Volatile private var fill: IntArray? = null
+    val filling get() = fill != null
+
     /** The screen as the device names it (deviceInfo's screenWidth and screenHeight), and the scale pages are drawn at. */
-    val screenWidth get() = if (device == org.webosarchive.lunacy.card.DeviceProfile.PRE3) 480 else 1024
-    val screenHeight get() = if (device == org.webosarchive.lunacy.card.DeviceProfile.PRE3) 800 else 768
+    val screenWidth get() = fill?.get(0) ?: if (device == org.webosarchive.lunacy.card.DeviceProfile.PRE3) 480 else 1024
+    val screenHeight get() = fill?.get(1) ?: if (device == org.webosarchive.lunacy.card.DeviceProfile.PRE3) 800 else 768
+    /** Screen px per page px. As this screen the size is already in a page's px (Electron scales the pages). */
     val scale get() = if (device == org.webosarchive.lunacy.card.DeviceProfile.PRE3) 1.5 else 1.0
 
-    fun setDevice(name: String) = main.call {
+    /** As this screen, the window changed size: [w] by [h] in a page's px, as it is held. */
+    fun setScreen(w: Int, h: Int) {
+        if (fill == null || w <= 0 || h <= 0) return
+        fill = intArrayOf(maxOf(w, h), minOf(w, h))
+    }
+
+    /** Luna DE becomes [name]: "touchpad", "pre3", or "screen" at [w] by [h] (a page's px, as the window is held). */
+    fun setDevice(name: String, w: Int = 0, h: Int = 0) = main.call {
         // Every app ends first: a page is told its device once, as it starts.
         lifecycle.windows.forEach { lifecycle.windowClosed(it) }
         device = if (name == "pre3") org.webosarchive.lunacy.card.DeviceProfile.PRE3 else org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD
-        // Held the way the device names its screen: a TouchPad wide, a Pre3 tall.
-        orientation = if (device.naturalLandscape) "right" else "up"
-        Log.i(Lunacy.TAG, "device: ${device.modelNameAscii}")
+        fill = if (name == "screen" && w > 0 && h > 0) intArrayOf(maxOf(w, h), minOf(w, h)) else null
+        // Held the way the device names its screen: a TouchPad wide, a Pre3 tall; this screen as its window is shaped.
+        orientation = if (fill != null) (if (h > w) "up" else "right") else if (device.naturalLandscape) "right" else "up"
+        Log.i(Lunacy.TAG, "device: ${device.modelNameAscii}${fill?.let { " at this screen's size, ${it[0]} x ${it[1]}" } ?: ""}")
         // As the other device starting: its boot-time apps again.
         for (id in AppLifecycle.LAUNCH_AT_BOOT) if (registry.get(id) != null && !lifecycle.isRunning(id))
             lifecycle.launch(id, JSONObject().put("launchedAtBoot", true), Placement.NO_CARD)

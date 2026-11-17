@@ -34,13 +34,27 @@ const IS_WIN = process.platform === "win32";
 // luna-platform.conf, read off the device 2026-11-16), so a page lays out 320 wide and the
 // status bar's 28 px are the screen's 42. The device is the host's to say (its /shell); the
 // window, its zoom and every measure here follow it. Sizes here are the screen's own px.
+//
+// Or this screen ("screen"): a TouchPad at whatever size the window is, as Lunacy is on an Android
+// tablet, where it fills the screen it finds. The window is then resizable (and F11 fills the
+// screen with it); the screen is the window's, less the bezel; and it is drawn at Android's
+// tablet scale (Luna.density: the short side about 768 shell px, in whole numbers, never under 1),
+// so a large or dense monitor shows a TouchPad's proportions, not a tiny one. Wide or tall is
+// how the window is shaped.
 const BEZEL = 44;
+const FILL = "screen";
+const MIN_FILL = { width: 480, height: 400 };
 let device = { id: "touchpad", name: "HP TouchPad", width: 1024, height: 768, scale: 1, virtualKeyboard: true };
 let orientation = "right";
+/** As this screen: the window's screen area, in its own px. */
+let fill = { width: 1024, height: 768 };
+const filling = () => device.id === FILL;
+const fillScale = (size) => Math.max(1, Math.round(Math.min(size.width, size.height) / 768));
 const portrait = () => orientation === "up" || orientation === "down";
 const STATUS_CSS = 28;
 const statusPx = () => Math.round(STATUS_CSS * device.scale);
 const screenSize = () => {
+	if (filling()) { return { width: fill.width, height: fill.height }; }
 	const long = Math.max(device.width, device.height), short = Math.min(device.width, device.height);
 	return portrait() ? { width: short, height: long } : { width: long, height: short };
 };
@@ -438,7 +452,79 @@ function openShell() {
 	shell.removeMenu();
 	shell.loadFile(path.join(__dirname, "shell.html"));
 	shell.on("closed", () => { shell = null; app.quit(); });
+	// As this screen, the window's size is the screen's: every change of it is the screen changing.
+	shell.on("resize", () => { if (filling()) { fillChanged(); } });
+	for (const ev of ["enter-full-screen", "leave-full-screen", "maximize", "unmaximize"]) { shell.on(ev, () => { if (filling()) { fillChanged(); } }); }
 }
+
+/** The window's screen area as it is now: its content, less the bezel. */
+function windowFill() {
+	const [w, h] = shell.getContentSize();
+	return { width: Math.max(MIN_FILL.width, w), height: Math.max(MIN_FILL.height, h - BEZEL) };
+}
+
+/**
+ * As this screen, the window changed size: the screen is that size now. The scale follows it
+ * (and the shell page's zoom and every app page's with it), a change between wide and tall is
+ * the device turning, the cards take the new shape, and the host hears the size apps are told.
+ */
+let fillTimer = null;
+function fillChanged() {
+	clearTimeout(fillTimer);
+	fillTimer = setTimeout(applyFill, 30);
+}
+async function applyFill() {
+	if (!shell || !filling()) { return; }
+	const size = windowFill();
+	const scale = fillScale(size), was = orientation, to = size.height > size.width ? "up" : "right";
+	if (size.width === fill.width && size.height === fill.height && scale === device.scale && to === was) { return; }
+	fill = size;
+	device.scale = scale;
+	const here = [...cards.values()].filter((c) => !c.popped);
+	if (to !== was) {
+		orientation = to;
+		await Promise.all(here.map((c) => orient(c.view.webContents, to)));
+	}
+	try { shell.webContents.setZoomFactor(device.scale); } catch (e) {}
+	for (const v of views.values()) { try { if (!(v.card && v.card.popped)) { v.view.webContents.setZoomFactor(pageScale(v.view.webContents)); } } catch (e) {} }
+	const r = cardRect();
+	for (const c of here) { c.view.setBounds(c === keyboardCard && c.shrunk ? { x: r.x, y: r.y, width: r.width, height: r.height - KEYBOARD } : r); }
+	send("luna-de:screen", screenForShell());
+	hostPost("/screen", fillForHost());
+	if (to !== was) { hostPost("/orientation", { v: to }); }
+}
+/** The screen as the host tells apps of it: in a page's px (the window's over the scale). */
+function fillForHost() { return { w: Math.round(fill.width / device.scale), h: Math.round(fill.height / device.scale) }; }
+
+/** The window as the device has it: a fixed size for a TouchPad or a Pre3, free as this screen (where it starts filling the display). */
+function shapeWindow() {
+	if (!shell) { return; }
+	if (filling()) {
+		shell.setResizable(true);
+		shell.setMinimumSize(MIN_FILL.width, MIN_FILL.height + BEZEL);
+		if (!shell.isFullScreen() && !shell.isMaximized()) { shell.maximize(); }
+		return;
+	}
+	if (shell.isFullScreen()) { shell.setFullScreen(false); }
+	if (shell.isMaximized()) { shell.unmaximize(); }
+	const size = screenSize();
+	shell.setResizable(true);
+	shell.setMinimumSize(1, 1);
+	shell.setContentSize(size.width, size.height + BEZEL);
+	shell.setResizable(false);
+}
+
+/** F11: Luna DE fills the display, as this screen (becoming it first), and comes back out of it. */
+async function toggleFullScreen() {
+	if (!shell) { return; }
+	if (!filling()) { await setDevice(FILL); }
+	shell.setFullScreen(!shell.isFullScreen());
+}
+
+/** The device Luna DE was last, kept beside its data: it starts as that again. */
+const savedDeviceFile = () => path.join(dataDir(), "luna-de-device.json");
+function savedDevice() { try { return JSON.parse(fs.readFileSync(savedDeviceFile(), "utf8")).device || ""; } catch (e) { return ""; } }
+function saveDevice(id) { try { fs.mkdirSync(dataDir(), { recursive: true }); fs.writeFileSync(savedDeviceFile(), JSON.stringify({ device: id })); } catch (e) {} }
 
 /**
  * A card popped out of the device: its live view moved into a window of its own, at the
@@ -734,6 +820,14 @@ function orient(wc, to) {
 /** The device turned: every page is told how it is held, then the window and the cards take the screen's new shape. */
 async function turn(to) {
 	if (to === orientation || !shell) { return; }
+	if (filling()) {
+		// This screen is held the way its window is shaped: turning it is the window's width and
+		// height changing places, where the window is free to (not filling the display).
+		const tall = to === "up" || to === "down";
+		if (tall === portrait() || shell.isFullScreen() || shell.isMaximized()) { return; }
+		shell.setContentSize(fill.height, fill.width + BEZEL);
+		return;
+	}
 	orientation = to;
 	const here = [...cards.values()].filter((c) => !c.popped);
 	await Promise.all(here.map((c) => orient(c.view.webContents, to)));
@@ -812,19 +906,27 @@ async function readDevice() {
  */
 async function setDevice(id) {
 	if (id === device.id || !shell) { return device.id; }
+	// As this screen it starts at the size the window has, and takes the display's as the window does.
+	const q = new URLSearchParams({ v: id });
+	if (id === FILL) {
+		const size = windowFill(), k = fillScale(size);
+		q.set("w", Math.round(size.width / k)); q.set("h", Math.round(size.height / k));
+	}
 	// The host ends every app first (its events close their views), then is the other device.
-	await net.fetch(host + "/device?v=" + id, { method: "POST" }).catch(() => {});
+	await net.fetch(host + "/device?" + q.toString(), { method: "POST" }).catch(() => {});
 	await readDevice();
-	const size = screenSize();
-	shell.setResizable(true);
-	shell.setContentSize(size.width, size.height + BEZEL);
-	shell.setResizable(false);
+	if (filling()) { fill = windowFill(); device.scale = fillScale(fill); orientation = fill.height > fill.width ? "up" : "right"; }
+	shapeWindow();
 	try { shell.webContents.setZoomFactor(device.scale); } catch (e) {}
 	send("luna-de:keyboard", { show: false, height: KEYBOARD });
 	send("luna-de:screen", screenForShell());
+	saveDevice(device.id);
 	return device.id;
 }
-ipcMain.handle("luna-de:device", (e, id) => setDevice(id || (device.id === "touchpad" ? "pre3" : "touchpad")));
+ipcMain.handle("luna-de:fullscreen", async () => { await toggleFullScreen(); return !!(shell && shell.isFullScreen()); });
+/** The bezel's device button goes round them: a TouchPad, a Pre3, this screen. */
+const DEVICES = ["touchpad", "pre3", FILL];
+ipcMain.handle("luna-de:device", (e, id) => setDevice(id || DEVICES[(DEVICES.indexOf(device.id) + 1) % DEVICES.length]));
 ipcMain.handle("luna-de:screen-now", () => screenForShell());
 
 /** The user agent every app page gives: the device's own, which webOS apps look for (DeviceProfile.userAgent, from the host). */
@@ -859,6 +961,7 @@ app.on("web-contents-created", (e, wc) => {
 		else if (input.key === "Home" && shell && !input.shift && !input.control && !isEditing(input)) { ev.preventDefault(); send("luna-de:toggle-card"); }
 		else if (input.key === "End" && shell && !input.shift && !input.control && !isEditing(input)) { ev.preventDefault(); send("luna-de:launcher"); }
 		else if (TURN[input.key]) { ev.preventDefault(); turn(TURN[input.key]); }
+		else if (input.key === "F11") { ev.preventDefault(); toggleFullScreen(); }
 		else if (input.key === "Escape" && isShell && shown) { ev.preventDefault(); tell(cards.get(shown).view.webContents, "back", String(Date.now())); }
 		else if (input.key === "F12" || (input.control && input.shift && input.key.toLowerCase() === "i")) { ev.preventDefault(); wc.toggleDevTools(); }
 		else if ((input.control || input.meta) && input.key.toLowerCase() === "r" && !isShell) { ev.preventDefault(); wc.reload(); }
@@ -883,6 +986,9 @@ app.whenReady().then(async () => {
 	} catch (e) {}
 	openShell();
 	followHost();
+	// As the device it was last time.
+	const last = savedDevice();
+	if (DEVICES.includes(last) && last !== device.id) { shell.webContents.once("did-finish-load", () => setDevice(last)); }
 	// LUNA_DE_OPEN=<app id>[,<app id>...] launches those apps once the shell is ready.
 	ipcMain.once("luna-de:ready", () => {
 		// LUNA_DE_INSTALL=<package or app folder>[<path separator><another>...] installs those first.

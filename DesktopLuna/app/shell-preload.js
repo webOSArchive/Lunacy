@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld("luna", {
 	back: () => ipcRenderer.invoke("luna-de:back"),
 	rotate: () => ipcRenderer.invoke("luna-de:rotate"),
 	device: (id) => ipcRenderer.invoke("luna-de:device", id),
+	fullScreen: () => ipcRenderer.invoke("luna-de:fullscreen"),
 	screenNow: () => ipcRenderer.invoke("luna-de:screen-now"),
 	key: (key) => ipcRenderer.invoke("luna-de:key", key),
 	realKeyboard: () => ipcRenderer.invoke("luna-de:real-keyboard"),

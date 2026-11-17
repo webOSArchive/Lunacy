@@ -199,8 +199,8 @@ fun main(args: Array<String>) {
             // What every app's page says it is: the TouchPad's browser, as on Android (AppWindow).
             .put("userAgent", shell.device.userAgent)
             // The device Luna DE is being, for Electron to size and scale its window by.
-            .put("device", JSONObject().put("id", if (shell.device == org.webosarchive.lunacy.card.DeviceProfile.PRE3) "pre3" else "touchpad")
-                .put("name", shell.device.deviceName).put("width", shell.screenWidth).put("height", shell.screenHeight)
+            .put("device", JSONObject().put("id", if (shell.filling) "screen" else if (shell.device == org.webosarchive.lunacy.card.DeviceProfile.PRE3) "pre3" else "touchpad")
+                .put("name", if (shell.filling) "This screen" else shell.device.deviceName).put("width", shell.screenWidth).put("height", shell.screenHeight)
                 .put("scale", shell.scale).put("orientation", shell.orientation)
                 .put("virtualKeyboard", shell.device == org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD))
             .put("phoneZoom", shell.phoneZoom())
@@ -317,7 +317,14 @@ fun main(args: Array<String>) {
     } }
     // Luna DE becomes another device (Electron has closed every app first).
     http.createContext("/device") { ex -> ex.use {
-        shell.setDevice(query(ex)["v"].orEmpty())
+        val q = query(ex)
+        shell.setDevice(q["v"].orEmpty(), q["w"]?.toIntOrNull() ?: 0, q["h"]?.toIntOrNull() ?: 0)
+        send(ex, 204, "text/plain", ByteArray(0))
+    } }
+    // As this screen, the window changed size (a page's px, as it is held).
+    http.createContext("/screen") { ex -> ex.use {
+        val q = query(ex)
+        shell.setScreen(q["w"]?.toIntOrNull() ?: 0, q["h"]?.toIntOrNull() ?: 0)
         send(ex, 204, "text/plain", ByteArray(0))
     } }
     // An app's Phone Zoom switch, from the bezel: v=1, v=0, or nothing for its default.

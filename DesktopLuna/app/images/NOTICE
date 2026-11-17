@@ -7,3 +7,6 @@ icon.png: Luna DE's icon, Lunacy's moon with rounded corners, made by
 DesktopLuna/build-resources/make-icon.py from Meta/LunaRound.png (see Meta/NOTICE: codepoet had
 it made with ChatGPT for Lunacy, 2026-11-07). build-resources/icon.png and icon-mac.png are the
 same, for the packages.
+
+device-screen.svg: a desktop display, for "this screen" on the bezel's device button. Drawn for
+Luna DE (2026-11-17); the project's own, under its licence.

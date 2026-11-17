@@ -144,11 +144,11 @@ API 21 gate.
 - **The system menu** (2026-11-17, codepoet: the date and Wi-Fi for now). The status bar's
   right-hand group opens it, drawn as AndroidLuna's SystemMenu draws SystemMenu.qml (300 px in
   menu-dropdown-bg.png, 42 px rows, the 200 ms fade, the group's tab behind it while it is
-  open). It holds the date and the Wi-Fi drawer, its header saying ON or OFF. The drawer's one
-  row is a grey "Simulated connectivity" (codepoet: so it is plain the machine's own network
-  isn't being changed, and webOS had no "Turn off WiFi" label), whose tap turns the simulated
-  network off or on, the same switch as the Wi-Fi tile; the menu goes 300 ms after turning it
-  off and a second after turning it on. A tap outside closes it and is
+  open). It holds the date and the Wi-Fi drawer, its header saying ON or OFF: Turn off WiFi /
+  Turn on WiFi switches the simulated network (the same switch as the Wi-Fi tile), and under
+  it, where a device listed its networks, a grey "Simulated connectivity" that can't be tapped,
+  so it is plain the machine's own network isn't being changed (codepoet); the menu goes 300 ms
+  after turning it off and a second after turning it on. A tap outside closes it and is
   eaten. Not there yet: the battery, brightness, Bluetooth, Airplane Mode, Rotation Lock, Mute.
   **Delta:** over a card that is up, the card's live view steps aside for the menu and its
   picture stands in until the menu goes (a native view can't be drawn under the shell page's).

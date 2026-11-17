@@ -199,9 +199,9 @@ body.phone.editing #grid .tile .del { left: calc(50% - 46px); top: calc(50% - 60
 /* Rename Tab / New Tab (renamedialog.cpp): 520 x 150, rgba(25,25,25,235), a 1.5 px white alpha 90
    border, radius 12; the prompt 18 px white alpha 170 in a 44 px row; the name 24 px bold in a box
    with a blue 1.5 px border; the trash can (tab-delete-icon.png, 40 px) beside it. */
-.tab-dialog, .remove-dialog, .group-panel { box-sizing: border-box; background: rgba(25,25,25,0.92); border: 1.5px solid rgba(255,255,255,0.35); border-radius: 12px; }
+.tab-dialog, .group-panel { box-sizing: border-box; background: rgba(25,25,25,0.92); border: 1.5px solid rgba(255,255,255,0.35); border-radius: 12px; }
 .tab-dialog { width: 520px; max-width: calc(var(--w) - 24px); height: 150px; padding: 0 18px 18px; }
-.tab-dialog .prompt, .remove-dialog .prompt { height: 44px; line-height: 44px; font: 18px/44px Prelude, sans-serif; color: rgba(255,255,255,0.67); }
+.tab-dialog .prompt { height: 44px; line-height: 44px; font: 18px/44px Prelude, sans-serif; color: rgba(255,255,255,0.67); }
 .tab-dialog .row { display: flex; align-items: center; gap: 12px; height: 70px; }
 .tab-dialog input, .group-panel .name input { flex: 1; min-width: 0; height: 52px; box-sizing: border-box; padding: 0 12px; border-radius: 6px; outline: 0;
 	border: 1.5px solid #4a9be8; background: rgba(0,0,0,0.35); color: #fff; font: bold 24px Prelude, sans-serif; }
@@ -209,11 +209,19 @@ body.phone.editing #grid .tile .del { left: calc(50% - 46px); top: calc(50% - 60
 	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/tab-delete-icon.png") 0 0 / 40px 80px no-repeat; }
 .tab-dialog .trash:active { background-position: 0 -40px; }
 /* Remove Application? (AppInfoDialog): 320 wide, the app and its version, Cancel and Remove, 52 px buttons. */
-.remove-dialog { width: 342px; padding: 4px 11px 11px; text-align: center; }
-.remove-dialog .what { font: bold 16px Prelude, sans-serif; padding: 2px 0 16px; }
-.remove-dialog button { width: calc(50% - 4px); height: 52px; margin: 0 2px; border: 1px solid rgba(255,255,255,0.25); border-radius: 6px; cursor: pointer;
-	color: #fff; font: bold 16px Prelude, sans-serif; background: linear-gradient(#5a5d63, #3a3c41); }
-.remove-dialog button.remove { background: linear-gradient(#c5453a, #94261e); }
+/* AppInfoDialog (RemoveDialog): the launcher under scrim.png; a 342 px panel in popup-bg.png (35 40
+   35 40 slices) with 11 px edges and 6 px margins, 4 more above the title; the title bold 18, the
+   app bold 14, centred; Cancel and Remove 52 px each, one over the other, in pin/button-black.png
+   (10 px slices, its -press state while held), their labels bold 16. */
+#scrim.picture { background: url("../../AndroidLuna/src/main/assets/luna/images/scrim.png") 0 0 / 100% 100%; }
+.remove-dialog { position: relative; width: 342px; box-sizing: border-box; padding: 21px 17px 17px; text-align: center; color: #fff; }
+.remove-dialog::before { content: ""; position: absolute; inset: 0; z-index: -1; box-sizing: border-box; border-style: solid; border-width: 40px 35px;
+	border-image: url("../../AndroidLuna/src/main/assets/luna/images/popup-bg.png") 40 35 fill / 40px 35px stretch; }
+.remove-dialog .title { font: bold 18px Prelude, sans-serif; line-height: 1.2; }
+.remove-dialog .what { font: bold 14px Prelude, sans-serif; line-height: 1.2; margin: 6px 0; overflow-wrap: anywhere; }
+.remove-dialog button { display: block; width: calc(100% - 1px); margin-left: 1px; height: 52px; padding: 0; cursor: pointer; color: #fff; font: bold 16px Prelude, sans-serif;
+	box-sizing: border-box; border-style: solid; border-width: 10px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/pin/button-black.png") 10 fill / 10px stretch; background: transparent; }
+.remove-dialog button:active { border-image-source: url("../../AndroidLuna/src/main/assets/luna/images/pin/button-black-press.png"); }
 /* A group's panel (groupoverlay.cpp): its name 22 px bold in a 44 px row, its members in 136 px
    cells, 18 px padding; in from 0.85 and faded over 160 ms, out over 130 ms. */
 .group-panel { padding: 0 18px 18px; transition: transform 160ms cubic-bezier(0.215, 0.61, 0.355, 1), opacity 160ms; }

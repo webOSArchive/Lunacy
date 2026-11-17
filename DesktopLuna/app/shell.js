@@ -1110,7 +1110,7 @@
 		scrim.innerHTML = ""; scrim.appendChild(el); scrim.hidden = false;
 		scrimAway = away;
 	}
-	function closeScrim() { $("scrim").hidden = true; $("scrim").innerHTML = ""; scrimAway = null; }
+	function closeScrim() { $("scrim").hidden = true; $("scrim").innerHTML = ""; $("scrim").classList.remove("picture"); scrimAway = null; }
 	$("scrim").addEventListener("pointerdown", function (e) { if (e.target === $("scrim") && scrimAway) { scrimAway(); } });
 
 	/**
@@ -1141,16 +1141,23 @@
 	}
 
 	/** LunaCE's AppInfoDialog: "Remove Application?", the app and its version, Cancel and Remove. */
+	/**
+	 * LunaCE's AppInfoDialog, as AndroidLuna's RemoveDialog draws it: over scrim.png, a 342 px
+	 * panel in popup-bg.png, "Remove Application?" in bold 18 and the app and its version in bold
+	 * 14, centred, and Cancel over Remove, each 52 px in pin/button-black.png, stacked across the
+	 * panel. A tap outside is Cancel.
+	 */
 	function removeDialog(a) {
 		var panel = document.createElement("div"); panel.className = "remove-dialog";
-		var h = document.createElement("div"); h.className = "prompt"; h.textContent = "Remove Application?"; panel.appendChild(h);
-		var what = document.createElement("div"); what.className = "what"; what.textContent = a.title + (a.version ? " - v." + a.version : ""); panel.appendChild(what);
+		var h = document.createElement("div"); h.className = "title"; h.textContent = "Remove Application?"; panel.appendChild(h);
+		var what = document.createElement("div"); what.className = "what"; what.textContent = a.title + " - v." + (a.version || ""); panel.appendChild(what);
 		[["Cancel", function () {}], ["Remove", function () { window.luna.remove(a.id); }]].forEach(function (it) {
-			var b = document.createElement("button"); b.textContent = it[0]; b.className = it[0].toLowerCase();
+			var b = document.createElement("button"); b.textContent = it[0];
 			b.addEventListener("click", function () { closeScrim(); it[1](); });
 			panel.appendChild(b);
 		});
 		openScrim(panel, closeScrim);
+		$("scrim").classList.add("picture");
 	}
 
 	/**
@@ -1776,9 +1783,9 @@
 	// its right edge 11 px past the screen's; the content 7 px in at the sides and 14 px up from
 	// the bottom; rows 42 px high with menu-divider.png between them; headers 14 px in and a
 	// drawer's rows 16 more. A drawer opens over 350 ms OutCubic; the menu fades in and out over
-	// 200 ms. For now it holds the date and the Wi-Fi drawer, whose one row, "Simulated
-	// connectivity", switches Luna DE's simulated network (the Wi-Fi tile's switch). Turned off,
-	// the menu goes 300 ms later; turned on, a second later (WiFiElement's wait for the connection).
+	// 200 ms. For now it holds the date and the Wi-Fi drawer, whose Turn off / Turn on WiFi
+	// switches Luna DE's simulated network (the Wi-Fi tile's switch). Turned off, the menu goes
+	// 300 ms later; turned on, a second later (WiFiElement's wait for the connection).
 	var sys = { open: false, wifiOpen: false, closer: null, online: true, covered: false };
 
 	function sysDraw() {
@@ -1801,14 +1808,16 @@
 		box.appendChild(head);
 		var drawer = document.createElement("div"); drawer.className = "drawer" + (sys.wifiOpen ? " open" : "");
 		drawer.appendChild(divider());
-		// The drawer's one row, in grey, so it is plain that it switches Luna DE's own simulated
-		// network and leaves the machine's alone (codepoet). A tap turns it off or on; the
-		// header says which it is.
-		drawer.appendChild(row("sub info", "Simulated connectivity", function () {
+		// Turn off WiFi / Turn on WiFi, as WiFiElement had it, and under it, where a device listed
+		// its networks, a grey "Simulated connectivity" that can't be tapped: the switch is Luna
+		// DE's simulated network, and the machine's own is left alone (codepoet).
+		drawer.appendChild(row("sub", sys.online ? "Turn off WiFi" : "Turn on WiFi", function () {
 			var on = !sys.online;
 			window.luna.setNetwork(on);
 			sysCloseIn(on ? 1000 : 300);
-		}, true));
+		}));
+		drawer.appendChild(divider());
+		drawer.appendChild(row("sub info", "Simulated connectivity", null, true));
 		box.appendChild(drawer);
 		drawer.style.height = sys.wifiOpen ? "auto" : "0px";
 		if (sys.wifiOpen) { drawer.style.height = drawer.scrollHeight + "px"; }

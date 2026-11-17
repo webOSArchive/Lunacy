@@ -130,7 +130,7 @@ modules for it (from Adoptium, checked against its checksum), so one machine bui
 |---|---|---|
 | `npm run dist` | macOS | `luna-de-<version>-mac-arm64.dmg` and `-mac-x64.dmg` (and a `.zip` of each), signed and notarised (below) |
 | `npm run dist` | Linux | `luna-de-<version>-linux-x86_64.AppImage` and a `.tar.gz`, for the machine's processor |
-| `npm run dist -- --win` | Linux or macOS | `luna-de-<version>-win-x64.zip`, the whole app in a folder (unzip it and run `Luna DE.exe`); with Wine installed, the installer too. Signed when a key is given (below) |
+| `npm run dist -- --win` | Linux or macOS | `luna-de-<version>-win-x64.exe`, the installer (for the user installing, no administrator needed; the folder may be chosen; Start menu and desktop shortcuts; Luna DE's data kept on uninstall); `-win-x64-portable.exe`, the app in one program that runs without installing; and `-win-x64.zip`, the whole app in a folder (unzip it and run `Luna DE.exe`). On Linux the installer needs Wine; a Mac needs none. Signed when a key is given (below) |
 
 `--arch x64,arm64` names the processors outright (a Linux arm64 package, say). `--release`
 refuses to finish a package that isn't signed (and, on a Mac, notarised): use it for anything

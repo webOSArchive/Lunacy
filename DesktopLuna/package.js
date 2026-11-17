@@ -22,8 +22,9 @@
 //     Developer ID in the keychain and notarised when Apple's credentials are set
 //     (signing/mac.js; signing/set-apple-vars.example);
 //   - on Linux: an AppImage and a tar.gz for this machine's processor;
-//   - with --win, on Linux or a Mac: Windows x64, a zip (and the installer where Wine is
-//     installed), signed when a Windows key is set (signing/windows.js;
+//   - with --win, on Linux or a Mac: Windows x64, an installer (NSIS: per user, the folder
+//     chosen, Start menu and desktop shortcuts; on Linux only where Wine is installed), a
+//     portable exe and a zip, signed when a Windows key is set (signing/windows.js;
 //     signing/set-windows-vars.example). Nothing in it is compiled for Windows here: its native
 //     parts are fetched (node.exe; the Windows modules of this JDK's version, from Adoptium,
 //     which jlink cuts a Windows runtime from) or taken from a jar (SQLite's .dll).
@@ -353,12 +354,14 @@ function signingPlan() {
 	const builder = require("electron-builder");
 	const version = require("./package.json").version;
 	const repo = (p) => path.join(REPO, p);
-	// Off Windows, the installer's own maker needs Wine (it runs a Windows program to write the
-	// uninstaller); without Wine the package is the zip alone, which is the whole app in a folder.
-	let winTargets = ["nsis", "zip"];
-	if (WIN && HOST_OS !== "win") {
+	// Windows: an installer, a portable exe (the app in one program that unpacks itself and runs)
+	// and a zip (the whole app in a folder). The installer writes its uninstaller by running a
+	// Windows program: on Windows itself; on a Mac electron-builder reads the uninstaller out of
+	// the installer instead; on Linux only Wine can, and without it there is no installer.
+	let winTargets = ["nsis", "portable", "zip"];
+	if (WIN && HOST_OS === "linux") {
 		try { execFileSync("wine", ["--version"], { stdio: "ignore" }); }
-		catch (e) { winTargets = ["zip"]; say("no Wine here, so no installer: the zip only (build on Windows, or install Wine, for the installer)"); }
+		catch (e) { winTargets = ["portable", "zip"]; say("no Wine here, so no installer: the portable exe and the zip only (build on Windows or a Mac, or install Wine, for the installer)"); }
 	}
 	const built = [];
 	for (const arch of ARCHES) {
@@ -424,7 +427,14 @@ function signingPlan() {
 				// the uninstaller and installer through this hook, and every other program and
 				// library in the app by afterPack below.
 				win: { icon: "build-resources/icon.png", signtoolOptions: { sign: winSigning.sign, signingHashAlgorithms: ["sha256"] } },
-				nsis: { oneClick: false, allowToChangeInstallationDirectory: true, differentialPackage: false },
+				// The installer: for the user installing (no administrator needed), who may choose
+				// the folder; Start menu and desktop shortcuts; Luna DE's data (installed apps,
+				// settings) kept on uninstall. The guid is Luna DE's for good: Windows knows an
+				// installed copy by it, so an upgrade replaces the copy rather than adding one.
+				nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true, deleteAppDataOnUninstall: false,
+					createDesktopShortcut: true, createStartMenuShortcut: true, shortcutName: "Luna DE",
+					guid: "41588ffe-658b-4186-b81f-366c1891d3a5", differentialPackage: false },
+				portable: { artifactName: "luna-de-${version}-win-${arch}-portable.${ext}" },
 				afterPack: async (ctx) => {
 					// Windows: every .exe and .dll signed before anything is packed (signing/windows.js).
 					if (ctx.electronPlatformName === "win32") {

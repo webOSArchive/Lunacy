@@ -93,7 +93,7 @@ fun main(args: Array<String>) {
     val desktopRoot = DesktopRoot(webosRoot, File(data, "jshost"), repo, rom)
     val packages = org.webosarchive.lunacy.card.Packages(installed, File(data, "cache/packages"), desktopRoot)
     val addedLaunchPoints = org.webosarchive.lunacy.card.LaunchPoints(webosRoot, files)
-    val shell = DesktopShell(main, registry, files, packages, addedLaunchPoints, data)
+    val shell = DesktopShell(main, bus, registry, files, packages, addedLaunchPoints, data)
     val windows = shell.windows
     systemService.hostPreference = { key ->
         org.webosarchive.lunacy.card.SystemService.devicePreference(key, java.util.Locale.getDefault(), false,
@@ -127,7 +127,10 @@ fun main(args: Array<String>) {
         org.webosarchive.lunacy.card.ConnectionManager(network).register(bus)
         // After db8: the activity manager reads its persisted activities back as it registers.
         val power = DesktopPower(main)
-        org.webosarchive.lunacy.card.ActivityManager(DesktopBattery, power).register(bus)
+        val activityManager = org.webosarchive.lunacy.card.ActivityManager(DesktopBattery, power).also { it.register(bus) }
+        // A launch as Luna DE starts waits for what the boot starts (AppLifecycle.launchFromOutside).
+        shell.lifecycle.bootSettled = { !activityManager.bootActivitiesPending() }
+        shell.lifecycle.bootPending = { activityManager.bootActivitiesDescribed() }
         // powerd's keyed timers (a Mojo app's refresh alarm) and its power activities, kept across restarts.
         org.webosarchive.lunacy.card.PowerService(FileKeyedStore(File(data, "power-timeouts.json")), power).also { it.register(bus); it.enable() }
         shell.configurator = org.webosarchive.lunacy.card.Configurator(files, db8, tempdb, webosRoot, bus)
@@ -222,8 +225,14 @@ fun main(args: Array<String>) {
     http.createContext("/native") { ex -> ex.use {
         val q = query(ex)
         val app = q["app"].orEmpty()
-        val w = windows.computeIfAbsent(q["w"].orEmpty()) { id ->
-            DesktopWindow(id, app, bus, main, shell).also { n -> shell.pendingTypes.remove(id)?.let { n.type = it.ifEmpty { null } } }
+        // A page's first call makes it its window's page: the window is the one Electron says the
+        // page is in (/page, never the page's own word), which this call waits a moment for.
+        val w = windows[q["w"].orEmpty()] ?: windows.computeIfAbsent(q["w"].orEmpty()) { id ->
+            val viewId = shell.viewOfPage(id)
+            DesktopWindow(id, app, bus, main, shell, shell.views[viewId]?.pid).also { n ->
+                shell.pendingTypes.remove(id)?.let { n.type = it.ifEmpty { null } }
+                if (viewId.isNotEmpty()) main.post { shell.bindPage(viewId, n) }
+            }
         }
         if (w.appId != app) { send(ex, 403, "text/plain", "another app's page".toByteArray()); return@use }
         val args = runCatching { JSONArray(ex.requestBody.readBytes().toString(Charsets.UTF_8)) }.getOrDefault(JSONArray())
@@ -244,12 +253,34 @@ fun main(args: Array<String>) {
         send(ex, 204, "text/plain", ByteArray(0))
     } }
 
+    // A window a page opened (window.open), which Electron has made a view for; a view that has
+    // gone; and a card or dashboard the person closed. The lifecycle decides what follows.
+    http.createContext("/opened") { ex -> ex.use {
+        val q = query(ex)
+        shell.opened(q["view"].orEmpty(), q["parent"].orEmpty(), q["app"].orEmpty(), q["kind"].orEmpty())
+        send(ex, 204, "text/plain", ByteArray(0))
+    } }
+    // Which window a page is in, from Electron, as the page starts.
+    http.createContext("/page") { ex -> ex.use {
+        val q = query(ex)
+        shell.pageIn(q["w"].orEmpty(), q["view"].orEmpty())
+        send(ex, 204, "text/plain", ByteArray(0))
+    } }
+    http.createContext("/view-gone") { ex -> ex.use {
+        shell.viewGone(query(ex)["view"].orEmpty())
+        send(ex, 204, "text/plain", ByteArray(0))
+    } }
+    http.createContext("/close") { ex -> ex.use {
+        shell.closedByUser(query(ex)["view"].orEmpty())
+        send(ex, 204, "text/plain", ByteArray(0))
+    } }
+
     // The shell launches an app (the launcher, the quick-launch bar, LUNA_DE_OPEN): through the
     // same path as applicationManager/launch, so a running app is relaunched, not started twice.
     http.createContext("/launch") { ex -> ex.use {
         val q = query(ex)
         val params = q["params"]?.takeIf { it.isNotEmpty() }?.let { runCatching { JSONObject(it) }.getOrNull() }
-        shell.launch(q["id"].orEmpty(), params)
+        shell.launchFromShell(q["id"].orEmpty(), params)
         send(ex, 204, "text/plain", ByteArray(0))
     } }
 

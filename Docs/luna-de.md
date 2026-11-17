@@ -3,7 +3,7 @@
 Status: **runs Enyo apps with their data and the shell's notifications** (2026-11-16). Branch
 `luna-de`. Reviewed, and being built.
 
-## Where it stands (2026-11-16)
+## Where it stands (2026-11-17)
 
 **In LunaCore now** (moved, packages unchanged, Android calling the same classes): the bus,
 AppServer and its transforms, the app registry, **db8** (on `core.Sql`: android.database.sqlite
@@ -14,6 +14,22 @@ schedule, triggers and requirements, **ConnectionManager**, Http and NetShim. Wh
 Android is an interface in `org.webosarchive.lunacy.core` (`Sql`, `Collation`, `Links`, `Images`,
 `HostFolders`, `BatteryWatch`, `PowerTimers`, `NetworkSource`, `Scheduler`, `Cookies`), or a
 member of the class's own shell interface (`ApplicationManager.Shell`, `ScriptHost`).
+
+**The apps' lifecycle is LunaCore's too** (2026-11-17): `AppLifecycle`, the class Android's shell
+ran, now over two interfaces. `Screen` is where a window goes (CardHost, the Exhibition controller
+and the notification host on Android; events to Electron on the desktop), and `Host` is what else
+it needs of a platform (its windows made, a tile that is the platform's own, memory). Android's
+side is `LifecyclePlatform`; Luna DE's is `DesktopShell`, whose windows are `DesktopView`s: a view
+in Electron, named by the host before Electron has made it (an app's first window) or by Electron
+as a page opens it, with the page it shows bound to it at that page's first native call. Electron
+decides nothing of it any more: it makes the views the host names, tells the host of each window
+a page opens and each view that goes, and places them as the host's events say. So Luna DE now
+has what Android had and it lacked: **Email, Calendar and Messaging start headless as Luna DE
+does** (the TouchPad's LaunchAtBoot), **Email and the other KeepAlive apps keep their headless
+page** when their last card closes, a headless app outlives its last window by a moment (a
+dashboard's onUserClose), every app has its own activity (PalmSystem.activityId, focused and
+unfocused with its card), and a launch as Luna DE starts waits for the boot's own.
+`AppLifecycleTest` (LunaCore, 26 cases) holds the rules for both.
 
 **Tests that hold the moves.** `Db8Suite` and `SqlSuite` (LunaCore/src/sharedTest) run on both
 SQLites: under Robolectric in AndroidLuna (`Db8Test`, `SqlTest`) and over JDBC in LunaCore
@@ -145,6 +161,12 @@ API 21 gate.
 - A card in the card view is a snapshot of its page, not the live page (a native view can't be
   scaled).
 - The shim's cookies are the host's own jar, not the Electron session's.
+- **Two things Electron does its own way are overridden** (2026-11-17). A page's `window.close()`
+  closes its own view (Electron's closes the window the view sits in: the whole device, and Luna
+  DE quit), and a window outlives the window that opened it (`outlivesOpener`; Electron closed a
+  dashboard with its card). And the long polls (each page's `/poll`, the shell's `/events`) go to
+  the host on connections of their own: Chromium keeps six to a host, each poll held one, and
+  with six pages open the next app took 25 s to start.
 - **Package scripts don't run** (postinst, prerm): a package installs without them and the log
   says so, until open question 2 is settled.
 - **A JS service runs as the developer**, in Node on their own machine: webOS paths are pointed
@@ -156,8 +178,14 @@ API 21 gate.
   left out of the ROM as the Android account's is.
 - The network is the machine's first interface with an address, shown as the TouchPad's Wi-Fi at
   full signal with no network name; the machine counts as on the mains.
-- The shell's own lifecycle rules (which apps run, relaunch, an app ending with its last window)
-  are written a second time, in `DesktopShell` and main.js, until AppLifecycle moves into LunaCore.
+- Where a card goes is still each platform's own: CardHost on Android, `DesktopShell` and the
+  shell page here. A headless app's placeholder card is the one rule written twice (when it goes
+  if the app opens no card: CardHost.withdrawPlaceholder and DesktopShell.pageSaid, on the same
+  two timings, which are LunaCore's). Not drawn here: a card's group (a card an app opens beside
+  its own), the emulated card a TouchPad gave an app that never said `uiRevision: 2` (it gets
+  the whole screen), and a card held to its app's `requestedWindowOrientation`.
+- A page's first native call waits for Electron to say which window the page is in (a few ms;
+  2 s at most, then it goes on as a page in no window, with a warning in the log).
 - An app installed from its folder is a copy: an edit to the folder shows after it is dropped
   again (a link to the folder would be read as outside the app's tree and refused).
 - The on-screen keyboard has no press-and-hold alternates, no caret dragging from its trackball,
@@ -182,7 +210,8 @@ API 21 gate.
    service that shells out to `luna-send` gets an error. With it, the question of package scripts
    (open question 2).
 2. *(Done 2026-11-16: WebSQL's native half is in LunaCore; see above.)*
-3. AppLifecycle and CardHost's decisions into LunaCore, replacing `DesktopShell`'s copy.
+3. *(Done 2026-11-17: AppLifecycle is in LunaCore and both shells run it; see above. CardHost's
+   own decisions, a card's group and placeholder, stay per platform for now.)*
 4. Milestone 5's tools (Novacom, the novacomd `local` transport), then packaging.
 
 **Checked on Android** after these moves (2026-11-16, luna-de build 668): `device-test.sh` on the
@@ -191,7 +220,11 @@ Fold3, installed over 1.0.1's data (three mail accounts, 231 contacts): 50 passe
 `fresh-install.sh` (the Configurator, the activity manager and the package installer all moved,
 and a first run is where 1.0 broke). **Since that check**, JsServices, ServiceProcess and SysLog moved too, and host.js and
 curl.js changed for every platform (a path already inside the root is left alone; the shell is the
-host's where the root has none): the unit tests pass, and no device has run them yet.
+host's where the root has none). **2026-11-17, on the Fold3 again:** build 725 (main's 1.0.2
+merged in, those moves included) 50 passed, 0 failed (`Docs/test-results/725/fold3.txt`); build
+733 (AppLifecycle in LunaCore) 49 passed, 0 failed (`Docs/test-results/733/fold3.txt`; the one
+check fewer is the on-demand SMTP service, which that run reports as not started rather than
+ready). Still owed, as above: an Android 5 device and a fresh install.
 
 **Ratchet items (desktop):** Electron runs with `--no-sandbox` in development (the Linux
 setuid helper needs root); app windows share the page's world with the preload

@@ -7,8 +7,10 @@
 // talks to its cards through those objects, and apps like Email and Calendar start headless and
 // open every card that way. The shell draws everything else, and in the card view shows each
 // card as a snapshot (a native view can't be scaled as Lunacy's live cards are; recorded in
-// Docs/luna-de.md). Which cards exist is decided here for now; AppLifecycle's move into LunaCore
-// takes that over.
+// Docs/luna-de.md). Which windows there are, and what each is (a card, a dashboard, a page nobody
+// sees), is the host's to say: LunaCore's AppLifecycle, the class Android's shell runs. This
+// makes the views it names, tells it of each window a page opens and each view that goes, and
+// places them as its events say (followHost).
 "use strict";
 const { app, BaseWindow, BrowserWindow, Menu, WebContentsView, dialog, ipcMain, net, session } = require("electron");
 const { spawn } = require("child_process");
@@ -54,10 +56,19 @@ let host = null;          // "http://127.0.0.1:<port>"
 let hostProcess = null;
 let shell = null;         // the device's window
 let nextCard = 1;
-/** Card id to { id, appId, title, view, popped }. */
+/**
+ * Every app window's view, by the id the host knows it by: { id, appId, view, attrs, card, panel }.
+ * "h..." ids are the host's (an app's first window, which it names before the view exists);
+ * "e..." ids are given here, to a window a page opened. A view with no card and no panel is on
+ * no screen: a headless app's page, or a window the host hasn't placed yet.
+ */
+const views = new Map();
+/** A view's id by its webContents' id, and by each page it has loaded (app-preload.js's page id). */
+const viewOfContents = new Map();
+const viewOfPage = new Map();
+let nextOpened = 1;
+/** Card id to { id, appId, title, view, popped, v }: the views shown as cards. */
 const cards = new Map();
-/** App id to its headless page (a noWindow app's), which isn't a card. */
-const headless = new Map();
 /**
  * The windows that aren't cards, by id: { id, appId, kind, view, height }. A "dashboard" lives in
  * the status bar's drop-down and a "popupalert" under it, each a live view the shell places
@@ -119,6 +130,27 @@ function startHost() {
 }
 
 /**
+ * A request the host holds until it has something to say (a page's /poll, the shell's /events),
+ * on a connection of its own (Node's, which has no limit) instead of Chromium's: it keeps six
+ * to a host, every page's poll held one for up to 25 s, and with six pages open (the three
+ * boot-time apps and three cards) the next page's files waited behind them: an app took 25 s
+ * to start.
+ */
+const longAgent = new (require("http").Agent)({ keepAlive: true, maxSockets: Infinity });
+function hostLong(pathAndQuery) {
+	return new Promise((resolve) => {
+		const req = require("http").get(host + pathAndQuery, { agent: longAgent }, (res) => {
+			const chunks = [];
+			res.on("data", (c) => chunks.push(c));
+			res.on("end", () => resolve(new Response(Buffer.concat(chunks), { status: res.statusCode || 502,
+				headers: { "content-type": res.headers["content-type"] || "application/json" } })));
+			res.on("error", () => resolve(new Response("[]", { status: 502 })));
+		});
+		req.on("error", () => resolve(new Response("[]", { status: 502 })));
+	});
+}
+
+/**
  * Every https request in the session comes here. An app origin's goes to the host; anything
  * else goes out to the network untouched (the review: only Lunacy's origins are intercepted).
  * The app is named by the request's own origin, never by what the page says (rule 10).
@@ -135,6 +167,7 @@ function routeAppOrigins() {
 			const q = new URLSearchParams(u.search);
 			q.set("app", appId);
 			const init = { method: req.method };
+			if (what === "poll") { return hostLong("/poll?" + q.toString()); }
 			if (req.method === "POST") { init.body = await req.arrayBuffer(); }
 			return net.fetch(host + "/" + what + "?" + q.toString(), init);
 		}
@@ -154,90 +187,136 @@ function appIdOf(url) {
 	try { const h = new URL(url).hostname; return h.endsWith(HOST_SUFFIX) ? h.slice(0, -HOST_SUFFIX.length) : null; } catch (e) { return null; }
 }
 
+/** Something the host is told, with nothing to wait for. */
+function hostPost(what, params) {
+	if (host) { net.fetch(host + what + "?" + new URLSearchParams(params).toString(), { method: "POST" }).catch(() => {}); }
+}
+
 /**
- * Every page's window.open becomes a card of its app, the new page keeping its opener (Electron's
+ * A view for the window the host calls [id]: around the webContents Chromium made for a page's
+ * window.open, or a new one. It is on no screen until the host says where it goes.
+ */
+function makeView(id, appId, webContents, attrs) {
+	const view = webContents ? new WebContentsView({ webContents, webPreferences: pagePrefs() }) : new WebContentsView({ webPreferences: pagePrefs() });
+	const v = { id, appId, view, attrs: attrs || {}, card: null, panel: null };
+	views.set(id, v);
+	const contents = view.webContents.id;
+	viewOfContents.set(contents, id);
+	adoptOpens(view.webContents);
+	// window.close() from the page, or the page gone: the host hears the window has closed.
+	view.webContents.on("destroyed", () => {
+		viewOfContents.delete(contents);
+		for (const [page, at] of viewOfPage) { if (at === id) { viewOfPage.delete(page); } }
+		if (views.get(id) !== v) { return; }   // closed at the host's word: it knows
+		views.delete(id);
+		unplace(v);
+		hostPost("/view-gone", { view: id });
+	});
+	return v;
+}
+
+/** The view the host names in an event, made now if this is the first it is heard of (an app's first window). */
+function viewFor(ev) { return views.get(ev.view) || (/^h/.test(ev.view) ? makeView(ev.view, ev.appId) : null); }
+
+/**
+ * Every page's window.open makes a view for the new page, which keeps its opener (Electron's
  * createWindow: the view is made around the webContents Chromium already made for the open).
+ * What the window is (a card, a dashboard, an alert) the host decides, from the kind the page
+ * named (window.open's "window" attribute, WindowType in LunaCore): it is told here, and places
+ * the view with an event.
  */
 function adoptOpens(wc) {
 	wc.setWindowOpenHandler((d) => {
 		if (!appIdOf(d.url) && d.url !== "about:blank") { return { action: "deny" }; }
 		return {
 			action: "allow",
+			// A window lives until the lifecycle closes it, as on webOS, where a dashboard outlived
+			// the card that opened it. Electron's own rule closes a window with its opener.
+			outlivesOpener: true,
 			createWindow: (options) => {
-				const view = new WebContentsView({ webContents: options.webContents, webPreferences: pagePrefs() });
 				const appId = appIdOf(wc.getURL()) || appIdOf(d.url) || "";
-				// The window's kind is what the page said it was opening (window.open's "window"
-				// attribute, WindowType on Android); a kind the shell doesn't know is a card.
 				const attrs = (pendingAttributes.get(wc.id) || []).shift() || {};
-				const kind = String(attrs.window || "card").toLowerCase();
-				if (kind === "dashboard" || kind === "popupalert" || kind === "dockmode") { addPanel(view, appId, kind, attrs); }
-				else { addCard(view, appId, d.frameName); }
-				return view.webContents;
+				const v = makeView("e" + nextOpened++, appId, options.webContents, attrs);
+				v.title = d.frameName;
+				hostPost("/opened", { view: v.id, parent: viewOfContents.get(wc.id) || "", app: appId, kind: String(attrs.window || "card") });
+				return v.view.webContents;
 			},
 			overrideBrowserWindowOptions: { webPreferences: pagePrefs() },
 		};
 	});
 }
 
-/** A new card: its view in the device's window, hidden until the shell brings it up. */
-function addCard(view, appId, title) {
+/** A view the host says is a card: in the device's window, hidden until the shell brings it up. */
+function addCard(v, title) {
 	const id = nextCard++;
-	const c = { id, appId, title: title || appId, view, popped: null };
+	const view = v.view, appId = v.appId;
+	const c = { id, appId, title: v.title || title || appId, view, popped: null, v };
 	cards.set(id, c);
+	v.card = c;
 	view.setBackgroundColor("#000000");
 	view.setBounds(cardRect());
 	view.setVisible(false);
 	shell.contentView.addChildView(view);
-	adoptOpens(view.webContents);
 	tell(view.webContents, "type", "card");
 	view.webContents.on("page-title-updated", (e, t) => { c.title = t; send("luna-de:card-title", { id, title: t }); });
 	// The card waits in the card view with its splash while its page loads, then comes up
 	// (CLAUDE.md, rule 0). Ready is the page's first paint with something in it; a page that never
 	// says so is taken as ready when it has loaded.
 	c.ready = () => { if (!c.saidReady) { c.saidReady = true; send("luna-de:card-ready", { id }); } };
-	view.webContents.once("did-finish-load", c.ready);
-	view.webContents.once("did-fail-load", c.ready);
-	// window.close() from the page, or the page gone: the card goes.
-	view.webContents.on("destroyed", () => removeCard(id, false));
+	if (view.webContents.isLoading() || !view.webContents.getURL()) {
+		view.webContents.once("did-finish-load", c.ready);
+		view.webContents.once("did-fail-load", c.ready);
+	}
 	send("luna-de:card-added", { id, appId, title: c.title });
+	// A window a page opened may have loaded before the host said it was a card.
+	if (!view.webContents.isLoading() && view.webContents.getURL()) { c.ready(); }
 	return c;
 }
 
 /**
- * A dashboard, a popup alert or a dock-mode window: a live view the shell places, hidden until
- * it does. A dashboard hears it has no focus as soon as it is there, as on a TouchPad.
+ * A view the host says is a dashboard, a popup alert or a dock-mode window: a live view the
+ * shell places, hidden until it does. A dashboard hears it has no focus as soon as it is there,
+ * as on a TouchPad.
  */
-function addPanel(view, appId, kind, attrs) {
+function addPanel(v, kind) {
 	const id = nextCard++;
-	const p = { id, appId, kind, view, height: Number(attrs.height) || (kind === "dashboard" ? 52 : 100) };
+	const view = v.view, appId = v.appId;
+	const p = { id, appId, kind, view, height: Number(v.attrs.height) || (kind === "dashboard" ? 52 : 100), v };
 	panels.set(id, p);
+	v.panel = p;
 	view.setBackgroundColor("#00000000");
 	view.setBounds({ x: 0, y: statusPx(), width: 320, height: p.height });
 	view.setVisible(false);
 	shell.contentView.addChildView(view);
-	adoptOpens(view.webContents);
 	tell(view.webContents, "type", kind === "dockmode" ? "dockMode" : kind);
 	if (kind === "dashboard") { tell(view.webContents, "focus", "false"); }
-	view.webContents.on("destroyed", () => removePanel(id, false));
 	send("luna-de:panel-added", { id, appId, kind, height: p.height, icon: host + "/icon?id=" + encodeURIComponent(appId) });
 }
 
-function removePanel(id, close) {
+function removePanel(id) {
 	const p = panels.get(id);
 	if (!p) { return; }
 	panels.delete(id);
+	p.v.panel = null;
 	try { if (shell) { shell.contentView.removeChildView(p.view); } } catch (e) {}
-	if (close && !p.view.webContents.isDestroyed()) { p.view.webContents.close(); }
 	send("luna-de:panel-removed", { id });
-	endIfLast(p.appId);
 }
 
-/** An app whose last window has gone ends, its headless page with it (AppLifecycle.endApp). */
-function endIfLast(appId) {
-	if ([...cards.values()].some((k) => k.appId === appId) || [...panels.values()].some((k) => k.appId === appId)) { return; }
-	const h = headless.get(appId);
-	if (h) { headless.delete(appId); if (!h.webContents.isDestroyed()) { h.webContents.close(); } }
+/** [v] off the screen: its card or its panel goes; the view itself stays until it is closed. */
+function unplace(v) {
+	if (v.card) { removeCard(v.card.id); }
+	if (v.panel) { removePanel(v.panel.id); }
 }
+
+/** The host closes a window: off the screen, and its page closed (which runs its unload handlers). */
+function closeView(v) {
+	views.delete(v.id);
+	unplace(v);
+	if (!v.view.webContents.isDestroyed()) { v.view.webContents.close(); }
+}
+
+/** The person closed a card or a dashboard: the host is asked, and its events take it away. */
+function askClose(v) { if (v && views.get(v.id) === v) { hostPost("/close", { view: v.id }); } }
 
 /** Tells the host something of a page: now if its id is known, and again for each page the view loads. */
 function tell(wc, what, value) {
@@ -248,6 +327,7 @@ function tell(wc, what, value) {
 	if (page) { postTell(page, what, value); }
 }
 function pageGone(page) {
+	viewOfPage.delete(page);
 	if (host) { net.fetch(host + "/gone?w=" + encodeURIComponent(page), { method: "POST" }).catch(() => {}); }
 }
 function postTell(page, what, value) {
@@ -332,36 +412,16 @@ function typeKey(key) {
 	wc.sendInputEvent({ type: "keyUp", keyCode: code });
 }
 
-function removeCard(id, close) {
+function removeCard(id) {
 	const c = cards.get(id);
 	if (!c) { return; }
 	cards.delete(id);
+	c.v.card = null;
 	if (shown === id) { shown = null; }
+	if (keyboardCard === c) { keyboardCard = null; send("luna-de:keyboard", { show: false, height: KEYBOARD }); }
 	try { if (!c.popped && shell) { shell.contentView.removeChildView(c.view); } } catch (e) {}
-	if (close && !c.view.webContents.isDestroyed()) { c.view.webContents.close(); }
-	if (c.popped && !c.popped.isDestroyed()) { c.popped.close(); }
+	if (c.popped && !c.popped.isDestroyed()) { const w = c.popped; c.popped = null; w.close(); }
 	send("luna-de:card-removed", { id });
-	endIfLast(c.appId);
-}
-
-/**
- * An app the host says to start (DesktopShell's "launch" event): its page, as a card or headless.
- * Whether it was running already is the host's to say; it relaunches a running app itself.
- */
-function launch(entry) {
-	if (entry.noWindow) {
-		if (headless.has(entry.id)) { return; }
-		// The headless page opens its own cards (window.open); it is never on the screen.
-		const view = new WebContentsView({ webPreferences: pagePrefs() });
-		headless.set(entry.id, view);
-		adoptOpens(view.webContents);
-		view.webContents.on("destroyed", () => headless.delete(entry.id));
-		view.webContents.loadURL(entry.url);
-		return;
-	}
-	const view = new WebContentsView({ webPreferences: pagePrefs() });
-	addCard(view, entry.id, entry.title);
-	view.webContents.loadURL(entry.url);
 }
 
 function send(channel, data) { if (shell && !shell.isDestroyed()) { shell.webContents.send(channel, data); } }
@@ -411,7 +471,8 @@ function popOut(id) {
 	});
 	c.view.setVisible(true);
 	c.popped = win;
-	win.on("closed", () => removeCard(id, true));
+	// Its window closed: the card is closed, as a flick up closes one in the device.
+	win.on("closed", () => { if (c.popped === win) { c.popped = null; askClose(c.v); } });
 	send("luna-de:card-removed", { id });
 }
 
@@ -496,7 +557,7 @@ ipcMain.handle("luna-de:snapshot", async (e, id) => {
 	if (!c || c.view.webContents.isDestroyed()) { return null; }
 	try { return (await c.view.webContents.capturePage()).toDataURL(); } catch (err) { return null; }
 });
-ipcMain.handle("luna-de:close", (e, id) => { if (panels.has(id)) { removePanel(id, true); } else { removeCard(id, true); } return true; });
+ipcMain.handle("luna-de:close", (e, id) => { const k = panels.get(id) || cards.get(id); if (k) { askClose(k.v); } return true; });
 ipcMain.handle("luna-de:popout", (e, id) => { popOut(id); return true; });
 ipcMain.handle("luna-de:devtools", (e, id) => { const c = cards.get(id); if (c) { c.view.webContents.openDevTools({ mode: "detach" }); } return true; });
 
@@ -579,6 +640,10 @@ function askLaunch(id, params) {
 	net.fetch(host + "/launch?" + q.toString(), { method: "POST" }).catch((err) => console.error("Luna DE: launch " + id + ": " + err));
 }
 
+// window.close() in an app's page (app-preload.js): that page's view closes, and the host hears
+// the window has gone. Left to Electron, it closed the window the view is in: the whole device.
+ipcMain.on("luna-de:close-self", (e) => { if (!e.sender.isDestroyed()) { e.sender.close(); } });
+
 /** Each page's id, as its preload told the host (app-preload.js), by its webContents' id. */
 const pageIds = new Map();
 ipcMain.on("luna-de:page", (e, page) => {
@@ -586,6 +651,11 @@ ipcMain.on("luna-de:page", (e, page) => {
 	const before = pageIds.get(e.sender.id);
 	if (before && before !== page) { pageGone(before); }
 	pageIds.set(e.sender.id, page);
+	// Which window the page is in: this process's to say, as the app is. The host holds the
+	// page's first native call until it has heard.
+	const view = viewOfContents.get(e.sender.id) || "";
+	if (view) { viewOfPage.set(page, view); }
+	hostPost("/page", { w: page, view });
 	// What this view's page is (its type, its focus) goes to each page it loads.
 	const t = told.get(e.sender.id) || {};
 	for (const what of ["type", "active", "focus", "orientation"]) { if (t[what] !== undefined) { postTell(page, what, t[what]); } }
@@ -595,22 +665,31 @@ ipcMain.on("luna-de:page", (e, page) => {
 async function followHost() {
 	for (;;) {
 		let events = [];
-		try { events = await (await net.fetch(host + "/events")).json(); }
+		try { const r = await hostLong("/events"); if (r.status !== 200) { throw new Error("no host"); } events = await r.json(); }
 		catch (err) { if (!hostProcess || hostProcess.exitCode !== null) { return; } await new Promise((r) => setTimeout(r, 1000)); }
 		for (const ev of events) {
 			try {
-				if (ev.type === "launch") { launch(ev); }
+				if (ev.type === "card") {
+					// A window that is a card: an app's first (its view made now), or one a page opened.
+					const v = viewFor(ev);
+					if (v && !v.card) { addCard(v, ev.title); }
+				} else if (ev.type === "loading") {
+					// A headless app's loading card: the shell page draws one (unless a tap already
+					// did), which the app's first card takes. Its page runs unseen.
+					viewFor(ev);
+					send("luna-de:card-loading", { appId: ev.appId, title: ev.title });
+				} else if (ev.type === "withdrawn") { send("luna-de:card-withdrawn", { appId: ev.appId }); }
+				else if (ev.type === "hide") { const v = viewFor(ev); if (v) { unplace(v); } }
+				else if (ev.type === "load") { const v = viewFor(ev); if (v) { v.view.webContents.loadURL(ev.url); } }
+				else if (ev.type === "panel") { const v = views.get(ev.view); if (v && !v.panel) { unplace(v); addPanel(v, ev.kind); } }
+				else if (ev.type === "remove") { const v = views.get(ev.view); if (v) { unplace(v); } }
 				else if (ev.type === "show") {
 					// The app's first card comes forward (a relaunch it didn't handle).
 					const c = [...cards.values()].find((k) => k.appId === ev.id && !k.popped);
 					if (c) { send("luna-de:show", { id: c.id }); }
 				} else if (ev.type === "close") {
-					const c = [...cards.values()].find((k) => pageIds.get(k.view.webContents.id) === ev.page);
-					if (c) { removeCard(c.id, true); }
-					else {
-						const h = [...headless.values()].find((v) => pageIds.get(v.webContents.id) === ev.page);
-						if (h && !h.webContents.isDestroyed()) { h.webContents.close(); }
-					}
+					const v = views.get(ev.view);
+					if (v) { closeView(v); }
 				} else if (ev.type === "apps") { send("luna-de:apps", {}); }
 				else if (ev.type === "banner") {
 					send("luna-de:banner", { id: ev.id, appId: ev.appId, message: ev.message, params: ev.params,
@@ -728,16 +807,12 @@ async function readDevice() {
 }
 
 /**
- * Luna DE becomes another device: every app is closed first (a page is told its device once, as
- * it starts), then the host changes, and the window takes the new screen's size and scale.
+ * Luna DE becomes another device: the host closes every app first (a page is told its device
+ * once, as it starts) and changes, and the window takes the new screen's size and scale.
  */
 async function setDevice(id) {
 	if (id === device.id || !shell) { return device.id; }
-	for (const c of [...cards.values()]) { removeCard(c.id, true); }
-	for (const p of [...panels.values()]) { removePanel(p.id, true); }
-	for (const h of [...headless.values()]) { if (!h.webContents.isDestroyed()) { h.webContents.close(); } }
-	headless.clear();
-	keyboardCard = null;
+	// The host ends every app first (its events close their views), then is the other device.
 	await net.fetch(host + "/device?v=" + id, { method: "POST" }).catch(() => {});
 	await readDevice();
 	const size = screenSize();

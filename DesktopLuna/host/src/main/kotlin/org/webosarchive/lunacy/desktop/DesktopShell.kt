@@ -4,6 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.webosarchive.lunacy.card.AppFiles
 import org.webosarchive.lunacy.card.AppInfo
+import org.webosarchive.lunacy.card.AppLifecycle
 import org.webosarchive.lunacy.card.AppRegistry
 import org.webosarchive.lunacy.card.AppServer
 import org.webosarchive.lunacy.card.ApplicationManager
@@ -12,6 +13,7 @@ import org.webosarchive.lunacy.card.LaunchPoints
 import org.webosarchive.lunacy.card.Packages
 import org.webosarchive.lunacy.card.Placement
 import org.webosarchive.lunacy.card.RunningWindow
+import org.webosarchive.lunacy.card.WindowType
 import org.webosarchive.lunacy.core.Log
 import org.webosarchive.lunacy.core.Lunacy
 import java.io.File
@@ -22,25 +24,32 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Luna DE's shell, as LunaCore's services see it: what the application manager asks of a shell
- * (ApplicationManager.Shell), answered for the desktop. Which apps run and with which windows is
- * kept here from the pages themselves ([windows]); what goes on the screen is Electron's, which
- * hears of it as events ([take]): an app to start, a card to bring forward or close, the launcher
- * to draw again, a banner.
+ * (ApplicationManager.Shell), and what the apps' lifecycle asks of a platform (AppLifecycle's
+ * Screen and Host), answered for the desktop.
  *
- * Launching follows AndroidLuna's AppLifecycle, which this stands in for until that class moves
- * into LunaCore (Docs/luna-de.md, milestone 3b): a running app is relaunched, not reloaded, and
- * its first card comes forward unless the app handled the relaunch or opened a window for it.
+ * Which apps run and with which windows is LunaCore's AppLifecycle, the class Android's shell
+ * runs ([lifecycle]): a running app is relaunched, not reloaded, an app ends with its last
+ * window, a headless app outlives it by a moment, Email and the other keep-alive apps keep
+ * their headless page, and the boot-time apps start headless. Its windows here are
+ * [DesktopView]s. What goes on the screen is Electron's, which hears of it as events ([take]):
+ * a window to show as a card, to keep unseen, to load, to remove or to close, a card to bring
+ * forward, the launcher to draw again, a banner. Electron decides none of it.
  */
 class DesktopShell(
     private val main: DesktopScheduler,
-    private val registry: AppRegistry,
+    private val bus: org.webosarchive.lunacy.card.Bus,
+    override val registry: AppRegistry,
     private val files: AppFiles,
     private val packages: Packages,
     private val addedLaunchPoints: LaunchPoints,
     private val data: File,
-) : ApplicationManager.Shell {
-    /** Every page with a native interface, by its page id, oldest first within an app. */
+) : ApplicationManager.Shell, AppLifecycle.Screen<DesktopView>, AppLifecycle.Host<DesktopView> {
+    /** Every page with a native interface, by its page id. */
     val windows = ConcurrentHashMap<String, DesktopWindow>()
+    /** Every window of a running app, by the id Electron knows its view by. */
+    val views = ConcurrentHashMap<String, DesktopView>()
+    /** The running apps and their windows. On the main thread. */
+    val lifecycle = AppLifecycle(bus, this, this, main)
     private val events = LinkedBlockingQueue<JSONObject>()
     lateinit var configurator: Configurator
     lateinit var applicationManager: ApplicationManager
@@ -59,7 +68,7 @@ class DesktopShell(
         return arrayListOf(first).also { events.drainTo(it) }
     }
 
-    fun systemBanner(appId: String, message: String) {
+    override fun systemBanner(appId: String, message: String) {
         events.add(event("banner").put("id", nextBanner.getAndIncrement()).put("appId", appId).put("message", message).put("params", "").put("icon", ""))
     }
 
@@ -69,7 +78,7 @@ class DesktopShell(
      * The webOS device Luna DE is being: a TouchPad (webOS CE 3.1.0, 1024 x 768) or a Pre3 (HP
      * webOS 2.2.4, 480 x 800 at a scale of 1.5, so apps lay out 320 wide). Both profiles are
      * LunaCore's, measured on the devices. A page is told its device once, as it starts, so
-     * Electron closes every app before it changes this.
+     * every app is closed before this changes ([setDevice]).
      */
     @Volatile var device = org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD
         private set
@@ -79,11 +88,16 @@ class DesktopShell(
     val screenHeight get() = if (device == org.webosarchive.lunacy.card.DeviceProfile.PRE3) 800 else 768
     val scale get() = if (device == org.webosarchive.lunacy.card.DeviceProfile.PRE3) 1.5 else 1.0
 
-    fun setDevice(name: String) {
+    fun setDevice(name: String) = main.call {
+        // Every app ends first: a page is told its device once, as it starts.
+        lifecycle.windows.forEach { lifecycle.windowClosed(it) }
         device = if (name == "pre3") org.webosarchive.lunacy.card.DeviceProfile.PRE3 else org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD
         // Held the way the device names its screen: a TouchPad wide, a Pre3 tall.
         orientation = if (device.naturalLandscape) "right" else "up"
         Log.i(Lunacy.TAG, "device: ${device.modelNameAscii}")
+        // As the other device starting: its boot-time apps again.
+        for (id in AppLifecycle.LAUNCH_AT_BOOT) if (registry.get(id) != null && !lifecycle.isRunning(id))
+            lifecycle.launch(id, JSONObject().put("launchedAtBoot", true), Placement.NO_CARD)
     }
 
     // ---- phone zoom ----
@@ -145,7 +159,8 @@ class DesktopShell(
         val w = windows[pageId] ?: run { pendingTypes[pageId] = value.takeIf { what == "type" } ?: return; return }
         when (what) {
             "type" -> w.type = value.ifEmpty { null }
-            "active" -> main.post { w.setStageActive(value == "true") }
+            // The card's focus, and with it the app's activity's (WebAppBase::focusActivity).
+            "active" -> main.post { w.setStageActive(value == "true"); w.view?.let { lifecycle.stageFocused(it, value == "true") } }
             "focus" -> main.post { w.sendFocus(value == "true") }
             "back" -> main.post { w.sendBack() }
             "keyboardShown" -> main.post { w.keyboardShown(value == "true") }
@@ -180,59 +195,244 @@ class DesktopShell(
 
     // ---- the apps that are running ----
 
-    /**
-     * [appId]'s windows, oldest first. A page that has stopped asking for its scripts has gone
-     * without anyone saying so (Electron tells us of every page it destroys; this is for the one
-     * it didn't): it is dropped here, so a launch never becomes a relaunch of a window that isn't there.
-     */
-    private fun windowsOf(appId: String): List<DesktopWindow> {
-        windows.values.filter { it.appId == appId && !it.alive }.forEach { Log.w(Lunacy.TAG, "$appId: a page stopped answering; forgotten"); gone(it.pageId) }
-        return windows.values.filter { it.appId == appId }.sortedBy { it.pid }
-    }
-
-    override val running: Map<String, List<RunningWindow>>
-        get() = windows.values.sortedBy { it.pid }.groupBy { it.appId }
+    override val running: Map<String, List<RunningWindow>> get() = lifecycle.apps
 
     override fun closeWindow(window: RunningWindow) {
-        (window as? DesktopWindow)?.let { events.add(event("close").put("page", it.pageId)) }
+        (window as? DesktopView)?.let { v -> main.post { lifecycle.windowClosed(v) } }
     }
 
-    /** A page has gone: its subscriptions end. */
-    fun gone(pageId: String) { windows.remove(pageId)?.close() }
+    /** Every window of [appId] closed (it is being replaced or removed). On the main thread. */
+    private fun closeApp(appId: String) { lifecycle.apps[appId]?.toList()?.forEach { lifecycle.windowClosed(it) } }
+
+    /** A page has gone (a reload, or its view closing): its subscriptions end. */
+    fun gone(pageId: String) {
+        synchronized(pageViews) { pageViews.remove(pageId) }
+        val w = windows.remove(pageId) ?: return
+        w.close()
+        main.post { w.view?.unbind(w); orphans.values.remove(w) }
+    }
+
+    /** The view each page is in, as Electron said as the page started ("" for a page in none it knows). */
+    private val pageViews = HashMap<String, String>()
+
+    fun pageIn(pageId: String, viewId: String) = synchronized(pageViews) {
+        pageViews[pageId] = viewId
+        (pageViews as Object).notifyAll()
+    }
+
+    /**
+     * The view [pageId] is in, waiting a moment for Electron's word of it: the page's first
+     * native call and that word leave Electron by different roads. "" if none came.
+     */
+    fun viewOfPage(pageId: String): String = synchronized(pageViews) {
+        val until = System.currentTimeMillis() + PAGE_VIEW_WAIT_MS
+        while (pageId !in pageViews) {
+            val left = until - System.currentTimeMillis()
+            if (left <= 0) { Log.w(Lunacy.TAG, "a page made a native call and Electron hasn't said which window it is in"); break }
+            (pageViews as Object).wait(left)
+        }
+        pageViews[pageId].orEmpty()
+    }
+
+    /**
+     * A page made its first native call from the view Electron calls [viewId]: it is that
+     * window's page now. A window a page opened can reach here before Electron's word of it
+     * ([opened]); its page waits for that. On the main thread.
+     */
+    fun bindPage(viewId: String, w: DesktopWindow) {
+        views[viewId]?.bind(w) ?: run { orphans[viewId] = w }
+    }
+    private val orphans = HashMap<String, DesktopWindow>()
+
+    /**
+     * A page opened a window (window.open), which Electron made a view for, [viewId]: of [appId]
+     * (the opener's origin, as Electron reads it), of the [kind] the page named (window.open's
+     * "window" attribute), opened by the window in [parentId]. Where it goes is the lifecycle's
+     * to say, as on Android (ShellActivity.onWindowOpened).
+     */
+    fun opened(viewId: String, parentId: String, appId: String, kind: String) {
+        // The window exists from here on, for its page's first native call to find (its pid).
+        val child = DesktopView(viewId, appId, WindowType.named(kind.ifEmpty { WindowType.CARD.wire }), this)
+        views[viewId] = child
+        main.post { openedNow(child, parentId) }
+    }
+
+    private fun openedNow(child: DesktopView, parentId: String) {
+        val appId = child.appId
+        orphans.remove(child.id)?.let { child.bind(it) }
+        val parent = views[parentId]
+        if (parent == null) Log.w(Lunacy.TAG, "$appId: a window opened by one the host doesn't know ($parentId)")
+        lifecycle.windowOpened(parent ?: child, child)
+    }
+
+    /** Electron's view [viewId] has gone (its page closed itself, or was destroyed): the window has closed. */
+    fun viewGone(viewId: String) = main.post {
+        val v = views[viewId] ?: return@post
+        if (lifecycle.apps[v.appId]?.contains(v) == true) lifecycle.windowClosed(v) else forget(v)
+    }
+
+    /** The person closed [viewId]'s card or dashboard (a flick up, the close button): ShellChrome's on Android. */
+    fun closedByUser(viewId: String) = main.post { views[viewId]?.let { lifecycle.windowClosed(it) } }
+
+    private fun forget(v: DesktopView) {
+        v.place = DesktopView.Place.NONE
+        views.remove(v.id, v)
+    }
+
+    private fun viewEvent(type: String, v: DesktopView) = event(type).put("view", v.id).put("appId", v.appId)
+    private fun titleOf(appId: String) = registry.get(appId)?.title ?: appId
+
+    /** [v]'s page starts loading (DesktopView.load). */
+    fun load(v: DesktopView, url: String) { events.add(viewEvent("load", v).put("url", url)) }
+    /** Electron closes [v]'s view (DesktopView.close). */
+    fun close(v: DesktopView) { events.add(viewEvent("close", v)) }
+
+    // ---- where a window goes (AppLifecycle.Screen) ----
+
+    /** Luna DE's card view has no groups yet: who launched an app changes nothing. */
+    override fun launchedBy(appId: String, launchedBy: String?) {}
+    /** The shell is Luna DE's home ([shellIsHome]): nothing is opened around it. */
+    override fun openDirect(appId: String) {}
+    override fun bringForward(appId: String) { events.add(event("show").put("id", appId)) }
+
+    override fun showAsCard(w: DesktopView, parent: DesktopView?, placeholder: Boolean, splash: Boolean) {
+        if (placeholder) {
+            // A headless app's loading card, which its first card window takes: the shell page
+            // draws it (it may have, at the tap), and the app's page runs unseen behind it.
+            w.place = DesktopView.Place.PLACEHOLDER
+            events.add(viewEvent("loading", w).put("title", titleOf(w.appId)))
+        } else {
+            w.place = DesktopView.Place.CARD
+            events.add(viewEvent("card", w).put("title", titleOf(w.appId)))
+        }
+    }
+
+    override fun cardOpened(parent: DesktopView, child: DesktopView) {
+        // A headless app's first card fills the card its launch put up, and the root goes on
+        // where a headless root lives (CardHost.cardOpened).
+        if (parent.place == DesktopView.Place.PLACEHOLDER) parent.place = DesktopView.Place.HIDDEN
+        showAsCard(child, parent)
+    }
+
+    override fun hide(w: DesktopView) {
+        w.place = DesktopView.Place.HIDDEN
+        events.add(viewEvent("hide", w))
+    }
+
+    override fun isHidden(w: DesktopView) = w.place == DesktopView.Place.HIDDEN
+
+    private fun panel(w: DesktopView, place: DesktopView.Place, kind: String) {
+        w.place = place
+        events.add(viewEvent("panel", w).put("kind", kind))
+    }
+    override fun showDashboard(w: DesktopView) = panel(w, DesktopView.Place.DASHBOARD, "dashboard")
+    override fun showAlert(w: DesktopView) = panel(w, DesktopView.Place.ALERT, "popupalert")
+    /** Luna DE has no Exhibition: a dock-mode window runs unseen. */
+    override fun showInDock(w: DesktopView) = panel(w, DesktopView.Place.DOCK, "dockmode")
+
+    /** Its card or dashboard goes as it is taken off the screen ([detach]), which always follows. */
+    override fun windowClosed(w: DesktopView) {}
+
+    override fun detach(w: DesktopView) {
+        events.add(viewEvent("remove", w))
+        forget(w)
+    }
+
+    override val empty get() = views.values.none { it.place == DesktopView.Place.CARD || it.place == DesktopView.Place.PLACEHOLDER }
+    /**
+     * Nothing to wait for: a page here loads in a process of its own, so its load can't hold up
+     * the card's slide as it does in Android's one WebView process. What the person sees is the
+     * shell page's to time, and it does (a card reaches the card view before it comes up).
+     */
+    override val slideMs get() = 0L
+
+    /**
+     * A headless app's placeholder goes when the app is up and has opened no card, as CardHost
+     * decides it on Android: a moment after it called stageReady, or after a page that never
+     * does has been loaded for WindowedWebApp's timeout. On the main thread.
+     */
+    fun pageSaid(w: DesktopWindow, what: String) {
+        val v = w.view ?: return
+        if (v.place != DesktopView.Place.PLACEHOLDER) return
+        when (what) {
+            "stageReady" -> withdrawPlaceholder(v)
+            "pageLoaded" -> main.postDelayed({ if (!w.stageReady && v.page === w) withdrawPlaceholder(v) }, AppLifecycle.SHOW_WINDOW_TIMEOUT_MS)
+        }
+    }
+
+    private fun withdrawPlaceholder(v: DesktopView) = main.postDelayed({
+        if (v.place == DesktopView.Place.PLACEHOLDER) {
+            Log.i(Lunacy.TAG, "launch ${v.appId}: no card opened; the placeholder goes")
+            v.place = DesktopView.Place.HIDDEN
+            events.add(viewEvent("withdrawn", v))
+        }
+    }, AppLifecycle.PLACEHOLDER_GRACE_MS)
+
+    // ---- the platform (AppLifecycle.Host) ----
+
+    override val profile get() = device
+    override fun addedLaunchPoint(id: String) =
+        if (id.startsWith(AppInfo.LAUNCH_POINT_PREFIX)) addedLaunchPoints.get(id.removePrefix(AppInfo.LAUNCH_POINT_PREFIX)) else null
+    /** No tile here is another system's app. */
+    override fun openedOutside(id: String) = false
+
+    override fun openedInstead(app: AppInfo): Boolean {
+        // On Android the Wi-Fi tile opens Android's Wi-Fi settings. Here it is a developer's switch:
+        // the connection lost, and back, so an app can be seen in both states (codepoet, 2026-11-16).
+        if (app.androidSettings == "wifi") { toggleNetwork(app.id); return true }
+        if (app.androidSettings.isNotEmpty()) { systemBanner(app.id, "${app.title} opens one of Android's settings; there is none on the desktop"); return true }
+        return false
+    }
+
+    private val nextView = java.util.concurrent.atomic.AtomicInteger(1)
+
+    /** An app's first window. Luna DE draws no emulated card yet: an old app gets the whole screen (Docs/luna-de.md). */
+    override fun newWindow(app: AppInfo, emulated: Boolean): DesktopView =
+        DesktopView("h${nextView.getAndIncrement()}", app.id, WindowType.CARD, this).also { views[it.id] = it }
+
+    override fun newNativeWindow(app: AppInfo): DesktopView? {
+        systemBanner(app.id, "${app.title} is a native app; Luna DE runs web apps")
+        return null
+    }
+    override fun startNative(window: DesktopView) = false
+    override fun shellIsHome() = true
+    /** The shell page goes to its card view by itself as its last card leaves. */
+    override fun onCardView() {}
+    override fun windowGone(window: DesktopView) {}
+    /** The desktop isn't watched for memory. */
+    override fun memoryLow() = false
 
     // ---- launching ----
 
     override fun launch(appId: String, params: JSONObject?, placement: Placement, launchedBy: String?) {
-        main.post { launchNow(appId, params, placement) }
+        main.post { forgetStale(appId); lifecycle.launch(appId, params, placement, launchedBy) }
     }
 
-    private fun launchNow(appId: String, params: JSONObject?, placement: Placement) {
-        // An added launch point launches its app with its own params.
-        addedLaunchPoints.get(appId.removePrefix(AppInfo.LAUNCH_POINT_PREFIX))?.takeIf { appId.startsWith(AppInfo.LAUNCH_POINT_PREFIX) }?.let { lp ->
-            launchNow(lp.appId, lp.paramsObject(), placement); return
-        }
-        val app = registry.get(appId) ?: run { Log.w(Lunacy.TAG, "launch: no app $appId"); return }
-        if (!app.isWeb) { systemBanner(appId, "${app.title} is a native app; Luna DE runs web apps"); return }
-        // On Android the Wi-Fi tile opens Android's Wi-Fi settings. Here it is a developer's switch:
-        // the connection lost, and back, so an app can be seen in both states (codepoet, 2026-11-16).
-        if (app.androidSettings == "wifi") { toggleNetwork(appId); return }
-        if (app.androidSettings.isNotEmpty()) { systemBanner(appId, "${app.title} opens one of Android's settings; there is none on the desktop"); return }
-        val root = windowsOf(appId).firstOrNull()
-        if (root != null) {
-            val before = windowsOf(appId).map { it.pageId }.toSet()
-            root.relaunch(params?.toString() ?: "") { handled ->
-                // A window the app opened while it handled the relaunch is its answer (AppLifecycle.relaunch).
-                val opened = windowsOf(appId).any { it.pageId !in before }
-                Log.i(Lunacy.TAG, "relaunch $appId handled=$handled${if (opened) ", opened a window" else ""}")
-                if (!handled && !opened) events.add(event("show").put("id", appId))
-            }
-            return
-        }
-        val url = AppServer.appUrl(app.id, app.main, app.dir) +
-            (if (params != null) "?launchParams=" + URLEncoder.encode(params.toString(), "UTF-8").replace("+", "%20") else "")
-        events.add(event("launch").put("id", app.id).put("title", app.title).put("url", url).put("noWindow", app.noWindow)
-            .put("noCard", placement != Placement.CARD))
+    /**
+     * A launch from the shell itself (a tap in the launcher, LUNA_DE_OPEN). One that comes as
+     * Luna DE starts waits for the boot-time apps, so that it reaches Email or Calendar as a
+     * relaunch of the headless app, as on a device (AppLifecycle.launchFromOutside).
+     */
+    fun launchFromShell(appId: String, params: JSONObject?) = main.post {
+        lifecycle.launchFromOutside(booting = true) { forgetStale(appId); lifecycle.launch(appId, params) }
     }
+
+    /**
+     * A page that has stopped asking for its scripts has gone without anyone saying so (Electron
+     * tells us of every view it destroys; this is for the one it didn't): its window is closed
+     * here, so a launch never becomes a relaunch of a window that isn't there.
+     */
+    private fun forgetStale(appId: String) {
+        lifecycle.apps[appId]?.toList()?.forEach { v ->
+            if (v.page?.alive == false) { Log.w(Lunacy.TAG, "$appId: a page stopped answering; its window is closed"); lifecycle.windowClosed(v) }
+        }
+    }
+
+    /**
+     * The apps a TouchPad starts at boot (AppLifecycle.LAUNCH_AT_BOOT), headless: Luna DE starts
+     * ready, so they start as it does, once the profile account is there.
+     */
+    private fun startBootTimeApps() = lifecycle.launchBootTimeApps()
 
     // ---- First Use ----
 
@@ -249,7 +449,7 @@ class DesktopShell(
         val profileMade = File(prefs, "first-use-profile-created")
         val configureAfter = !ranFirstUse.exists() || !profileMade.exists()
         runCatching { prefs.mkdirs(); ranFirstUse.createNewFile() }
-        if (profileMade.exists()) { if (configureAfter) configurator.run(); return }
+        if (profileMade.exists()) { if (configureAfter) configurator.run(); startBootTimeApps(); return }
         bus.call("", "palm://com.palm.accountservices/createNovaAccount", "{\"createDefaultAccount\":true}", privateBus = true) { r ->
             Log.i(Lunacy.TAG, "firstuse-createDefaultAccount: $r")
         }
@@ -257,10 +457,10 @@ class DesktopShell(
         var waited = 0
         val check = object : Runnable {
             override fun run() {
-                if (profileMade.exists()) { configurator.run(); return }
+                if (profileMade.exists()) { configurator.run(); startBootTimeApps(); return }
                 waited += 500
                 if (waited < 60_000) main.postDelayed(this, 500)
-                else Log.w(Lunacy.TAG, "first use: no profile account after a minute; activities held back until the next start")
+                else { Log.w(Lunacy.TAG, "first use: no profile account after a minute; activities held back until the next start"); startBootTimeApps() }
             }
         }
         main.postDelayed(check, 500)
@@ -330,7 +530,7 @@ class DesktopShell(
             }.exceptionOrNull()
             main.post {
                 if (error != null) { systemBanner("", "Couldn't install ${dir.name}: ${error.message}"); return@post }
-                windowsOf(id).forEach { closeWindow(it) }
+                closeApp(id)
                 appsChanged()
                 systemBanner(id, "${registry.get(id)?.title ?: id} installed")
             }
@@ -345,7 +545,7 @@ class DesktopShell(
     }
 
     override fun removeInstalled(app: AppInfo, done: (String?) -> Unit) {
-        windowsOf(app.id).forEach { closeWindow(it) }
+        closeApp(app.id)
         setPhoneZoom(app.id, null)
         packages.remove(app.id, app.dir) { error ->
             appsChanged()
@@ -371,6 +571,8 @@ class DesktopShell(
     override val freeBytes get() = data.usableSpace
 
     companion object {
+        /** How long a page's first native call waits to hear which window the page is in. */
+        const val PAGE_VIEW_WAIT_MS = 2000L
         /** The page width Phone Zoom lays an app out at: Lunacy's default (FormFactor.appLayoutWidth). */
         const val PHONE_ZOOM_WIDTH = 640
         /**

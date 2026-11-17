@@ -271,8 +271,8 @@ class CardHost(private val activity: Activity, private val host: Host, private v
 
     companion object {
         /** WindowedWebApp's kShowWindowTimeoutMs: how long a loaded page gets to call stageReady. */
-        const val SHOW_WINDOW_TIMEOUT_MS = 3000L
+        const val SHOW_WINDOW_TIMEOUT_MS = AppLifecycle.SHOW_WINDOW_TIMEOUT_MS
         /** How long after a headless app is up its placeholder card waits for it to open one. */
-        const val PLACEHOLDER_GRACE_MS = 1000L
+        const val PLACEHOLDER_GRACE_MS = AppLifecycle.PLACEHOLDER_GRACE_MS
     }
 }

@@ -25,12 +25,18 @@ import java.util.concurrent.atomic.AtomicInteger
  * a device with nothing there would (Docs/luna-de.md).
  */
 class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus, private val main: DesktopScheduler,
-                    private val shell: DesktopShell) : org.webosarchive.lunacy.card.RunningWindow {
+                    private val shell: DesktopShell, pid: Int? = null) {
     /** The device this page was started on. */
     private val profile = shell.device
     private val outbox = LinkedBlockingQueue<String>()
     private val calls = HashMap<Int, Bus.Call>()   // on the main thread only
-    override val pid = nextPid.getAndIncrement()
+    /** The process id the page is told: its window's ([DesktopView.pid]), which a reload keeps. */
+    val pid = pid ?: nextPid.getAndIncrement()
+    /** The window this page is in (AppLifecycle's), once the host knows it. */
+    @Volatile var view: DesktopView? = null
+    /** The page called PalmSystem.stageReady. */
+    @Volatile var stageReady = false
+        private set
     @Volatile private var closed = false
     /** How this window is held when it isn't the device's way: a popped-out window resized to the other shape. */
     @Volatile var ownOrientation: String? = null
@@ -68,7 +74,8 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
         "screenOrientation" -> JSONObject.quote(screenOrientation())
         "windowOrientation" -> JSONObject.quote(profile.windowOrientationFor(screenOrientation()))
         "processId" -> pid.toString()
-        "activityId" -> "0"
+        // The app's own activity, as WebAppManager made one for every app (AppLifecycle.createAppActivity).
+        "activityId" -> (view?.let { shell.lifecycle.activityId(it) } ?: -1).toString()
         "mediaBase" -> JSONObject.quote("")
         "localNetworkBlocked" -> "false"
         "netSend" -> { net.send(a.optInt(0), a.optString(1)); "null" }
@@ -85,7 +92,8 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
         "pageLoaded", "stageReady", "pageDrawn" -> {
             // The app says its stage is ready (or its page has drawn): its card can come up.
             if (method != "pageLoaded") shell.pageReady(this)
-            main.post { pageUp() }; "null"
+            if (method == "stageReady") stageReady = true
+            main.post { pageUp(); shell.pageSaid(this, method) }; "null"
         }
         "scriptResult" -> { val t = a.optInt(0); val v = a.optBoolean(1); main.post { results.remove(t)?.invoke(v) }; "null" }
         "clipboardHasText" -> "false"
@@ -168,7 +176,7 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
     private var focusPending = false
 
     /** Calls a lifecycle hook the way LunaSysMgr did: a function on the page's Mojo object. */
-    private fun callMojo(fn: String, argsJson: String = "") {
+    fun callMojo(fn: String, argsJson: String = "") {
         if (!closed) outbox.add("(function(){try{if(window.Mojo&&Mojo.$fn){Mojo.$fn($argsJson);}}catch(e){console.error('Mojo.$fn: '+e);}})()")
     }
 

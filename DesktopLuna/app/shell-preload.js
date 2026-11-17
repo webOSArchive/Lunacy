@@ -44,6 +44,8 @@ contextBridge.exposeInMainWorld("luna", {
 	onNetwork: on("luna-de:network"),
 	onHome: on("luna-de:home"),
 	onCardAdded: on("luna-de:card-added"),
+	onCardLoading: on("luna-de:card-loading"),
+	onCardWithdrawn: on("luna-de:card-withdrawn"),
 	onCardReady: on("luna-de:card-ready"),
 	onCardRemoved: on("luna-de:card-removed"),
 	onCardTitle: on("luna-de:card-title"),

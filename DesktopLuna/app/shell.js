@@ -554,6 +554,12 @@
 
 	window.luna.onHome(home);
 	window.luna.onCardAdded(added);
+	// A headless app the host started with a loading card (a launch that was no tap here: another
+	// app's, LUNA_DE_OPEN), and the host's word that the app is up and opened no card for it.
+	window.luna.onCardLoading(function (d) { launching({ id: d.appId, title: d.title }); });
+	window.luna.onCardWithdrawn(function (d) {
+		cards.filter(function (c) { return !c.id && c.appId === d.appId; }).forEach(function (c) { clearTimeout(c.waiting); dropCard(c, false); });
+	});
 	window.luna.onCardReady(ready);
 	window.luna.onCardRemoved(removed);
 	window.luna.onShow(function (d) { var i = cardIndex(d.id); if (i >= 0) { maximize(i); } });

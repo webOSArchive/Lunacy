@@ -34,9 +34,14 @@
 	// This engine's own version, for the compat layer's engine-bound fixes.
 	N.engineMajor = function () { return parseInt(process.versions.chrome, 10) || -1; };
 	window.LunacyNative = N;
-	// The main process names a page by this id when the host asks for it to be closed.
+	// The main process knows the page by this id, and tells the host which window it is in (the
+	// host holds the page's first native call until it has heard). Not a synchronous message: one
+	// sent from a window as window.open makes it was never answered, and hung the app.
 	var ipc = null;
 	try { ipc = require("electron").ipcRenderer; ipc.send("luna-de:page", page); } catch (e) {}
+	// window.close() closes this page's own window (its card, its dashboard), as on webOS. Electron's
+	// own would close the window the view sits in, which is the whole device, and Luna DE with it.
+	if (ipc) { try { window.close = function () { ipc.send("luna-de:close-self"); }; } catch (e) {} }
 	// What the page is about to open (window.open's attributes: a card, a dashboard, a popup
 	// alert) is Electron's to place, so it hears of it before the open reaches it.
 	N.nextWindow = function (attributesJson) { if (ipc) { try { ipc.sendSync("luna-de:next-window", String(attributesJson)); } catch (e) {} } return null; };

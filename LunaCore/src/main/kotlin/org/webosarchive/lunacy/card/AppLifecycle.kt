@@ -475,6 +475,10 @@ class AppLifecycle<W : LifecycleWindow>(
         const val MEMORY_CALM_MS = 30_000L
         /** How long a headless app outlives its last visible window: long enough to hear that window go. */
         const val HEADLESS_LINGER_MS = 1000L
+        /** WindowedWebApp's kShowWindowTimeoutMs: how long a loaded page gets to call stageReady before it counts as ready (the screen's to act on). */
+        const val SHOW_WINDOW_TIMEOUT_MS = 3000L
+        /** How long after a headless app is up its placeholder card waits for it to open one. */
+        const val PLACEHOLDER_GRACE_MS = 1000L
 
         /**
          * A launch's params as a query value, percent-encoded as android.net.Uri.encode does

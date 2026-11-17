@@ -132,7 +132,7 @@ Two Settings apps help you tweak system-wide and on a per-app basis:
    - Tablet forces Lunacy to treat your device as a TouchPad by default
    - No matter what you select, you can still apply an app-specific override in Device Info
 
-<img src="Meta/screenshots/ZoomApps.png" height="200" style="height:200px">
+<img src="Meta/screenshots/ZoomApps.png" height="280" style="height:200px">
 
 ### Android Integration
 
@@ -152,7 +152,7 @@ Lunacy works best when it's the default Android Launcher (but you don't have to 
 
 You can control how much Android appears in webOS in the **Software Manager** Settings app by toggling Android apps visibility on and off.
 
-<img src="Meta/screenshots/HideApps.png" height="200" style="height:200px">
+<img src="Meta/screenshots/HideApps.png" height="280" style="height:200px">
 
 Hiding an app does not uninstall it, but it removes it from the Lunacy launcher and JustType UIs.
 
@@ -164,7 +164,7 @@ To uninstall an Android app, use Android settings -- webOS will not remove Andro
 
 If you prefer to use a different Launcher, webOS apps can be pinned to that Launcher and webOS notification sounds and wallpapers are added to Android, so you can still have a webOS experience.
 
-<img src="Meta/screenshots/PinApps.png" height="200" style="height:200px">
+<img src="Meta/screenshots/PinApps.png" height="280" style="height:200px">
 
 To pin a webOS app to an alternate Android Launcher, use **Software Manager**, find the webOS app, and tap the "Pin" button. 
 

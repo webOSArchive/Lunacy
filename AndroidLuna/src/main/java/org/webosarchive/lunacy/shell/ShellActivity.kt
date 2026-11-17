@@ -1360,7 +1360,7 @@ class ShellActivity : Activity(), WindowHost {
         // What Music plays is Android's media session too; its controls come back as webOS's media keys (NowPlaying).
         MediaBroadcast(this).register(bus)
         NowPlaying.onKey = { k -> runOnUiThread { keys.mediaKey(k) } }
-        universalSearch = UniversalSearch(this) { registry.apps }.also {
+        universalSearch = UniversalSearch(org.webosarchive.lunacy.card.UniversalSearchStore(this)) { registry.apps }.also {
             it.register(bus)
             it.onChange = { runOnUiThread { chrome.searchChanged() } }
             chrome.searchReady(it)

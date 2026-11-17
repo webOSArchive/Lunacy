@@ -53,6 +53,11 @@ tab (or right-click it) to rename or delete it; hold the tab bar's empty space (
 it) for "+", a new tab. Hold an icon on the bar to move it or drag it off. Done, Esc or the
 home button ends it.
 
+**Just Type:** click the pill in the card view, or just type there. An installed app's
+`universalSearch` entries in its appinfo.json (a search, a quick action, a content search over
+its db8 kind) show as they did on a device, and choosing one launches the app with the params
+a device gave it; the bundled Just Type settings app turns each on and off.
+
 **Installing an app:** drop its `.ipk`, or its folder (the one holding `appinfo.json`), on the
 window; or press Ctrl/Cmd+O for a package, Ctrl/Cmd+Shift+O for a folder; or start with
 `LUNA_DE_INSTALL=<path>`. It appears on the launcher's Downloads tab. Drop a folder again after

@@ -204,6 +204,84 @@ body.phone.editing #grid .tile .del { left: calc(50% - 46px); top: calc(50% - 60
 .group-panel .name input { width: 100%; height: 40px; font-size: 22px; text-align: center; }
 .group-panel .members { display: grid; grid-auto-rows: 128px; justify-content: center; }
 
+/* ---- Just Type: Palm's app, to its measurements and with its art (AndroidLuna's JustTypePanel,
+   measured on the reference TouchPad). A 62 px header with the 570 px field 13 px down; once a
+   search has run, the 47 px filter tabs, six cells of tab-button.png (plain in rows 0-46, pressed
+   49-95, chosen 99-145; 34 px ends); groups 736 wide, the first 33 px below the tabs, 12 px
+   apart (20 before one with a caption); rows 74 high with a 48 px icon 10 px in and the label
+   at 69 px; LAUNCH tiles 85 x 113, 138 apart, from 40 px in and 48 px down. ---- */
+#justtype { position: absolute; left: 0; top: var(--status); width: var(--w); height: calc(var(--h) - var(--status)); z-index: 35;
+	display: flex; flex-direction: column; background: url("../../AndroidLuna/src/main/assets/luna/images/justtype/bg.png"); opacity: 0; transition: opacity 150ms linear; }
+#justtype[hidden] { display: none; }
+body.justtype #justtype { opacity: 1; }
+body.justtype #pill { opacity: 0; pointer-events: none; }
+body.justtype #quicklaunch { transform: translateY(100%); }
+#jt-header { flex: none; height: 62px; background: url("../../AndroidLuna/src/main/assets/luna/images/justtype/search-header-bg.png") repeat-x top / 20px 200px; position: relative; z-index: 2; }
+#jt-field { position: absolute; left: 50%; top: 13px; width: 570px; max-width: calc(var(--w) - 24px); height: 36px; transform: translateX(-50%); box-sizing: border-box;
+	border-style: solid; border-width: 0 18px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/justtype/roundedbox.png") 0 18 fill / 0 18px stretch; display: flex; align-items: center; }
+#jt-input { flex: 1; min-width: 0; margin: 0 6px 0 -4px; border: 0; outline: 0; background: transparent; color: #333; font: 20px Prelude, sans-serif; }
+#jt-clear { flex: none; width: 20px; height: 20px; border: 0; padding: 0; cursor: pointer; background: url("../../AndroidLuna/src/main/assets/luna/images/justtype/search-input-cancel.png") center / 20px 20px no-repeat; }
+#jt-clear[hidden] { display: none; }
+#jt-tabs { flex: none; height: 47px; display: flex; position: relative; z-index: 2; }
+#jt-tabs[hidden] { display: none; }
+#jt-tabs button { flex: 1 1 0; min-width: 0; height: 47px; padding: 0; box-sizing: border-box; cursor: pointer; background: transparent;
+	color: #c8c8c8; font: bold 15px/50px Prelude, sans-serif; text-transform: uppercase; white-space: nowrap; overflow: hidden;
+	border-style: solid; border-width: 0 34px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/justtype/tab-button.png") 0 34 103 34 fill / 0 34px stretch; }
+#jt-tabs button.blank { cursor: default; }
+#jt-tabs button.filter:active { color: #fff; border-image-slice: 49 34 54 34 fill; }
+#jt-tabs button.chosen { color: #fff; border-image-slice: 99 34 4 34 fill; }
+#jt-tabs button { text-indent: -20px; padding-right: 0; }
+#jt-tabs button.filter { text-indent: 0; margin: 0; }
+#jt-list { flex: 1; overflow-y: auto; padding: 33px 0 24px; scrollbar-width: none; position: relative;
+	box-shadow: inset 0 10px 0 -10px transparent; }
+#jt-list::-webkit-scrollbar { display: none; }
+#jt-list::before { content: ""; position: sticky; display: block; top: -33px; height: 10px; margin: -33px 0 23px; pointer-events: none; z-index: 1;
+	background: url("../../AndroidLuna/src/main/assets/luna/images/justtype/search-header-shadow.png") repeat-x; }
+.jt-group { position: relative; width: 736px; max-width: calc(var(--w) - 24px); margin: 0 auto 12px; }
+.jt-group::before { content: ""; position: absolute; inset: 0; pointer-events: none; box-sizing: border-box; z-index: 0;
+	border-style: solid; border-width: 14px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/justtype/group-unlabeled.png") 14 fill / 14px stretch; }
+.jt-group.labeled { margin-top: 20px; padding-top: 25px; }
+.jt-group.labeled::before { border-width: 36px 14px 14px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/justtype/group-labeled.png") 36 14 14 14 fill / 36px 14px 14px stretch; }
+.jt-group.focused::after { content: ""; position: absolute; inset: 0; pointer-events: none; box-sizing: border-box; z-index: 2;
+	border-style: solid; border-width: 6px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/justtype/groupbox-focus.png") 6 / 6px stretch; }
+.jt-group .caption { position: absolute; left: 12px; top: 5px; z-index: 1; font: bold 14px Prelude, sans-serif; text-transform: uppercase; color: #fff; }
+.jt-row { position: relative; z-index: 1; height: 74px; display: flex; align-items: center; margin: 0 1px; cursor: pointer; font: 18px Prelude, sans-serif; color: #fff; }
+.jt-row + .jt-row { box-shadow: 0 -1px 0 #1d2023, inset 0 1px 0 #606468; }
+.jt-row:active { background: #212325; }
+.jt-row > img { position: absolute; left: 10px; top: 50%; width: 48px; height: 48px; margin-top: -24px; object-fit: contain; }
+.jt-row .label { margin-left: 69px; margin-right: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 600px; }
+.jt-row.web { height: 58px; }
+.jt-row.web > img { left: 12px; width: 32px; height: 32px; margin-top: -16px; }
+.jt-row.web .label { margin-left: 54px; }
+.jt-row.more > img { left: 18px; width: 32px; height: 32px; margin-top: -16px; }
+.jt-row.content { height: 70px; }
+.jt-row.content.open { height: 71px; }
+.jt-row .count { position: absolute; right: 11px; top: 50%; height: 26px; min-width: 25px; margin-top: -13px; box-sizing: border-box; text-align: center; font: 18px/26px Prelude, sans-serif;
+	border-style: solid; border-width: 0 11px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/justtype/filter-field-pill.png") 0 11 fill / 0 11px stretch; }
+.jt-row.result { height: 70px; }
+.jt-row.result.drawer { height: 66px; }
+.jt-row.result .lines { margin: 0 70px 0 14px; min-width: 0; }
+.jt-row.result .l1, .jt-row.result .l2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 500px; }
+.jt-row.result .l2 { color: #b8e2ff; font-size: 16px; }
+.jt-row.result .kind { left: auto; right: 12px; }
+.jt-row u, .jt-tile u { text-decoration: none; background: url("../../AndroidLuna/src/main/assets/luna/images/justtype/underline.png") repeat-x bottom / 20px 3px; padding-bottom: 2px; }
+.jt-group.launch { display: flex; flex-wrap: wrap; padding: 48px 0 15px 40px; gap: 25px 53px; box-sizing: border-box; }
+.jt-tile { position: relative; z-index: 1; width: 85px; height: 113px; padding: 5px 0 0; border: 0; background: transparent; cursor: pointer; color: #fff;
+	display: flex; flex-direction: column; align-items: center; font: bold 14px Prelude, sans-serif; }
+.jt-tile::before { content: ""; position: absolute; inset: 0; box-sizing: border-box; pointer-events: none; z-index: -1;
+	border-style: solid; border-width: 6px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/justtype/groupbox-app-focus-empty.png") 6 fill / 6px stretch; }
+.jt-tile.first::before { border-image-source: url("../../AndroidLuna/src/main/assets/luna/images/justtype/groupbox-app-focus.png"); }
+.jt-tile img { width: 64px; height: 64px; object-fit: contain; }
+.jt-tile span { margin-top: 5px; max-width: 75px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Nothing typed (HomeView's emptyMain): empty-search.png 100 px down, the words 20 px under it. */
+.jt-empty { text-align: center; padding-top: 67px; color: rgba(255,255,255,0.5); font: 20px Prelude, sans-serif; }
+.jt-empty.none { padding-top: 91px; }
+.jt-empty img { display: block; width: 176px; height: 176px; margin: 0 auto 20px; }
+/* A phone: the field and the groups span the width less 12 px margins. */
+body.phone #jt-field { width: calc(var(--w) - 24px); }
+body.phone #jt-tabs button { border-width: 0 8px; border-image-width: 0 8px; font-size: 12px; }
+body.phone .jt-group.launch { padding-left: 14px; gap: 25px 10px; }
+
 /* ---- the quick-launch bar ---- */
 #quicklaunch {
 	position: absolute; left: 0; right: 0; bottom: 0; height: var(--ql); z-index: 30;

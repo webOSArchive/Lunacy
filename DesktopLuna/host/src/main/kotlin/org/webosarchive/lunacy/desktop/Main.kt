@@ -137,6 +137,10 @@ fun main(args: Array<String>) {
         shell.applicationManager = org.webosarchive.lunacy.card.ApplicationManager(registry,
             org.webosarchive.lunacy.card.ContentHandlers(registry, webosRoot), addedLaunchPoints, files, packages, desktopRoot, shell)
             .also { it.register(bus) }
+        // What Just Type offers besides apps, from every app's appinfo.json, and the settings
+        // Palm's Just Type app keeps for it (com.palm.universalsearch), as on Android.
+        shell.universalSearch = org.webosarchive.lunacy.card.UniversalSearch(FileKeyedStore(File(data, "universalsearch.json"))) { registry.apps }
+            .also { it.register(bus) }
         shell.configurator.run()
         // JS services: each package under /usr/palm/services, the ROM's and installed ones', in
         // its own Node process, started by its first call (JsServices). /var/log/messages is
@@ -198,6 +202,18 @@ fun main(args: Array<String>) {
                 .put("virtualKeyboard", shell.device == org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD))
             .put("phoneZoom", shell.phoneZoom())
         send(ex, 200, "application/json; charset=utf-8", out.toString().toByteArray())
+    } }
+
+    // Just Type: what a text finds (with content=1, the apps' content searches too), and a choice made.
+    val justType by lazy { DesktopJustType(main, bus, registry, shell.universalSearch!!, ::entryOf) }
+    http.createContext("/justtype") { ex -> ex.use {
+        val q = query(ex)
+        send(ex, 200, "application/json; charset=utf-8", justType.find(q["q"].orEmpty(), q["content"] == "1").toString().toByteArray())
+    } }
+    http.createContext("/justtype-go") { ex -> ex.use {
+        val q = query(ex)
+        justType.go(q["kind"].orEmpty(), q["id"].orEmpty(), q["q"].orEmpty(), q["i"]?.toIntOrNull() ?: -1)
+        send(ex, 204, "text/plain", ByteArray(0))
     } }
 
     // The launcher as its owner has just left it: {"tabs": [...]} in LauncherLayout's saved

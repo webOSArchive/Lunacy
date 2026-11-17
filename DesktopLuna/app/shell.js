@@ -192,6 +192,7 @@
 
 	/** A card main.js has made (a launch, or an app's window.open): it takes the loading card the tap put up, or comes in with its own. */
 	function added(d) {
+		closeJustType();
 		closeLauncher();
 		clearGlow();
 		var c = cards.filter(function (k) { return !k.id && k.appId === d.appId; })[0] || newCard(d.appId, d.title);
@@ -858,6 +859,7 @@
 	}
 
 	function openLauncher() {
+		closeJustType();
 		if (maximized) { cardView(); }
 		$("launcher").hidden = false;
 		document.body.classList.add("launcher");
@@ -877,6 +879,7 @@
 	function home() {
 		$("menu").hidden = true;
 		if (!$("scrim").hidden) { if (scrimAway) { scrimAway(); } else { closeScrim(); } }
+		else if (jt.open) { closeJustType(); }
 		else if (editing) { exitEdit(); }
 		else if (!$("launcher").hidden) { closeLauncher(); }
 		else if (maximized) { cardView(); }
@@ -922,6 +925,292 @@
 	}
 	// The title is the app menu's, while a card is up (the TouchPad's status bar).
 	$("title").addEventListener("click", function () { if (maximized) { window.luna.appMenu(); } });
+
+	// ---- Just Type ----
+	//
+	// Palm's Just Type app, drawn to its measurements and with its art as AndroidLuna's
+	// JustTypePanel has them. What a text finds, and what each choice does, is the host's to say
+	// (LunaCore's JustTypeSearch over com.palm.universalsearch, which every installed app's
+	// appinfo.json feeds): the apps to LAUNCH; "Go to website" for something that reads as an
+	// address; each app's content search with results and its count; "Search <default engine>";
+	// SEARCH USING… and QUICK ACTIONS, four and then More…. The results follow the typing by
+	// half a second, and the content searches by half a second more. An email address shows the
+	// actions alone. Return takes the first thing offered.
+	var JT_ART = "../../AndroidLuna/src/main/assets/luna/images/justtype/";
+	var JT_SEARCH_MS = 500, JT_DB_MS = 500;
+	var JT_FILTERS = ["All", "Contacts", "Content", "Actions"];
+	var JT_EMAIL = /^([A-Za-z0-9_\-.])+@([A-Za-z0-9_\-.@])+\.([A-Za-z]{2,4}) *$/;
+	var jt = { open: false, term: "", searched: false, view: 0, actionsOnly: false, detail: null, moreSearch: false, moreActions: false,
+		data: null, content: [], timer: null, dbTimer: null, gen: 0 };
+
+	function jtIcon(item) {
+		var img = document.createElement("img");
+		img.alt = "";
+		var generic = JT_ART + "search-icon-generic.png";
+		img.onerror = function () { img.onerror = null; img.src = generic; };
+		if (item.type === "web") { img.src = JT_ART + "search-icon-" + item.id + ".png"; }
+		else if (item.type === "opensearch") { img.src = generic; }
+		else if (appEntries[item.id]) { img.src = appEntries[item.id].icon; }
+		else { window.luna.iconFor(item.id).then(function (u) { img.src = u; }); }
+		return img;
+	}
+
+	function openJustType(initial) {
+		if (maximized || jt.open) { return; }
+		closeLauncher();
+		jt.open = true;
+		var el = $("justtype");
+		el.hidden = false; el.getBoundingClientRect();
+		document.body.classList.add("justtype");
+		$("title-text").textContent = "Just Type";
+		var input = $("jt-input");
+		input.value = initial || "";
+		input.focus();
+		jtTyped(input.value);
+	}
+
+	function closeJustType() {
+		if (!jt.open) { return; }
+		jt.open = false;
+		clearTimeout(jt.timer); clearTimeout(jt.dbTimer); jt.gen++;
+		document.body.classList.remove("justtype");
+		$("jt-input").blur();
+		setTimeout(function () { if (!jt.open) { $("justtype").hidden = true; $("jt-input").value = ""; jtTyped(""); } }, 150);   // universalSearchCrossFadeDuration
+		setTitle();
+	}
+
+	function jtTyped(text) {
+		clearTimeout(jt.timer);
+		$("jt-clear").hidden = !text;
+		if (!text) {
+			// JustType.clearSearchText: back to the start, tabs and all.
+			clearTimeout(jt.dbTimer); jt.gen++;
+			jt.term = ""; jt.searched = false; jt.view = 0; jt.actionsOnly = false; jt.detail = null;
+			jt.moreSearch = false; jt.moreActions = false; jt.data = null; jt.content = [];
+			jtDraw(); return;
+		}
+		// updateEmailOrWebDiv runs on every keystroke from three characters.
+		if (text.length >= 3) {
+			if (JT_EMAIL.test(text)) { jt.actionsOnly = true; jt.view = 3; jt.detail = null; }
+			else if (jt.actionsOnly) { jt.actionsOnly = false; jt.view = 0; }
+		}
+		jt.timer = setTimeout(function () { jtSearch(text); }, JT_SEARCH_MS);
+	}
+
+	function jtSearch(text) {
+		if (!text || !jt.open) { return Promise.resolve(); }
+		var gen = ++jt.gen;
+		clearTimeout(jt.dbTimer);
+		return window.luna.justType(text, false).then(function (d) {
+			if (gen !== jt.gen || !d) { return; }
+			var first = !jt.searched;
+			jt.searched = true; jt.term = text; jt.data = d; jt.moreSearch = false; jt.moreActions = false;
+			if (text.length < 2) { jt.content = []; if (jt.detail) { jt.detail = null; jt.view = 2; } }
+			else {
+				jt.dbTimer = setTimeout(function () {
+					window.luna.justType(text, true).then(function (d2) {
+						if (gen !== jt.gen || !d2) { return; }
+						jt.content = d2.content || [];
+						// The results being looked at went away: back to the content groups.
+						if (jt.detail && !jt.content.some(function (c) { return c.id === jt.detail; })) { jt.detail = null; jt.view = 2; }
+						jtDraw();
+					});
+				}, JT_DB_MS);
+			}
+			if (first) { $("jt-list").scrollTop = 0; }
+			jtDraw();
+		});
+	}
+
+	function jtGo(kind, id, index) {
+		var term = jt.term;
+		closeJustType();
+		if (kind === "app") { launch(appEntries[id] || { id: id, title: id }, null); return; }
+		window.luna.justTypeGo(kind, id, term, index);
+	}
+
+	/** Return: the address, else the first app found, else the default search. */
+	function jtEnter() {
+		clearTimeout(jt.timer);
+		var text = $("jt-input").value;
+		if (!text) { return; }
+		var ready = text !== jt.term || !jt.searched ? jtSearch(text) : Promise.resolve();
+		ready.then(function () {
+			var d = jt.data;
+			if (!d || !jt.open) { return; }
+			if (d.goToWeb && !jt.actionsOnly) { jtGo("web", "", 0); return; }
+			if (jt.view !== 2 && jt.view !== 1 && d.launch.length) { jtGo("app", d.launch[0].id, 0); return; }
+			if (d.default) { jtGo("default", d.default.id, 0); }
+		});
+	}
+
+	function jtGroup(caption, focused) {
+		var g = document.createElement("div");
+		g.className = "jt-group" + (caption ? " labeled" : "") + (focused ? " focused" : "");
+		if (caption) { var c = document.createElement("div"); c.className = "caption"; c.textContent = caption; g.appendChild(c); }
+		return g;
+	}
+	function jtRow(iconEl, label, tap, cls) {
+		var r = document.createElement("div");
+		r.className = "jt-row" + (cls ? " " + cls : "");
+		if (iconEl) { r.appendChild(iconEl); }
+		var s = document.createElement("span"); s.className = "label"; s.textContent = label; r.appendChild(s);
+		if (tap) { r.addEventListener("click", tap); }
+		return r;
+	}
+	function jtArt(name) { var i = document.createElement("img"); i.alt = ""; i.src = JT_ART + name; return i; }
+	/** Util.highlightString: every word that starts with the typed text, underlined. */
+	function jtHighlight(el, text, words) {
+		el.textContent = "";
+		var w = words.trim(), re = null;
+		try { re = w ? new RegExp("\\b(" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "ig") : null; } catch (e) {}
+		var at = 0, m;
+		while (re && (m = re.exec(text))) {
+			if (m.index > at) { el.appendChild(document.createTextNode(text.slice(at, m.index))); }
+			var u = document.createElement("u"); u.textContent = m[0]; el.appendChild(u);
+			at = m.index + m[0].length;
+			if (!m[0].length) { break; }
+		}
+		el.appendChild(document.createTextNode(text.slice(at)));
+	}
+	/** Four, then More… when there is more than one left (populateLaunchAndSearchList). */
+	function jtLimited(g, items, all, more, row) {
+		var limit = (jt.data && jt.data.limit) || 4;
+		if (all || items.length <= limit + 1) { items.forEach(function (i) { g.appendChild(row(i)); }); return; }
+		items.slice(0, limit).forEach(function (i) { g.appendChild(row(i)); });
+		g.appendChild(jtRow(jtArt("search-icon-new.png"), "More...", function () { more(); jtDraw(); }, "more"));
+	}
+	function jtResultRow(item, r, index, cls) {
+		var row = document.createElement("div");
+		row.className = "jt-row result " + cls;
+		var lines = document.createElement("div"); lines.className = "lines";
+		(r.lines || []).forEach(function (l, i) { var d = document.createElement("div"); d.className = i ? "l2" : "l1"; jtHighlight(d, l, jt.term); lines.appendChild(d); });
+		row.appendChild(lines);
+		var kind = { "com.palm.browserbookmarks:1": "bookmark-icon-48.png", "com.palm.browserhistory:1": "history-icon-48.png" }[r.kind];
+		if (kind && cls === "detail") { var k = jtArt(kind); k.className = "kind"; row.appendChild(k); }
+		row.addEventListener("click", function () { jtGo("result", item.id, index); });
+		return row;
+	}
+
+	function jtActions(d) {
+		if (!d.actions.length) { return null; }
+		var g = jtGroup("Quick Actions");
+		jtLimited(g, d.actions, jt.moreActions, function () { jt.moreActions = true; }, function (a) { return jtRow(jtIcon(a), a.displayName, function () { jtGo("action", a.id, 0); }); });
+		return g;
+	}
+
+	function jtDraw() {
+		var list = $("jt-list"), tabs = $("jt-tabs"), d = jt.data;
+		list.innerHTML = "";
+		tabs.hidden = !jt.searched;
+		if (!jt.searched || !d) {
+			// Just Type with nothing typed: HomeView's emptyMain.
+			var e = document.createElement("div"); e.className = "jt-empty"; e.appendChild(jtArt("empty-search.png"));
+			var t = document.createElement("div"); t.textContent = "Start typing to search or create"; e.appendChild(t);
+			list.appendChild(e); return;
+		}
+		// The filter tabs: six cells on a tablet, the outer two empty; the four alone on a phone.
+		tabs.innerHTML = "";
+		var phone = document.body.classList.contains("phone");
+		for (var i = 0; i < 6; i++) {
+			var f = JT_FILTERS[i - 1];
+			if (phone && !f) { continue; }
+			var cell = document.createElement("button");
+			cell.className = (f ? "filter" : "blank") + (i - 1 === jt.view ? " chosen" : "");
+			cell.textContent = f || "";
+			if (f) { (function (n) { cell.addEventListener("click", function () {
+				// JustType.tabClickHandler → MainView.showView.
+				jt.actionsOnly = false; jt.detail = null; jt.moreSearch = false; jt.moreActions = false; jt.view = n; list.scrollTop = 0; jtDraw();
+			}); })(i - 1); }
+			tabs.appendChild(cell);
+		}
+		var groups = [];
+		if (jt.detail) {
+			var item = jt.content.filter(function (c) { return c.id === jt.detail; })[0];
+			if (item) {
+				var dg = jtGroup(item.displayName + " (" + item.results.length + ")");
+				item.results.forEach(function (r, n) { dg.appendChild(jtResultRow(item, r, n, "detail")); });
+				groups.push(dg);
+			}
+		} else if (jt.view === 1) {
+			// Contacts aren't searched yet (as on Android).
+		} else if (jt.actionsOnly) {
+			var only = jtActions(d); if (only) { groups.push(only); }
+		} else {
+			var all = jt.view === 0, goToWeb = all && d.goToWeb;
+			if (goToWeb) {
+				var wg = jtGroup(null, true);
+				wg.appendChild(jtRow(jtArt("goto-icon-32.png"), "Go to website", function () { jtGo("web", "", 0); }, "web"));
+				groups.push(wg);
+			}
+			if ((all || jt.view === 3) && d.launch.length) {
+				var lg = jtGroup("Launch"); lg.classList.add("launch");
+				d.launch.forEach(function (a, n) {
+					var tile = document.createElement("button");
+					tile.className = "jt-tile" + (n === 0 ? " first" : "");
+					tile.appendChild(icon(a));
+					var name = document.createElement("span");
+					// The matched start of the title underlined.
+					if (a.match >= 0) {
+						name.appendChild(document.createTextNode(a.title.slice(0, a.match)));
+						var u = document.createElement("u"); u.textContent = a.title.slice(a.match, a.match + a.matchLength); name.appendChild(u);
+						name.appendChild(document.createTextNode(a.title.slice(a.match + a.matchLength)));
+					} else { name.textContent = a.title; }
+					tile.appendChild(name);
+					tile.addEventListener("click", function () { jtGo("app", a.id, 0); });
+					lg.appendChild(tile);
+				});
+				groups.push(lg);
+			}
+			if (all || jt.view === 2) {
+				jt.content.forEach(function (c) {
+					var cg = jtGroup(null);
+					var head = jtRow(jtIcon(c), c.displayName, function () { jt.detail = c.id; jt.view = 2; list.scrollTop = 0; jtDraw(); }, "content" + (c.inline ? " open" : ""));
+					var pill = document.createElement("span"); pill.className = "count"; pill.textContent = c.results.length; head.appendChild(pill);
+					cg.appendChild(head);
+					if (c.inline) { c.results.forEach(function (r, n) { cg.appendChild(jtResultRow(c, r, n, "drawer")); }); }
+					groups.push(cg);
+				});
+			}
+			if (all || jt.view === 3) {
+				if (d.default) {
+					var sg = jtGroup(null, !goToWeb && !d.launch.length);
+					sg.appendChild(jtRow(jtIcon(d.default), "Search " + d.default.displayName, function () { jtGo("default", d.default.id, 0); }));
+					groups.push(sg);
+				}
+				if (d.using.length) {
+					var ug = jtGroup("Search Using...");
+					jtLimited(ug, d.using, jt.moreSearch, function () { jt.moreSearch = true; }, function (e2) { return jtRow(jtIcon(e2), e2.displayName, function () { jtGo("using", e2.id, 0); }); });
+					groups.push(ug);
+				}
+				var ag = jtActions(d); if (ag) { groups.push(ag); }
+			}
+		}
+		if (!groups.length) {
+			// "No Search Results Found", as DbSearch and ContactSearch show it.
+			var none = document.createElement("div"); none.className = "jt-empty none"; none.appendChild(jtArt("empty-search.png"));
+			var nt = document.createElement("div"); nt.textContent = "No Search Results Found"; none.appendChild(nt);
+			list.appendChild(none); return;
+		}
+		groups.forEach(function (g) { list.appendChild(g); });
+	}
+
+	$("pill").addEventListener("click", function () { openJustType(""); });
+	$("jt-input").addEventListener("input", function () { jtTyped($("jt-input").value); });
+	$("jt-input").addEventListener("keydown", function (e) {
+		e.stopPropagation();
+		if (e.key === "Enter") { e.preventDefault(); jtEnter(); }
+		else if (e.key === "Escape") { e.preventDefault(); closeJustType(); }
+	});
+	$("jt-clear").addEventListener("click", function () { $("jt-input").value = ""; jtTyped(""); $("jt-input").focus(); });
+	// Just type: a printable key in the card view or the launcher opens Just Type with that
+	// character, as on a TouchPad with a keyboard paired.
+	document.addEventListener("keydown", function (e) {
+		if (jt.open || maximized || editing || !$("scrim").hidden || e.ctrlKey || e.metaKey || e.altKey) { return; }
+		if (e.key.length !== 1 || e.key === " " || (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName))) { return; }
+		e.preventDefault();
+		openJustType(e.key);
+	});
 
 	// ---- notifications: banners, the dashboards' drop-down, popup alerts ----
 

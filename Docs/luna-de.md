@@ -118,6 +118,23 @@ API 21 gate.
   saved shape, with `LauncherLayoutTest`. AndroidLuna's launcher still runs its own copy of
   those rules in its view; moving it onto LauncherLayout is not done. Not here: pages swiped
   sideways (a tab is tapped), and an install's progress on the downloads page.
+- **Just Type, with the apps' own integrations** (2026-11-17), so a developer can test theirs.
+  The pill in the card view, or any printable key there or in the launcher, opens it: Palm's
+  Just Type app as AndroidLuna's JustTypePanel draws it (the field, the filter tabs, LAUNCH,
+  "Go to website", each app's content search with its count and results, "Search <default
+  engine>", SEARCH USING…, QUICK ACTIONS, four and then More…). What it offers is
+  `com.palm.universalsearch`'s lists, which every installed app's appinfo.json feeds
+  (`universalSearch.search`, `.action`, `.dbsearch`): **UniversalSearch is in LunaCore now**,
+  over a `KeyedStore` (Android's "universalsearch" preferences, typed as they were; a file
+  here), registered on Luna DE's bus, so Palm's own Just Type settings app turns each entry on
+  and off as on a device. What a text finds and what a choice does is LunaCore's
+  `JustTypeSearch` (Palm's LaunchAndSearch.js, Actions.js and DbSearch.js, as JustTypePanel has
+  them): a search launches its app with the words encoded under its launchParam, an action
+  with the words as typed, a content search runs the app's db8 query with the words and opens
+  a result with its `launchParamDbField`; all as `com.palm.launcher` on the bus.
+  `JustTypeSearchTest` holds it with an app that declares all three. AndroidLuna's panel
+  still carries its own copy of those rules. Not here: contacts (as on Android), recent
+  searches, and a loading card for an app Just Type starts.
 - **Logs.** The bezel's `</>` button opens the log window: every app page's console (cards,
   dashboards, alerts, pages with no window) in one place, each line with its time, app id, level
   and source, kept from when Luna DE started, with a filter and the levels to show. It stands in

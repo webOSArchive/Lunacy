@@ -569,6 +569,19 @@ ipcMain.handle("luna-de:shell", async () => {
 	s.dock.forEach(withIcon);
 	return s;
 });
+// Just Type: what a text finds (the host's answer, by LunaCore's rules), and a choice made.
+ipcMain.handle("luna-de:justtype", async (e, text, content) => {
+	try {
+		const d = await (await net.fetch(host + "/justtype?" + new URLSearchParams({ q: text, content: content ? "1" : "0" }).toString())).json();
+		(d.launch || []).forEach(withIcon);
+		return d;
+	} catch (err) { return null; }
+});
+ipcMain.handle("luna-de:icon-url", (e, id) => host + "/icon?id=" + encodeURIComponent(id));
+ipcMain.handle("luna-de:justtype-go", (e, kind, id, text, index) => {
+	hostPost("/justtype-go", { kind, id: id || "", q: text || "", i: index === undefined ? -1 : index });
+	return true;
+});
 // The launcher as its owner has just arranged it (its tabs, or the quick-launch bar): the host keeps it.
 ipcMain.handle("luna-de:launcher-save", (e, what) => {
 	net.fetch(host + "/launcher", { method: "POST", body: JSON.stringify(what || {}) }).catch(() => {});

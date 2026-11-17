@@ -54,6 +54,7 @@ class DesktopShell(
     lateinit var configurator: Configurator
     lateinit var applicationManager: ApplicationManager
     var jsServices: org.webosarchive.lunacy.card.JsServices? = null
+    var universalSearch: org.webosarchive.lunacy.card.UniversalSearch? = null
     var network: DesktopNetwork? = null
     /** Where every app's WebSQL databases are kept (files/websql on Android). */
     val webSqlDir get() = File(data, "websql")
@@ -576,6 +577,8 @@ class DesktopShell(
         registry.reload()
         configurator.run()
         jsServices?.reload()
+        // A new app's Just Type entries join the lists, a removed app's leave.
+        universalSearch?.appsChanged()
         val after = registry.launchPoints.associateBy { it.id }
         for ((id, app) in after) if (id !in before) applicationManager.launchPointChanged(app, "added")
         for ((id, app) in before) if (id !in after) applicationManager.launchPointChanged(app, "removed")

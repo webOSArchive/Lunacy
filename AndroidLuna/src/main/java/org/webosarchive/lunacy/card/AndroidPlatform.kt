@@ -281,3 +281,17 @@ class AndroidKeyedStore(context: android.content.Context, name: String) : org.we
     override fun put(key: String, value: String) { prefs.edit().putString(key, value).apply() }
     override fun remove(key: String) { prefs.edit().remove(key).apply() }
 }
+
+/**
+ * Just Type's settings (UniversalSearch), in the "universalsearch" preferences they have always
+ * been in, and typed as they were before UniversalSearch moved into LunaCore: whether an item
+ * is on ("on:…") a boolean, the rest strings. An earlier build reads the same file.
+ */
+class UniversalSearchStore(context: android.content.Context) : org.webosarchive.lunacy.core.KeyedStore {
+    private val prefs = context.getSharedPreferences("universalsearch", android.content.Context.MODE_PRIVATE)
+    override fun all(): Map<String, String> = prefs.all.mapNotNull { (k, v) -> v?.let { k to it.toString() } }.toMap()
+    override fun put(key: String, value: String) {
+        if (key.startsWith("on:")) prefs.edit().putBoolean(key, value == "true").apply() else prefs.edit().putString(key, value).apply()
+    }
+    override fun remove(key: String) { prefs.edit().remove(key).apply() }
+}

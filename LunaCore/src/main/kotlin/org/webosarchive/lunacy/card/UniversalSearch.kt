@@ -1,8 +1,8 @@
 package org.webosarchive.lunacy.card
 
-import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import org.webosarchive.lunacy.core.KeyedStore
 
 /**
  * palm://com.palm.universalsearch: what Just Type offers besides launching apps, and the
@@ -30,9 +30,13 @@ import org.json.JSONObject
  * stores whatever it is given (a key it didn't know, set to true, came back as "true").
  *
  * Each engine's icon is luna-applauncher's, which AppServer serves at the device's path.
+ *
+ * In LunaCore, for Android's Just Type and Luna DE's: what it keeps goes through [store]
+ * (Android's "universalsearch" preferences, as before; a file beside Luna DE's data).
  */
-class UniversalSearch(context: Context, private val apps: () -> List<AppInfo>) {
-    private val prefs = context.getSharedPreferences("universalsearch", Context.MODE_PRIVATE)
+class UniversalSearch(private val store: KeyedStore, private val apps: () -> List<AppInfo>) {
+    private fun saved(key: String): String? = store.all()[key]
+    private fun savedOn(key: String, initially: Boolean): Boolean = saved(key)?.let { it == "true" } ?: initially
     private val listSubscribers = LinkedHashSet<Bus.Call>()
     private val prefSubscribers = LinkedHashSet<Bus.Call>()
     /** The shell's own Just Type hears every change, as the device's Just Type app subscribed. */
@@ -72,7 +76,7 @@ class UniversalSearch(context: Context, private val apps: () -> List<AppInfo>) {
     fun register(bus: Bus) {
         // What is installed when Lunacy first runs this is in the lists from the start, in
         // the order the apps are listed; anything installed later goes at the end.
-        if (!prefs.contains("seen")) prefs.edit().putString("seen", integrated().joinToString("\n")).apply()
+        if (saved("seen") == null) store.put("seen", integrated().joinToString("\n"))
         bus.register(SERVICE, "getUniversalSearchList", Bus.CallHandler { c ->
             c.reply(listReply().put("subscribed", c.subscribe).toString())
             subscribe(c, listSubscribers)
@@ -84,7 +88,7 @@ class UniversalSearch(context: Context, private val apps: () -> List<AppInfo>) {
         bus.register(SERVICE, "setSearchPreference") { _, p, reply ->
             val key = p.optString("key")
             if (key.isEmpty() || !p.has("value")) return@register reply(Bus.error("Unable to get data"))
-            prefs.edit().putString("pref:$key", p.opt("value").toString()).apply()
+            store.put("pref:$key", p.opt("value").toString())
             reply(Bus.ok())
             prefsChanged()
             // The default engine is part of the lists' reply too.
@@ -94,10 +98,8 @@ class UniversalSearch(context: Context, private val apps: () -> List<AppInfo>) {
             val id = p.optString("id")
             val category = p.optString("category")
             if (id.isEmpty() || category !in listOf(SEARCH, ACTION, DBSEARCH)) return@register reply(Bus.error("Unable to get data"))
-            val edit = prefs.edit()
-            if (p.has("enabled")) edit.putBoolean(enabledKey(category, id), p.optBoolean("enabled"))
-            if (p.optBoolean("setDefault", false)) edit.putString("pref:defaultSearchEngine", id)
-            edit.apply()
+            if (p.has("enabled")) store.put(enabledKey(category, id), p.optBoolean("enabled").toString())
+            if (p.optBoolean("setDefault", false)) store.put("pref:defaultSearchEngine", id)
             // The device answers true for an id it hasn't got, and changes nothing.
             reply(Bus.ok())
             listChanged("update")
@@ -107,11 +109,9 @@ class UniversalSearch(context: Context, private val apps: () -> List<AppInfo>) {
             val category = p.optString("category")
             if (category !in listOf(SEARCH, ACTION, DBSEARCH) || !p.has("enabled")) return@register reply(Bus.error("Unable to get data"))
             val on = p.optBoolean("enabled")
-            val edit = prefs.edit()
             // The settings app turns the whole group off but the default engine's own row
             // with it; the default engine is shown by its own switch (defaultSearch).
-            for (item in list(category)) if (!(category == SEARCH && item.id == defaultEngine())) edit.putBoolean(enabledKey(category, item.id), on)
-            edit.apply()
+            for (item in list(category)) if (!(category == SEARCH && item.id == defaultEngine())) store.put(enabledKey(category, item.id), on.toString())
             reply(Bus.ok())
             listChanged("update")
         }
@@ -125,10 +125,9 @@ class UniversalSearch(context: Context, private val apps: () -> List<AppInfo>) {
             added.put(id, JSONObject().put("id", id).put("displayName", p.optString("displayName", id))
                 .put("iconFilePath", p.optString("iconFilePath")).put("url", p.optString("url"))
                 .put("suggestURL", p.optString("suggestURL")).put("launchParam", "").put("type", p.optString("type", "opensearch")))
-            val edit = prefs.edit().putString("added", added.toString())
-                .putBoolean(enabledKey(SEARCH, id), p.optBoolean("enabled", true))
-            if (p.optBoolean("setDefault", false)) edit.putString("pref:defaultSearchEngine", id)
-            edit.apply()
+            store.put("added", added.toString())
+            store.put(enabledKey(SEARCH, id), p.optBoolean("enabled", true).toString())
+            if (p.optBoolean("setDefault", false)) store.put("pref:defaultSearchEngine", id)
             reply(Bus.ok())
             listChanged("newapp")
             if (p.optBoolean("setDefault", false)) prefsChanged()
@@ -149,7 +148,7 @@ class UniversalSearch(context: Context, private val apps: () -> List<AppInfo>) {
 
     // ---- what Just Type reads ----
 
-    fun preference(key: String): String = prefs.getString("pref:$key", null) ?: DEFAULT_PREFS[key] ?: ""
+    fun preference(key: String): String = saved("pref:$key") ?: DEFAULT_PREFS[key] ?: ""
     fun defaultEngine(): String = preference("defaultSearchEngine")
 
     /** The [category] list in its order, on and off alike. */
@@ -165,16 +164,16 @@ class UniversalSearch(context: Context, private val apps: () -> List<AppInfo>) {
         val added = known.filter { it !in seen }
         val removed = seen.filter { it !in known }
         if (added.isEmpty() && removed.isEmpty()) return
-        prefs.edit().putString("seen", (seen.filter { it in known } + added).joinToString("\n")).apply()
+        store.put("seen", (seen.filter { it in known } + added).joinToString("\n"))
         listChanged(if (added.isNotEmpty()) "newapp" else "remove")
     }
 
     // ---- the lists ----
 
     private fun enabledKey(category: String, id: String) = "on:$category:$id"
-    private fun isOn(category: String, id: String, initially: Boolean) = prefs.getBoolean(enabledKey(category, id), initially)
+    private fun isOn(category: String, id: String, initially: Boolean) = savedOn(enabledKey(category, id), initially)
 
-    private fun addedEngines(): JSONObject = runCatching { JSONObject(prefs.getString("added", "{}")!!) }.getOrDefault(JSONObject())
+    private fun addedEngines(): JSONObject = runCatching { JSONObject(saved("added") ?: "{}") }.getOrDefault(JSONObject())
 
     private fun engines(): List<Item> {
         val out = ArrayList<Item>()
@@ -184,12 +183,12 @@ class UniversalSearch(context: Context, private val apps: () -> List<AppInfo>) {
                 .put("suggestURL", "").put("launchParam", "").put("type", "web").put("enabled", isOn(SEARCH, e.id, e.on)))
         }
         val added = addedEngines()
-        for (id in added.keys()) out += Item(SEARCH, JSONObject(added.getJSONObject(id).toString()).put("enabled", isOn(SEARCH, id, true)))
+        for (id in added.keys().asSequence().map { it.toString() }) out += Item(SEARCH, JSONObject(added.getJSONObject(id).toString()).put("enabled", isOn(SEARCH, id, true)))
         return out
     }
 
     private fun integrated(): List<String> = apps().filter { it.appinfo.optJSONObject("universalSearch") != null }.map { it.id }
-    private fun savedSeen(): List<String> = prefs.getString("seen", "").orEmpty().split('\n').filter { it.isNotEmpty() }
+    private fun savedSeen(): List<String> = saved("seen").orEmpty().split('\n').filter { it.isNotEmpty() }
 
     /** Apps with integrations, in the order Lunacy first saw each; new ones go at the end. */
     private fun seenOrder(): List<String> {
@@ -229,7 +228,7 @@ class UniversalSearch(context: Context, private val apps: () -> List<AppInfo>) {
     private fun prefsJson(): JSONObject {
         val out = JSONObject()
         for ((k, v) in DEFAULT_PREFS) out.put(k, v)
-        for ((k, v) in prefs.all) if (k.startsWith("pref:")) out.put(k.removePrefix("pref:"), v.toString())
+        for ((k, v) in store.all()) if (k.startsWith("pref:")) out.put(k.removePrefix("pref:"), v)
         return out
     }
 

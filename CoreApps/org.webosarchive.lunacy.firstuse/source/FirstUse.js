@@ -7,9 +7,11 @@
  * in the same way: the shared storage that stands in for /media/internal, location (the
  * System menu's Wi-Fi list, and webOS apps the owner allows), the system
  * settings that Screen & Lock's brightness and screen-off time really set, and leave from
- * Android's battery optimisation to keep running in the background. The pages that
- * don't apply on this Android version are skipped: Android 5 granted both at install, so
- * there it is a welcome and a Done.
+ * Android's battery optimisation to keep running in the background. Two more are the
+ * owner's choices rather than permissions, offered on every Android version: Android's
+ * Notification access, so Android apps' notifications show the webOS way, and Lunacy as the
+ * home screen. The pages that don't apply on this Android version are skipped: Android 5
+ * granted the permissions at install, so there it is a welcome, those two and a Done.
  *
  * Everything it asks is Lunacy's own service, palm://org.webosarchive.lunacy/: permissions
  * are Android's, not webOS's, and the bus says so. The look is Palm's First Use's (NOTICE).
@@ -101,12 +103,28 @@ enyo.kind({
 					{kind: "Button", name: "homeNext", caption: $L("Skip"), onclick: "next"}
 				]}
 			]},
+			// Android's Notification access (codepoet, 2026-11-17): Android has no question for it,
+			// only its own screen, and 1.0.1's one way there was a switch in Screen & Lock that
+			// people didn't find. Offered here once, and never again unasked.
+			{name: "notifications", kind: "VFlexBox", className: "page", align: "center", pack: "center", components: [
+				{content: $L("Notifications"), className: "title"},
+				{kind: "VFlexBox", className: "contentDefaults box", components: [
+					{content: $L("Lunacy can show your Android apps' notifications the webOS way, as banners and dashboards."), className: "text"},
+					{content: $L("To use: turn on notification access for Lunacy in Android's settings, then come back here. Lunacy only shows them: it keeps none and sends none anywhere."), className: "text"},
+					{name: "notificationsOk", className: "ok", showing: false},
+					{name: "notificationsMessage", className: "message", showing: false}
+				]},
+				{kind: "HFlexBox", className: "buttons", pack: "center", components: [
+					{kind: "Button", name: "notificationsOpen", caption: $L("Open Android Settings"), className: "enyo-button-affirmative", onclick: "openNotifications"},
+					{kind: "Button", name: "notificationsNext", caption: $L("Skip"), onclick: "next"}
+				]}
+			]},
 			{name: "done", kind: "VFlexBox", className: "page", align: "center", pack: "center", components: [
 				{content: $L("Setup Complete"), className: "title"},
 				{kind: "VFlexBox", className: "contentDefaults box", components: [
 					{content: $L("Lunacy is ready."), className: "text"},
 					{content: $L("The launcher has the apps that come with Lunacy; App Catalog, on its Downloads tab, has the rest."), className: "text"},
-					{content: $L("Anything not allowed here can be allowed later in Android's settings for Lunacy."), className: "text small"},
+					{content: $L("Anything not allowed here can be allowed later in Android's settings for Lunacy; Android apps' notifications, in Screen & Lock."), className: "text small"},
 					{content: $L("You can add your Android contacts and calendars later in Accounts."), className: "text small"}
 				]},
 				{kind: "HFlexBox", className: "buttons", pack: "center", components: [
@@ -146,6 +164,7 @@ enyo.kind({
 		if (inResponse.location && inResponse.location.asked) { steps.push("location"); }
 		if (inResponse.systemSettings && inResponse.systemSettings.asked) { steps.push("settings"); }
 		if (inResponse.background && inResponse.background.asked) { steps.push("background"); }
+		if (inResponse.notifications && inResponse.notifications.asked) { steps.push("notifications"); }
 		if (inResponse.homeLauncher && inResponse.homeLauncher.asked) { steps.push("home"); }
 		steps.push("done");
 		// Opened by the shell for one page on an install that has done First Use: that page
@@ -220,6 +239,14 @@ enyo.kind({
 		this.$.backgroundNext.setCaption(b ? $L("Next") : $L("Skip"));
 		this.$.backgroundNext.addRemoveClass("enyo-button-affirmative", !!b);
 		if (b) { this.$.backgroundMessage.setShowing(false); }
+		var n = p.notifications && p.notifications.granted;
+		if (n && this.steps[this.step] == "notifications") { this.watchStatus(false); }
+		this.$.notificationsOk.setContent(n ? $L("Allowed.") : "");
+		this.$.notificationsOk.setShowing(!!n);
+		this.$.notificationsOpen.setShowing(!n);
+		this.$.notificationsNext.setCaption(n ? $L("Next") : $L("Skip"));
+		this.$.notificationsNext.addRemoveClass("enyo-button-affirmative", !!n);
+		if (n) { this.$.notificationsMessage.setShowing(false); }
 	},
 	next: function() {
 		// The one page on its own: its Next or Skip is the end.
@@ -236,7 +263,8 @@ enyo.kind({
 		var storageGranted = p && p.storage && p.storage.granted;
 		var waiting = (page == "settings" && !(p && p.systemSettings && p.systemSettings.granted)) ||
 			(page == "home" && !(p && p.homeLauncher && p.homeLauncher.granted)) ||
-			(page == "background" && !(p && p.background && p.background.granted));
+			(page == "background" && !(p && p.background && p.background.granted)) ||
+			(page == "notifications" && !(p && p.notifications && p.notifications.granted));
 		this.watchStatus(waiting);
 		// The storage page asks as soon as it is up: Android's dialog over the page that
 		// explains it, as a webOS page put its question up at once. Not when Android has
@@ -283,6 +311,10 @@ enyo.kind({
 	openSettings: function() {
 		this.$.request.call({permission: "systemSettings"});
 	},
+	openNotifications: function() {
+		this.$.request.call({permission: "notifications"});
+		this.watchStatus(true);
+	},
 	requested: function(inSender, inResponse) {
 		if (inResponse.permission == "storage") {
 			this.$.storageAllow.setDisabled(false);
@@ -310,13 +342,18 @@ enyo.kind({
 				this.$.locationMessage.setShowing(true);
 			}
 		}
+		// Android 13 and later can grey the switch out for an app installed from a file.
+		if (inResponse.permission == "notifications" && inResponse.opened && inResponse.restrictable) {
+			this.$.notificationsMessage.setContent($L("If Android shows the switch grayed out as a restricted setting, open Lunacy's App info in Android's settings, choose Allow restricted settings from its menu, then try again."));
+			this.$.notificationsMessage.setShowing(true);
+		}
 		this.$.status.call({});
 	},
 	requestFailed: function(inSender, inResponse) {
 		var text = (inResponse && inResponse.errorText) || $L("Android didn't answer.");
 		var which = inSender && inSender.params && inSender.params.permission;
 		var where = which == "systemSettings" ? this.$.settingsMessage : which == "background" ? this.$.backgroundMessage :
-			which == "location" ? this.$.locationMessage : this.$.storageMessage;
+			which == "location" ? this.$.locationMessage : which == "notifications" ? this.$.notificationsMessage : this.$.storageMessage;
 		this.$.storageAllow.setDisabled(false);
 		this.$.locationAllow.setDisabled(false);
 		where.setContent(text);

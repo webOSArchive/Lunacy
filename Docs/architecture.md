@@ -61,7 +61,9 @@ What this target means:
   talks to Lunacy's own service: `permissions/status`, `permissions/request` (storage puts up
   Android's dialog and answers when the user has, with whether Android would ask again;
   "Modify system settings" opens Android's own screen; the home screen asks for the home role
-  from Android 10, and opens the Home settings before that) and `firstUse/done`. A page that
+  from Android 10, and opens the Home settings before that; `notifications` opens Android's
+  Notification access, Lunacy's own entry there from Android 11, since Android grants it on
+  that screen alone) and `firstUse/done`. A page that
   waits on something granted on Android's own screen asks for the status again every couple
   of seconds while it waits. Only Lunacy's own
   apps may call the last two. After it has run, the shell asks for storage itself at startup

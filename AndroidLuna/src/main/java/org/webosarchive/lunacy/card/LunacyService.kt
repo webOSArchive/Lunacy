@@ -219,7 +219,9 @@ class LunacyService(
      * what Android asks before it names the Wi-Fi networks around (the system menu's list);
      * `systemSettings` is "Modify system settings", which Screen & Lock's brightness needs;
      * `homeLauncher` is whether Lunacy is the device's home screen, which is offered on
-     * every Android version and is the owner's choice rather than a permission.
+     * every Android version and is the owner's choice rather than a permission;
+     * `notifications` is Android's Notification access, which lets Android apps' notifications
+     * show as dashboards (AndroidNotifications), and is the owner's choice the same way.
      */
     private fun permissionsStatus(): String {
         val asked = Build.VERSION.SDK_INT >= 23
@@ -231,6 +233,7 @@ class LunacyService(
             "systemSettings" to JSONObject().put("asked", asked).put("granted", systemSettingsGranted()),
             "background" to JSONObject().put("asked", asked).put("granted", backgroundAllowed(context)),
             "homeLauncher" to JSONObject().put("asked", true).put("granted", isDefaultHome()),
+            "notifications" to JSONObject().put("asked", true).put("granted", AndroidNotifications.accessGranted(context)),
             "firstUseDone" to firstUseDone(context),
         ))
     }
@@ -334,6 +337,15 @@ class LunacyService(
                 ).any { i -> runCatching { context.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess }
                 reply(if (ok) Bus.ok(mapOf("permission" to which, "granted" to false, "opened" to true))
                       else Bus.error("Couldn't open Android's battery settings"))
+            }
+            "notifications" -> {
+                if (AndroidNotifications.accessGranted(context)) { reply(Bus.ok(mapOf("permission" to which, "granted" to true))); return }
+                // Android has no question for this one: it is granted on its own screen alone.
+                // `restrictable`: from Android 13 the switch there can be greyed out for an app
+                // installed from a file, until "Allow restricted settings" in its App info.
+                reply(if (openNotificationAccess()) Bus.ok(mapOf("permission" to which, "granted" to false, "opened" to true,
+                          "restrictable" to (Build.VERSION.SDK_INT >= 33)))
+                      else Bus.error("Couldn't open Android's Notification access settings"))
             }
             else -> reply(Bus.error("No permission \"$which\": ${PERMISSIONS.joinToString(", ")}"))
         }
@@ -669,6 +681,10 @@ class LunacyService(
      */
     private fun openSettings(panel: String): String {
         val action = PANELS[panel.lowercase()] ?: return Bus.error("No Android settings panel \"$panel\"")
+        if (panel.lowercase() == "notificationaccess") {
+            return if (openNotificationAccess()) Bus.ok(mapOf("panel" to panel))
+                else Bus.error("This device has no screen for \"$panel\"")
+        }
         val intent = Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (intent.resolveActivity(context.packageManager) == null) {
             return Bus.error("This device has no screen for \"$panel\"")
@@ -679,6 +695,26 @@ class LunacyService(
         } catch (e: Exception) {
             Log.w(AppServer.TAG, "openSettings $panel failed", e)
             Bus.error("Couldn't open Android's $panel settings: ${e.message}")
+        }
+    }
+
+    /**
+     * Android's Notification access, which Android grants on its own screen and nowhere else
+     * (there is no dialog to ask with). From Android 11 that is Lunacy's own switch (the
+     * listener's detail screen); before, or where a device has no such screen, the list of
+     * every app that can be allowed, with Lunacy in it. False if neither opens.
+     */
+    private fun openNotificationAccess(): Boolean {
+        val intents = ArrayList<Intent>()
+        if (Build.VERSION.SDK_INT >= 30) {
+            intents += Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).putExtra(
+                Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+                android.content.ComponentName(context, AndroidNotificationListener::class.java).flattenToString())
+        }
+        intents += Intent(PANELS.getValue("notificationaccess"))
+        return intents.any { i ->
+            runCatching { context.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                .onFailure { Log.w(AppServer.TAG, "notification access: ${i.action} didn't open: $it") }.isSuccess
         }
     }
 
@@ -693,7 +729,7 @@ class LunacyService(
         /** Bundled apps that host an account's setup page ([hostsAccountPages]). */
         private val ACCOUNT_PAGE_HOSTS = setOf("com.palm.app.contacts", "com.palm.app.calendar", "com.palm.app.accounts")
         /** What permissions/request takes: its `when`, in order. */
-        private val PERMISSIONS = listOf("storage", "location", "contacts", "calendar", "systemSettings", "background", "homeLauncher")
+        private val PERMISSIONS = listOf("storage", "location", "contacts", "calendar", "systemSettings", "background", "homeLauncher", "notifications")
         private val STORAGE = listOf(android.Manifest.permission.READ_EXTERNAL_STORAGE, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
         /**
          * Location: Android names the Wi-Fi networks around only to an app with it (SystemControls),

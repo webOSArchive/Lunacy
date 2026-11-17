@@ -1,74 +1,122 @@
-package org.webosarchive.lunacy.shell
+package org.webosarchive.lunacy.card
 
-import android.app.Activity
-import android.os.Handler
-import android.util.Log
 import org.json.JSONObject
-import org.webosarchive.lunacy.card.AppInfo
-import org.webosarchive.lunacy.card.AppRegistry
-import org.webosarchive.lunacy.card.AppServer
-import org.webosarchive.lunacy.card.AppWindow
-import org.webosarchive.lunacy.card.Bus
-import org.webosarchive.lunacy.card.DeviceProfile
-import org.webosarchive.lunacy.card.LaunchPoint
-import org.webosarchive.lunacy.card.LunacyService
-import org.webosarchive.lunacy.card.PdkRuntime
-import org.webosarchive.lunacy.card.PdkWindow
-import org.webosarchive.lunacy.card.Placement
-import org.webosarchive.lunacy.card.WindowHost
-import org.webosarchive.lunacy.card.WindowType
+import org.webosarchive.lunacy.core.Log
+import org.webosarchive.lunacy.core.Platform
+import org.webosarchive.lunacy.core.Scheduler
+
+/**
+ * A window as the apps' lifecycle keeps it: AppWindow on Android (a WebView, or a PDK app's
+ * window), a page's view in Electron for Luna DE.
+ */
+interface LifecycleWindow : RunningWindow {
+    val appId: String
+    /** The kind of window its page asked for; null for a name the shell doesn't know, which is shown as a card. */
+    val type: WindowType?
+    /** appinfo.json's requestedWindowOrientation, which every card of the app starts with. */
+    var fixedOrientation: String?
+    /** Starts the window's page. */
+    fun load(url: String)
+    /** Relaunches the app in its page (Mojo.relaunch); [done] hears whether the app handled it. */
+    fun relaunch(params: String, done: (Boolean) -> Unit)
+    /** Calls a lifecycle hook the way LunaSysMgr did: a function on the page's Mojo object. */
+    fun callMojo(fn: String, argsJson: String = "")
+    /** Closes the window as webOS did: its page's unload handlers first. */
+    fun close()
+    /** Gone at once, with the shell. */
+    fun destroy()
+}
 
 /**
  * The apps' lifecycle, as LunaSysMgr's WebAppManager and ApplicationManager kept it: which
- * apps are running and with which windows, launching one (a web app, a PDK app, an Android
- * app or settings screen, an added launch point) or relaunching it, a window opened or
- * closed, an app ending with its last window, the activity WebAppManager made for every app,
- * the apps started at boot, and the memory state the apps are told. Where a window goes on
- * the screen is [CardHost]'s; what this needs of the rest of the shell comes through [Host].
+ * apps are running and with which windows, launching one (a web app, a PDK app, a tile that is
+ * the platform's own, an added launch point) or relaunching it, a window opened or closed, an
+ * app ending with its last window, the activity WebAppManager made for every app, the apps
+ * started at boot, and the memory state the apps are told. One code path for Android and Luna
+ * DE (Docs/luna-de.md): where a window goes on the screen is [Screen]'s (CardHost and the rest
+ * of the shell on Android), and what else this needs of the platform comes through [Host].
  */
-class AppLifecycle(
-    private val activity: Activity,
-    /** What every window this starts talks to: the shell. */
-    private val windowHost: WindowHost,
+class AppLifecycle<W : LifecycleWindow>(
     private val bus: Bus,
-    private val cardHost: CardHost,
-    private val host: Host,
-    private val handler: Handler,
+    private val screen: Screen<W>,
+    private val host: Host<W>,
+    private val scheduler: Scheduler = Platform.scheduler,
 ) {
-    interface Host {
+    /** Where an app's windows are on the screen: the shell's cards, its dock, its dashboards and alerts. */
+    interface Screen<W> {
+        /** [appId]'s launch was asked for by [launchedBy] (LunaSysMgr's launchingAppId), for the group its card joins. */
+        fun launchedBy(appId: String, launchedBy: String?)
+        /** [appId] is opened from outside the shell's launcher: its card comes up at once. */
+        fun openDirect(appId: String)
+        /** Brings [appId]'s first card up. */
+        fun bringForward(appId: String)
+        /** [w] in a card of its own: a [placeholder] for a headless app's first card, with the app's [splash] or without. */
+        fun showAsCard(w: W, parent: W? = null, placeholder: Boolean = false, splash: Boolean = true)
+        /** A card window [child] that [parent] opened: a headless app's first fills the card its launch put up. */
+        fun cardOpened(parent: W, child: W)
+        /** [w] goes on headless: its scripts run, and it is never shown. */
+        fun hide(w: W)
+        fun isHidden(w: W): Boolean
+        fun showDashboard(w: W)
+        fun showAlert(w: W)
+        /** An app's own Exhibition view: the dock's, never a card. */
+        fun showInDock(w: W)
+        /** [w] has closed, or is being closed: out of wherever it was shown. */
+        fun windowClosed(w: W)
+        /** [w] off the screen altogether, as it is closed or destroyed. */
+        fun detach(w: W)
+        /** Whether nothing is left to show: no card, and no Exhibition. */
+        val empty: Boolean
+        /** How long a new card takes to slide into the card view, which its page's load waits for. */
+        val slideMs: Long
+    }
+
+    interface Host<W> {
         val registry: AppRegistry
         /** The webOS device the next window is told it runs on. */
         val profile: DeviceProfile
-        /** The PDK runtime for [profile]. */
-        val pdkRuntime: PdkRuntime
-        val exhibitions: ExhibitionController
-        val notificationHost: NotificationHost
         /** A launch point an app added (applicationManager/addLaunchPoint), by its tile's id. */
         fun addedLaunchPoint(id: String): LaunchPoint?
-        /** An Android app or a shortcut pinned to Android's home screen, by its tile's id. */
-        fun androidTile(id: String): AppInfo?
-        /** Opens an Android app or a pinned shortcut, which Android does. */
-        fun openAndroid(app: AppInfo)
+        /**
+         * A tile that is no webOS app, which the platform opens itself (an Android app, a shortcut
+         * pinned to Android's home screen): true if [id] was one, and is opened.
+         */
+        fun openedOutside(id: String): Boolean
+        /**
+         * An app of Lunacy's own that stands for something of the platform's (one of Android's
+         * settings screens; Luna DE's network switch): true if [app] was one, and that is done.
+         */
+        fun openedInstead(app: AppInfo): Boolean
+        /** A web app's window, not yet on the screen and its page not yet started; [emulated] is the phone-sized card a TouchPad gave an old app. */
+        fun newWindow(app: AppInfo, emulated: Boolean): W
+        /** A native (PDK) app's window, not yet started; null where it can't run, which the host has said in a banner. */
+        fun newNativeWindow(app: AppInfo): W?
+        /** Starts a native app's process in [window]: false if it didn't start. */
+        fun startNative(window: W): Boolean
         /** A banner from the system itself; tapping it launches [appId]. */
         fun systemBanner(appId: String, message: String)
-        /** Whether Lunacy is Android's home app, when an app is opened from its icon there. */
-        fun lunacyIsHome(): Boolean
-        fun closeMenu()
+        /** Whether the shell is where apps are opened from, so that [AppLifecycle.openDirect] is an ordinary launch (Lunacy as Android's home app). */
+        fun shellIsHome(): Boolean
         /** The card view, with no card left to show. */
         fun onCardView()
         /** [window] has closed: whatever it held of the shell (the screen kept on) goes. */
-        fun windowGone(window: AppWindow)
+        fun windowGone(window: W)
+        /** Whether the platform still calls itself short of memory. */
+        fun memoryLow(): Boolean
     }
 
-    private val running = LinkedHashMap<String, MutableList<AppWindow>>()
+    private val running = LinkedHashMap<String, MutableList<W>>()
 
     /** Running apps: app id to all its windows, root first. */
-    val apps: Map<String, List<AppWindow>> get() = running
+    val apps: Map<String, List<W>> get() = running
 
     /** Every running window. */
-    val windows: List<AppWindow> get() = running.values.flatten()
+    val windows: List<W> get() = running.values.flatten()
 
     fun isRunning(appId: String) = running.containsKey(appId)
+
+    /** A clock that only goes forward, in ms. */
+    private fun now() = System.nanoTime() / 1_000_000
 
     /**
      * Starts an app, or brings it forward if it is running. [placement] is where its first
@@ -76,14 +124,14 @@ class AppLifecycle(
      * (showAsCard): LunaSysMgr's launchingAppId.
      */
     fun launch(appId: String, params: JSONObject? = null, placement: Placement = Placement.CARD, launchedBy: String? = null) {
-        cardHost.launchedBy(appId, launchedBy)
+        screen.launchedBy(appId, launchedBy)
         // An added launch point launches its app with its own params, never into the dock.
         host.addedLaunchPoint(appId)?.let { lp ->
             launch(lp.appId, lp.paramsObject(), if (placement == Placement.DOCK) Placement.NO_CARD else placement); return
         }
-        host.androidTile(appId)?.let { host.openAndroid(it); return }
+        if (host.openedOutside(appId)) return
         val app = host.registry.get(appId) ?: run { Log.w(AppServer.TAG, "launch: no app $appId"); return }
-        if (app.androidSettings.isNotEmpty()) { openAndroidSettings(app); return }
+        if (host.openedInstead(app)) return
         val windows = running[appId]
         // The dock takes web apps' windows only; a native app has no Exhibition view.
         if (placement == Placement.DOCK && !app.isWeb) { Log.w(AppServer.TAG, "exhibition: $appId is a native app"); return }
@@ -94,40 +142,21 @@ class AppLifecycle(
         }
     }
 
-    /**
-     * A shortcut to one of Android's settings screens: no window, no pretending that Lunacy
-     * owns the setting. Only apps Lunacy ships declare this.
-     */
-    private fun openAndroidSettings(app: AppInfo) {
-        bus.call(app.id, "palm://${LunacyService.SERVICE}/android/openSettings",
-            JSONObject().put("panel", app.androidSettings).toString()) { reply ->
-            val r = runCatching { JSONObject(reply) }.getOrNull()
-            if (r?.optBoolean("returnValue") != true) {
-                host.systemBanner(app.id, r?.optString("errorText").orEmpty().ifEmpty { "Couldn't open ${app.title}" })
-            }
-        }
-    }
-
     /** A PDK app: its own process, in a card of its own kind (Docs/pdk.md); brought forward if running. */
-    private fun launchNative(app: AppInfo, windows: List<AppWindow>?) {
+    private fun launchNative(app: AppInfo, windows: List<W>?) {
         val appId = app.id
-        if (windows != null) { cardHost.bringForward(appId); return }
-        val pdkRuntime = host.pdkRuntime
-        if (!pdkRuntime.available) {
-            host.systemBanner(appId, "${app.title} is a native app; it needs Lunacy's 32-bit build on a 32-bit ARM device")
-            return
-        }
-        val w = PdkWindow(activity, appId, windowHost, app, pdkRuntime)
+        if (windows != null) { screen.bringForward(appId); return }
+        val w = host.newNativeWindow(app) ?: return
         running[appId] = mutableListOf(w)
-        cardHost.showAsCard(w)
-        if (!w.start()) { host.systemBanner(appId, "Couldn't start ${app.title}"); windowClosed(w) }
+        screen.showAsCard(w)
+        if (!host.startNative(w)) { host.systemBanner(appId, "Couldn't start ${app.title}"); windowClosed(w) }
     }
 
     /**
      * Relaunch: webOS doesn't reload a running app. Unless the app handles the relaunch
      * itself, LunaSysMgr brings its first card forward.
      */
-    private fun relaunch(app: AppInfo, windows: List<AppWindow>, params: JSONObject?, placement: Placement) {
+    private fun relaunch(app: AppInfo, windows: List<W>, params: JSONObject?, placement: Placement) {
         val appId = app.id
         val before = windows.toSet()
         windows.first().relaunch(params?.toString() ?: "") { handled ->
@@ -143,7 +172,7 @@ class AppLifecycle(
             Log.i(AppServer.TAG, "relaunch $appId ${if (Bus.handlesPeople(appId)) "" else params} handled=$handled${if (opened) ", opened a window" else ""}")
             // A relaunch for the dock leaves the card view alone: the app answers it with
             // a dockMode window, or the dock shows nothing of it, as on a device.
-            if (!handled && !opened && placement != Placement.DOCK) cardHost.bringForward(appId)
+            if (!handled && !opened && placement != Placement.DOCK) screen.bringForward(appId)
         }
     }
 
@@ -154,105 +183,94 @@ class AppLifecycle(
         // its own size, so on a phone - where apps are told they are on a Pre3 - there is
         // nothing to emulate.
         val emulate = placement != Placement.DOCK && host.profile == DeviceProfile.TOUCHPAD && app.emulated
-        val t0 = android.os.SystemClock.uptimeMillis()
-        val rootWindow = AppWindow(activity, appId, windowHost, emulate)
+        val t0 = now()
+        val rootWindow = host.newWindow(app, emulate)
         rootWindow.fixedOrientation = fixedOrientationOf(app)
         running[appId] = mutableListOf(rootWindow)
         createAppActivity(rootWindow)
-        val url = if (params != null) app.url + "?launchParams=" + android.net.Uri.encode(params.toString()) else app.url
+        val url = if (params != null) app.url + "?launchParams=" + encodeParam(params.toString()) else app.url
         // The startup card first, the page behind it: everything the launch can put off until
         // the card is on the screen waits for it (loadWhenShown). A headless app (Clock) opens
         // its card itself once its page has run, so for it the card is a placeholder with the
-        // app's splash, which its first card window fills (onWindowOpened); an app that never
-        // opens one loses the placeholder once it is up and running (withdrawPlaceholder).
+        // app's splash, which its first card window fills (windowOpened); an app that never
+        // opens one loses the placeholder once it is up and running (the screen's to decide).
         when (placement) {
             // ProcessManager::launch: an app that wasn't running, launched with windowType
             // dockModeWindow, gets its first window as a dock window, not a card. A headless
-            // app opens its dock window itself (onWindowOpened).
+            // app opens its dock window itself (windowOpened).
             Placement.DOCK -> {
-                if (app.noWindow) cardHost.hide(rootWindow) else host.exhibitions.addDockWindow(rootWindow)
-                rootWindow.loadUrl(url)
+                if (app.noWindow) screen.hide(rootWindow) else screen.showInDock(rootWindow)
+                rootWindow.load(url)
             }
             Placement.NO_CARD -> {
-                if (app.noWindow) cardHost.hide(rootWindow) else cardHost.showAsCard(rootWindow, splash = false)
-                rootWindow.loadUrl(url)
+                if (app.noWindow) screen.hide(rootWindow) else screen.showAsCard(rootWindow, splash = false)
+                rootWindow.load(url)
             }
             Placement.CARD -> {
-                cardHost.showAsCard(rootWindow, placeholder = app.noWindow)
-                Log.i(AppServer.TAG, "launch $appId: window and card in ${android.os.SystemClock.uptimeMillis() - t0} ms")
+                screen.showAsCard(rootWindow, placeholder = app.noWindow)
+                Log.i(AppServer.TAG, "launch $appId: window and card in ${now() - t0} ms")
                 loadWhenShown(rootWindow, url, t0)
             }
         }
     }
 
     /** Page loads waiting for their startup card to be up; see [loadWhenShown]. */
-    private val pendingLoads = HashMap<AppWindow, Runnable>()
+    private val pendingLoads = HashMap<W, Runnable>()
 
     /**
      * Starts the page once its card has slid into the card view (or up, should it maximize
-     * first). The page's scripts run on this thread - the WebView is single-process on these
-     * Androids - so a load started any earlier froze the card's slide, and the launcher with
-     * it, for as long as the app took to load. This is the point of the startup card
-     * (codepoet): the work happens while it is on the screen.
+     * first). On Android the page's scripts run on the shell's thread - the WebView is
+     * single-process on these Androids - so a load started any earlier froze the card's slide,
+     * and the launcher with it, for as long as the app took to load. This is the point of the
+     * startup card (codepoet): the work happens while it is on the screen.
      */
-    private fun loadWhenShown(w: AppWindow, url: String, launchedAt: Long) {
+    private fun loadWhenShown(w: W, url: String, launchedAt: Long) {
         val load = Runnable {
             if (pendingLoads.remove(w) == null) return@Runnable
-            Log.i(AppServer.TAG, "launch ${w.appId}: page load started ${android.os.SystemClock.uptimeMillis() - launchedAt} ms in")
-            w.loadUrl(url)
+            Log.i(AppServer.TAG, "launch ${w.appId}: page load started ${now() - launchedAt} ms in")
+            w.load(url)
         }
         pendingLoads[w] = load
-        // On the activity's window rather than the card layer, which a rebuild replaces (reshell).
-        activity.window.decorView.postDelayed(load, CardLayer.Params.SLIDE_MS + 50)
+        scheduler.postDelayed(load, screen.slideMs + 50)
     }
 
     /** [window]'s card is up: a page load still waiting for it starts now. */
-    fun shown(window: AppWindow) {
+    fun shown(window: W) {
         pendingLoads[window]?.run()
     }
 
-    /** Opens [appId] for its icon on Android's home screen. With Lunacy as the home app it is an ordinary launch. */
+    /** Opens [appId] from outside the shell's launcher (its icon on Android's home screen). With the shell as the home it is an ordinary launch. */
     fun openDirect(appId: String) {
-        if (host.lunacyIsHome()) { launch(appId); return }
-        cardHost.openDirect(appId)
+        if (host.shellIsHome()) { launch(appId); return }
+        screen.openDirect(appId)
         launch(appId)
     }
 
     /** appinfo.json's requestedWindowOrientation, which every card of the app starts with. */
     private fun fixedOrientationOf(app: AppInfo?): String? =
         app?.appinfo?.optString("requestedWindowOrientation")?.lowercase()
-            ?.takeIf { it in ShellActivity.ORIENTATIONS }
+            ?.takeIf { it in ORIENTATIONS }
 
     /** An app's page opened another window, [child], of the kind it asked for. */
-    fun windowOpened(parent: AppWindow, child: AppWindow) {
+    fun windowOpened(parent: W, child: W) {
         running.getOrPut(child.appId) { mutableListOf() } += child
         child.fixedOrientation = fixedOrientationOf(host.registry.get(child.appId))
-        val notificationHost = host.notificationHost
         when (child.type) {
-            WindowType.DASHBOARD -> notificationHost.notifications.addDashboard(child, notificationHost.icon(child.attributes.optString("icon"), child.appId))
-            WindowType.POPUP_ALERT -> {
-                // A phone's list gives way to the alert in the same area: closed by the shell,
-                // so the scrim over the rest goes with it, or it would eat the next tap.
-                if (notificationHost.notificationsAtBottom) host.closeMenu()
-                notificationHost.notifications.popups.show(child, notificationHost.alertHeight(child))
-            }
+            WindowType.DASHBOARD -> screen.showDashboard(child)
+            WindowType.POPUP_ALERT -> screen.showAlert(child)
             // The headless app's first card: it fills the card its launch put up, and the root
             // goes on where a headless root lives.
-            WindowType.CARD -> cardHost.cardOpened(parent, child)
+            WindowType.CARD -> screen.cardOpened(parent, child)
             // An app's own Exhibition view: the dock's, never a card.
-            WindowType.DOCK_MODE -> host.exhibitions.addDockWindow(child)
+            WindowType.DOCK_MODE -> screen.showInDock(child)
             // A name the shell doesn't know.
-            null -> cardHost.showAsCard(child, parent)
+            null -> screen.showAsCard(child, parent)
         }
     }
 
     /** [window] has closed, or is closed by the shell: out of wherever it was shown, then closed. */
-    fun windowClosed(window: AppWindow) {
-        host.exhibitions.windowClosed(window)
-        cardHost.windowClosed(window)
-        val notifications = host.notificationHost.notifications
-        notifications.removeDashboard(window)
-        notifications.popups.remove(window)
+    fun windowClosed(window: W) {
+        screen.windowClosed(window)
         closeWindow(window)
     }
 
@@ -267,7 +285,7 @@ class AppLifecycle(
      * PalmSystem.activityId for all the app's windows, and Mojo sends it with each service
      * call as "$activity", which a JS service adopts.
      */
-    private fun createAppActivity(root: AppWindow) {
+    private fun createAppActivity(root: W) {
         val appId = root.appId
         val params = JSONObject().put("activity", JSONObject().put("name", appId)
             .put("description", root.pid.toString()).put("type", JSONObject().put("foreground", true)))
@@ -284,23 +302,23 @@ class AppLifecycle(
         appActivityCalls.remove(appId)?.cancel()
     }
 
-    fun activityId(window: AppWindow): Int = appActivities[window.appId] ?: -1
+    fun activityId(window: W): Int = appActivities[window.appId] ?: -1
 
     /** WebAppBase::focusActivity and blurActivity, as the app's card gains and loses the focus. */
-    fun stageFocused(window: AppWindow, focused: Boolean) {
+    fun stageFocused(window: W, focused: Boolean) {
         val id = appActivities[window.appId] ?: return
         bus.call(window.appId, "palm://com.palm.activitymanager/${if (focused) "focus" else "unfocus"}",
             JSONObject().put("activityId", id).toString(), privateBus = true) {}
     }
 
     /** Closes [w] and, with its last visible window gone, its app. */
-    fun closeWindow(w: AppWindow) {
+    fun closeWindow(w: W) {
         pendingLoads.remove(w)
         // A window that closes while holding the screen on lets it go.
         host.windowGone(w)
         val list = running[w.appId] ?: return
         list.remove(w)
-        (w.parent as? android.view.ViewGroup)?.removeView(w)
+        screen.detach(w)
         // Its unload handlers first, as webOS ran them (a dashboard's onUserClose comes from there).
         w.close()
         // An app ends when its last visible window closes; its headless root goes with it, a
@@ -309,31 +327,31 @@ class AppLifecycle(
         // it opens meanwhile keeps it. An app in [KEEP_ALIVE] keeps its headless root.
         val app = host.registry.get(w.appId)
         if (list.isEmpty()) endApp(w.appId, list)
-        else if (app?.noWindow == true && w.appId !in KEEP_ALIVE && list.all { cardHost.isHidden(it) }) {
-            activity.window.decorView.postDelayed({
-                if (running[w.appId] === list && list.all { cardHost.isHidden(it) }) endApp(w.appId, list)
+        else if (app?.noWindow == true && w.appId !in KEEP_ALIVE && list.all { screen.isHidden(it) }) {
+            scheduler.postDelayed({
+                if (running[w.appId] === list && list.all { screen.isHidden(it) }) endApp(w.appId, list)
             }, HEADLESS_LINGER_MS)
         }
-        if (cardHost.cards.cards.isEmpty() && !host.exhibitions.exhibitionOn) host.onCardView()
+        if (screen.empty) host.onCardView()
     }
 
     /** An app has ended (its last window closed): what lasted for its session ends with it. */
     var onAppEnded: (String) -> Unit = {}
 
-    private fun endApp(appId: String, list: MutableList<AppWindow>) {
-        list.forEach { (it.parent as? android.view.ViewGroup)?.removeView(it); it.close() }
+    private fun endApp(appId: String, list: MutableList<W>) {
+        list.forEach { screen.detach(it); it.close() }
         running.remove(appId)
         endAppActivity(appId)
         onAppEnded(appId)
     }
 
     /**
-     * Every app's pages destroyed, with the shell: each is a renderer in this process, and
-     * Android re-creates the activity for a font-size or language change.
+     * Every app's pages destroyed, with the shell: on Android each is a renderer in the shell's
+     * process, and Android re-creates the activity for a font-size or language change.
      */
     fun destroyAll() {
         pendingLoads.clear()
-        for (w in running.values.flatten()) { (w.parent as? android.view.ViewGroup)?.removeView(w); w.destroy() }
+        for (w in running.values.flatten()) { screen.detach(w); w.destroy() }
         running.clear()
     }
 
@@ -369,7 +387,7 @@ class AppLifecycle(
     private fun flushWhenSettled(waited: Long) {
         if (waitingForBoot.isEmpty()) return
         if (!bootSettled() && waited < BOOT_SETTLE_MAX_MS) {
-            handler.postDelayed({ flushWhenSettled(waited + BOOT_SETTLE_STEP_MS) }, BOOT_SETTLE_STEP_MS)
+            scheduler.postDelayed({ flushWhenSettled(waited + BOOT_SETTLE_STEP_MS) }, BOOT_SETTLE_STEP_MS)
             return
         }
         Log.i(AppServer.TAG, "launch from outside: the boot settled after $waited ms${if (bootSettled()) "" else " (gave up waiting on ${bootPending()})"}")
@@ -402,21 +420,17 @@ class AppLifecycle(
 
     /** The memory state the apps were last told: LunaSysMgr's "normal", "low" or "critical". */
     private var memoryState = "normal"
-    private var lastTrim = 0L
+    private var lastPressure = 0L
 
     /**
-     * Android saying memory is short, passed on as LunaSysMgr's MemoryWatcher did: every app's
-     * root page gets `Mojo.lowMemoryNotification({state})` when the state changes, which Enyo
-     * turns into its `lowMemory` event (WebAppManager::slotMemoryStateChanged). The shell
-     * still makes room itself, as before; this only lets an app help.
+     * The platform saying memory is short ("low" or "critical"), passed on as LunaSysMgr's
+     * MemoryWatcher did: every app's root page gets `Mojo.lowMemoryNotification({state})` when
+     * the state changes, which Enyo turns into its `lowMemory` event
+     * (WebAppManager::slotMemoryStateChanged). The shell still makes room itself, as before;
+     * this only lets an app help.
      */
-    fun trimMemory(level: Int) {
-        val state = when (level) {
-            android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL, android.content.ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> "critical"
-            android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW, android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE -> "low"
-            else -> return
-        }
-        lastTrim = android.os.SystemClock.uptimeMillis()
+    fun memoryPressure(state: String) {
+        lastPressure = now()
         setMemoryState(state)
     }
 
@@ -427,10 +441,8 @@ class AppLifecycle(
     private val memoryCheck = object : Runnable {
         override fun run() {
             if (memoryState == "normal") return
-            val mi = android.app.ActivityManager.MemoryInfo()
-            (activity.getSystemService(Activity.ACTIVITY_SERVICE) as android.app.ActivityManager).getMemoryInfo(mi)
-            if (android.os.SystemClock.uptimeMillis() - lastTrim >= MEMORY_CALM_MS && !mi.lowMemory) setMemoryState("normal")
-            else handler.postDelayed(this, MEMORY_CHECK_MS)
+            if (now() - lastPressure >= MEMORY_CALM_MS && !host.memoryLow()) setMemoryState("normal")
+            else scheduler.postDelayed(this, MEMORY_CHECK_MS)
         }
     }
 
@@ -441,8 +453,8 @@ class AppLifecycle(
         // Root pages only, as LunaSysMgr sent it: a child window is the same app.
         val arg = JSONObject().put("state", state).toString()
         running.values.mapNotNull { it.firstOrNull() }.forEach { it.callMojo("lowMemoryNotification", arg) }
-        handler.removeCallbacks(memoryCheck)
-        if (state != "normal") handler.postDelayed(memoryCheck, MEMORY_CHECK_MS)
+        scheduler.cancel(memoryCheck)
+        if (state != "normal") scheduler.postDelayed(memoryCheck, MEMORY_CHECK_MS)
     }
 
     companion object {
@@ -455,11 +467,28 @@ class AppLifecycle(
          */
         val LAUNCH_AT_BOOT = listOf("com.palm.app.phone", "com.palm.app.email", "com.palm.app.calendar", "com.palm.app.messaging")
         val KEEP_ALIVE = setOf("com.palm.app.email", "com.palm.app.calendar", "com.palm.app.messaging", "com.palm.app.photos", "com.palm.app.musicplayer")
+        /** The orientations a card can be fixed at (appinfo.json's requestedWindowOrientation). */
+        val ORIENTATIONS = setOf("up", "down", "right", "left", "landscape", "portrait")
         const val BOOT_SETTLE_STEP_MS = 100L
         const val BOOT_SETTLE_MAX_MS = 5_000L
         const val MEMORY_CHECK_MS = 10_000L
         const val MEMORY_CALM_MS = 30_000L
         /** How long a headless app outlives its last visible window: long enough to hear that window go. */
         const val HEADLESS_LINGER_MS = 1000L
+
+        /**
+         * A launch's params as a query value, percent-encoded as android.net.Uri.encode does
+         * (which is what every Lunacy build has put in an app's URL): UTF-8, everything but
+         * letters, digits and _-!.~'()* escaped.
+         */
+        fun encodeParam(s: String): String {
+            val out = StringBuilder(s.length + 16)
+            for (b in s.toByteArray(Charsets.UTF_8)) {
+                val c = b.toInt() and 0xff
+                if (c < 0x80 && (c.toChar().let { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' } || c.toChar() in "_-!.~'()*")) out.append(c.toChar())
+                else out.append('%').append("0123456789ABCDEF"[c shr 4]).append("0123456789ABCDEF"[c and 15])
+            }
+            return out.toString()
+        }
     }
 }

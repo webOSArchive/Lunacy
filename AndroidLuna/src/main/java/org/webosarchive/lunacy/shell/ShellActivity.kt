@@ -376,7 +376,7 @@ class ShellActivity : Activity(), WindowHost {
         override fun scaleChanged() { androidAppsAt = null }
     }
     /** What the apps' lifecycle asks of the shell. */
-    private val lifecycleShell = object : AppLifecycle.Host {
+    private val lifecycleShell = object : LifecyclePlatform.Shell {
         override val registry get() = this@ShellActivity.registry
         override val profile get() = this@ShellActivity.profile
         override val pdkRuntime get() = this@ShellActivity.pdkRuntime
@@ -392,7 +392,10 @@ class ShellActivity : Activity(), WindowHost {
         override fun windowGone(window: AppWindow) { if (screenAwake.remove(window)) holdScreen() }
     }
     /** The running apps and their windows (AppLifecycle). After [shellHandler], which it posts to. */
-    private val lifecycle: AppLifecycle by lazy { AppLifecycle(this, this, bus, cardHost, lifecycleShell, shellHandler) }
+    private val lifecycle: AppLifecycle by lazy {
+        val platform = LifecyclePlatform(this, this, bus, cardHost, lifecycleShell)
+        AppLifecycle(bus, platform, platform, HandlerScheduler(shellHandler))
+    }
     private fun launch(appId: String, params: JSONObject? = null, placement: Placement = Placement.CARD, launchedBy: String? = null) =
         lifecycle.launch(appId, params, placement, launchedBy)
 

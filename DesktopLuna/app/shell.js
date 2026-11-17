@@ -1313,15 +1313,10 @@
 	// its right edge 11 px past the screen's; the content 7 px in at the sides and 14 px up from
 	// the bottom; rows 42 px high with menu-divider.png between them; headers 14 px in and a
 	// drawer's rows 16 more. A drawer opens over 350 ms OutCubic; the menu fades in and out over
-	// 200 ms. For now it holds the date and the Wi-Fi drawer, whose Turn off / Turn on WiFi is
-	// Luna DE's simulated network (the Wi-Fi tile's switch). Turned off, the menu goes 300 ms
-	// later; turned on, a second later (WiFiElement's wait for the connection).
+	// 200 ms. For now it holds the date and the Wi-Fi drawer, whose one row, "Simulated
+	// connectivity", switches Luna DE's simulated network (the Wi-Fi tile's switch). Turned off,
+	// the menu goes 300 ms later; turned on, a second later (WiFiElement's wait for the connection).
 	var sys = { open: false, wifiOpen: false, closer: null, online: true, covered: false };
-
-	function sysRows() {
-		var rows = [{ kind: "date" }, { kind: "divider" }, { kind: "wifi-header" }];
-		return rows;
-	}
 
 	function sysDraw() {
 		var box = $("sysmenu").querySelector(".content");
@@ -1343,15 +1338,14 @@
 		box.appendChild(head);
 		var drawer = document.createElement("div"); drawer.className = "drawer" + (sys.wifiOpen ? " open" : "");
 		drawer.appendChild(divider());
-		drawer.appendChild(row("sub", sys.online ? "Turn off WiFi" : "Turn on WiFi", function () {
+		// The drawer's one row, in grey, so it is plain that it switches Luna DE's own simulated
+		// network and leaves the machine's alone (codepoet). A tap turns it off or on; the
+		// header says which it is.
+		drawer.appendChild(row("sub info", "Simulated connectivity", function () {
 			var on = !sys.online;
 			window.luna.setNetwork(on);
 			sysCloseIn(on ? 1000 : 300);
-		}));
-		// Where a device listed its networks: grey, and not to be tapped, so it is plain that this
-		// switches Luna DE's own simulated network and leaves the machine's alone (codepoet).
-		drawer.appendChild(divider());
-		drawer.appendChild(row("sub info", "Simulated connectivity", null, true));
+		}, true));
 		box.appendChild(drawer);
 		drawer.style.height = sys.wifiOpen ? "auto" : "0px";
 		if (sys.wifiOpen) { drawer.style.height = drawer.scrollHeight + "px"; }

@@ -594,7 +594,9 @@ function shapeWindow() {
 	if (filling()) {
 		shell.setResizable(true);
 		shell.setMinimumSize(MIN_FILL.width, MIN_FILL.height + BEZEL);
-		if (!shell.isFullScreen() && !shell.isMaximized()) { shell.maximize(); }
+		// A moment after it became resizable: asked at once, the desktop (GNOME on Wayland) took it
+		// for a window that couldn't be maximized and left it at the device's size.
+		setTimeout(() => { if (shell && filling() && !shell.isFullScreen() && !shell.isMaximized()) { shell.maximize(); } }, 100);
 		return;
 	}
 	if (shell.isFullScreen()) { shell.setFullScreen(false); }

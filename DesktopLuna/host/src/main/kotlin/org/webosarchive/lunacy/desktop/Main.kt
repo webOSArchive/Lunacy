@@ -339,10 +339,12 @@ private val ANDROID_ONLY_APPS = setOf(
 
 /**
  * And of the ROM: the account templates that need Android to sign in or to sync (the Android
- * account; Google and Microsoft through Lunacy's sign-in page and OAuth service).
+ * account; Google and Microsoft through Lunacy's sign-in page and OAuth service), and Exchange,
+ * whose transport is one of the TouchPad's own programs left out below: offered, it failed at
+ * its first call (codepoet, 2026-11-17: hidden for now).
  */
 private val ANDROID_ONLY_ROM = listOf("org.webosarchive.lunacy.androidaccount", "org.webosarchive.lunacy.google",
-    "org.webosarchive.lunacy.microsoft", "org.webosarchive.lunacy.microsoft365").map { "usr/palm/public/accounts/$it" } +
+    "org.webosarchive.lunacy.microsoft", "org.webosarchive.lunacy.microsoft365", "com.palm.eas").map { "usr/palm/public/accounts/$it" } +
     // The TouchPad's own programs and their libraries (the mail and messaging engines), which run
     // on Android under the PDK runtime and nowhere on a desktop: a package leaves them out, and
     // assets that have them (the development machine's) are read as if they hadn't.

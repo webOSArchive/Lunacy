@@ -151,8 +151,9 @@ API 21 gate.
   into Luna DE's root (host.js), but nothing holds a service to it, and its shell commands run in
   the machine's `/bin/sh` (the root has no busybox). It is the developer's own code, as it is in
   any Node they run; a package from somewhere else deserves the same care as any script.
-- The mail transports (Palm's native IMAP, SMTP and EAS, built for Android's ARM) aren't there:
-  the Exchange account type is still offered, and adding one fails at its first call.
+- The mail transports (Palm's native IMAP, SMTP and EAS, built for Android's ARM) aren't there.
+  The Exchange account type is hidden with them (codepoet, 2026-11-17, for now): its template is
+  left out of the ROM as the Android account's is.
 - The network is the machine's first interface with an address, shown as the TouchPad's Wi-Fi at
   full signal with no network name; the machine counts as on the mains.
 - The shell's own lifecycle rules (which apps run, relaunch, an app ending with its last window)

@@ -34,7 +34,21 @@ after 1.0.
 Before shipping 1.0, as for every release: the latest App Catalog bundled (6.3.2931 since
 2026-11-15, codepoet's package for 1.0).
 
-## Where things stand (2026-11-15, end of day)
+## Where things stand (2026-11-17, end of day)
+
+**Released:** Lunacy 1.0.2 (build 652; GitHub and the F-Droid feed). **webos-sdk-redux 0.5**
+(tag `0.5-Release`), with **Luna DE 0.5.0**, Lunacy's desktop shell, as its packages for Linux,
+macOS and Windows; their source is this repository's tag `luna-de-0.5` (branch `luna-de`). Checked
+on all three systems: the SDK's tools against a TouchPad, Lunacy on the Fold3 and Luna DE alike
+(Docs/luna-de.md, "The SDK's tools"). Luna DE is done for now.
+
+**Next: Lunacy 1.1.0** (codepoet): merge `luna-de`'s refactors (the moves into LunaCore; the shared
+AppLifecycle, LauncherLayout, JustTypeSearch and NovacomProtocol) into `main`, so Android and Luna
+DE run the same code. `luna-de` is about 110 commits ahead of `main`; `main` has two of its own
+(codepoet's "update images" and "limit height"). Owed before it ships, from the Luna DE plan:
+`device-test.sh` on an Android 5 device and `fresh-install.sh`, since first-run code moved.
+
+## Where things stood (2026-11-15, end of day)
 
 **1.0 is out** (build 635, released by codepoet; F-Droid feed verified). That evening two bugs
 turned up that live only in a fresh install's first run, which no round had covered: every

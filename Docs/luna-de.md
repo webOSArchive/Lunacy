@@ -240,8 +240,8 @@ API 21 gate.
   the machine's `/bin/sh` (the root has no busybox). It is the developer's own code, as it is in
   any Node they run; a package from somewhere else deserves the same care as any script.
 - The mail transports (Palm's native IMAP, SMTP and EAS, built for Android's ARM) aren't there.
-  The Exchange account type is hidden with them (codepoet, 2026-11-17, for now): its template is
-  left out of the ROM as the Android account's is.
+  The Exchange account type is hidden with them, and stays so: there are no plans for Exchange
+  in Luna DE (codepoet, 2026-11-17). Its template is left out of the ROM as the Android account's is.
 - The network is the machine's first interface with an address, shown as the TouchPad's Wi-Fi at
   full signal with no network name; the machine counts as on the mains.
 - **Cards live in groups** (2026-11-17), the shell page's card view now CardLayer's: a card
@@ -276,8 +276,8 @@ API 21 gate.
   had them).
 - As a Pre3, the launcher follows AndroidLuna's phone rules too (Launcher.Phone: a 40 px tab bar
   of 150 px tabs that scrolls sideways, 84 x 112 cells, 56 px icons, 13 px bold labels; three
-  columns held tall, six held wide). Not carried over: a phone's two permanent tabs, groups and
-  edit mode, which Luna DE's launcher hasn't got on either device. The status bar is the
+  columns held tall, six held wide). Not carried over: a phone's two permanent tabs (Luna DE's
+  launcher keeps the TouchPad's built-in ones on both devices). The status bar is the
   TouchPad's 28 px at the Pre3's scale of 1.5, which is what AndroidLuna draws on a phone.
 - As a Pre3, the quick-launch bar and Just Type's pill follow AndroidLuna's phone rules (a 95 px
   bar, four apps and the launcher button in five equal slots, icons at 78 % of a slot; the pill

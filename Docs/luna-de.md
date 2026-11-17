@@ -95,9 +95,10 @@ API 21 gate.
   DE's window is. The window is then resizable and starts maximized, and F11 fills the display
   (from either other device it becomes this one first). Apps are told a TouchPad whose screen
   is the window's, in TouchPad px, as `ShellActivity.deviceInfo` tells them on an Android tablet;
-  the shell and the pages are drawn at Android's tablet scale (`Luna.density`: the short side
-  over 768, to a whole number, never under 1), so a 2560 x 1440 display is a 1280 x 698 TouchPad
-  at 2. A resize is the screen changing size (each page hears a resize), and a change between
+  a TouchPad px is one of the desktop's own (device-independent) pixels, so the desktop's own
+  display scaling sizes it on a dense monitor, as Android's density does on a phone: a 2560 x
+  1440 display at 100 % is a 2560 x 1396 TouchPad. (Android's tablet rule, the short side over
+  768, came first and made it enormous on a monitor: codepoet, 2026-11-17.) A resize is the screen changing size (each page hears a resize), and a change between
   wide and tall is the device turning; the rotate button swaps the window's sides where the
   window is free to. The bezel stays, in full screen too. Always a TouchPad: the phone layout
   for a narrow window is not done. The two exact devices are unchanged, for checking an app

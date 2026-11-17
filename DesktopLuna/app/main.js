@@ -37,10 +37,12 @@ const IS_WIN = process.platform === "win32";
 //
 // Or this screen ("screen"): a TouchPad at whatever size the window is, as Lunacy is on an Android
 // tablet, where it fills the screen it finds. The window is then resizable (and F11 fills the
-// screen with it); the screen is the window's, less the bezel; and it is drawn at Android's
-// tablet scale (Luna.density: the short side about 768 shell px, in whole numbers, never under 1),
-// so a large or dense monitor shows a TouchPad's proportions, not a tiny one. Wide or tall is
-// how the window is shaped.
+// screen with it); the screen is the window's, less the bezel; and a TouchPad px is one of the
+// desktop's own (a device-independent pixel), so the desktop's display scaling is what makes a
+// dense monitor's TouchPad the size it should be, as Android's density does on a phone. Android's
+// tablet rule (the short side about 768 px) was tried first and made a desktop monitor's
+// TouchPad enormous (codepoet, 2026-11-17): a monitor is far bigger, and further away, than a
+// tablet. Wide or tall is how the window is shaped.
 const BEZEL = 44;
 const FILL = "screen";
 const MIN_FILL = { width: 480, height: 400 };
@@ -49,7 +51,7 @@ let orientation = "right";
 /** As this screen: the window's screen area, in its own px. */
 let fill = { width: 1024, height: 768 };
 const filling = () => device.id === FILL;
-const fillScale = (size) => Math.max(1, Math.round(Math.min(size.width, size.height) / 768));
+const fillScale = () => 1;
 const portrait = () => orientation === "up" || orientation === "down";
 const STATUS_CSS = 28;
 const statusPx = () => Math.round(STATUS_CSS * device.scale);

@@ -36,10 +36,25 @@ import java.util.concurrent.Executors
  *
  * Prints "LUNA-DE-HOST <port>" on standard output once it listens.
  */
+/** Held while this copy runs: the data folder is this copy's alone. */
+private var dataLock: java.nio.channels.FileLock? = null
+
 fun main(args: Array<String>) {
     val opt = args.toList().windowed(2, 2, partialWindows = false).associate { it[0].removePrefix("--") to it[1] }
     val repo = File(opt["repo"] ?: error("--repo <Lunacy checkout> is required")).absoluteFile
     val data = File(opt["data"] ?: File(System.getProperty("user.home"), ".luna-de").path).absoluteFile
+    // One copy of Luna DE to a data folder: two would share one db8 and one webOS root, each
+    // writing over the other. A second copy says so (Electron tells the person) and goes.
+    data.mkdirs()
+    dataLock = runCatching {
+        java.nio.channels.FileChannel.open(File(data, ".lock").toPath(),
+            java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.WRITE).tryLock()
+    }.getOrNull()
+    if (dataLock == null) {
+        println("LUNA-DE-HOST-BUSY")
+        System.out.flush()
+        kotlin.system.exitProcess(3)
+    }
 
     Log.sink = Log.Sink { p, tag, msg, tr ->
         System.err.println("${"??VDIWE".getOrElse(p) { '?' }}/$tag: $msg")

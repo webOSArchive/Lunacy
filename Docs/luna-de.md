@@ -594,6 +594,21 @@ launch, then following the log until stopped, as on a device), `palm-log -f com.
 following the Clock as it started, `palm-log` without `-f`, `palm-install -r`, `novacom run`; no
 novacom thread left behind after.
 
+**Checked as a user would, on all three** (2026-11-17, Linux): webos-sdk-redux cloned and
+`sudo ./install.sh` run over 0.4, taking the recommended answers (0.5 installed beside the older
+versions, `Current` moved, the service rebuilt and running); Luna DE 0.5's AppImage started on an
+empty data folder. Then one script, by nduid, against the TouchPad (webOS CE 3.2.0, USB), Lunacy
+on the Fold3 (Wi-Fi adb) and Luna DE: `get` and `put` of a 200 KB file byte for byte, `run` with
+its exit code, `palm-generate` (an Enyo and a Mojo app) and `palm-package`, `palm-install`,
+`--list`, `palm-launch` and `-c`, the running list, `palm-log -f` and without, `palm-run`,
+`palm-install -r`, and `open tty`. TouchPad 21/21, Fold3 21/21, Luna DE 20/20 (`open tty`, not
+offered, is the one difference). Found and fixed along the way: two copies of Luna DE could run
+on one data folder (now the second says so and goes: the host holds `<data>/.lock`); seen once
+and not again in 63 tries since, a `get` that didn't match the `put` before it on Luna DE. The
+TouchPad rebooted once when palm-launch woke it from sleep (its kernel stopped as the panel came
+on; not the SDK's), and its own `luna-send`, run with stdin already closed, answers nothing, which
+the tools never do.
+
 **Checked earlier** (2026-11-17, Linux): through a test build of novacomd on other ports (the installed
 one is shared with the TouchPad, and swapping it waits for codepoet), Luna DE was listed as `local
 luna-de`; palm-install's commands (`mkdir -p`, `put`, `ls -l`, `installNoVerify`, `rm -f`),

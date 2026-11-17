@@ -137,10 +137,13 @@ function startHost() {
 	}
 	return new Promise((resolve, reject) => {
 		hostProcess = spawn(bin, args, { stdio: ["pipe", "pipe", "inherit"] });
-		hostProcess.on("exit", (code) => { if (!host) { reject(new Error("host exited " + code)); } else { app.quit(); } });
+		hostProcess.on("exit", (code) => {
+			if (!host) { const e = new Error("host exited " + code); e.busy = code === 3; reject(e); } else { app.quit(); }
+		});
 		readline.createInterface({ input: hostProcess.stdout }).on("line", (line) => {
 			const m = /^LUNA-DE-HOST (\d+)$/.exec(line);
 			if (m && !host) { host = "http://127.0.0.1:" + m[1]; resolve(host); }
+			else if (line === "LUNA-DE-HOST-BUSY") { const e = new Error("another Luna DE is running with " + dataDir()); e.busy = true; reject(e); }
 			else { console.log("[host] " + line); }
 		});
 	});
@@ -1144,6 +1147,8 @@ app.whenReady().then(async () => {
 		await startHost();
 	} catch (e) {
 		console.error("Luna DE: " + e.message);
+		// A second copy on a data folder in use: told plainly, as nothing else would show.
+		if (e.busy) { dialog.showErrorBox("Luna DE is already running", "Another Luna DE is using its data folder:\n" + dataDir() + "\n\nUse that one, or close it first. (LUNA_DE_DATA names another folder, for a second copy.)"); app.exit(0); return; }
 		app.exit(1);
 		return;
 	}

@@ -166,7 +166,7 @@ To pin a webOS app to an alternate Android Launcher, use **Software Manager**, f
 
 #### Other Integrations
 
-- **Android media notifications:** can be connected both ways: webOS media apps show up in Android media controls; Android media apps show a webOS Dashboard for controls. This feature requires that you grant the permission in Android.
+- **Android media notifications:** can be connected both ways: webOS media apps show up in Android media controls; Android media apps show a webOS Dashboard for controls. This feature requires that you grant the permission in Android Settings (Apps > Special Access > Notifications)
 - **Android notification light:** if your device has a notification light, webOS notifications can pulse the light. You can disable this in **Screen & Lock** if you prefer.
 - **Multi-tasking:** Android and webOS both compete for edge swipes, experiment with Gesture and Button controls in Android, and toggling (side) Edge swipe in **Screen & Lock** to find what works best for your device.
 - **Calendar and Contact Mirroring:** Android PIM data can be mirrored to webOS, if enabled and with your permission. Add this feature as a new "Account" in the webOS Calendar and Contacts apps.

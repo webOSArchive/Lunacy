@@ -544,11 +544,13 @@ On the desktop there is no adb, and Luna DE pretends to be no device: no adb, no
   `ok 0`, the 0xdecafbad packets, the return code. It is Android's `Novacom.kt` moved; Android
   keeps its socket, its check on who connects and how a command runs (busybox in the webOS root),
   and Luna DE has its own (`DesktopNovacom`).
-- **The socket** is a Unix-domain socket of the user running Luna DE: on Linux and macOS
-  `/tmp/luna-de-<uid>/novacom-<pid>.sock`, in a folder only that user can open; on Windows
+- **The socket** is a Unix-domain socket of the user running Luna DE: on Linux
+  `$XDG_RUNTIME_DIR/luna-de/novacom-<pid>.sock` (`/run/user/<uid>`: the SDK's systemd service
+  has `PrivateTmp`, so novacomd doesn't see the real `/tmp`), on macOS (and a Linux without a
+  runtime folder) `/tmp/luna-de-<uid>/novacom-<pid>.sock`, in a folder only that user can open; on Windows
   `%ProgramData%\luna-de\novacom-<pid>.sock`. One per running copy, so two never collide. Its
   nduid is made once and kept in Luna DE's data folder.
-- **novacomd's `local` relay** (webos-sdk-redux `novacomd/src/host/local_relay.c`) looks there
+- **novacomd's `local` relay** (webos-sdk-redux `novacomd/src/host/local_relay.c`) looks in both
   every 3 s, reads each copy's nduid with `get file:///proc/nduid` as `adb_relay.c` does, gives
   it a port and splices every client connection through unchanged. `novacom -l` lists it as
   `<port> <nduid> local luna-de`, and the tools reach it with `-d luna-de`. On Linux and macOS a
@@ -557,7 +559,8 @@ On the desktop there is no adb, and Luna DE pretends to be no device: no adb, no
   says `Lunacy Luna DE`, which it already knows.
 - **No host program runs.** A `run` is one of Luna DE's own commands, each held inside the webOS
   root (a path that leaves it, by `..` or otherwise, is refused): `luna-send` (on the private
-  bus, as `novacomd`, as root's was), `tail` (with `-f`, for `palm-log`), `cat`, `ls`, `mkdir`,
+  bus, as `novacomd`, as root's was), `tail` (with `-f`, for `palm-log -f`), `grep` (for
+  `palm-log` without it), `cat`, `ls`, `mkdir`,
   `rm`, `rmdir`, `uname`, and `sh -c` holding one of those (the tools wrap luna-send as `exec
   /usr/bin/luna-send … 2>/dev/null`; anything with a pipe, a list or other redirection is
   refused). These are exactly what `palm-install`, `palm-launch`, `palm-log` and `palm-run` send,
@@ -576,7 +579,19 @@ USB, or a Lunacy device through a shared adb server. What a connection can do is
 commands above can, inside Luna DE's root. On Windows the ProgramData folder is open to the
 machine's users; tightening it to the user's own ACL is an open item.
 
-**Checked** (2026-11-17, Linux): through a test build of novacomd on other ports (the installed
+- **The display service** answers palm-launch's and palm-run's `control/setState {"state":"on"}`:
+  Luna DE's screen never sleeps, so "on" is already true; `control/status` says it is on, and any
+  other state is an error, as Android's DisplayService says of a state it hasn't got.
+
+**Checked with the installed service** (2026-11-17, Linux, codepoet's go-ahead): the SDK's new
+novacomd installed over 0.4.1's (`/usr/local/bin/novacomd.0.4.1-backup` kept) and the service
+restarted; the TouchPad and both Lunacy devices came back beside `local luna-de`. Against `-d
+luna-de`: `palm-install` of the test app, `--list`, `palm-launch` and `-c`, `palm-run` (install,
+launch, then following the log until stopped, as on a device), `palm-log -f com.palm.app.clock`
+following the Clock as it started, `palm-log` without `-f`, `palm-install -r`, `novacom run`; no
+novacom thread left behind after.
+
+**Checked earlier** (2026-11-17, Linux): through a test build of novacomd on other ports (the installed
 one is shared with the TouchPad, and swapping it waits for codepoet), Luna DE was listed as `local
 luna-de`; palm-install's commands (`mkdir -p`, `put`, `ls -l`, `installNoVerify`, `rm -f`),
 palm-launch's (`listApps`, `launch`, `running`, `close`) and palm-log's (`tail -f

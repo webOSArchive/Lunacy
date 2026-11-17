@@ -124,6 +124,21 @@ fun main(args: Array<String>) {
         // webOS's downloader, which apps hand every file fetch to (App Catalog's Pivot, a podcast's
         // episodes): it writes into the webOS tree.
         org.webosarchive.lunacy.card.DownloadManager(webosRoot).register(bus)
+        // The display: Luna DE's screen is a window that never sleeps, so it is always on, and "on"
+        // (palm-launch and palm-run send it before launching) is already true. Exhibition's states,
+        // the brightness and the timeout aren't Luna DE's: those are errors, as Android's
+        // DisplayService says of a state it hasn't got.
+        bus.register("com.palm.display", "control/setState") { _, p, reply ->
+            reply(when (val state = p.optString("state")) {
+                "on" -> org.webosarchive.lunacy.card.Bus.ok()
+                "" -> org.webosarchive.lunacy.card.Bus.error("state is required")
+                else -> org.webosarchive.lunacy.card.Bus.error("Luna DE has no display state \"$state\"")
+            })
+        }
+        bus.register("com.palm.display", "control/status", org.webosarchive.lunacy.card.Bus.CallHandler { call ->
+            call.reply(JSONObject().put("returnValue", true).put("event", "request").put("state", "on")
+                .put("blockDisplay", "false").put("active", true).put("subscribed", call.subscribe).toString())
+        })
         val network = DesktopNetwork(main)
         shell.network = network
         org.webosarchive.lunacy.card.Http.offline = { network.simulatedDown }

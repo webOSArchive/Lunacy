@@ -30,7 +30,9 @@ import java.util.concurrent.TimeUnit
  *
  * **The socket.** A Unix-domain socket of this user's, which the SDK's novacomd finds and relays
  * to, as it relays to Lunacy through adb (webos-sdk-redux novacomd/src/host/local_relay.c): on
- * Linux and macOS `/tmp/luna-de-<uid>/novacom-<pid>.sock`, in a folder only this user can open
+ * Linux `$XDG_RUNTIME_DIR/luna-de/novacom-<pid>.sock` (`/run/user/<uid>`: the SDK's systemd
+ * service has PrivateTmp, so novacomd doesn't see the real /tmp), on macOS (and a Linux without a
+ * runtime folder) `/tmp/luna-de-<uid>/novacom-<pid>.sock`, in a folder only this user can open
  * (novacomd runs as root, and reads it); on Windows `%ProgramData%\luna-de\novacom-<pid>.sock`.
  * One per running copy of Luna DE, so two never collide. The relay hands each client connection
  * through unchanged.
@@ -38,7 +40,7 @@ import java.util.concurrent.TimeUnit
  * **The commands.** Nothing of the host's runs: a `run` is one of a few commands of Luna DE's
  * own, each held inside its webOS root, which is all the tools use (measured against Lunacy,
  * 2026-11-17): `luna-send` (the bus, on the private bus, as root's was), `tail` (palm-log's `-f
- * /var/log/messages`), `cat`, `ls`, `mkdir`, `rm`, `rmdir`, `uname`, and `/bin/sh -c` holding one
+ * /var/log/messages`), `grep` (palm-log without -f), `cat`, `ls`, `mkdir`, `rm`, `rmdir`, `uname`, and `/bin/sh -c` holding one
  * of those (the tools wrap luna-send in `exec … 2>/dev/null`). Anything else is not offered and
  * says so. `open tty://` (novaterm) and package scripts wait for how they are to be contained
  * (Docs/luna-de.md, open question 2).
@@ -88,8 +90,8 @@ class DesktopNovacom(
 
     /**
      * Where the sockets are, which novacomd (as root, or Windows' service) looks through. On
-     * Linux and macOS a folder of this user's that only this user can open; on Windows a folder
-     * under ProgramData.
+     * Linux and macOS a folder of this user's that only this user can open (in the runtime folder
+     * where there is one, else /tmp); on Windows a folder under ProgramData.
      */
     private fun socketFolder(): File? {
         val windows = System.getProperty("os.name").orEmpty().startsWith("Windows")
@@ -97,8 +99,11 @@ class DesktopNovacom(
             val base = System.getenv("ProgramData") ?: "C:\\ProgramData"
             return File(base, "luna-de").takeIf { it.isDirectory || it.mkdirs() }
         }
-        val uid = runCatching { Files.getAttribute(Paths.get(System.getProperty("user.home")), "unix:uid") as Int }.getOrNull() ?: return null
-        val dir = File("/tmp/luna-de-$uid")
+        val runtime = System.getenv("XDG_RUNTIME_DIR")?.takeIf { it.isNotEmpty() }?.let { File(it) }?.takeIf { it.isDirectory }
+        val dir = if (runtime != null) File(runtime, "luna-de") else {
+            val uid = runCatching { Files.getAttribute(Paths.get(System.getProperty("user.home")), "unix:uid") as Int }.getOrNull() ?: return null
+            File("/tmp/luna-de-$uid")
+        }
         if (!dir.isDirectory && !dir.mkdirs()) return null
         // Owner only: another user on the machine can't reach a socket inside it.
         dir.setReadable(false, false); dir.setWritable(false, false); dir.setExecutable(false, false)
@@ -187,6 +192,7 @@ class DesktopNovacom(
             "luna-send" -> lunaSend(args, job)
             "tail" -> job.thread { tail(args, job) }
             "cat" -> job.thread { cat(args, job) }
+            "grep" -> job.thread { grep(args, job) }
             "ls" -> job.thread { ls(args, job) }
             "mkdir" -> job.thread { mkdir(args, job) }
             "rm" -> job.thread { rm(args, job) }
@@ -281,6 +287,45 @@ class DesktopNovacom(
             f.inputStream().use { s -> val b = ByteArray(16384); while (true) { val n = s.read(b); if (n < 0) break; job.outBytes(b.copyOf(n)) } }
         }
         return code
+    }
+
+    /**
+     * grep [-i] [-v] [-c] [-F] [-E] <pattern> <file>…: palm-log without -f greps the system log
+     * for an app's id. The pattern is a regular expression (Java's, which reads an app id or a
+     * plain word as busybox's did); 0 when a line matched, 1 when none did, 2 on an error.
+     */
+    private fun grep(args: List<String>, job: Job): Int {
+        var ignoreCase = false; var invert = false; var count = false; var fixed = false
+        var pattern: String? = null
+        val files = ArrayList<String>()
+        for (a in args) {
+            if (pattern == null && a.startsWith("-") && a.length > 1) {
+                for (f in a.drop(1)) when (f) {
+                    'i' -> ignoreCase = true; 'v' -> invert = true; 'c' -> count = true
+                    'F' -> fixed = true; 'E' -> {}
+                    else -> { job.err("grep: unrecognized option '-$f'\n"); return 2 }
+                }
+            } else if (pattern == null) pattern = a else files += a
+        }
+        if (pattern == null || files.isEmpty()) { job.err("Usage: grep [-icvFE] PATTERN FILE...\n"); return 2 }
+        val re = try {
+            Regex(if (fixed) Regex.escape(pattern) else pattern, if (ignoreCase) setOf(RegexOption.IGNORE_CASE) else emptySet())
+        } catch (e: Exception) { job.err("grep: bad regex '$pattern'\n"); return 2 }
+        var matched = 0; var error = false
+        for (name in files) {
+            val f = inRoot(name)
+            if (f == null || !f.isFile) { job.err("grep: $name: No such file or directory\n"); error = true; continue }
+            var n = 0
+            f.bufferedReader().useLines { lines ->
+                for (line in lines) if (re.containsMatchIn(line) != invert) {
+                    n++
+                    if (!count) job.out((if (files.size > 1) "$name:" else "") + line + "\n")
+                }
+            }
+            if (count) job.out((if (files.size > 1) "$name:" else "") + "$n\n")
+            matched += n
+        }
+        return if (error) 2 else if (matched > 0) 0 else 1
     }
 
     private fun ls(args: List<String>, job: Job): Int {
@@ -450,6 +495,6 @@ class DesktopNovacom(
 
     private companion object {
         /** The commands Luna DE runs itself: what the SDK's tools use. */
-        val COMMANDS = setOf("sh", "luna-send", "tail", "cat", "ls", "mkdir", "rm", "rmdir", "uname")
+        val COMMANDS = setOf("sh", "luna-send", "tail", "cat", "grep", "ls", "mkdir", "rm", "rmdir", "uname")
     }
 }

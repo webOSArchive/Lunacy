@@ -400,22 +400,26 @@ fun main(args: Array<String>) {
  * template, Android's notifications as dashboards, First Use and the mail sign-in page (both made
  * for Android), Lunacy's own APK updates, the screen saver's settings, and the tiles that only
  * open one of Android's settings screens. Wi-Fi stays: here it turns a simulated network off and
- * on (DesktopShell.launch).
+ * on (DesktopShell.launch). And Email: Palm's mail engines are the TouchPad's own programs, which
+ * a desktop doesn't run, and developers won't use mail here (codepoet, 2026-11-17). Calendar,
+ * Contacts and Messaging stay: App Catalog has add-ons for them.
  */
 private val ANDROID_ONLY_APPS = setOf(
     "org.webosarchive.lunacy.androidaccount", "org.webosarchive.lunacy.notifications", "org.webosarchive.lunacy.firstuse",
     "org.webosarchive.lunacy.signin", "com.palm.app.updates", "com.palm.app.exhibitionpreferences",
     "com.palm.app.bluetooth", "com.palm.app.languagepicker", "com.palm.app.dateandtime",
+    "com.palm.app.email",
 )
 
 /**
  * And of the ROM: the account templates that need Android to sign in or to sync (the Android
- * account; Google and Microsoft through Lunacy's sign-in page and OAuth service), and Exchange,
- * whose transport is one of the TouchPad's own programs left out below: offered, it failed at
- * its first call (codepoet, 2026-11-17: hidden for now).
+ * account; Google and Microsoft through Lunacy's sign-in page and OAuth service), and the mail
+ * accounts, Exchange, IMAP and Email Account, whose transports are the TouchPad's own programs
+ * left out below: offered, they failed at their first call (codepoet, 2026-11-17: no mail here).
  */
 private val ANDROID_ONLY_ROM = listOf("org.webosarchive.lunacy.androidaccount", "org.webosarchive.lunacy.google",
-    "org.webosarchive.lunacy.microsoft", "org.webosarchive.lunacy.microsoft365", "com.palm.eas").map { "usr/palm/public/accounts/$it" } +
+    "org.webosarchive.lunacy.microsoft", "org.webosarchive.lunacy.microsoft365", "com.palm.eas", "com.palm.imap", "com.palm.othermail")
+    .map { "usr/palm/public/accounts/$it" } +
     // The TouchPad's own programs and their libraries (the mail and messaging engines), which run
     // on Android under the PDK runtime and nowhere on a desktop: a package leaves them out, and
     // assets that have them (the development machine's) are read as if they hadn't.

@@ -233,8 +233,9 @@ API 21 gate.
   dashboard with its card). And the long polls (each page's `/poll`, the shell's `/events`) go to
   the host on connections of their own: Chromium keeps six to a host, each poll held one, and
   with six pages open the next app took 25 s to start.
-- **Package scripts don't run** (postinst, prerm): a package installs without them and the log
-  says so, until open question 2 is settled.
+- **Package scripts don't run** (postinst, prerm), and never will: a package installs without them
+  and the log says so. Luna DE is an app environment, not an operating system (codepoet,
+  2026-11-17; open question 2).
 - **A JS service runs as the developer**, in Node on their own machine: webOS paths are pointed
   into Luna DE's root (host.js), but nothing holds a service to it, and its shell commands run in
   the machine's `/bin/sh` (the root has no busybox). It is the developer's own code, as it is in
@@ -297,14 +298,13 @@ API 21 gate.
 
 **Not there yet, in the order planned:**
 1. **luna-send for a service's child processes** (LunaSendServer, a Unix socket on Android): a
-   service that shells out to `luna-send` gets an error. With it, the question of package scripts
-   (open question 2).
+   service that shells out to `luna-send` gets an error.
 2. *(Done 2026-11-16: WebSQL's native half is in LunaCore; see above.)*
 3. *(Done 2026-11-17: AppLifecycle is in LunaCore and both shells run it; see above. CardHost's
    own decisions, a card's group and placeholder, stay per platform for now.)*
 4. *(Done 2026-11-17, not yet in a released SDK: Novacom's protocol is in LunaCore, and
    webos-sdk-redux's novacomd has the `local` relay; see "The SDK's tools". `novaterm` and package
-   scripts wait for open question 2.)* Then packaging.
+   scripts are never offered: open question 2.)* Then packaging.
 
 **Checked on Android** after these moves (2026-11-16, luna-de build 668): `device-test.sh` on the
 Fold3, installed over 1.0.1's data (three mail accounts, 231 contacts): 50 passed, 0 failed
@@ -334,8 +334,8 @@ setuid helper needs root); app windows share the page's world with the preload
 2. **Enyo apps first.** The first useful release runs Enyo 1 apps well. Mojo apps follow,
    because the same layers serve them. PDK (native) apps are a "maybe, later".
 3. **The SDK's command-line tools work against it.** `palm-install`, `palm-launch`,
-   `palm-log`, `novacom` and `novaterm` treat Luna DE as a device, as they already do for
-   Lunacy on Android.
+   `palm-log` and `novacom` treat Luna DE as a device, as they already do for Lunacy on
+   Android. (`novaterm` doesn't, by design: open question 2.)
 4. **One code path.** Luna DE runs Lunacy's own code, not a copy of it. A fix to the bus, db8,
    the serve-time transforms, the compat layer or the frameworks reaches Android and the
    desktop in the same commit. Nothing is written twice.
@@ -567,8 +567,9 @@ On the desktop there is no adb, and Luna DE pretends to be no device: no adb, no
   refused). These are exactly what `palm-install`, `palm-launch`, `palm-log` and `palm-run` send,
   measured on the Fold3 on 2026-11-17. Anything else answers `file does not exist`, the truth on
   this device. `get` and `put` reach files in the root only.
-- **Not yet:** `open tty://` (`novaterm`) and package scripts, which need a shell that is held
-  inside the root on every host (open question 2). `connect tcp-port://` (the debugger), as on
+- **Never:** `open tty://` (`novaterm`) and package scripts. Luna DE is an app environment, not
+  an operating system: it has no shell to log in to and runs no system scripts (codepoet,
+  2026-11-17; open question 2). `connect tcp-port://` (the debugger), as on
   Android: use Electron's DevTools.
 - **Apps' console output goes to `/var/log/messages`** (2026-11-17), as AndroidLuna's AppWindow
   sends it (nothing from an app that handles people's own data), so `palm-log -f <app>` follows
@@ -707,8 +708,8 @@ onto `luna-de`, and nothing goes back until the refactoring is done and proven (
 
 1. *(Settled 2026-11-17, codepoet: A, a novacomd `local` relay; no adb, no emulator. See "The
    SDK's tools".)*
-2. The webOS root's shell: how package scripts are kept inside the root on each host, and on
-   Windows a bundled busybox-w32 or a mapped minimal shell?
+2. *(Settled 2026-11-17, codepoet: none. Luna DE is an app environment, not an operating system;
+   it will never run package scripts or system scripts, or offer `novaterm`.)*
 3. *(Settled 2026-11-17, codepoet: Luna DE's version is the SDK version it targets and ships
    with, 0.5 first; `DesktopLuna/package.json` holds it.)*
 4. *(Settled 2026-11-15: one window running the shell, with the launcher and card view; a card

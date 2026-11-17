@@ -43,8 +43,8 @@ import java.util.concurrent.TimeUnit
  * 2026-11-17): `luna-send` (the bus, on the private bus, as root's was), `tail` (palm-log's `-f
  * /var/log/messages`), `grep` (palm-log without -f), `cat`, `ls`, `mkdir`, `rm`, `rmdir`, `uname`, and `/bin/sh -c` holding one
  * of those (the tools wrap luna-send in `exec … 2>/dev/null`). Anything else is not offered and
- * says so. `open tty://` (novaterm) and package scripts wait for how they are to be contained
- * (Docs/luna-de.md, open question 2).
+ * says so. `open tty://` (novaterm) and package scripts are never offered: Luna DE is an app
+ * environment, not an operating system (Docs/luna-de.md, open question 2).
  */
 class DesktopNovacom(
     private val main: DesktopScheduler,

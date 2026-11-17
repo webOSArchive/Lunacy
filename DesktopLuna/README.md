@@ -66,8 +66,8 @@ changing it; right-click an installed app's tile to remove it.
 **The SDK's tools** (webos-sdk-redux's novacomd, from the version after 0.4.1, finds a running
 Luna DE on the same machine): `novacom -l` lists it as `local luna-de`, and `palm-install`,
 `palm-launch` and `palm-log` work against `-d luna-de`. Luna DE runs no program of the host's for
-them, only its own few commands inside its webOS root, so `novaterm` and package scripts aren't
-there yet. See "The SDK's tools" in [Docs/luna-de.md](../Docs/luna-de.md).
+them, only its own few commands inside its webOS root. It is an app environment, not an operating
+system: there is no `novaterm`, and packages' scripts don't run. See "The SDK's tools" in [Docs/luna-de.md](../Docs/luna-de.md).
 
 **Wi-Fi** in the launcher's Settings is a developer's switch: it simulates the network connection
 being lost (apps are told, and their requests fail) until it is tapped again.

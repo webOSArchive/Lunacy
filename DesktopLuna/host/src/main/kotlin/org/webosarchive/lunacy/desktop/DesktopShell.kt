@@ -620,8 +620,8 @@ class DesktopShell(
  * Luna DE's webOS root as [org.webosarchive.lunacy.card.ScriptHost]: where JS services run, under
  * a Node of Android's major version ([node]), with Lunacy's host scripts copied beside the root.
  *
- * Package scripts aren't run yet (Docs/luna-de.md, open question 2: a script would run as the
- * developer on their own machine), and there is no luna-send for a service's child processes:
+ * Package scripts are never run: Luna DE is an app environment, not an operating system
+ * (Docs/luna-de.md, open question 2). There is no luna-send for a service's child processes:
  * one that shells out to it gets an error. curl is Lunacy's curl.js, as on Android.
  */
 class DesktopRoot(override val root: File, override val hostScripts: File, private val repo: File,

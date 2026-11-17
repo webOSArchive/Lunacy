@@ -27,7 +27,9 @@ import java.util.concurrent.Executors
  * client: it routes the app origins' requests here, naming the app from the request's origin
  * (rule 10). See Docs/luna-de.md.
  *
- *   luna-de-host --repo <Lunacy checkout> --data <folder> [--port <n>] [--assets <zip>]
+ *   luna-de-host --repo <Lunacy checkout> --data <folder> [--port <n>] [--assets <zip>] [--version <v>]
+ *
+ * --version: Luna DE's version, which is the SDK version it ships with (codepoet, 2026-11-17).
  *
  * --assets: the asset tree as one zip (a packaged Luna DE's, made by DesktopLuna/package.js), read
  * in place as Android reads the APK's; without it, the checkout's own folders.
@@ -79,7 +81,8 @@ fun main(args: Array<String>) {
     val romNow = runCatching { assets.open("rootfs.index").use { it.readBytes() }.contentHashCode().toString() }.getOrDefault("")
     if (!romStamp.isFile || romStamp.readText() != romNow) { rom.syncRom(); romStamp.writeText(romNow) }
     rom.makeFolders(installed)
-    rom.writeBuildInfo("Luna DE", "0")
+    val version = "Luna DE" + (opt["version"]?.removeSuffix(".0")?.let { " $it" } ?: "")
+    rom.writeBuildInfo(version, "0")
 
     // db8 and tempdb, with every app's, service's and the system's kinds (Configurator), as the
     // Android shell sets them up (ShellActivity.registerServices).
@@ -112,7 +115,7 @@ fun main(args: Array<String>) {
         bus.register(Lunacy.SERVICE, "system/getEnvironment") { _, _, reply ->
             val profile = shell.device
             reply(JSONObject().put("returnValue", true)
-                .put("lunacy", JSONObject().put("version", "Luna DE").put("flavour", "desktop")
+                .put("lunacy", JSONObject().put("version", version).put("flavour", "desktop")
                     .put("reportsWebOS", profile.versionString).put("reportsAs", profile.modelName)
                     .put("enyo", "1.0").put("node", desktopRoot.node.path).put("apps", registry.apps.size)
                     .put("services", shell.jsServices?.names() ?: JSONArray()))

@@ -103,7 +103,8 @@ function dataDir() {
 
 /** Starts the JVM host and resolves with its address once it listens. */
 function startHost() {
-	let bin, args = ["--repo", REPO, "--data", dataDir(), "--with-parent", "1"];
+	// Luna DE's version (package.json's: the SDK version it ships with), for its build info.
+	let bin, args = ["--repo", REPO, "--data", dataDir(), "--with-parent", "1", "--version", app.getVersion()];
 	// A packaged Luna DE's assets are one zip beside the app (package.js); LUNA_DE_ASSETS names one
 	// for a checkout, to try a package's assets without packaging.
 	const zip = app.isPackaged ? path.join(process.resourcesPath, "assets.zip") : process.env.LUNA_DE_ASSETS;

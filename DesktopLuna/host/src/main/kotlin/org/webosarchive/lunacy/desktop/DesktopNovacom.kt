@@ -33,7 +33,8 @@ import java.util.concurrent.TimeUnit
  * Linux `$XDG_RUNTIME_DIR/luna-de/novacom-<pid>.sock` (`/run/user/<uid>`: the SDK's systemd
  * service has PrivateTmp, so novacomd doesn't see the real /tmp), on macOS (and a Linux without a
  * runtime folder) `/tmp/luna-de-<uid>/novacom-<pid>.sock`, in a folder only this user can open
- * (novacomd runs as root, and reads it); on Windows `%ProgramData%\luna-de\novacom-<pid>.sock`.
+ * (novacomd runs as root, and reads it); on Windows `%ProgramData%\luna-de\<user>\novacom-<pid>.sock`,
+ * in a folder only that user and SYSTEM (novacomd's service) can open.
  * One per running copy of Luna DE, so two never collide. The relay hands each client connection
  * through unchanged.
  *
@@ -96,8 +97,13 @@ class DesktopNovacom(
     private fun socketFolder(): File? {
         val windows = System.getProperty("os.name").orEmpty().startsWith("Windows")
         if (windows) {
+            // ProgramData is open to the machine's users, so each has a folder of their own under
+            // it, which only they and SYSTEM (novacomd's service) can open.
             val base = System.getenv("ProgramData") ?: "C:\\ProgramData"
-            return File(base, "luna-de").takeIf { it.isDirectory || it.mkdirs() }
+            val user = System.getProperty("user.name").orEmpty().replace(Regex("[^A-Za-z0-9._-]"), "_").ifEmpty { "user" }
+            val dir = File(File(base, "luna-de"), user)
+            if (!dir.isDirectory && !dir.mkdirs()) return null
+            return dir.takeIf { private(it) }
         }
         val runtime = System.getenv("XDG_RUNTIME_DIR")?.takeIf { it.isNotEmpty() }?.let { File(it) }?.takeIf { it.isDirectory }
         val dir = if (runtime != null) File(runtime, "luna-de") else {
@@ -109,6 +115,24 @@ class DesktopNovacom(
         dir.setReadable(false, false); dir.setWritable(false, false); dir.setExecutable(false, false)
         dir.setReadable(true, true); dir.setWritable(true, true); dir.setExecutable(true, true)
         return dir
+    }
+
+    /**
+     * On Windows: [dir]'s access list made the owner's and SYSTEM's alone, with nothing inherited
+     * from ProgramData. False if it couldn't be, and then no socket is offered there.
+     */
+    private fun private(dir: File): Boolean = try {
+        val path = dir.toPath()
+        val view = Files.getFileAttributeView(path, java.nio.file.attribute.AclFileAttributeView::class.java) ?: throw IOException("no access lists")
+        val lookup = path.fileSystem.userPrincipalLookupService
+        val all = java.nio.file.attribute.AclEntryPermission.values().toSet()
+        val inherit = setOf(java.nio.file.attribute.AclEntryFlag.FILE_INHERIT, java.nio.file.attribute.AclEntryFlag.DIRECTORY_INHERIT)
+        fun entry(who: java.nio.file.attribute.UserPrincipal) = java.nio.file.attribute.AclEntry.newBuilder()
+            .setType(java.nio.file.attribute.AclEntryType.ALLOW).setPrincipal(who).setPermissions(all).setFlags(inherit).build()
+        view.acl = listOf(entry(view.owner), entry(lookup.lookupPrincipalByName("NT AUTHORITY\\SYSTEM")))
+        true
+    } catch (e: Exception) {
+        Log.w(Lunacy.TAG, "novacom: can't make $dir private: $e"); false
     }
 
     private fun serve(c: SocketChannel) {

@@ -1,7 +1,7 @@
 {
   "name": "luna-de",
   "productName": "Luna DE",
-  "version": "0.0.1",
+  "version": "0.5.0",
   "private": true,
   "description": "Luna Desktop Edition: Lunacy on the desktop, for webOS app developers (Docs/luna-de.md).",
   "main": "app/main.js",

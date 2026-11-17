@@ -533,8 +533,8 @@ Not every move is a pure one, and the plan doesn't pretend otherwise:
 
 ### The SDK's tools
 
-*(Built 2026-11-17: design A, as codepoet chose it. The SDK change ships in its next minor
-version.)*
+*(Built 2026-11-17: design A, as codepoet chose it. It ships in SDK 0.5, whose release carries
+Luna DE's packages: Luna DE is a feature of the SDK, codepoet 2026-11-17.)*
 
 Lunacy on Android serves novacom's device protocol on an abstract socket, and the SDK's
 novacomd reaches it through the adb server (webos-sdk-redux `novacomd/src/host/adb_relay.c`).
@@ -548,7 +548,8 @@ On the desktop there is no adb, and Luna DE pretends to be no device: no adb, no
   `$XDG_RUNTIME_DIR/luna-de/novacom-<pid>.sock` (`/run/user/<uid>`: the SDK's systemd service
   has `PrivateTmp`, so novacomd doesn't see the real `/tmp`), on macOS (and a Linux without a
   runtime folder) `/tmp/luna-de-<uid>/novacom-<pid>.sock`, in a folder only that user can open; on Windows
-  `%ProgramData%\luna-de\novacom-<pid>.sock`. One per running copy, so two never collide. Its
+  `%ProgramData%\luna-de\<user>\novacom-<pid>.sock`, in a folder whose access list is that
+  user's and SYSTEM's alone (novacomd's service runs as SYSTEM). One per running copy, so two never collide. Its
   nduid is made once and kept in Luna DE's data folder.
 - **novacomd's `local` relay** (webos-sdk-redux `novacomd/src/host/local_relay.c`) looks in both
   every 3 s, reads each copy's nduid with `get file:///proc/nduid` as `adb_relay.c` does, gives
@@ -576,8 +577,10 @@ On the desktop there is no adb, and Luna DE pretends to be no device: no adb, no
 **Who may connect.** The socket is the user's own, but novacomd (root, or Windows' service)
 gives each device a port on 127.0.0.1, which any local user can reach: the same as a TouchPad on
 USB, or a Lunacy device through a shared adb server. What a connection can do is what the
-commands above can, inside Luna DE's root. On Windows the ProgramData folder is open to the
-machine's users; tightening it to the user's own ACL is an open item.
+commands above can, inside Luna DE's root. On Windows each user's socket folder is private to
+them (and SYSTEM), so another user can't plant a socket there; they could still make a folder of
+their own with a socket that answers, listed as one more `luna-de`, which the relay can't tell
+from a real one without checking who owns it (an open item, Windows only).
 
 - **The display service** answers palm-launch's and palm-run's `control/setState {"state":"on"}`:
   Luna DE's screen never sleeps, so "on" is already true; `control/status` says it is on, and any
@@ -691,7 +694,8 @@ onto `luna-de`, and nothing goes back until the refactoring is done and proven (
    SDK's tools".)*
 2. The webOS root's shell: how package scripts are kept inside the root on each host, and on
    Windows a bundled busybox-w32 or a mapped minimal shell?
-3. Does Luna DE share a version number with Lunacy, or have its own?
+3. *(Settled 2026-11-17, codepoet: Luna DE's version is the SDK version it targets and ships
+   with, 0.5 first; `DesktopLuna/package.json` holds it.)*
 4. *(Settled 2026-11-15: one window running the shell, with the launcher and card view; a card
    can pop out into a window of its own.)*
 5. Is the single bundled JVM acceptable, or should LunaCore aim at Kotlin Multiplatform

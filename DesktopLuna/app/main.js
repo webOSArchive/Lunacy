@@ -564,9 +564,15 @@ function popOut(id) {
 
 ipcMain.handle("luna-de:shell", async () => {
 	const s = await (await net.fetch(host + "/shell")).json();
-	s.pages.forEach((p) => p.apps.forEach(withIcon));
+	// A cell is an app, or a group of them.
+	s.pages.forEach((p) => p.apps.forEach((c) => (c.apps ? c.apps.forEach(withIcon) : withIcon(c))));
 	s.dock.forEach(withIcon);
 	return s;
+});
+// The launcher as its owner has just arranged it (its tabs, or the quick-launch bar): the host keeps it.
+ipcMain.handle("luna-de:launcher-save", (e, what) => {
+	net.fetch(host + "/launcher", { method: "POST", body: JSON.stringify(what || {}) }).catch(() => {});
+	return true;
 });
 // The shell asks for an app: the host decides (started, or relaunched and brought forward), as
 // it does for applicationManager/launch from an app.

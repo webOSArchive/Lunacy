@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld("luna", {
 		return path ? ipcRenderer.invoke("luna-de:install", [path]) : Promise.resolve(false);
 	},
 	remove: (id) => ipcRenderer.invoke("luna-de:remove", id),
+	saveLauncher: (what) => ipcRenderer.invoke("luna-de:launcher-save", what),
 	place: (rects, dashboardsOpen) => ipcRenderer.invoke("luna-de:place", rects, dashboardsOpen),
 	appMenu: () => ipcRenderer.invoke("luna-de:appmenu"),
 	back: () => ipcRenderer.invoke("luna-de:back"),

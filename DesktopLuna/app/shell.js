@@ -331,28 +331,504 @@
 		tabs.addEventListener("wheel", function (e) { tabs.scrollLeft += e.deltaX || e.deltaY; e.preventDefault(); }, { passive: false });
 	})();
 
-	function showPage(n) {
-		page = n;
-		[].forEach.call($("tabs").children, function (b, i) { b.classList.toggle("selected", i === n); });
-		// The chosen tab comes fully into view (Launcher.Phone's TAB_SCROLL_MS, 250 ms).
-		var chosen = $("tabs").children[n];
-		if (chosen && chosen.scrollIntoView) { chosen.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" }); }
-		var grid = $("grid");
-		grid.innerHTML = "";
-		(pages[n] ? pages[n].apps : []).forEach(function (a) {
-			var t = document.createElement("button");
-			t.className = "tile";
-			t.title = a.id;
-			t.appendChild(icon(a));
-			var s = document.createElement("span"); s.textContent = a.title; t.appendChild(s);
-			t.addEventListener("click", function () { launch(a, t); });
-			// An installed app's tile: Luna DE's Remove, by the right button.
-			t.addEventListener("contextmenu", function (e) {
-				e.preventDefault();
-				if (a.removable) { showItems(e.clientX, e.clientY, [["Remove " + a.title, function () { window.luna.remove(a.id); }]]); }
+	// ---- the launcher as its owner arranges it (LunaCE's, as AndroidLuna's Launcher has it) ----
+	//
+	// A cell is an app or a group of apps. Holding an icon begins edit mode and picks the icon up;
+	// in edit mode a drag picks one up. A picked-up icon follows the pointer and the layout is
+	// looked at only when the pointer has all but stopped (so passing over icons doesn't shuffle
+	// them): over another tab it goes to that page; over the middle of another icon, and held
+	// there 300 ms, it will drop onto it (into its group, or the two make one); anywhere else it
+	// takes the cell under it and the others move aside over 300 ms. Held at a side edge 1.5 s it
+	// goes to the next page; dropped on the quick-launch bar, the bar takes the app. Holding a
+	// tab renames it (one the owner added can be deleted, its icons going to the first page);
+	// holding the bar's empty space brings up "+" for a new tab, up to six. The host keeps it all
+	// (LunaCore's LauncherLayout).
+	var editing = false, dock = [], limits = { tabs: 6, name: 24, groupName: "Group" };
+	var HOLD_MS = 500, TAB_HOLD_MS = 700, ADD_HOLD_MS = 650, MOVE_MS = 300, EDGE = 50, EDGE_MS = 1500, GROUP_DWELL_MS = 300, STILL_MS = 60, CELL = 128, GROUP_CORE = 0.6;
+	var drag = null;   // what follows the pointer now: { to(x, y), drop(x, y) }
+
+	function isGroup(c) { return !!(c && c.apps); }
+	function keyOf(c) { return isGroup(c) ? c.uid : c.id; }
+	function newId() { return "group_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
+
+	function saveTabs() {
+		window.luna.saveLauncher({ tabs: pages.map(function (p) {
+			return { designator: p.designator, name: p.title, apps: p.apps.map(function (c) {
+				return isGroup(c) ? { group: c.group, uid: c.uid, apps: c.apps.map(function (a) { return a.id; }) } : c.id;
+			}) };
+		}) });
+	}
+	function saveDock() { window.luna.saveLauncher({ dock: dock.map(function (a) { return a.id; }) }); }
+
+	/**
+	 * A press on something that can be tapped, held or dragged: a tap if it ends within the tap
+	 * radius and wasn't held; [o.hold] ms without leaving the radius is a hold; leaving it first is
+	 * a drag. onHold and onDrag may pick something up (set [drag]), which then follows the pointer
+	 * until it is let go.
+	 */
+	function press(e, o) {
+		if (e.button !== 0) { return; }
+		var x0 = e.clientX, y0 = e.clientY, held = false, moved = false;
+		var timer = o.hold ? setTimeout(function () { held = true; if (o.onHold) { o.onHold(x0, y0); } }, o.hold) : null;
+		function move(ev) {
+			if (!moved && Math.max(Math.abs(ev.clientX - x0), Math.abs(ev.clientY - y0)) > TAP) {
+				moved = true; clearTimeout(timer);
+				if (!held && o.onDrag) { o.onDrag(x0, y0); }
+			}
+			if (drag) { drag.to(ev.clientX, ev.clientY); }
+		}
+		function up(ev) {
+			window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up);
+			clearTimeout(timer);
+			if (drag) { var d = drag; drag = null; d.drop(ev.clientX, ev.clientY); }
+			else if (!moved && !held && o.onTap) { o.onTap(ev); }
+		}
+		window.addEventListener("pointermove", move); window.addEventListener("pointerup", up); window.addEventListener("pointercancel", up);
+	}
+
+	/** GroupIcon's composite: the first members as thumbnails, 2 by 2, "+N" in the fourth place past four. */
+	function groupArt(g) {
+		var art = document.createElement("div");
+		art.className = "group-art";
+		g.apps.slice(0, 4).forEach(function (a, i) {
+			if (g.apps.length > 4 && i === 3) { var more = document.createElement("b"); more.textContent = "+" + (g.apps.length - 3); art.appendChild(more); return; }
+			art.appendChild(icon(a));
+		});
+		return art;
+	}
+
+	function tileFor(c) {
+		var t = document.createElement("button");
+		t.className = "tile";
+		t.cell = c;
+		if (isGroup(c)) {
+			t.classList.add("group");
+			t.title = c.apps.map(function (a) { return a.title; }).join(", ");
+			t.appendChild(groupArt(c));
+		} else {
+			t.title = c.id;
+			t.appendChild(icon(c));
+			if (c.removable) { var del = document.createElement("i"); del.className = "del"; t.appendChild(del); }
+		}
+		var s = document.createElement("span"); s.textContent = isGroup(c) ? c.group : c.title; t.appendChild(s);
+		t.addEventListener("pointerdown", function (e) {
+			var onDelete = editing && e.target.classList && e.target.classList.contains("del");
+			press(e, {
+				hold: editing || onDelete ? 0 : HOLD_MS,
+				onHold: function (x, y) { enterEdit(); pickUp(c, x, y); },
+				onDrag: function (x, y) { if (editing && !onDelete) { pickUp(c, x, y); } },
+				onTap: function () {
+					if (onDelete) { removeDialog(c); return; }
+					if (editing) { return; }   // icons don't launch while being arranged
+					if (isGroup(c)) { glow(t); openGroup(c, t); } else { launch(c, t); }
+				},
 			});
+		});
+		// An installed app's tile: Luna DE's Remove, by the right button.
+		t.addEventListener("contextmenu", function (e) {
+			e.preventDefault();
+			if (!isGroup(c) && c.removable) { showItems(e.clientX, e.clientY, [["Remove " + c.title, function () { window.luna.remove(c.id); }]]); }
+		});
+		return t;
+	}
+
+	function showPage(n) {
+		page = Math.max(0, Math.min(pages.length - 1, n));
+		[].forEach.call($("tabs").children, function (b, i) { b.classList.toggle("selected", i === page); });
+		// The chosen tab comes fully into view (Launcher.Phone's TAB_SCROLL_MS, 250 ms).
+		var chosen = $("tabs").children[page];
+		if (chosen && chosen.scrollIntoView) { chosen.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" }); }
+		var grid = $("grid"), cells = pages[page] ? pages[page].apps : [];
+		grid.innerHTML = "";
+		cells.forEach(function (c) {
+			var t = tileFor(c);
+			if (lifted && lifted === c) { t.classList.add("lifted"); }
 			grid.appendChild(t);
 		});
+		$("empty-page").hidden = cells.length > 0;
+	}
+
+	// ---- edit mode ----
+
+	function enterEdit() {
+		if (editing) { return; }
+		editing = true; clearGlow();
+		document.body.classList.add("editing");
+		$("tab-done").hidden = false; $("tab-add").hidden = true;
+	}
+	/** Done, the home button, or the launcher closing. */
+	function exitEdit() {
+		if (!editing) { return; }
+		editing = false;
+		document.body.classList.remove("editing");
+		$("tab-done").hidden = true;
+	}
+	$("tab-done").addEventListener("click", exitEdit);
+
+	/** Changes the order, every icon sliding from where it is to its new cell (IconReorderIconMoveAnimTime). */
+	function reorder(change) {
+		var before = {};
+		[].forEach.call($("grid").children, function (t) { before[keyOf(t.cell)] = t.getBoundingClientRect(); });
+		change();
+		showPage(page);
+		[].forEach.call($("grid").children, function (t) {
+			var was = before[keyOf(t.cell)];
+			if (!was) { return; }
+			var now = t.getBoundingClientRect(), dx = was.left - now.left, dy = was.top - now.top;
+			if (!dx && !dy) { return; }
+			t.style.transition = "none"; t.style.transform = "translate(" + dx + "px," + dy + "px)";
+			t.getBoundingClientRect();
+			t.style.transition = "transform " + MOVE_MS + "ms cubic-bezier(0.55, 0.085, 0.68, 0.53)"; t.style.transform = "";
+		});
+	}
+
+	var lifted = null;   // the cell that is picked up: its own tile keeps its place, unseen
+
+	function tabAt(x, y) {
+		var tabs = $("tabs").children;
+		for (var i = 0; i < tabs.length; i++) { var r = tabs[i].getBoundingClientRect(); if (x >= r.left && x < r.right && y >= r.top && y < r.bottom) { return i; } }
+		return -1;
+	}
+	function dockTop() { return $("quicklaunch").getBoundingClientRect().top; }
+
+	/** The cell under a point of the page, by the grid's own measure; the last one for a point past them. */
+	function cellAt(x, y) {
+		var grid = $("grid"), tiles = grid.children;
+		if (!tiles.length) { return -1; }
+		var first = tiles[0].getBoundingClientRect(), cols = 1;
+		while (cols < tiles.length && tiles[cols].getBoundingClientRect().top === first.top) { cols++; }
+		var pitchY = tiles.length > cols ? tiles[cols].getBoundingClientRect().top - first.top : first.height;
+		var col = Math.max(0, Math.min(cols - 1, Math.floor((x - first.left) / first.width)));
+		var row = Math.max(0, Math.floor((y - first.top) / pitchY));
+		return Math.max(0, Math.min(tiles.length - 1, row * cols + col));
+	}
+
+	function pickUp(c, x, y) {
+		var el = [].filter.call($("grid").children, function (t) { return t.cell === c; })[0];
+		if (!el) { return; }
+		var r = el.getBoundingClientRect(), ghost = el.cloneNode(true);
+		ghost.className = "tile ghost" + (isGroup(c) ? " group" : "");
+		ghost.style.width = r.width + "px"; ghost.style.height = r.height + "px";
+		$("screen").appendChild(ghost);
+		lifted = c; el.classList.add("lifted");
+		var d = { x: x, y: y, dx: x - r.left, dy: y - r.top, still: null, hover: null, target: null, arm: null, side: 0, edge: null };
+		function place() { ghost.style.transform = "translate(" + (d.x - d.dx) + "px," + (d.y - d.dy) + "px)"; }
+		function clearTarget() {
+			clearTimeout(d.arm); d.hover = null; d.target = null;
+			[].forEach.call($("grid").children, function (t) { t.classList.remove("group-target"); });
+		}
+		function lightTab(i) { [].forEach.call($("tabs").children, function (b, j) { b.classList.toggle("over", j === i); }); }
+		/** The dragged icon goes to the end of another page, which is shown. */
+		function moveTo(to) {
+			if (to < 0 || to >= pages.length || to === page) { return; }
+			var apps = pages[page].apps;
+			apps.splice(apps.indexOf(c), 1);
+			pages[to].apps.push(c);
+			clearTarget();
+			showPage(to);
+		}
+		/** The pointer has all but stopped: what the icon is over decides. */
+		function sample() {
+			if (d.y < $("grid").getBoundingClientRect().top) { var i = tabAt(d.x, d.y); if (i >= 0 && i !== page) { moveTo(i); } return; }
+			if (d.y > dockTop()) { return; }
+			var apps = pages[page].apps, to = cellAt(d.x, d.y), from = apps.indexOf(c);
+			var over = to >= 0 ? $("grid").children[to] : null;
+			if (over && over.cell !== c && !isGroup(c)) {
+				var r2 = over.getBoundingClientRect(), core = CELL * GROUP_CORE / 2;
+				if (Math.abs(d.x - (r2.left + r2.width / 2)) < core && Math.abs(d.y - (r2.top + r2.height / 2)) < core) {
+					var k = keyOf(over.cell);
+					if (d.hover !== k) {
+						clearTarget(); d.hover = k;
+						d.arm = setTimeout(function () { d.target = k; [].forEach.call($("grid").children, function (t) { t.classList.toggle("group-target", keyOf(t.cell) === k); }); }, GROUP_DWELL_MS);
+					}
+					return;
+				}
+			}
+			clearTarget();
+			if (to >= 0 && from >= 0 && to !== from) { reorder(function () { apps.splice(from, 1); apps.splice(to, 0, c); }); }
+		}
+		function edgeFlip() {
+			if (!d.side) { return; }
+			moveTo(page + d.side);
+			d.edge = setTimeout(edgeFlip, EDGE_MS);
+		}
+		place();
+		drag = {
+			to: function (nx, ny) {
+				d.x = nx; d.y = ny; place();
+				var onPage = ny >= $("grid").getBoundingClientRect().top && ny <= dockTop();
+				lightTab(onPage ? -1 : tabAt(nx, ny));
+				ghost.classList.toggle("over-dock", ny > dockTop());
+				var side = !onPage ? 0 : nx < EDGE ? -1 : nx > W - EDGE ? 1 : 0;
+				if (side !== d.side) { d.side = side; clearTimeout(d.edge); if (side) { d.edge = setTimeout(edgeFlip, EDGE_MS); } }
+				clearTimeout(d.still); d.still = setTimeout(sample, STILL_MS);
+			},
+			drop: function (nx, ny) {
+				clearTimeout(d.still); clearTimeout(d.edge); clearTimeout(d.arm);
+				lightTab(-1);
+				var target = d.target;
+				[].forEach.call($("grid").children, function (t) { t.classList.remove("group-target"); });
+				lifted = null;
+				var apps = pages[page].apps;
+				if (ny > dockTop()) {
+					// Onto the bar: it takes the app; the icon stays where it was in the launcher.
+					if (!isGroup(c)) { dropOnDock(c, nx); }
+				} else if (target && !isGroup(c)) {
+					// Onto another icon: into its group, or the two make a new one where it stood.
+					var onto = apps.filter(function (k) { return keyOf(k) === target; })[0];
+					if (onto) {
+						apps.splice(apps.indexOf(c), 1);
+						if (isGroup(onto)) { onto.apps.push(c); }
+						else { apps[apps.indexOf(onto)] = { group: limits.groupName, uid: newId(), apps: [onto, c] }; }
+					}
+				}
+				saveTabs();
+				// The icon settles from under the pointer into its cell.
+				showPage(page);
+				var home = [].filter.call($("grid").children, function (t) { return t.cell === c; })[0];
+				if (!home) { ghost.remove(); return; }
+				var hr = home.getBoundingClientRect();
+				home.classList.add("lifted");
+				ghost.style.transition = "transform " + MOVE_MS + "ms cubic-bezier(0.55, 0.085, 0.68, 0.53)";
+				ghost.style.transform = "translate(" + hr.left + "px," + hr.top + "px)";
+				setTimeout(function () { ghost.remove(); home.classList.remove("lifted"); }, MOVE_MS);
+			},
+		};
+	}
+
+	// ---- the tabs ----
+
+	function drawTabs() {
+		var tabs = $("tabs");
+		tabs.innerHTML = "";
+		pages.forEach(function (p, i) {
+			var b = document.createElement("button");
+			b.textContent = p.title;
+			b.addEventListener("pointerdown", function (e) {
+				press(e, {
+					hold: editing ? 0 : TAB_HOLD_MS,
+					onHold: function () { renameTab(i); },
+					onTap: function () { if (!tabDragged) { showPage(i); } },
+				});
+			});
+			b.addEventListener("contextmenu", function (e) { e.preventDefault(); if (!editing) { renameTab(i); } });
+			tabs.appendChild(b);
+		});
+	}
+
+	/** A tab was held: rename it, and for one the owner added, offer to delete it (its icons go to the first page). */
+	function renameTab(i) {
+		var p = pages[i];
+		if (!p) { return; }
+		textDialog("Rename Tab", p.title, !p.permanent, true, function (name, del) {
+			if (name) { p.title = name; }
+			if (del && !p.permanent) {
+				pages.splice(i, 1);
+				pages[0].apps = pages[0].apps.concat(p.apps);
+				if (page >= pages.length) { page = pages.length - 1; }
+			}
+			saveTabs(); drawTabs(); showPage(page);
+		});
+	}
+
+	// The bar's empty space, held (or right-clicked): "+" for a new tab, while there is room for
+	// one. A tap on it asks for the tab's name; a tap anywhere else puts it away.
+	$("tabbar").addEventListener("pointerdown", function (e) {
+		if (e.target !== $("tabbar") && e.target !== $("tabs")) { return; }
+		press(e, { hold: ADD_HOLD_MS, onHold: revealAdd });
+	});
+	$("tabbar").addEventListener("contextmenu", function (e) {
+		if (e.target === $("tabbar") || e.target === $("tabs")) { e.preventDefault(); revealAdd(); }
+	});
+	function revealAdd() { if (!editing && pages.length < limits.tabs) { $("tab-add").hidden = false; } }
+	document.addEventListener("pointerup", function (e) { if (e.target !== $("tab-add") && e.target !== $("tabbar") && e.target !== $("tabs")) { $("tab-add").hidden = true; } }, true);
+	$("tab-add").addEventListener("click", function () {
+		$("tab-add").hidden = true;
+		textDialog("New Tab", "New Tab", false, false, function (name) {
+			if (!name || pages.length >= limits.tabs) { return; }
+			pages.push({ designator: "usertab_" + newId().slice(6), title: name, permanent: false, apps: [] });
+			saveTabs(); drawTabs(); showPage(pages.length - 1);
+		});
+	});
+
+	// ---- LunaCE's dialogs over the launcher ----
+
+	var scrimAway = null;
+	function openScrim(el, away) {
+		var scrim = $("scrim");
+		scrim.innerHTML = ""; scrim.appendChild(el); scrim.hidden = false;
+		scrimAway = away;
+	}
+	function closeScrim() { $("scrim").hidden = true; $("scrim").innerHTML = ""; scrimAway = null; }
+	$("scrim").addEventListener("pointerdown", function (e) { if (e.target === $("scrim") && scrimAway) { scrimAway(); } });
+
+	/**
+	 * Rename Tab / New Tab (renamedialog.cpp): the prompt, and the name in a box, up to 24
+	 * characters. Return commits; tapping away commits a rename ([commitAway]) but throws a new
+	 * tab away. [deletable] puts the trash can beside the box, which deletes at once.
+	 * [done] gets the trimmed name (null to leave things as they were) and whether to delete.
+	 */
+	function textDialog(prompt, value, deletable, commitAway, done) {
+		var panel = document.createElement("div"); panel.className = "tab-dialog";
+		var p = document.createElement("div"); p.className = "prompt"; p.textContent = prompt; panel.appendChild(p);
+		var row = document.createElement("div"); row.className = "row"; panel.appendChild(row);
+		var input = document.createElement("input"); input.type = "text"; input.maxLength = limits.name; input.value = value; row.appendChild(input);
+		var finished = false;
+		function finish(name, del) { if (finished) { return; } finished = true; closeScrim(); done(name, !!del); }
+		function typed() { return input.value.trim() || null; }
+		if (deletable) {
+			var trash = document.createElement("button"); trash.className = "trash"; trash.title = "Delete this tab";
+			trash.addEventListener("click", function () { finish(null, true); });
+			row.appendChild(trash);
+		}
+		input.addEventListener("keydown", function (e) {
+			e.stopPropagation();
+			if (e.key === "Enter") { finish(typed(), false); } else if (e.key === "Escape") { finish(null, false); }
+		});
+		openScrim(panel, function () { finish(commitAway ? typed() : null, false); });
+		input.focus(); input.select();
+	}
+
+	/** LunaCE's AppInfoDialog: "Remove Application?", the app and its version, Cancel and Remove. */
+	function removeDialog(a) {
+		var panel = document.createElement("div"); panel.className = "remove-dialog";
+		var h = document.createElement("div"); h.className = "prompt"; h.textContent = "Remove Application?"; panel.appendChild(h);
+		var what = document.createElement("div"); what.className = "what"; what.textContent = a.title + (a.version ? " - v." + a.version : ""); panel.appendChild(what);
+		[["Cancel", function () {}], ["Remove", function () { window.luna.remove(a.id); }]].forEach(function (it) {
+			var b = document.createElement("button"); b.textContent = it[0]; b.className = it[0].toLowerCase();
+			b.addEventListener("click", function () { closeScrim(); it[1](); });
+			panel.appendChild(b);
+		});
+		openScrim(panel, closeScrim);
+	}
+
+	/**
+	 * A group opened (groupoverlay.cpp): the launcher dimmed, and a panel of the group's members,
+	 * up to four across and sixteen shown, under the group's name. It grows out of the group's
+	 * icon. A tap on a member launches it; holding one puts it back on the page, just after the
+	 * group; a tap on the name renames the group; a tap outside closes it.
+	 */
+	function openGroup(g, from) {
+		var panel = document.createElement("div"); panel.className = "group-panel";
+		var name = document.createElement("div"); name.className = "name"; name.textContent = g.group; panel.appendChild(name);
+		var members = document.createElement("div"); members.className = "members"; panel.appendChild(members);
+		members.style.gridTemplateColumns = "repeat(" + Math.min(4, Math.max(1, g.apps.length)) + ", 136px)";
+		function close() { clearGlow(); panel.classList.add("closing"); setTimeout(closeScrim, 130); }
+		/** The group as it is now, on its page: one member left is that app again, none and it is gone. */
+		function changed() {
+			pages.forEach(function (p) {
+				var i = p.apps.indexOf(g);
+				if (i < 0) { return; }
+				if (g.apps.length === 0) { p.apps.splice(i, 1); } else if (g.apps.length === 1) { p.apps[i] = g.apps[0]; }
+			});
+			saveTabs(); showPage(page);
+		}
+		g.apps.slice(0, 16).forEach(function (a) {
+			var t = document.createElement("button"); t.className = "tile";
+			t.appendChild(icon(a));
+			var s = document.createElement("span"); s.textContent = a.title; t.appendChild(s);
+			t.addEventListener("pointerdown", function (e) {
+				press(e, {
+					hold: 700,
+					onHold: function () {
+						// Out of the group, onto the page just after it.
+						g.apps.splice(g.apps.indexOf(a), 1);
+						pages.forEach(function (p) { var i = p.apps.indexOf(g); if (i >= 0) { p.apps.splice(i + 1, 0, a); } });
+						changed(); closeScrim(); clearGlow();
+					},
+					onTap: function () { t.classList.add("glow"); close(); launch(a, null); },
+				});
+			});
+			members.appendChild(t);
+		});
+		name.addEventListener("click", function () {
+			if (name.querySelector("input")) { return; }
+			var input = document.createElement("input"); input.type = "text"; input.maxLength = limits.name; input.value = g.group;
+			name.textContent = ""; name.appendChild(input); input.focus(); input.select();
+			function commit() {
+				var v = input.value.trim();
+				if (v) { g.group = v; saveTabs(); showPage(page); }
+				name.textContent = g.group;
+			}
+			input.addEventListener("keydown", function (e) { e.stopPropagation(); if (e.key === "Enter") { commit(); } else if (e.key === "Escape") { name.textContent = g.group; } });
+			input.addEventListener("blur", function () { if (input.parentNode === name) { commit(); } });
+		});
+		openScrim(panel, close);
+		// Out of the group's icon: 0.85 to full size, faded in, over 160 ms.
+		if (from) {
+			var r = from.getBoundingClientRect(), pr = panel.getBoundingClientRect();
+			panel.style.transformOrigin = (r.left + r.width / 2 - pr.left) + "px " + (r.top + 40 - pr.top) + "px";
+		}
+		panel.classList.add("opening");
+		panel.getBoundingClientRect();
+		panel.classList.remove("opening");
+	}
+
+	// ---- the quick-launch bar's own arranging (QuickLaunch) ----
+	//
+	// Holding a bar icon picks it up, for that drag only; in the launcher's edit mode a drag picks
+	// one up too. It sits 15 px above the pointer and the others make room for it; above the bar
+	// it turns half transparent. Let go on the bar and it takes that slot, let go above the bar
+	// and it leaves the bar. A launcher icon dropped on the bar joins it.
+
+	function dockMax() { return document.body.classList.contains("phone") ? 4 : 5; }
+	function slotAt(x, count) {
+		var r = $("dock").getBoundingClientRect();
+		return Math.max(0, Math.min(Math.max(0, count - 1), Math.floor((x - r.left) / (r.width / Math.max(1, count)))));
+	}
+	function dropOnDock(a, x) {
+		var at = dock.map(function (k) { return k.id; }).indexOf(a.id);
+		if (at >= 0) { dock.splice(at, 1); dock.splice(slotAt(x, dock.length + 1), 0, a); }
+		else if (dock.length < dockMax()) { dock.splice(slotAt(x, dock.length + 1), 0, a); }
+		else { dock[slotAt(x, dock.length)] = a; }
+		saveDock(); drawDock();
+	}
+
+	var dockLifted = null;
+	function drawDock() {
+		var el = $("dock");
+		el.innerHTML = "";
+		dock.slice(0, dockMax()).forEach(function (a) {
+			var b = document.createElement("button");
+			b.title = a.title;
+			b.appendChild(icon(a));
+			if (dockLifted === a) { b.classList.add("lifted"); }
+			b.addEventListener("pointerdown", function (e) {
+				press(e, {
+					hold: editing ? 0 : HOLD_MS,
+					onHold: function (x, y) { dockPick(a, x, y); },
+					onDrag: function (x, y) { if (editing) { dockPick(a, x, y); } },
+					onTap: function () { if (!editing) { launch(a, b); } },
+				});
+			});
+			el.appendChild(b);
+		});
+		setTimeout(layoutDock, 0);
+	}
+
+	function dockPick(a, x, y) {
+		var ghost = icon(a);
+		ghost.className = "dock-ghost";
+		$("screen").appendChild(ghost);
+		dockLifted = a; drawDock();
+		function place(nx, ny) { ghost.style.transform = "translate(" + (nx - 32) + "px," + (ny - 32 - 15) + "px)"; }
+		place(x, y);
+		drag = {
+			to: function (nx, ny) {
+				place(nx, ny);
+				var on = ny >= dockTop();
+				ghost.classList.toggle("leaving", !on);
+				if (on) {
+					var from = dock.indexOf(a), to = slotAt(nx, dock.length);
+					if (from >= 0 && to !== from) { dock.splice(from, 1); dock.splice(to, 0, a); drawDock(); }
+				}
+			},
+			drop: function (nx, ny) {
+				ghost.remove(); dockLifted = null;
+				if (ny < dockTop()) { var i = dock.indexOf(a); if (i >= 0) { dock.splice(i, 1); } }
+				saveDock(); drawDock();
+			},
+		};
 	}
 
 	/**
@@ -388,6 +864,7 @@
 		$("title-text").textContent = "Launcher";
 	}
 	function closeLauncher() {
+		exitEdit(); closeScrim();
 		$("launcher").hidden = true;
 		document.body.classList.remove("launcher");
 		setTitle();
@@ -399,7 +876,9 @@
 	/** The home button (the bezel's, or F1): up from an app to the card view, or away from the launcher. */
 	function home() {
 		$("menu").hidden = true;
-		if (!$("launcher").hidden) { closeLauncher(); }
+		if (!$("scrim").hidden) { if (scrimAway) { scrimAway(); } else { closeScrim(); } }
+		else if (editing) { exitEdit(); }
+		else if (!$("launcher").hidden) { closeLauncher(); }
 		else if (maximized) { cardView(); }
 	}
 	$("home").addEventListener("click", home);
@@ -428,6 +907,7 @@
 	$("rotate").addEventListener("click", function () { window.luna.rotate(); });
 	document.addEventListener("keydown", function (e) {
 		if (e.key === "F1") { e.preventDefault(); home(); }
+		else if (e.key === "Escape" && (editing || !$("scrim").hidden)) { e.preventDefault(); home(); }
 		// Left and Right switch cards in the card view (the SDK emulator's keys).
 		else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !maximized && cards.length && $("launcher").hidden) {
 			active = Math.max(0, Math.min(cards.length - 1, active + (e.key === "ArrowRight" ? 1 : -1)));
@@ -537,6 +1017,9 @@
 
 	// ---- installing: a package or an app's folder dropped on the device ----
 
+	// Nothing in the shell is dragged the browser's way: a press on an icon's picture that moved
+	// began a drag of the picture, and the icon being arranged was let go at once.
+	document.addEventListener("dragstart", function (e) { e.preventDefault(); });
 	document.addEventListener("dragover", function (e) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
 	document.addEventListener("drop", function (e) {
 		e.preventDefault();
@@ -583,32 +1066,18 @@
 	// The simulated network (the Wi-Fi tile): the status bar's Wi-Fi icon shows it gone.
 	window.luna.onNetwork(function (d) { document.querySelector("#status-right .wifi").classList.toggle("off", !d.online); });
 
-	/** The launcher's pages and the quick-launch bar, drawn from what the host has installed. */
+	/** The launcher's pages and the quick-launch bar, as the host has them: what is installed, arranged as its owner left it. */
 	function loadApps(first) {
 		return window.luna.shell().then(function (s) {
 			pages = s.pages;
-			pages.forEach(function (p) { p.apps.forEach(function (a) { appTitles[a.id] = a.title; appEntries[a.id] = a; }); });
-			s.dock.forEach(function (a) { appTitles[a.id] = a.title; appEntries[a.id] = a; });
-			var tabs = $("tabs");
-			tabs.innerHTML = "";
-			pages.forEach(function (p, i) {
-				var b = document.createElement("button");
-				b.textContent = p.title;
-				b.addEventListener("click", function () { if (!tabDragged) { showPage(i); } });
-				tabs.appendChild(b);
-			});
+			dock = s.dock;
+			if (s.limits) { limits = s.limits; }
+			function note(a) { appTitles[a.id] = a.title; appEntries[a.id] = a; }
+			pages.forEach(function (p) { p.apps.forEach(function (c) { if (isGroup(c)) { c.apps.forEach(note); } else { note(c); } }); });
+			dock.forEach(note);
+			drawTabs();
 			showPage(first ? 0 : Math.min(page, pages.length - 1));
-			var dock = $("dock");
-			dock.innerHTML = "";
-			setTimeout(layoutDock, 0);
-			// A phone's bar holds four (QuickLaunch.PHONE_MAX_ITEMS), a tablet's five.
-			s.dock.slice(0, document.body.classList.contains("phone") ? 4 : 5).forEach(function (a) {
-				var b = document.createElement("button");
-				b.title = a.title;
-				b.appendChild(icon(a));
-				b.addEventListener("click", function () { launch(a, b); });
-				dock.appendChild(b);
-			});
+			drawDock();
 		});
 	}
 	// An app installed or removed: the launcher draws what there is now.

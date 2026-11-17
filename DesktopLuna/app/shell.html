@@ -12,8 +12,9 @@
 	<div id="cards"></div>
 	<div id="pill"><span>Just type...</span></div>
 	<div id="launcher" hidden>
-		<div id="tabs"></div>
+		<div id="tabbar"><div id="tabs"></div><button id="tab-add" hidden title="New tab"></button><button id="tab-done" hidden>DONE</button></div>
 		<div id="grid"></div>
+		<div id="empty-page" hidden><span>Tap and hold any app to drag it to this page.</span></div>
 	</div>
 	<div id="quicklaunch"><div id="dock"></div><button id="launcher-button" title="Launcher"></button></div>
 	<div id="statusbar">
@@ -28,6 +29,8 @@
 	<div id="dashboards" hidden></div>
 	<div id="alert" hidden></div>
 	<canvas id="keyboard" hidden></canvas>
+	<!-- LunaCE's launcher dialogs, over the launcher: a group's panel, Rename Tab / New Tab, Remove Application. -->
+	<div id="scrim" hidden></div>
 	<div id="menu" hidden></div>
 </div>
 <div id="bezel"><button id="popout" title="Pop this card out into a window of its own" disabled></button><button id="devtools" title="Logs: every app's console in one window. Right-click to inspect a card"></button><button id="zoom" title="Phone Zoom for this app: its page laid out 640 px wide and shown whole, for an app written for a TouchPad (the card loads again)" disabled></button><button id="realkb" class="on" title="A real keyboard is attached: the on-screen keyboard stays away. Click to take it away."></button><button id="home" title="Home: the card view (F1)"></button><button id="device" title="The device: an HP TouchPad or an HP Pre3 (changing it closes the open apps)"><img alt=""></button><button id="rotate" title="Turn the device: wide or tall (F6 to F9 for each way up)"></button></div>

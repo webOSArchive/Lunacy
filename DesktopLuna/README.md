@@ -47,6 +47,12 @@ The first six are the old SDK emulator's keys.
 like any other: resize it freely and the page follows, hearing each change as a resize and a
 change between wide and tall as the device turning.
 
+**Arranging the launcher:** hold an icon to begin (then drag any): onto another cell, onto the
+middle of another icon to make a group, onto another tab, or onto the quick-launch bar. Hold a
+tab (or right-click it) to rename or delete it; hold the tab bar's empty space (or right-click
+it) for "+", a new tab. Hold an icon on the bar to move it or drag it off. Done, Esc or the
+home button ends it.
+
 **Installing an app:** drop its `.ipk`, or its folder (the one holding `appinfo.json`), on the
 window; or press Ctrl/Cmd+O for a package, Ctrl/Cmd+Shift+O for a folder; or start with
 `LUNA_DE_INSTALL=<path>`. It appears on the launcher's Downloads tab. Drop a folder again after

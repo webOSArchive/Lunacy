@@ -102,6 +102,22 @@ API 21 gate.
   for a narrow window is not done. The two exact devices are unchanged, for checking an app
   against a real screen. Luna DE starts as the device it was last (`luna-de-device.json`
   beside its data).
+- **The launcher is its owner's to arrange** (2026-11-17), as LunaCE's is and AndroidLuna's
+  Launcher has it. Holding an icon begins edit mode and picks it up (in edit mode a drag does):
+  it takes the cell it is held over, the others moving aside; held over the middle of another
+  icon for 300 ms and dropped, the two make a **group** (or it joins the group); over another
+  tab, or held at a side edge, it goes to that page; dropped on the quick-launch bar, the bar
+  takes the app. Edit mode has the frames, the delete badge on an installed app (Remove
+  Application?) and Done. A group opens as a panel: a tap launches a member, holding one puts
+  it back on the page, a tap on the name renames it; one member left and it is that app again.
+  **Tabs:** holding one renames it, and one the owner added can be deleted (its icons go to the
+  first page); holding the bar's empty space brings up "+" for a new tab, six in all. A right
+  click does what a hold does on a tab and on the bar. **The quick-launch bar:** holding an
+  icon picks it up, to another slot or up and out of the bar. All of it is kept by the host in
+  `launcher.json`, by LunaCore's `LauncherLayout`: Launcher.setApps' rules and LauncherStore's
+  saved shape, with `LauncherLayoutTest`. AndroidLuna's launcher still runs its own copy of
+  those rules in its view; moving it onto LauncherLayout is not done. Not here: pages swiped
+  sideways (a tab is tapped), and an install's progress on the downloads page.
 - **Logs.** The bezel's `</>` button opens the log window: every app page's console (cards,
   dashboards, alerts, pages with no window) in one place, each line with its time, app id, level
   and source, kept from when Luna DE started, with a filter and the levels to show. It stands in

@@ -74,8 +74,9 @@ body.maximized .card { border-radius: 0; }
 	display: flex; flex-direction: column;
 }
 #launcher[hidden] { display: none; }
-#tabs { display: flex; height: 50px; flex: none;
+#tabbar { display: flex; align-items: center; height: 50px; flex: none; position: relative;
 	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/tab-bg.png") repeat-x; }
+#tabs { display: flex; height: 100%; flex: 0 1 auto; min-width: 0; }
 #tabs button {
 	flex: 0 0 auto; min-width: 130px; padding: 0 22px; border: 0; color: rgba(255,255,255,0.8); font: bold 15px Prelude, sans-serif;
 	background: transparent; text-transform: uppercase; cursor: pointer;
@@ -84,18 +85,20 @@ body.maximized .card { border-radius: 0; }
 #tabs button.selected { color: #fff;
 	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/tab-selected-bg.png") center / 100% 100%; }
 #grid {
-	flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(var(--columns, 6), 1fr); grid-auto-rows: 116px;
-	padding: 18px 20px calc(var(--ql) + 10px); align-content: start;
+	/* The TouchPad's cells (Launcher.Params): 128 px, 10 px between rows, 20 px above the first;
+	   a 64 px icon centred 11 px above the cell's centre, its label 2 px under it. */
+	flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(var(--columns, 6), 1fr); grid-auto-rows: 128px; row-gap: 10px;
+	padding: 20px 20px calc(var(--ql) + 10px); align-content: start;
 }
 .tile { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; cursor: pointer;
-	border: 0; background: transparent; color: #fff; font: 14px Prelude, sans-serif; padding-top: 8px; border-radius: 8px; position: relative; }
+	border: 0; background: transparent; color: #fff; font: 14px Prelude, sans-serif; padding-top: 21px; gap: 2px; border-radius: 8px; position: relative; }
 /* LunaCE's launch feedback: launcher-touch-feedback.png, 90 px, centred on the tapped icon until
    its launch is done with it or 3 s run out (Launcher.Params.FEEDBACK, FEEDBACK_MS). */
 .tile.glow::before, #dock button.glow::before {
 	content: ""; position: absolute; width: 90px; height: 90px; left: 50%; margin-left: -45px; z-index: 0; pointer-events: none;
 	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/launcher-touch-feedback.png") center / 90px 90px no-repeat;
 }
-.tile.glow::before { top: -5px; }            /* the icon is 64 high, 8 px down the tile */
+.tile.glow::before { top: 8px; }             /* the icon is 64 high, 21 px down the tile */
 .tile img, .tile span, #dock img { position: relative; z-index: 1; }
 .tile img { width: 64px; height: 64px; object-fit: contain; }
 .tile span { max-width: 150px; text-align: center; line-height: 1.15; text-shadow: 0 1px 2px #000; }
@@ -107,7 +110,8 @@ body.maximized .card { border-radius: 0; }
 /* webOS drew no scroll bar beside the launcher's pages. */
 #grid { scrollbar-width: none; }
 #grid::-webkit-scrollbar { display: none; }
-body.phone #tabs { height: 40px; overflow-x: auto; scrollbar-width: none; background-size: auto 100%; }
+body.phone #tabbar { height: 40px; background-size: auto 100%; }
+body.phone #tabs { overflow-x: auto; scrollbar-width: none; }
 body.phone #tabs::-webkit-scrollbar { display: none; }
 body.phone #tabs button { flex: 0 0 150px; min-width: 0; padding: 0; }
 body.phone #grid { grid-auto-rows: 112px; row-gap: 9px; padding: 14px 6px calc(var(--ql) + 10px); }
@@ -115,6 +119,90 @@ body.phone .tile { padding-top: 18px; gap: 4px; font: bold 13px Prelude, sans-se
 body.phone .tile img { width: 56px; height: 56px; }
 body.phone .tile span { max-width: 80px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 body.phone .tile.glow::before { width: 80px; height: 80px; margin-left: -40px; top: 6px; background-size: 80px 80px; }
+
+/* ---- the launcher as its owner arranges it: LunaCE's edit mode, tabs, groups and dialogs, as
+   AndroidLuna's Launcher, TabDialog, RemoveDialog and GroupOverlay draw them ---- */
+#tabs button.over { background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/tab-highlight.png") center / 100% 100%; }
+/* "+" (tab-add-icon.png, its upper half; 28 px, 12 px after the last tab) and Done
+   (edit-button-done.png: 98 x 34 at (1, 2), pressed at (1, 42); 7 px in from the bar's right). */
+#tab-add { flex: none; width: 28px; height: 28px; margin-left: 12px; border: 0; padding: 0; cursor: pointer;
+	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/tab-add-icon.png") 0 0 / 28px 56px no-repeat; }
+#tab-add:active { background-position: 0 -28px; }
+#tab-add[hidden], #tab-done[hidden] { display: none; }
+#tab-done { position: absolute; right: 7px; top: 50%; margin-top: -17px; width: 98px; height: 34px; border: 0; padding: 0 0 2px; cursor: pointer;
+	color: #fff; font: bold 14px Prelude, sans-serif; text-shadow: 0 -1px 0 rgba(0,0,0,0.6);
+	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/edit-button-done.png") -1px -2px no-repeat; }
+#tab-done:active { background-position: -1px -42px; }
+/* Edit mode: edit-icon-bg.png (128 px) behind each cell, and the delete badge on what can be
+   removed (edit-button-delete.png: 32 x 32 at (2, 1), pressed at (2, 41)), its centre 50 px left
+   of and above the cell's. */
+.tile { touch-action: none; }
+#screen img { -webkit-user-drag: none; }
+body.editing #grid .tile::after { content: ""; position: absolute; left: 50%; top: 50%; width: 128px; height: 128px; margin: -64px 0 0 -64px; z-index: 0; pointer-events: none;
+	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/edit-icon-bg.png") center / 128px 128px no-repeat; }
+.tile .del { display: none; }
+body.editing #grid .tile .del { display: block; position: absolute; left: calc(50% - 66px); top: calc(50% - 66px); width: 32px; height: 32px; z-index: 3; cursor: pointer;
+	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/edit-button-delete.png") -2px -1px no-repeat; }
+body.editing #grid .tile .del:active { background-position: -2px -41px; }
+/* A phone's cell is 84 x 112: the frame a nine-slice with 16 px corners, the badge 30 px left of
+   and 44 px above the cell's centre (Launcher.Phone). */
+body.phone.editing #grid .tile::after { width: 84px; height: 112px; margin: -56px 0 0 -42px; background: none; box-sizing: border-box;
+	border-style: solid; border-width: 16px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/edit-icon-bg.png") 16 fill / 16px stretch; }
+body.phone.editing #grid .tile .del { left: calc(50% - 46px); top: calc(50% - 60px); }
+#grid .tile.lifted, #dock button.lifted img { visibility: hidden; }
+#grid .tile.lifted::after { visibility: visible; }
+#grid .tile.group-target::before { content: ""; position: absolute; left: 50%; top: 4px; width: 78px; height: 78px; margin-left: -39px; border-radius: 12px; z-index: 0;
+	box-shadow: 0 0 0 2px rgba(255,255,255,0.75), 0 0 14px rgba(140,190,255,0.8); }
+/* The picked-up icon, over everything in the device. */
+.tile.ghost { position: absolute; left: 0; top: 0; z-index: 70; pointer-events: none; margin: 0; opacity: 0.92; }
+.tile.ghost .del { display: none !important; }
+.tile.ghost.over-dock span { visibility: hidden; }
+.dock-ghost { position: absolute; left: 0; top: 0; width: 64px; height: 64px; z-index: 70; pointer-events: none; object-fit: contain; }
+.dock-ghost.leaving { opacity: 0.5; }
+/* A group (groupicon.cpp): a 68 px rounded backplate, a gradient under a 2 px white border, its
+   first members as 26 px thumbnails 2 by 2 with 6 px margins; past four, "+N" in the fourth place. */
+.group-art { position: relative; z-index: 1; width: 68px; height: 68px; margin: -2px 0; box-sizing: border-box; border-radius: 8px; padding: 6px;
+	display: grid; grid-template-columns: 26px 26px; grid-auto-rows: 26px; gap: 4px;
+	border: 2px solid rgba(255,255,255,0.37); padding: 4px;
+	background: linear-gradient(rgba(111,111,116,0.63), rgba(61,61,66,0.59) 35%, rgba(36,36,38,0.67));
+	box-shadow: 0 1.5px 0 rgba(0,0,0,0.47); }
+.group-art img { width: 26px !important; height: 26px !important; object-fit: contain; }
+.group-art b { font: bold 12px Prelude, sans-serif; color: #fff; display: flex; align-items: center; justify-content: center; }
+/* An empty page (ReorderablePage): the picture, and the message below it. */
+#empty-page { position: absolute; left: 50%; top: 190px; width: 350px; margin-left: -175px; text-align: center; pointer-events: none;
+	padding-top: 230px; color: rgba(255,255,255,0.75); font: 16px Prelude, sans-serif;
+	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/launcher-empty-page.png") top center / 280px 220px no-repeat; }
+#empty-page[hidden] { display: none; }
+/* The dialogs' scrim: the launcher dimmed, black at alpha 120. */
+#scrim { position: absolute; left: 0; right: 0; top: var(--status); bottom: 0; z-index: 55; background: rgba(0,0,0,0.47);
+	display: flex; align-items: center; justify-content: center; }
+#scrim[hidden] { display: none; }
+/* Rename Tab / New Tab (renamedialog.cpp): 520 x 150, rgba(25,25,25,235), a 1.5 px white alpha 90
+   border, radius 12; the prompt 18 px white alpha 170 in a 44 px row; the name 24 px bold in a box
+   with a blue 1.5 px border; the trash can (tab-delete-icon.png, 40 px) beside it. */
+.tab-dialog, .remove-dialog, .group-panel { box-sizing: border-box; background: rgba(25,25,25,0.92); border: 1.5px solid rgba(255,255,255,0.35); border-radius: 12px; }
+.tab-dialog { width: 520px; max-width: calc(var(--w) - 24px); height: 150px; padding: 0 18px 18px; }
+.tab-dialog .prompt, .remove-dialog .prompt { height: 44px; line-height: 44px; font: 18px/44px Prelude, sans-serif; color: rgba(255,255,255,0.67); }
+.tab-dialog .row { display: flex; align-items: center; gap: 12px; height: 70px; }
+.tab-dialog input, .group-panel .name input { flex: 1; min-width: 0; height: 52px; box-sizing: border-box; padding: 0 12px; border-radius: 6px; outline: 0;
+	border: 1.5px solid #4a9be8; background: rgba(0,0,0,0.35); color: #fff; font: bold 24px Prelude, sans-serif; }
+.tab-dialog .trash { flex: none; width: 40px; height: 40px; border: 0; cursor: pointer;
+	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/tab-delete-icon.png") 0 0 / 40px 80px no-repeat; }
+.tab-dialog .trash:active { background-position: 0 -40px; }
+/* Remove Application? (AppInfoDialog): 320 wide, the app and its version, Cancel and Remove, 52 px buttons. */
+.remove-dialog { width: 342px; padding: 4px 11px 11px; text-align: center; }
+.remove-dialog .what { font: bold 16px Prelude, sans-serif; padding: 2px 0 16px; }
+.remove-dialog button { width: calc(50% - 4px); height: 52px; margin: 0 2px; border: 1px solid rgba(255,255,255,0.25); border-radius: 6px; cursor: pointer;
+	color: #fff; font: bold 16px Prelude, sans-serif; background: linear-gradient(#5a5d63, #3a3c41); }
+.remove-dialog button.remove { background: linear-gradient(#c5453a, #94261e); }
+/* A group's panel (groupoverlay.cpp): its name 22 px bold in a 44 px row, its members in 136 px
+   cells, 18 px padding; in from 0.85 and faded over 160 ms, out over 130 ms. */
+.group-panel { padding: 0 18px 18px; transition: transform 160ms cubic-bezier(0.215, 0.61, 0.355, 1), opacity 160ms; }
+.group-panel.opening { transform: scale(0.85); opacity: 0; transition: none; }
+.group-panel.closing { transform: scale(0.85); opacity: 0; transition: transform 130ms cubic-bezier(0.55, 0.055, 0.675, 0.19), opacity 130ms; }
+.group-panel .name { height: 44px; line-height: 44px; text-align: center; font: bold 22px/44px Prelude, sans-serif; cursor: text; }
+.group-panel .name input { width: 100%; height: 40px; font-size: 22px; text-align: center; }
+.group-panel .members { display: grid; grid-auto-rows: 128px; justify-content: center; }
 
 /* ---- the quick-launch bar ---- */
 #quicklaunch {

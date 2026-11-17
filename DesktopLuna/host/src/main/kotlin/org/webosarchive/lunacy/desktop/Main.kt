@@ -173,29 +173,22 @@ fun main(args: Array<String>) {
         send(ex, 200, "application/json; charset=utf-8", list.toString().toByteArray())
     } }
 
-    // The shell's launcher and quick-launch bar, placed by LunaCore's rules (LauncherPages), as
-    // AndroidLuna's launcher places a fresh install's apps: the default layout first, then each
-    // other app on its category's or keywords' page, alphabetically. The user's own tabs and
-    // groups (Launcher.setApps on Android) come with editable tabs here.
+    // The shell's launcher and quick-launch bar, as their owner has arranged them (LunaCore's
+    // LauncherLayout, kept in launcher.json): the tabs, each tab's icons and groups in their
+    // order, and the bar's apps; before any arranging, the default layout, then each other app
+    // on its category's or keywords' page, alphabetically. No "android" tab: on Android it
+    // holds Android's own apps (shell/AndroidApps).
     val launcherPages = LauncherPages(assets)
+    val launcher = org.webosarchive.lunacy.card.LauncherLayout(launcherPages, File(data, "launcher.json"), setOf("favorites"))
     http.createContext("/shell") { ex -> ex.use {
         val apps = registry.launchPoints
-        val byId = apps.associateBy { it.id }
-        fun entry(a: org.webosarchive.lunacy.card.AppInfo) = entryOf(a)
-        // No "android" tab: on Android it holds Android's own apps (shell/AndroidApps).
-        val pages = launcherPages.initialPages.filter { (_, name) -> name != "android" }.map { (d, name) -> d to (name to ArrayList<org.webosarchive.lunacy.card.AppInfo>()) }
-        val placed = HashSet<String>()
-        for ((designator, ids) in launcherPages.defaultLayout) {
-            val page = pages.firstOrNull { it.first == designator }?.second?.second ?: continue
-            ids.mapNotNull { byId[it] }.filter { placed.add(it.id) }.forEach { page += it }
-        }
-        for (a in apps.filter { it.id !in placed }.sortedBy { it.title.lowercase() }) {
-            val d = launcherPages.designatorFor(a)
-            (pages.firstOrNull { it.first == d } ?: pages.first()).second.second += a
-        }
+        val phone = shell.device == org.webosarchive.lunacy.card.DeviceProfile.PRE3
         val out = JSONObject()
-            .put("pages", JSONArray(pages.map { (d, p) -> JSONObject().put("designator", d).put("title", p.first).put("apps", JSONArray(p.second.map(::entry))) }))
-            .put("dock", JSONArray(launcherPages.quickLaunch().mapNotNull { byId[it] }.map(::entry)))
+            .put("pages", JSONArray(launcher.tabs(apps).map { t -> JSONObject().put("designator", t.designator).put("title", t.name)
+                .put("permanent", t.permanent).put("apps", org.webosarchive.lunacy.card.LauncherLayout.cells(t.tiles, ::entryOf)) }))
+            .put("dock", JSONArray(launcher.dock(apps, phone).map(::entryOf)))
+            .put("limits", JSONObject().put("tabs", org.webosarchive.lunacy.card.LauncherLayout.MAX_TABS).put("name", org.webosarchive.lunacy.card.LauncherLayout.MAX_NAME)
+                .put("groupName", org.webosarchive.lunacy.card.LauncherLayout.GROUP_NAME))
             // What every app's page says it is: the TouchPad's browser, as on Android (AppWindow).
             .put("userAgent", shell.device.userAgent)
             // The device Luna DE is being, for Electron to size and scale its window by.
@@ -205,6 +198,15 @@ fun main(args: Array<String>) {
                 .put("virtualKeyboard", shell.device == org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD))
             .put("phoneZoom", shell.phoneZoom())
         send(ex, 200, "application/json; charset=utf-8", out.toString().toByteArray())
+    } }
+
+    // The launcher as its owner has just left it: {"tabs": [...]} in LauncherLayout's saved
+    // shape (a cell an app's id, or a group of ids), and {"dock": [ids]} for the bar.
+    http.createContext("/launcher") { ex -> ex.use {
+        val body = runCatching { JSONObject(ex.requestBody.readBytes().toString(Charsets.UTF_8)) }.getOrDefault(JSONObject())
+        body.optJSONArray("tabs")?.let { launcher.saveTabs(it) }
+        body.optJSONArray("dock")?.let { launcher.saveDock(it, shell.device == org.webosarchive.lunacy.card.DeviceProfile.PRE3) }
+        send(ex, 204, "text/plain", ByteArray(0))
     } }
 
     http.createContext("/icon") { ex -> ex.use {
@@ -391,7 +393,7 @@ private val ANDROID_ONLY_ROM = listOf("org.webosarchive.lunacy.androidaccount", 
 /** The wallpaper Lunacy shows until one is picked (Luna.DEFAULT_WALLPAPER on Android). */
 private const val DEFAULT_WALLPAPER = "22.jpg"
 
-private fun entryOf(a: org.webosarchive.lunacy.card.AppInfo) = JSONObject().put("id", a.id).put("title", a.title)
+private fun entryOf(a: org.webosarchive.lunacy.card.AppInfo) = JSONObject().put("id", a.id).put("title", a.title).put("version", a.version)
     .put("url", AppServer.appUrl(a.id, a.main, a.dir)).put("noWindow", a.noWindow)
     .put("icon", "/icon?id=" + java.net.URLEncoder.encode(a.id, "UTF-8"))
     .put("splash", "/splash?id=" + java.net.URLEncoder.encode(a.id, "UTF-8")).put("splashOwn", a.splashIcon.isNotEmpty())

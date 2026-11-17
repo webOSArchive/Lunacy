@@ -240,27 +240,35 @@ body.justtype #quicklaunch { transform: translateY(100%); }
 #jt-clear[hidden] { display: none; }
 #jt-tabs { flex: none; height: 47px; display: flex; position: relative; z-index: 2; }
 #jt-tabs[hidden] { display: none; }
-#jt-tabs button { flex: 1 1 0; min-width: 0; height: 47px; padding: 0; box-sizing: border-box; cursor: pointer; background: transparent;
+#jt-tabs button { flex: 1 1 0; min-width: 0; height: 47px; padding: 0; box-sizing: border-box; cursor: pointer; background: transparent; text-shadow: 1px 1px 1px #000;
 	color: #c8c8c8; font: bold 15px/50px Prelude, sans-serif; text-transform: uppercase; white-space: nowrap; overflow: hidden;
 	border-style: solid; border-width: 0 34px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/justtype/tab-button.png") 0 34 103 34 fill / 0 34px stretch; }
 #jt-tabs button.blank { cursor: default; }
 #jt-tabs button.filter:active { color: #fff; border-image-slice: 49 34 54 34 fill; }
 #jt-tabs button.chosen { color: #fff; border-image-slice: 99 34 4 34 fill; }
-#jt-tabs button { text-indent: -20px; padding-right: 0; }
-#jt-tabs button.filter { text-indent: 0; margin: 0; }
+#jt-tabs button { overflow: visible; }
+#jt-tabs button span { display: block; margin: 0 -34px; text-align: center; white-space: nowrap; }
 #jt-list { flex: 1; overflow-y: auto; padding: 33px 0 24px; scrollbar-width: none; position: relative;
 	box-shadow: inset 0 10px 0 -10px transparent; }
 #jt-list::-webkit-scrollbar { display: none; }
 #jt-list::before { content: ""; position: sticky; display: block; top: -33px; height: 10px; margin: -33px 0 23px; pointer-events: none; z-index: 1;
 	background: url("../../AndroidLuna/src/main/assets/luna/images/justtype/search-header-shadow.png") repeat-x; }
-.jt-group { position: relative; width: 736px; max-width: calc(var(--w) - 24px); margin: 0 auto 12px; }
+.jt-group { position: relative; width: 736px; max-width: calc(var(--w) - 24px); margin: 12px auto 0; }
+#jt-list > .jt-group:first-of-type, #jt-list > .jt-group:first-child { margin-top: 0; }
+#jt-list.detail { padding-top: 9px; }
+.jt-group.launch + .jt-group { margin-top: 28px; }
 .jt-group::before { content: ""; position: absolute; inset: 0; pointer-events: none; box-sizing: border-box; z-index: 0;
 	border-style: solid; border-width: 14px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/justtype/group-unlabeled.png") 14 fill / 14px stretch; }
-.jt-group.labeled { margin-top: 20px; padding-top: 25px; }
+.jt-group.labeled { padding-top: 28px; }
+.jt-group + .jt-group.labeled { margin-top: 20px; }
+.jt-group.launch + .jt-group.labeled { margin-top: 28px; }
+/* The first row under a caption is 3 px shorter: the caption's overlap. */
+.jt-group.labeled > .caption + .jt-row { height: 71px; }
+.jt-group.labeled > .caption + .jt-row.result { height: 67px; }
 .jt-group.labeled::before { border-width: 36px 14px 14px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/justtype/group-labeled.png") 36 14 14 14 fill / 36px 14px 14px stretch; }
 .jt-group.focused::after { content: ""; position: absolute; inset: 0; pointer-events: none; box-sizing: border-box; z-index: 2;
 	border-style: solid; border-width: 6px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/justtype/groupbox-focus.png") 6 / 6px stretch; }
-.jt-group .caption { position: absolute; left: 12px; top: 5px; z-index: 1; font: bold 14px Prelude, sans-serif; text-transform: uppercase; color: #fff; }
+.jt-group .caption { position: absolute; left: 12px; top: 5px; z-index: 1; font: bold 14px Prelude, sans-serif; text-transform: uppercase; color: #fff; text-shadow: 0 1px 0 #646454; }
 .jt-row { position: relative; z-index: 1; height: 74px; display: flex; align-items: center; margin: 0 1px; cursor: pointer; font: 18px Prelude, sans-serif; color: #fff; }
 .jt-row + .jt-row { box-shadow: 0 -1px 0 #1d2023, inset 0 1px 0 #606468; }
 .jt-row:active { background: #212325; }
@@ -276,12 +284,14 @@ body.justtype #quicklaunch { transform: translateY(100%); }
 	border-style: solid; border-width: 0 11px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/justtype/filter-field-pill.png") 0 11 fill / 0 11px stretch; }
 .jt-row.result { height: 70px; }
 .jt-row.result.drawer { height: 66px; }
-.jt-row.result .lines { margin: 0 70px 0 14px; min-width: 0; }
+.jt-row.result .lines { margin: 0 70px 0 11px; min-width: 0; }
+.jt-row .dbicon { position: absolute; left: 10px; top: 50%; width: 48px; height: 48px; margin-top: -24px; overflow: hidden; }
+.jt-row .dbicon img { position: absolute; left: -8px; top: -8px; width: 64px; height: 64px; object-fit: contain; }
 .jt-row.result .l1, .jt-row.result .l2 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 500px; }
 .jt-row.result .l2 { color: #b8e2ff; font-size: 16px; }
 .jt-row.result .kind { left: auto; right: 12px; }
 .jt-row u, .jt-tile u { text-decoration: none; background: url("../../AndroidLuna/src/main/assets/luna/images/justtype/underline.png") repeat-x bottom / 20px 3px; padding-bottom: 2px; }
-.jt-group.launch { display: flex; flex-wrap: wrap; padding: 48px 0 15px 40px; gap: 25px 53px; box-sizing: border-box; }
+.jt-group.launch { display: flex; flex-wrap: wrap; padding: 48px 0 27px 40px; gap: 25px 53px; box-sizing: border-box; }
 .jt-tile { position: relative; z-index: 1; width: 85px; height: 113px; padding: 5px 0 0; border: 0; background: transparent; cursor: pointer; color: #fff;
 	display: flex; flex-direction: column; align-items: center; font: bold 14px Prelude, sans-serif; }
 .jt-tile::before { content: ""; position: absolute; inset: 0; box-sizing: border-box; pointer-events: none; z-index: -1;
@@ -295,8 +305,9 @@ body.justtype #quicklaunch { transform: translateY(100%); }
 .jt-empty img { display: block; width: 176px; height: 176px; margin: 0 auto 20px; }
 /* A phone: the field and the groups span the width less 12 px margins. */
 body.phone #jt-field { width: calc(var(--w) - 24px); }
-body.phone #jt-tabs button { border-width: 0 8px; border-image-width: 0 8px; font-size: 12px; }
-body.phone .jt-group.launch { padding-left: 14px; gap: 25px 10px; }
+body.phone #jt-tabs button { font-size: var(--jt-tab-px, 15px); }
+/* A phone's tiles: as many to a row as fit, with equal gaps between and around them (at least 10). */
+body.phone .jt-group.launch { display: grid; grid-template-columns: repeat(auto-fill, 85px); padding: 48px 14px 27px; gap: 25px 10px; justify-content: space-evenly; }
 
 /* ---- the quick-launch bar ---- */
 #quicklaunch {

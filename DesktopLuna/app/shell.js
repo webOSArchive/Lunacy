@@ -1010,6 +1010,7 @@
 		measure(d.width, d.height);
 		document.body.classList.toggle("portrait", d.height > d.width);
 		if (wasPhone !== (d.device === "pre3") && pages.length) { loadApps(false); }
+		if (wasPhone !== (d.device === "pre3")) { closeJustType(); sysClose(); }
 		// The bezel is Luna DE's own, not the device's screen: it keeps its size at any scale.
 		if (d.bezel) { document.documentElement.style.setProperty("--unzoom", String(d.bezel / 44)); }
 		$("device").querySelector("img").src = "images/device-" + (d.device || "touchpad") + (d.device === "screen" ? ".svg" : ".png");
@@ -1106,6 +1107,8 @@
 			else if (jt.actionsOnly) { jt.actionsOnly = false; jt.view = 0; }
 		}
 		jt.timer = setTimeout(function () { jtSearch(text); }, JT_SEARCH_MS);
+		// "Start typing…" is for an empty field only: it goes with the first character.
+		if (!jt.searched) { jtDraw(); }
 	}
 
 	function jtSearch(text) {
@@ -1215,20 +1218,30 @@
 		list.innerHTML = "";
 		tabs.hidden = !jt.searched;
 		if (!jt.searched || !d) {
+			if ($("jt-input").value) { return; }
 			// Just Type with nothing typed: HomeView's emptyMain.
 			var e = document.createElement("div"); e.className = "jt-empty"; e.appendChild(jtArt("empty-search.png"));
 			var t = document.createElement("div"); t.textContent = "Start typing to search or create"; e.appendChild(t);
 			list.appendChild(e); return;
 		}
-		// The filter tabs: six cells on a tablet, the outer two empty; the four alone on a phone.
+		// The filter tabs: six cells on a tablet, the outer two empty; the four alone on a phone,
+		// where, too narrow for 15 px, every label shrinks alike until CONTACTS fits 8 px inside its cell.
 		tabs.innerHTML = "";
 		var phone = document.body.classList.contains("phone");
+		if (phone) {
+			var ctx = (jtDraw.canvas = jtDraw.canvas || document.createElement("canvas")).getContext("2d");
+			ctx.font = "bold 15px Prelude, sans-serif";
+			var widest = Math.max.apply(null, JT_FILTERS.map(function (f) { return ctx.measureText(f.toUpperCase()).width; }));
+			var room = W / 4 - 8;
+			tabs.style.setProperty("--jt-tab-px", (widest <= room ? 15 : 15 * room / widest).toFixed(2) + "px");
+		}
 		for (var i = 0; i < 6; i++) {
 			var f = JT_FILTERS[i - 1];
 			if (phone && !f) { continue; }
 			var cell = document.createElement("button");
 			cell.className = (f ? "filter" : "blank") + (i - 1 === jt.view ? " chosen" : "");
-			cell.textContent = f || "";
+			// The label centred on the whole cell, over the art's 34 px ends too.
+			var lab = document.createElement("span"); lab.textContent = f || ""; cell.appendChild(lab);
 			if (f) { (function (n) { cell.addEventListener("click", function () {
 				// JustType.tabClickHandler → MainView.showView.
 				jt.actionsOnly = false; jt.detail = null; jt.moreSearch = false; jt.moreActions = false; jt.view = n; list.scrollTop = 0; jtDraw();
@@ -1276,7 +1289,9 @@
 			if (all || jt.view === 2) {
 				jt.content.forEach(function (c) {
 					var cg = jtGroup(null);
-					var head = jtRow(jtIcon(c), c.displayName, function () { jt.detail = c.id; jt.view = 2; list.scrollTop = 0; jtDraw(); }, "content" + (c.inline ? " open" : ""));
+					var hi = c.id === "com.palm.app.email" || c.id === "com.palm.app.enyo-email" ? jtArt("icon-email.png") : c.id === "com.palm.app.browser" ? jtArt("go-url.png") : null;
+					if (!hi) { hi = document.createElement("span"); hi.className = "dbicon"; var ii = jtIcon(c); ii.onerror = function () { ii.onerror = null; ii.src = JT_ART + "calendar.png"; }; hi.appendChild(ii); }
+					var head = jtRow(hi, c.displayName, function () { jt.detail = c.id; jt.view = 2; list.scrollTop = 0; jtDraw(); }, "content" + (c.inline ? " open" : ""));
 					var pill = document.createElement("span"); pill.className = "count"; pill.textContent = c.results.length; head.appendChild(pill);
 					cg.appendChild(head);
 					if (c.inline) { c.results.forEach(function (r, n) { cg.appendChild(jtResultRow(c, r, n, "drawer")); }); }
@@ -1297,12 +1312,13 @@
 				var ag = jtActions(d); if (ag) { groups.push(ag); }
 			}
 		}
-		if (!groups.length) {
+		if (!groups.length && (jt.view === 1 || jt.view === 2)) {
 			// "No Search Results Found", as DbSearch and ContactSearch show it.
 			var none = document.createElement("div"); none.className = "jt-empty none"; none.appendChild(jtArt("empty-search.png"));
 			var nt = document.createElement("div"); nt.textContent = "No Search Results Found"; none.appendChild(nt);
 			list.appendChild(none); return;
 		}
+		list.classList.toggle("detail", !!jt.detail);
 		groups.forEach(function (g) { list.appendChild(g); });
 	}
 

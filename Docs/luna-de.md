@@ -137,8 +137,9 @@ API 21 gate.
   with the words as typed, a content search runs the app's db8 query with the words and opens
   a result with its `launchParamDbField`; all as `com.palm.launcher` on the bus.
   `JustTypeSearchTest` holds it with an app that declares all three. AndroidLuna's panel
-  still carries its own copy of those rules. Not here: contacts (as on Android), recent
-  searches, and a loading card for an app Just Type starts.
+  still carries its own copy of those rules. At parity with Lunacy on Android (codepoet,
+  2026-11-17: parity, no further), its spacing measured against JustTypePanel's: contacts
+  aren't searched and no recent searches are kept, there as here.
 - **The system menu** (2026-11-17, codepoet: the date and Wi-Fi for now). The status bar's
   right-hand group opens it, drawn as AndroidLuna's SystemMenu draws SystemMenu.qml (300 px in
   menu-dropdown-bg.png, 42 px rows, the 200 ms fade, the group's tab behind it while it is

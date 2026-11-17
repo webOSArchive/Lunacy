@@ -42,6 +42,52 @@
 	// window.close() closes this page's own window (its card, its dashboard), as on webOS. Electron's
 	// own would close the window the view sits in, which is the whole device, and Luna DE with it.
 	if (ipc) { try { window.close = function () { ipc.send("luna-de:close-self"); }; } catch (e) {} }
+	/**
+	 * A dashboard row's sweep (DashboardRow on Android): the row owns the pointer (all of it, or
+	 * with [manual] only the 50 px badge at the left) and the page never sees it go down. Moved
+	 * sideways past the slop, the row follows it (the main process moves the view); let go, the
+	 * main process decides whether it goes. A press that never moved is the page's after all: a
+	 * press and a release where it went down, and a click.
+	 */
+	window.__lunaDeDashboard = function (manual) {
+		if (window.__lunaDeDashboardOn || !ipc) { return; }
+		window.__lunaDeDashboardOn = true;
+		var BADGE = 50, SLOP = 8, down = null, replaying = false;
+		function block(e) { if (!replaying) { e.stopImmediatePropagation(); e.preventDefault(); } }
+		window.addEventListener("pointerdown", function (e) {
+			if (replaying || e.button !== 0 || (manual && e.clientX > BADGE)) { down = null; return; }
+			down = { x: e.clientX, y: e.clientY, moved: false, dragging: false, id: e.pointerId };
+			try { document.documentElement.setPointerCapture(e.pointerId); } catch (err) {}
+			e.stopImmediatePropagation(); e.preventDefault();
+		}, true);
+		window.addEventListener("pointermove", function (e) {
+			if (!down) { return; }
+			e.stopImmediatePropagation();
+			var dx = e.clientX - down.x, dy = e.clientY - down.y;
+			if (!down.moved && (Math.abs(dx) > SLOP || Math.abs(dy) > SLOP)) { down.moved = true; down.dragging = Math.abs(dx) > Math.abs(dy); }
+			if (down.dragging) { ipc.send("luna-de:dash-drag", dx); }
+		}, true);
+		window.addEventListener("pointerup", function (e) {
+			var d = down;
+			if (!d) { return; }
+			e.stopImmediatePropagation(); e.preventDefault();
+			down = null;
+			// The browser's own click after this release is the row's too: the page gets its own, below, or none.
+			window.__lunaDeSwallowClick = true;
+			setTimeout(function () { window.__lunaDeSwallowClick = false; }, 0);
+			if (d.moved) { if (d.dragging) { ipc.send("luna-de:dash-release"); } return; }
+			var el = document.elementFromPoint(d.x, d.y);
+			if (!el) { return; }
+			replaying = true;
+			try {
+				["mousedown", "mouseup", "click"].forEach(function (t) {
+					el.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window, clientX: d.x, clientY: d.y, button: 0, buttons: t === "mousedown" ? 1 : 0 }));
+				});
+			} finally { replaying = false; }
+		}, true);
+		window.addEventListener("pointercancel", function () { if (down && down.dragging) { ipc.send("luna-de:dash-release"); } down = null; }, true);
+		["mousedown", "mouseup", "click", "mousemove"].forEach(function (t) { window.addEventListener(t, function (e) { if (!replaying && (down || t === "click" && window.__lunaDeSwallowClick)) { block(e); } }, true); });
+	};
 	// What the page is about to open (window.open's attributes: a card, a dashboard, a popup
 	// alert) is Electron's to place, so it hears of it before the open reaches it.
 	N.nextWindow = function (attributesJson) { if (ipc) { try { ipc.sendSync("luna-de:next-window", String(attributesJson)); } catch (e) {} } return null; };

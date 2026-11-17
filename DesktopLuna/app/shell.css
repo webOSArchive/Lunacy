@@ -450,9 +450,6 @@ body.sysmenu #sysmenu { opacity: 1; }
 }
 #dashboards .row { height: 52px; position: relative; }
 #dashboards .row + .row { border-top: 2px solid transparent; border-image: url("../../AndroidLuna/src/main/assets/luna/images/menu-divider.png") 2 0 0 0 stretch; }
-#dashboards .row .dismiss { position: absolute; right: -6px; top: 14px; width: 24px; height: 24px; border: 0; border-radius: 12px;
-	background: rgba(0,0,0,0.55); color: #fff; font: bold 14px sans-serif; cursor: pointer; z-index: 2; opacity: 0; }
-#dashboards .row:hover .dismiss { opacity: 1; }
 #alert {
 	width: 360px; padding: 20px;                                                           /* WIDTH + 2 x FRAME */
 	border-style: solid; border-width: 20px; padding: 0;

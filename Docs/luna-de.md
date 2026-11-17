@@ -272,7 +272,11 @@ API 21 gate.
 - Mojo logs at every level. On a device `Mojo.Log` starts at errors only and an app raises it
   with `logLevel` in its framework_config.json; Luna DE holds it at 99 whatever the app set, a
   developer's tool being for seeing them (codepoet, 2026-11-16). Enyo's own level is 99 already.
-- A dashboard is dismissed with a small close button that shows under the pointer, not a swipe.
+- A dashboard is swept away (2026-11-17), as AndroidLuna's DashboardRow has it: dragged to the
+  right past a quarter of its width it goes on off over 200 ms and is closed, short of that it
+  goes back; an Enyo dashboard (`webosDragMode: "manual"`) is swept by its 50 px badge only, the
+  rest of it the app's; a press that never moved reaches the page as a press, a release and a
+  click where it went down. The page sees none of a sweep (its preload takes the pointer first).
 
 **Not there yet, in the order planned:**
 1. **luna-send for a service's child processes** (LunaSendServer, a Unix socket on Android): a

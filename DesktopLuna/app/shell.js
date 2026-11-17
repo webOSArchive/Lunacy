@@ -1703,10 +1703,9 @@
 		if (!box.hidden) {
 			box.innerHTML = "";
 			d.forEach(function (p) {
+				// A row is swept away to the right (main.js, app-preload.js), as on a device.
 				var row = document.createElement("div"); row.className = "row";
-				var x = document.createElement("button"); x.className = "dismiss"; x.textContent = "\u00d7"; x.title = "Dismiss";
-				x.addEventListener("click", function () { window.luna.close(p.id); });
-				row.appendChild(x); box.appendChild(row);
+				box.appendChild(row);
 			});
 			var right = W - $("notes").getBoundingClientRect().right;
 			box.style.right = Math.max(0, right - 11) + "px";

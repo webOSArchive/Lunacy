@@ -303,9 +303,57 @@ function addPanel(v, kind) {
 	view.setVisible(false);
 	shell.contentView.addChildView(view);
 	tell(view.webContents, "type", kind === "dockmode" ? "dockMode" : kind);
-	if (kind === "dashboard") { tell(view.webContents, "focus", "false"); }
+	if (kind === "dashboard") {
+		tell(view.webContents, "focus", "false");
+		// The row's sweep, in the page (app-preload.js): every touch, or for an Enyo dashboard
+		// (webosDragMode "manual") only its 50 px badge at the left; the rest are the app's.
+		const manual = String(v.attrs.webosDragMode || "") === "manual";
+		const arm = () => { if (!view.webContents.isDestroyed()) { view.webContents.executeJavaScript("window.__lunaDeDashboard&&__lunaDeDashboard(" + manual + ")", false).catch(() => {}); } };
+		view.webContents.on("dom-ready", arm);
+		arm();
+	}
 	send("luna-de:panel-added", { id, appId, kind, height: p.height, icon: host + "/icon?id=" + encodeURIComponent(appId) });
 }
+
+/** A panel where the shell put it, moved [p.dx] along (a dashboard being swept away). */
+function placePanel(p) {
+	if (!p.rect) { return; }
+	p.view.setBounds({ x: p.rect.x + Math.round(p.dx || 0), y: p.rect.y, width: p.rect.width, height: p.rect.height });
+}
+
+/**
+ * A dashboard swept sideways (DashboardRow): it follows the pointer, to the right only in the
+ * drop-down; let go past a quarter of its width it goes on off by one and a half widths over
+ * dashboardDeleteDuration (200 ms, linear) and is closed; short of that it goes back the same 200 ms.
+ * The page's px are the device's over its scale.
+ */
+const DISMISS_MS = 200;
+function panelOf(wc) { for (const p of panels.values()) { if (p.view.webContents === wc) { return p; } } return null; }
+function animatePanel(p, to, done) {
+	clearInterval(p.anim);
+	const from = p.dx || 0, t0 = Date.now();
+	p.anim = setInterval(() => {
+		const f = Math.min(1, (Date.now() - t0) / DISMISS_MS);
+		p.dx = from + (to - from) * f;
+		if (!p.view.webContents.isDestroyed()) { placePanel(p); }
+		if (f >= 1) { clearInterval(p.anim); p.anim = null; if (done) { done(); } }
+	}, 16);
+}
+ipcMain.on("luna-de:dash-drag", (e, dx) => {
+	const p = panelOf(e.sender);
+	if (!p || p.leaving) { return; }
+	clearInterval(p.anim);
+	p.dx = Math.max(0, dx * device.scale);
+	placePanel(p);
+});
+ipcMain.on("luna-de:dash-release", (e) => {
+	const p = panelOf(e.sender);
+	if (!p || p.leaving || !p.rect) { return; }
+	if (Math.abs(p.dx || 0) > p.rect.width / 4) {
+		p.leaving = true;
+		animatePanel(p, Math.sign(p.dx) * p.rect.width * 1.5, () => askClose(p.v));
+	} else { animatePanel(p, 0); }
+});
 
 function removePanel(id) {
 	const p = panels.get(id);
@@ -623,7 +671,8 @@ ipcMain.handle("luna-de:place", (e, rects, dashboardsOpen) => {
 		const r = byId.get(p.id);
 		// The shell's px are the page's; the screen's are those times the device's scale.
 		const k = device.scale;
-		if (r) { p.view.setBounds({ x: Math.round(r.x * k), y: Math.round(r.y * k), width: Math.round(r.width * k), height: Math.round(r.height * k) }); }
+		p.rect = r ? { x: Math.round(r.x * k), y: Math.round(r.y * k), width: Math.round(r.width * k), height: Math.round(r.height * k) } : null;
+		if (r) { placePanel(p); }
 		p.view.setVisible(!!r);
 		if (p.kind === "dashboard") { tell(p.view.webContents, "focus", String(!!dashboardsOpen)); }
 	}

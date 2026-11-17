@@ -28,12 +28,15 @@
 		<div id="title"><span id="title-text">Luna DE</span><span class="arrow"></span></div>
 		<div id="status-right">
 			<div id="notes" hidden><span id="banner" hidden><img id="banner-icon" alt=""><span id="banner-text"></span></span><span id="note-icons"></span><span class="arrow"></span></div>
-			<span class="icon wifi"></span><span class="icon battery"></span><span id="clock"></span>
+			<div id="system"><span class="icon wifi"></span><span class="icon battery"></span><span id="clock"></span><span class="arrow"></span></div>
 		</div>
 	</div>
 	<!-- The dashboards' drop-down and a popup alert: frames here, the windows themselves live
 	     views main.js lays over them (luna-de:place). -->
 	<div id="dashboards" hidden></div>
+	<!-- The system menu, under the status bar's right-hand group (LunaSysMgr's SystemMenu.qml). -->
+	<div id="sysmenu-scrim" hidden></div>
+	<div id="sysmenu" hidden><div class="content"></div></div>
 	<div id="alert" hidden></div>
 	<canvas id="keyboard" hidden></canvas>
 	<!-- LunaCE's launcher dialogs, over the launcher: a group's panel, Rename Tab / New Tab, Remove Application. -->

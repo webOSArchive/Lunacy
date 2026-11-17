@@ -577,6 +577,15 @@ ipcMain.handle("luna-de:justtype", async (e, text, content) => {
 		return d;
 	} catch (err) { return null; }
 });
+// The system menu's Wi-Fi: the simulated network on or off.
+ipcMain.handle("luna-de:network", (e, on) => { hostPost("/network", { v: on ? "1" : "0" }); return true; });
+// Something of the shell's own drawn over the card that is up (the system menu): its live view
+// steps aside while it is there, the shell showing the card's picture in its place.
+ipcMain.handle("luna-de:cover", (e, on) => {
+	const c = shown && cards.get(shown);
+	if (c && !c.popped) { c.view.setVisible(!on); if (!on) { c.view.webContents.focus(); } }
+	return true;
+});
 ipcMain.handle("luna-de:icon-url", (e, id) => host + "/icon?id=" + encodeURIComponent(id));
 ipcMain.handle("luna-de:justtype-go", (e, kind, id, text, index) => {
 	hostPost("/justtype-go", { kind, id: id || "", q: text || "", i: index === undefined ? -1 : index });

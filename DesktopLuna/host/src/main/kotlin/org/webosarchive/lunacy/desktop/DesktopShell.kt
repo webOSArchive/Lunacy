@@ -487,6 +487,12 @@ class DesktopShell(
 
     // ---- the simulated network ----
 
+    /** Whether the simulated network is up (the Wi-Fi tile, the system menu's Wi-Fi). */
+    val online get() = network?.simulatedDown != true
+
+    /** The system menu's Turn on / Turn off WiFi: the simulated network to [on], if it isn't. */
+    fun setNetwork(on: Boolean) = main.post { if (on != online) toggleNetwork("") }
+
     private fun toggleNetwork(appId: String) {
         val net = network ?: return
         val down = !net.simulatedDown

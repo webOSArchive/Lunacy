@@ -31,6 +31,19 @@ body.maximized #title { cursor: pointer; }   /* the app menu, as the TouchPad's 
 #title .arrow, #notes .arrow { width: 15px; height: 26px; margin-left: 7px;   /* menu-arrow.png, as StatusBar draws it */
 	background: url("../../AndroidLuna/src/main/assets/luna/images/statusBar/menu-arrow.png") 0 0 / 15px 26px no-repeat; }
 #status-right { display: flex; align-items: center; gap: 8px; padding-right: 10px; height: 100%; }
+/* The system group, as StatusBar draws it: its separator, then 5 px, the info icons (Wi-Fi), the
+   battery and the clock 5 px apart, and the 15 px arrow 7 px after the clock, ending 10 px from
+   the screen's edge. Open, its separator gives way to status-bar-menu-dropdown-tab.png (11 px
+   caps) from the separator to the screen's edge, faded over 200 ms. */
+#system { position: relative; display: flex; align-items: center; gap: 5px; height: 100%; padding-left: 7px; cursor: pointer; margin-right: -10px; padding-right: 10px; }
+#system::after { content: ""; position: absolute; left: 0; top: 0; width: 2px; height: 100%; transition: opacity 200ms linear;
+	background: url("../../AndroidLuna/src/main/assets/luna/images/statusBar/status-bar-separator.png") no-repeat; }
+#system::before { content: ""; position: absolute; left: -9px; right: 0; top: 0; bottom: 0; box-sizing: border-box; opacity: 0; transition: opacity 200ms linear; z-index: -1;
+	border-style: solid; border-width: 0 11px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/statusBar/status-bar-menu-dropdown-tab.png") 0 11 fill / 0 11px stretch; }
+body.sysmenu #system::before { opacity: 1; }
+body.sysmenu #system::after { opacity: 0; }
+#system #clock { min-width: 0; }
+#system .arrow { width: 15px; height: 26px; margin-left: 2px; background: url("../../AndroidLuna/src/main/assets/luna/images/statusBar/menu-arrow.png") 0 0 / 15px 26px no-repeat; }
 #status-right .icon { width: 22px; height: 20px; background: center / contain no-repeat; }
 #status-right .wifi { background-image: url("../../AndroidLuna/src/main/assets/luna/images/statusBar/wifi-3.png"); }
 #status-right .wifi.off { background-image: url("../../AndroidLuna/src/main/assets/luna/images/statusBar/wifi-0.png"); opacity: 0.6; }
@@ -363,6 +376,35 @@ body.phone #zoom { display: block; }
 #rotate::before { content: ""; position: absolute; left: 4px; top: 9px; width: 18px; height: 12px; border: 2px solid #aaa; border-radius: 3px; box-sizing: border-box; transition: transform 200ms; }
 body.portrait #rotate::before { transform: rotate(90deg); }
 #rotate::after { content: "\21bb"; position: absolute; right: -2px; top: -4px; color: #aaa; font: 14px sans-serif; }
+
+/* ---- the system menu (SystemMenu.qml, AndroidLuna's SystemMenu): 300 wide in
+   menu-dropdown-bg.png (borders 30 10 30 30), its right edge 11 px past the screen's, under the
+   status bar; content 7 px in at the sides, 14 px up from the bottom; 42 px rows; the text 18 px,
+   the header's state 13 px, grey #aaa where it is information; menu-divider.png across the
+   content less 7 px; a pressed row lit by menu-selection-gradient (19 px caps), the row less
+   4 px either side, the last row's with its rounded foot. ---- */
+#sysmenu-scrim { position: absolute; left: 0; right: 0; top: var(--status); bottom: 0; z-index: 44; }
+#sysmenu-scrim[hidden] { display: none; }
+#sysmenu { position: absolute; top: var(--status); right: -11px; width: 300px; z-index: 45; box-sizing: border-box; padding: 0 7px 14px;
+	border-style: solid; border-width: 10px 30px 30px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/menu-dropdown-bg.png") 10 30 30 30 fill / 10px 30px 30px stretch;
+	margin: 0; opacity: 0; transition: opacity 200ms linear; }
+#sysmenu { border-width: 0; padding: 0; }
+#sysmenu::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; box-sizing: border-box;
+	border-style: solid; border-width: 10px 30px 30px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/menu-dropdown-bg.png") 10 30 30 30 fill / 10px 30px 30px stretch; }
+#sysmenu[hidden] { display: none; }
+body.sysmenu #sysmenu { opacity: 1; }
+#sysmenu .content { position: relative; margin: 0 7px 14px; }
+#sysmenu .row { position: relative; height: 42px; display: flex; align-items: center; padding-left: 14px; font: 18px Prelude, sans-serif; color: #fff; white-space: nowrap; }
+#sysmenu .row.selectable { cursor: pointer; }
+#sysmenu .row.selectable:active::before { content: ""; position: absolute; left: 4px; right: 4px; top: 0; bottom: 0; z-index: -1; box-sizing: border-box;
+	border-style: solid; border-width: 0 19px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/menu-selection-gradient-default.png") 0 19 fill / 0 19px stretch; }
+#sysmenu .row.selectable.last:active::before { border-image-source: url("../../AndroidLuna/src/main/assets/luna/images/menu-selection-gradient-last.png"); }
+#sysmenu .row.date { color: #aaa; }
+#sysmenu .row.sub { padding-left: 30px; }
+#sysmenu .row .text { overflow: hidden; text-overflow: ellipsis; }
+#sysmenu .row .state { margin-left: auto; padding: 0 14px 0 12px; font-size: 13px; color: #aaa; text-transform: uppercase; }
+#sysmenu .divider { height: 2px; margin: 0 3.5px; background: url("../../AndroidLuna/src/main/assets/luna/images/menu-divider.png") repeat-x; }
+#sysmenu .drawer { overflow: hidden; height: 0; transition: height 350ms cubic-bezier(0.215, 0.61, 0.355, 1); }
 
 /* ---- notifications (Docs/luna-shell-reference.md section 5; Notifications.kt's measurements):
    a banner's text and the dashboards' icons in the status bar, left of the system's own; the

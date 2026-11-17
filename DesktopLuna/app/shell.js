@@ -878,7 +878,8 @@
 	/** The home button (the bezel's, or F1): up from an app to the card view, or away from the launcher. */
 	function home() {
 		$("menu").hidden = true;
-		if (!$("scrim").hidden) { if (scrimAway) { scrimAway(); } else { closeScrim(); } }
+		if (sys.open) { sysClose(); }
+		else if (!$("scrim").hidden) { if (scrimAway) { scrimAway(); } else { closeScrim(); } }
 		else if (jt.open) { closeJustType(); }
 		else if (editing) { exitEdit(); }
 		else if (!$("launcher").hidden) { closeLauncher(); }
@@ -910,7 +911,7 @@
 	$("rotate").addEventListener("click", function () { window.luna.rotate(); });
 	document.addEventListener("keydown", function (e) {
 		if (e.key === "F1") { e.preventDefault(); home(); }
-		else if (e.key === "Escape" && (editing || !$("scrim").hidden)) { e.preventDefault(); home(); }
+		else if (e.key === "Escape" && (editing || !$("scrim").hidden || sys.open)) { e.preventDefault(); home(); }
 		// Left and Right switch cards in the card view (the SDK emulator's keys).
 		else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !maximized && cards.length && $("launcher").hidden) {
 			active = Math.max(0, Math.min(cards.length - 1, active + (e.key === "ArrowRight" ? 1 : -1)));
@@ -1263,6 +1264,7 @@
 	}
 
 	$("notes").addEventListener("click", function () {
+		if (sys.open) { sysClose(); }
 		if (bannerOn && bannerOn.appId) { var b = bannerOn; endBanner(); window.luna.launch({ id: b.appId, params: parse(b.params) }); return; }
 		if (dashboards().length) { dashOpen = !dashOpen; placePanels(); }
 	});
@@ -1303,6 +1305,91 @@
 		active = Math.max(0, Math.min(cards.length - 1, active + (d > 0 ? 1 : -1)));
 		layout(true);
 	}, { passive: true });
+
+	// ---- the system menu ----
+	//
+	// The status bar's right-hand group opens it: LunaSysMgr's SystemMenu.qml as the reference
+	// TouchPad has it and AndroidLuna's SystemMenu draws it. 300 px wide in menu-dropdown-bg.png,
+	// its right edge 11 px past the screen's; the content 7 px in at the sides and 14 px up from
+	// the bottom; rows 42 px high with menu-divider.png between them; headers 14 px in and a
+	// drawer's rows 16 more. A drawer opens over 350 ms OutCubic; the menu fades in and out over
+	// 200 ms. For now it holds the date and the Wi-Fi drawer, whose Turn off / Turn on WiFi is
+	// Luna DE's simulated network (the Wi-Fi tile's switch). Turned off, the menu goes 300 ms
+	// later; turned on, a second later (WiFiElement's wait for the connection).
+	var sys = { open: false, wifiOpen: false, closer: null, online: true, covered: false };
+
+	function sysRows() {
+		var rows = [{ kind: "date" }, { kind: "divider" }, { kind: "wifi-header" }];
+		return rows;
+	}
+
+	function sysDraw() {
+		var box = $("sysmenu").querySelector(".content");
+		box.innerHTML = "";
+		function row(cls, text, tap, last) {
+			var r = document.createElement("div");
+			r.className = "row " + cls + (last ? " last" : "");
+			var t = document.createElement("span"); t.className = "text"; t.textContent = text; r.appendChild(t);
+			if (tap) { r.classList.add("selectable"); r.addEventListener("click", tap); }
+			return r;
+		}
+		function divider() { var d = document.createElement("div"); d.className = "divider"; return d; }
+		// The date: DateFormat's full date, in grey.
+		box.appendChild(row("date", new Date().toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })));
+		box.appendChild(divider());
+		// Wi-Fi's header: the title, and its state on the right.
+		var head = row("header", "Wi-Fi", function () { sys.wifiOpen = !sys.wifiOpen; drawer.classList.toggle("open", sys.wifiOpen); drawer.style.height = (sys.wifiOpen ? drawer.scrollHeight : 0) + "px"; head.classList.toggle("last", !sys.wifiOpen); }, !sys.wifiOpen);
+		var state = document.createElement("span"); state.className = "state"; state.textContent = sys.online ? "ON" : "OFF"; head.appendChild(state);
+		box.appendChild(head);
+		var drawer = document.createElement("div"); drawer.className = "drawer" + (sys.wifiOpen ? " open" : "");
+		drawer.appendChild(divider());
+		drawer.appendChild(row("sub", sys.online ? "Turn off WiFi" : "Turn on WiFi", function () {
+			var on = !sys.online;
+			window.luna.setNetwork(on);
+			sysCloseIn(on ? 1000 : 300);
+		}, true));
+		box.appendChild(drawer);
+		drawer.style.height = sys.wifiOpen ? "auto" : "0px";
+		if (sys.wifiOpen) { drawer.style.height = drawer.scrollHeight + "px"; }
+	}
+
+	function sysOpen() {
+		if (sys.open) { sysClose(); return; }
+		$("menu").hidden = true;
+		if (dashOpen) { dashOpen = false; placePanels(); }
+		sys.open = true; sys.wifiOpen = false;
+		clearTimeout(sys.closer);
+		sysDraw();
+		var el = $("sysmenu");
+		el.hidden = false; $("sysmenu-scrim").hidden = false;
+		el.getBoundingClientRect();
+		document.body.classList.add("sysmenu");
+		// Over a card that is up, its live view steps aside for the menu, its picture in its place.
+		var c = maximized ? cards[active] : null;
+		if (c && c.id && !c.splash) {
+			window.luna.snapshot(c.id).then(function (url) {
+				if (!sys.open) { return; }
+				if (url) { c.img.src = url; }
+				sys.covered = true; window.luna.cover(true);
+			});
+		}
+	}
+
+	function sysClose() {
+		if (!sys.open) { return; }
+		sys.open = false;
+		clearTimeout(sys.closer);
+		document.body.classList.remove("sysmenu");
+		$("sysmenu-scrim").hidden = true;
+		if (sys.covered) { sys.covered = false; window.luna.cover(false); }
+		setTimeout(function () { if (!sys.open) { $("sysmenu").hidden = true; } }, 200);
+	}
+
+	/** SystemMenu.qml's closeMenuTimer. */
+	function sysCloseIn(ms) { clearTimeout(sys.closer); sys.closer = setTimeout(sysClose, ms); }
+
+	$("system").addEventListener("click", sysOpen);
+	$("sysmenu-scrim").addEventListener("pointerdown", function (e) { e.preventDefault(); sysClose(); });
 
 	// ---- installing: a package or an app's folder dropped on the device ----
 
@@ -1353,13 +1440,22 @@
 	});
 
 	// The simulated network (the Wi-Fi tile): the status bar's Wi-Fi icon shows it gone.
-	window.luna.onNetwork(function (d) { document.querySelector("#status-right .wifi").classList.toggle("off", !d.online); });
+	window.luna.onNetwork(function (d) {
+		sys.online = !!d.online;
+		document.querySelector("#status-right .wifi").classList.toggle("off", !d.online);
+		// The menu's Wi-Fi row says what it does now, unless the menu is on its way out.
+		if (sys.open && !sys.closer) { sysDraw(); }
+		else if (sys.open) {
+			var st = document.querySelector("#sysmenu .header .state"); if (st) { st.textContent = sys.online ? "ON" : "OFF"; }
+		}
+	});
 
 	/** The launcher's pages and the quick-launch bar, as the host has them: what is installed, arranged as its owner left it. */
 	function loadApps(first) {
 		return window.luna.shell().then(function (s) {
 			pages = s.pages;
 			dock = s.dock;
+			if (s.online !== undefined) { sys.online = !!s.online; document.querySelector("#status-right .wifi").classList.toggle("off", !s.online); }
 			if (s.limits) { limits = s.limits; }
 			function note(a) { appTitles[a.id] = a.title; appEntries[a.id] = a; }
 			pages.forEach(function (p) { p.apps.forEach(function (c) { if (isGroup(c)) { c.apps.forEach(note); } else { note(c); } }); });

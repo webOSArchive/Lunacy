@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld("luna", {
 	justType: (text, content) => ipcRenderer.invoke("luna-de:justtype", text, !!content),
 	justTypeGo: (kind, id, text, index) => ipcRenderer.invoke("luna-de:justtype-go", kind, id, text, index),
 	iconFor: (id) => ipcRenderer.invoke("luna-de:icon-url", id),
+	setNetwork: (on) => ipcRenderer.invoke("luna-de:network", !!on),
+	cover: (on) => ipcRenderer.invoke("luna-de:cover", !!on),
 	place: (rects, dashboardsOpen) => ipcRenderer.invoke("luna-de:place", rects, dashboardsOpen),
 	appMenu: () => ipcRenderer.invoke("luna-de:appmenu"),
 	back: () => ipcRenderer.invoke("luna-de:back"),

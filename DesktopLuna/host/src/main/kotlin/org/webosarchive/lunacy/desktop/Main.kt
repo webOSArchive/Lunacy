@@ -201,6 +201,7 @@ fun main(args: Array<String>) {
                 .put("scale", shell.scale).put("orientation", shell.orientation)
                 .put("virtualKeyboard", shell.device == org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD))
             .put("phoneZoom", shell.phoneZoom())
+            .put("online", shell.online)
         send(ex, 200, "application/json; charset=utf-8", out.toString().toByteArray())
     } }
 
@@ -350,6 +351,11 @@ fun main(args: Array<String>) {
         val q = query(ex)
         q["app"]?.takeIf { it.isNotEmpty() }?.let { shell.setPhoneZoom(it, when (q["v"]) { "1" -> true; "0" -> false; else -> null }) }
         send(ex, 200, "application/json", shell.phoneZoom().toString().toByteArray())
+    } }
+    // The system menu's Wi-Fi: the simulated network on (v=1) or off (v=0).
+    http.createContext("/network") { ex -> ex.use {
+        query(ex)["v"]?.let { shell.setNetwork(it == "1") }
+        send(ex, 200, "application/json", JSONObject().put("online", shell.online).toString().toByteArray())
     } }
     http.createContext("/orientation") { ex -> ex.use {
         shell.turn(query(ex)["v"].orEmpty())

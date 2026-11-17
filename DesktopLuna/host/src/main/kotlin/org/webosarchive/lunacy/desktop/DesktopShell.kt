@@ -631,7 +631,8 @@ class DesktopRoot(override val root: File, override val hostScripts: File, priva
     /**
      * LUNA_DE_NODE if it is set, else the Node 12 DesktopLuna/fetch-node.sh fetched, else whatever
      * `node` the machine has, with a warning: Palm's services were written for node 0.4, Lunacy's
-     * host runs them on Node 12, and a newer Node isn't what Android runs.
+     * host runs them on Node 12, and a newer Node isn't what Android runs. (Apple Silicon's is 16:
+     * Node 12 has none for it; Docs/luna-de.md, "Deltas, recorded".)
      */
     override val node: File by lazy {
         val named = System.getenv("LUNA_DE_NODE")?.takeIf { it.isNotEmpty() }?.let { File(it) }

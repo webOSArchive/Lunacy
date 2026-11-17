@@ -224,6 +224,15 @@ API 21 gate.
   brings it back. The machine's own network is untouched.
 
 **Deltas, recorded:**
+- **Apple Silicon runs JS services on Node 16, not 12** (2026-11-17, for macOS's next major
+  version). Node 12 has no build for Apple Silicon, so Luna DE 0.5's arm64 Mac package carried the
+  Intel one under Rosetta, the only Intel program among its 47, and macOS 26 warns that such an
+  app "contains a component that will not be available in the next major version of macOS".
+  16.20.2 is the first Node built for it. Everywhere else stays on Node 12, Android's version.
+  Measured on Linux before the change: a fresh Luna DE on each Node, launching Contacts,
+  Calendar, Messaging, Photos and Clock, gave the same services the same calls and errors (one
+  difference, a timing one: Photos' second `cachePowerActivity` met its first still running) and
+  no warnings from either Node.
 - A card in the card view is a snapshot of its page, not the live page (a native view can't be
   scaled).
 - The shim's cookies are the host's own jar, not the Electron session's.
@@ -717,8 +726,9 @@ onto `luna-de`, and nothing goes back until the refactoring is done and proven (
 5. Is the single bundled JVM acceptable, or should LunaCore aim at Kotlin Multiplatform
    (compiling the core to JavaScript or native) to drop the JRE later? The recommendation is the
    JVM: it's the smaller change and keeps the core byte-for-byte the code Android runs.
-6. Node on Apple Silicon and Windows on ARM: Node 12 x64 under translation, a Node 12 built
-   for them, or a newer Node there with the difference recorded?
+6. *(Settled for Apple Silicon 2026-11-17, codepoet: native, on Node 16, the difference recorded
+   under "Deltas, recorded". Windows on ARM still runs the x64 package under Windows' own
+   emulation.)*
 
 ## Packaging
 

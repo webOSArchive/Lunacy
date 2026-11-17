@@ -52,7 +52,9 @@ const CACHE = path.join(HERE, "build", "cache");
 const STAGE = path.join(HERE, "build", "package");
 // Where the packages go: out/ at the top of the repository.
 const OUT = path.join(REPO, "out");
-const NODE_VERSION = "v12.22.12";
+const NODE_VERSION_DEFAULT = "v12.22.12";
+/** Apple Silicon's: Node 12 has no build for it, and Rosetta is going; 16 is the first that has one (Docs/luna-de.md, "Deltas, recorded"). */
+const NODE_VERSION_MAC_ARM64 = "v16.20.2";
 // What the host and its libraries use of the JDK (java.desktop for ImageIO, jdk.crypto.ec for
 // TLS, jdk.httpserver for the host's own server, jdk.unsupported for SQLite's driver).
 const JAVA_MODULES = ["java.base", "java.sql", "java.desktop", "java.logging", "java.naming", "java.net.http", "java.xml",
@@ -113,13 +115,15 @@ function jdkTool(name) { return path.join(JDK.home, "bin", name + (HOST_OS === "
 const native = (arch) => OS === HOST_OS && arch === process.arch;
 
 /**
- * Node 12 for the package. This machine's own goes in DesktopLuna/node (which `npm start` uses);
- * another system's or processor's is kept apart, in the stage. nodejs.org built Node 12 for x64 on
- * all three systems and for arm64 on Linux only, so a Mac's arm64 package carries the x64 Node
- * (Apple Silicon runs it under Rosetta; Docs/luna-de.md, open question 6).
+ * Node for the package: 12, as Android's nodejs-mobile, everywhere nodejs.org built it (x64 on all
+ * three systems, arm64 on Linux). A Mac's arm64 package carries Node 16 instead, Apple Silicon's
+ * own, so nothing in it runs under Rosetta (Docs/luna-de.md, "Deltas, recorded"). This machine's own goes in
+ * DesktopLuna/node (which `npm start` uses); another system's or processor's is kept apart, in
+ * the stage.
  */
 async function node12(arch, stage) {
-	const nodeArch = OS === "linux" ? arch : "x64";
+	const NODE_VERSION = MAC && arch === "arm64" ? NODE_VERSION_MAC_ARM64 : NODE_VERSION_DEFAULT;
+	const nodeArch = OS === "linux" || (MAC && arch === "arm64") ? arch : "x64";
 	const own = OS === HOST_OS && nodeArch === process.arch;
 	const home = own ? path.join(HERE, "node") : path.join(stage, "node");
 	const bin = path.join(home, "bin", WIN ? "node.exe" : "node");

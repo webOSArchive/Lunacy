@@ -115,6 +115,44 @@ notifications in Lunacy, because they never found the Android Apps switch in Scr
 First Use now offers Notification access once, on a page of its own, and from Android 11 the
 switch opens Lunacy's own entry on Android's screen (f337bfb, f524b4d; luna-deltas B14).
 
+**The 1.0.2 round (2026-11-17):**
+
+```
+Build under test:  1.0.2, build 652, commit 7998aa9
+                   out/SHA256SUMS sha256 e58863f001cde0384bf18ffdc2ce5ccf319fb86d1026c7973fe6549b91b845f4
+                                                       (six APKs: release + debug, both
+                                                        ABIs and the keyboard)
+Tier 1:            ./test.sh             10 passed / 0 failed / 1 skipped (build.sh release ran it)
+                   apk-inventory         every APK: 9762 or 9763 files by content, 26 patches,
+                                         0 problems (build.sh ran it)
+Tier 2:            fresh-install.sh      Nexus 5 (Android 6.0.1, arm32 debug), twice:
+                                         no Android contacts: 42 passed / 0 failed
+                                                              test-results/652/fresh-nexus5-no-contacts.txt
+                                         3 test Android contacts -> the account, 3 people,
+                                         17 activities live: 42 passed / 1 failed
+                                                              test-results/652/fresh-nexus5.txt
+                                         The failure: Screen & Lock, no card within 25 s. Not
+                                         repeated: 7 s in the run before, 4 s by hand after,
+                                         10 s in the device-test below. Its cause is unknown;
+                                         the log of that moment was gone.
+                   device-test.sh
+                   Nexus 5    (debug)    43 passed / 0 failed     test-results/652/nexus5.txt
+                   Pixel      (debug)    49 passed / 0 failed     test-results/652/pixel-tablet.txt
+                   pdk-sweep.sh          not run: nothing in the PDK runtime changed (codepoet)
+Tier 3:            codepoet's, not run
+
+What this run does NOT decide, despite being green:
+                   - First Use's Notifications page by eye: the fresh install finishes First Use
+                     over the bus and walks no page. A tiny screen is still to be seen (codepoet)
+                   - the grant being noticed on the page after Android's screen
+                   - the Fold3 (it stays on the luna-de build, codepoet), the Nexus 7 and the
+                     A7 Lite (off the network)
+                   - anything only a person sees: rule 0 is tier 3, never tier 2
+                   - the update path from 1.0.1 through F-Droid (codepoet's, on the Kyocera)
+```
+
+Still to do: the F-Droid feed, the GitHub release, the release notes.
+
 **Then Luna DE**, on the `luna-de` branch (Docs/luna-de.md there): Lunacy on the desktop for
 webOS developers, in one Electron window running the shell, sharing LunaCore with this Android
 build. Main stays bug fixes only, each cherry-picked onto luna-de, until that work is done and

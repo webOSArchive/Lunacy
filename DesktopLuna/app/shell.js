@@ -1,16 +1,15 @@
 // Luna DE's shell: one window as a TouchPad's screen, the status bar, the launcher, apps as
 // cards and the card view (Docs/luna-de.md, milestone 3b). Its geometry is AndroidLuna's
-// (CardLayer.Params, StatusBar, QuickLaunch). For now it keeps its own list of the cards; the
-// shell-logic moves (AppLifecycle, CardHost's decisions) replace that with LunaCore's.
+// (CardLayer.Params, StatusBar, QuickLaunch), and its card view CardLayer's, groups and all.
+// Which windows there are is the host's (LunaCore's AppLifecycle); where each card is, this.
 "use strict";
 (function () {
 	var STATUS = 28, RESERVE = 48, ORIGIN = 0.40, GAP = 30; // StatusBar.HEIGHT; CardLayer.Params: PILL_RESERVE, ORIGIN_RATIO, GAP
-	var W, H, AREA, ACTIVE, OTHER, ORIGIN_Y;
+	var W, H, AREA, ORIGIN_Y;
+	var ACTIVE_RATIO = 0.55, NON_ACTIVE_RATIO = 0.50;   // ActiveCardWindowRatio, NonActiveCardWindowRatio; a phone's are the Pre3's
 	/** The screen's size, and what follows from it: the card area below the status bar and CardLayer's ratios. */
 	function measure(w, h) {
 		W = w; H = h; AREA = h - STATUS;
-		ACTIVE = (AREA - RESERVE) * 0.55 / AREA;           // ACTIVE_RATIO, as activeScale() works it out
-		OTHER = (AREA - RESERVE) * 0.50 / AREA;            // NON_ACTIVE_RATIO
 		ORIGIN_Y = RESERVE + (AREA - RESERVE) * ORIGIN;    // originY() within the card area
 		document.documentElement.style.setProperty("--w", w + "px");
 		document.documentElement.style.setProperty("--h", h + "px");
@@ -39,65 +38,211 @@
 		}
 	}
 	measure(1024, 768);
-	var TAP = 25, THROW_DISTANCE = -50, THROW_VELOCITY = -1.1;   // TAP_RADIUS; THROW_*, px and px/ms
-	var cards = [], active = -1, maximized = false;
+	var TAP = 25, AXIS_LOCK = 0.866, HOLD_MS = 700, FLING_MIN = 300;   // TAP_RADIUS, AXIS_LOCK, HOLD_MS; a flick's least speed, px/s
+	// Throw away: CardWindowManager's thresholds, in Luna's flick units (about a third of px/s).
+	var THROW_VELOCITY = -1100, THROW_DISTANCE = -50, THROW_MIN_VELOCITY = -500;
+	var MAXIMIZE_MS = 300, FAN_MS = 200, SLIDE_MS = 300, DELETE_MS = 300, TRACK_GROUP_MS = 50, TRACK_MS = 300,
+		SHUFFLE_MS = 350, GROUP_REORDER_MS = 500, DIM_MS = 300, MIN_SCALE = 0.26, GROUP_X_DISTANCE = 0.35, GROUP_ROT = 90,
+		SIDE_STAGGER = 10, REORDER_OPACITY = 0.8, DIMMED = 0.8;
+	var EASE = { outQuart: "cubic-bezier(0.165, 0.84, 0.44, 1)", outCubic: "cubic-bezier(0.215, 0.61, 0.355, 1)", linear: "linear" };
+	var maximized = false;
 	var $ = function (id) { return document.getElementById(id); };
 
 	// ---- the cards ----
-	// A card here is the shell's picture of an app window: main.js keeps its live view, shown
-	// over the card area while it is up and hidden in the card view, where this draws its
-	// snapshot at CardLayer's place and scale.
+	//
+	// AndroidLuna's CardLayer, LunaSysMgr's CardWindowManager and CardGroup: cards live in
+	// groups. A card an app opens while its own card is up joins that card's group, and so does
+	// one an app opens for another app that launched it while that app's card was up; anything
+	// else starts a group of its own just right of the active one. The active group is fanned;
+	// the others collapse into a 10 px stagger at the smaller scale as they leave the middle.
+	// Holding a card of the active group picks it up to reorder it, within its group or out of
+	// it into the next (or a group of its own); holding the space either side goes to the group
+	// that way. A card here is the shell's picture of an app window: main.js keeps its live view,
+	// shown over the card area while it is up and hidden in the card view, where this draws its
+	// snapshot. Each card's place is its group's x (sliding on one timing) and its own place in
+	// the group (on another), so a card is two elements: the outer for the group's x, the face
+	// for the rest.
 
-	function cardIndex(id) { for (var i = 0; i < cards.length; i++) { if (cards[i].id === id) { return i; } } return -1; }
+	var groups = [], activeGroup = null, current = null, topCard = null, activating = null, upCard = null;
+	/** Every card, group by group, back to front. */
+	function allCards() { var out = []; groups.forEach(function (g) { out = out.concat(g.cards); }); return out; }
+	/** The card in front: the active group's active card (cards[active] before groups). */
+	function cur() { return activeGroup ? activeGroup.active : null; }
+	function cardById(id) { return allCards().filter(function (c) { return c.id === id; })[0] || null; }
 
-	function transform(c, x, y, s) { c.el.style.transform = "translate(" + x + "px," + y + "px) scale(" + s + ")"; }
+	function activeScale() { return Math.max(MIN_SCALE, (AREA - RESERVE) * (isPhone() ? 0.659 : ACTIVE_RATIO) / AREA); }
+	function nonActiveScale() { return Math.max(MIN_SCALE, (AREA - RESERVE) * (isPhone() ? 0.61 : NON_ACTIVE_RATIO) / AREA); }
+	function isPhone() { return document.body.classList.contains("phone"); }
 
-	/** CardWindowManager's slideAllGroups: the active card in the middle, the rest either side. */
-	function layout(animate, slide) {
-		slide = slide || 0;
-		var cy = ORIGIN_Y - AREA / 2;
-		cards.forEach(function (c, i) {
-			c.el.classList.toggle("animate", !!animate);
-			var s = i === active ? ACTIVE : OTHER, x;
-			if (i === active) { x = 0; }
-			else if (i < active) { x = -(W * ACTIVE / 2 + GAP + W * OTHER / 2) - (active - 1 - i) * (W * OTHER + GAP); }
-			else { x = (W * ACTIVE / 2 + GAP + W * OTHER / 2) + (i - active - 1) * (W * OTHER + GAP); }
-			transform(c, x + slide, cy, s);
-			c.el.style.opacity = "1";
-			c.el.style.zIndex = i === active ? 2 : 1;
+	/** Half a transformed card's width, rotation included, as LunaCE's mapRect measures it. */
+	function halfExtent(s, rot) {
+		var a = rot * Math.PI / 180;
+		return s * (W / 2 * Math.cos(a) + AREA / 2 * Math.abs(Math.sin(a)));
+	}
+
+	/**
+	 * CardGroup::calculateOpenedPositions for the Stack arranger, relative to the group, with
+	 * LunaCE's always-centred position. A group [xOffset] from the centre collapses towards a
+	 * 10 px stagger at the non-active scale as it goes. Sets the group's extents.
+	 */
+	function fan(g, xOffset) {
+		var n = g.cards.length, p = (n - 1) / 2, c0 = activeScale(), non = nonActiveScale(), aw = W * c0;
+		var poses = g.cards.map(function (card, i) {
+			var x = ((i - p) / 3) * aw * GROUP_X_DISTANCE, y = x > 0 ? x / 15 : 0, s = c0, r = x / (c0 * GROUP_ROT);
+			if (xOffset !== 0) {
+				var amt = Math.max(1, aw - Math.abs(xOffset)) / aw;
+				x = x * amt + (1 - amt) * SIDE_STAGGER * i;
+				y *= amt; s = non + (c0 - non) * amt; r *= amt;
+			}
+			return { gx: 0, rx: x, cy: ORIGIN_Y + y, scale: s, rot: r };
 		});
+		if (n) {
+			g.left = -(poses[0].rx - halfExtent(poses[0].scale, poses[0].rot));
+			g.right = poses[n - 1].rx + halfExtent(poses[n - 1].scale, poses[n - 1].rot);
+		}
+		return poses;
+	}
+
+	/** The Linear arranger, used while a card is maximized: full size, side by side. */
+	function linear(g) {
+		var n = g.cards.length, a = Math.max(0, g.cards.indexOf(g.active));
+		var poses = g.cards.map(function (card, i) { return { gx: 0, rx: (i - a) * (W + (n > 1 ? GAP : 0)), cy: AREA / 2, scale: 1, rot: 0 }; });
+		if (n) { g.left = -(poses[0].rx - W / 2); g.right = poses[n - 1].rx + W / 2; }
+		return poses;
+	}
+
+	/**
+	 * Every card's place, CardWindowManager::slideAllGroups: the active group at [activeX] and
+	 * the others either side of it, GAP between their extents. [tracking]: the groups under a
+	 * finger, where the active group collapses too. A Map of card to pose.
+	 */
+	function layout(stack, activeX, tracking) {
+		activeX = activeX || 0;
+		var out = new Map(), ag = activeGroup;
+		if (!ag) { return out; }
+		function poses(g, off) { return stack ? fan(g, off) : linear(g); }
+		function put(g, gx, ps) { g.cards.forEach(function (c, i) { out.set(c, { gx: gx, rx: ps[i].rx, cy: ps[i].cy, scale: ps[i].scale, rot: ps[i].rot }); }); }
+		put(ag, activeX, poses(ag, tracking ? activeX : 0));
+		var ai = groups.indexOf(ag), edge = activeX - ag.left - GAP, i, g, x;
+		// A side group's extents depend on how far it has collapsed, which depends on where it
+		// lands: measured collapsed first, then placed once more with that.
+		for (i = ai - 1; i >= 0; i--) { g = groups[i]; poses(g, -1e9); x = edge - g.right; put(g, x, poses(g, x)); edge = x - GAP - g.left; }
+		edge = activeX + ag.right + GAP;
+		for (i = ai + 1; i < groups.length; i++) { g = groups[i]; poses(g, 1e9); x = edge + g.left; put(g, x, poses(g, x)); edge = x + GAP + g.right; }
+		return out;
+	}
+
+	/** CardWindowManager::maximizeActiveWindow: the card full size in the middle, the rest of its group off either side at the active scale. */
+	function maximizedLayout(card) {
+		var g = card.group, out = layout(false);
+		if (!g) { return out; }
+		var a = g.cards.indexOf(card);
+		g.cards.forEach(function (c, i) {
+			out.set(c, c === card ? { gx: 0, rx: 0, cy: AREA / 2, scale: 1, rot: 0 }
+				: { gx: 0, rx: (i < a ? -1 : 1) * W, cy: AREA / 2, scale: activeScale(), rot: 0 });
+		});
+		return out;
+	}
+
+	/** Puts a card where its numbers say, over the given timings (none: at once). */
+	function apply(c, gMs, gEase, cMs, cEase) {
+		c.el.style.transition = gMs ? "transform " + gMs + "ms " + gEase : "none";
+		c.face.style.transition = cMs ? "transform " + cMs + "ms " + cEase + ", opacity " + cMs + "ms " + cEase : "none";
+		c.el.style.transform = "translateX(" + c.gx + "px)";
+		c.face.style.transform = "translate(" + c.rx + "px," + (c.cy - AREA / 2 + c.lift) + "px) scale(" + c.scale + ") rotate(" + c.rot + "deg)";
+		c.face.style.opacity = c.fade;
+	}
+	function setPose(c, p) { c.gx = p.gx; c.rx = p.rx; c.cy = p.cy; c.scale = p.scale; c.rot = p.rot; c.lift = 0; }
+
+	var runTimer = null;
+	/** Every card in [poses] to its place, each on the timings [timing] gives it; [done] when they have all arrived. */
+	function run(poses, timing, done) {
+		clearTimeout(runTimer);
+		var total = 0;
+		poses.forEach(function (p, c) {
+			var t = timing(c);
+			setPose(c, p);
+			apply(c, t[0], t[1], t[2], t[3]);
+			total = Math.max(total, t[0], t[2]);
+		});
+		runTimer = setTimeout(function () { restack(); if (done) { done(); } }, total);
+	}
+
+	/** slideAllGroups: every group to its place over 300 ms OutQuart, and the active group's own cards over 200 ms OutCubic. */
+	function slide(except, done) {
+		var ag = activeGroup, poses = layout(true);
+		if (except) { poses.delete(except); }
+		run(poses, function (c) { return c.group === ag ? [SLIDE_MS, EASE.outQuart, FAN_MS, EASE.outCubic] : [SLIDE_MS, EASE.outQuart, SLIDE_MS, EASE.outQuart]; }, done);
+	}
+
+	/** Within a group later cards are drawn over earlier ones, the active group over the others, and the card on its way up over all. */
+	function restack() {
+		var order = [];
+		groups.forEach(function (g) { if (g !== activeGroup) { order = order.concat(g.cards); } });
+		if (activeGroup) { order = order.concat(activeGroup.cards); }
+		if (topCard && order.indexOf(topCard) >= 0) { order.splice(order.indexOf(topCard), 1); order.push(topCard); }
+		order.forEach(function (c, i) { c.el.style.zIndex = i + 1; });
+	}
+
+	/** LunaSysMgr's active card window: changing it dims the one before (CardDimmPercentage, 300 ms OutCubic). */
+	function setCurrent(c) {
+		if (c === current) { return; }
+		if (current && current.group) { current.dim.style.opacity = String(1 - DIMMED); }
+		current = c;
+		if (c) { c.dim.style.opacity = "0"; }
+	}
+	function setActiveGroup(g) { activeGroup = g; setCurrent(g ? g.active : null); restack(); setTitle(); }
+	/** CardWindowManager::groupClosestToCenterHorizontally. */
+	function closestGroup() {
+		var best = null, d = Infinity;
+		groups.forEach(function (g) { var x = g.cards[0] ? Math.abs(g.cards[0].gx) : Infinity; if (x < d) { d = x; best = g; } });
+		return best;
 	}
 
 	/** The status bar's title: the app's own name while its card is up, as the TouchPad showed it (not the page's title). */
 	function setTitle() {
-		$("popout").disabled = !(cards[active] && cards[active].id);
+		var c = cur();
+		$("popout").disabled = !(c && c.id);
 		zoomState(false);
-		$("title-text").textContent = maximized && cards[active] ? (appTitles[cards[active].appId] || cards[active].title) : "Luna DE";
+		if (jt && jt.open) { return; }
+		$("title-text").textContent = maximized && c ? (appTitles[c.appId] || c.title) : "Luna DE";
 	}
 	var appTitles = {}, appEntries = {};
 	/** The Phone Zoom button, for the card that is up: how its app's switch stands, or (flip) the other way. */
 	function zoomState(flip) {
-		var c = cards[active], b = $("zoom");
+		var c = cur(), b = $("zoom");
 		b.disabled = !(c && c.id);
 		if (b.disabled) { b.classList.remove("on"); return; }
 		window.luna.phoneZoom(c.id, flip).then(function (on) { b.classList.toggle("on", !!on); });
 	}
 	$("zoom").addEventListener("click", function () { zoomState(true); });
 
-	/** A card comes up: its picture grows to the screen, then its live view takes over. */
-	function maximize(i) {
-		var c = cards[i];
-		if (!c) { return; }
-		active = i; maximized = true;
+	/**
+	 * LunaSysMgr's m_cardToRestoreToMaximized: a card that joined the focused card's group
+	 * remembers that card, and if it is closed while it is up, the shell goes to the card view
+	 * and then maximizes the remembered card again (Email's compose card closing after Send
+	 * lands back on the inbox). Minimizing, switching cards or another card arriving forgets it.
+	 */
+	var restoreTo = null, restoreAfter = null;
+
+	/** A card comes up: its picture grows to the screen (300 ms OutQuart), then its live view takes over. */
+	function maximize(card, ms) {
+		if (!card || !card.group) { return; }
+		if (ms === undefined) { ms = MAXIMIZE_MS; }
+		if (card !== restoreAfter) { restoreTo = null; restoreAfter = null; }
 		closeLauncher();
+		card.group.active = card;
+		launchingCards.delete(card);
+		setActiveGroup(card.group);
+		activating = card; topCard = card; restack();
+		maximized = true; upCard = null;
 		document.body.classList.add("maximized");
-		cards.forEach(function (k, j) {
-			k.el.classList.add("animate");
-			if (j === i) { transform(k, 0, 0, 1); k.el.style.zIndex = 3; }
-			else { transform(k, (j < i ? -1 : 1) * (W + GAP), 0, 1); }
-		});
 		setTitle();
-		setTimeout(function () { if (maximized && cards[active] === c) { showLive(c); } }, MAXIMIZE_MS);
+		run(maximizedLayout(card), function () { return [ms, EASE.outQuart, ms, EASE.outQuart]; }, function () {
+			if (activating !== card) { return; }
+			activating = null; upCard = card;
+			showLive(card);
+		});
 	}
 
 	/**
@@ -105,47 +250,50 @@
 	 * loading card stays on the screen. The splash fades out over the page (CardSplash.dismiss).
 	 */
 	function showLive(c) {
-		if (!c.id || !c.pageReady || !maximized || cards[active] !== c) { return; }
+		if (!c.id || !c.pageReady || !maximized || cur() !== c || activating) { return; }
 		window.luna.maximize(c.id);
 		if (c.splash) { var sp = c.splash; c.splash = null; sp.classList.add("gone"); setTimeout(function () { sp.remove(); }, 320); }
 	}
 
 	/** Down to the card view: the live card's picture taken first, so it shrinks from what was on the screen. */
-	function cardView() {
-		var c = maximized ? cards[active] : null;
-		maximized = false;
+	function cardView(then) {
+		restoreTo = null; restoreAfter = null;
+		var c = maximized ? cur() : null;
+		maximized = false; activating = null; upCard = null; topCard = null;
 		document.body.classList.remove("maximized");
 		setTitle();
-		var done = function () { window.luna.cardView(); layout(true); refreshPictures(c); };
+		var done = function () { window.luna.cardView(); restack(); slide(null, then); refreshPictures(c); };
 		if (!c || !c.id || c.splash) { done(); return; }
 		window.luna.snapshot(c.id).then(function (url) { if (url) { c.img.src = url; } done(); }, done);
 	}
 
 	/** Every card's picture taken again, but [skip]'s, just taken: a page goes on drawing while hidden. */
 	function refreshPictures(skip) {
-		cards.forEach(function (k) {
+		allCards().forEach(function (k) {
 			if (k === skip || !k.id || k.splash) { return; }
 			window.luna.snapshot(k.id).then(function (url) { if (url) { k.img.src = url; } });
 		});
 	}
 
-	var MAXIMIZE_MS = 300, SLIDE_MS = 300;   // cardMaximizeDuration, cardSlideDuration (CardLayer.Params)
+	/** Launching cards whose apps aren't ready yet, waiting in the card view. */
+	var launchingCards = new Set();
 
 	/**
-	 * A new card, in the shell's picture: its loading card with the app's splash icon (CardSplash),
-	 * coming up from below the screen into the card view (CardLayer.openLaunching). [entry] is the
-	 * app's launcher entry when the shell has it.
+	 * A new card, in the shell's picture: its loading card with the app's splash icon
+	 * (CardSplash), coming up from below the screen into the card view (CardLayer.openLaunching).
+	 * [sibling] is the card whose group it joins (CardWindowManager::prepareAddWindowSibling).
 	 */
-	function newCard(appId, title) {
+	function newCard(appId, title, sibling) {
 		var el = document.createElement("div");
 		el.className = "card";
+		var face = document.createElement("div");
+		face.className = "face";
 		var img = document.createElement("img");
 		img.className = "picture";
 		img.alt = "";
-		var cover = document.createElement("div");
-		cover.className = "cover";
-		el.appendChild(img);
-		var c = { id: 0, appId: appId, title: title, el: el, img: img, pageReady: false, splash: null, born: performance.now() };
+		face.appendChild(img);
+		var c = { id: 0, appId: appId, title: title, el: el, face: face, img: img, pageReady: false, splash: null, born: performance.now(),
+			group: null, gx: 0, rx: 0, cy: 0, scale: 1, rot: 0, lift: 0, fade: 1 };
 		var entry = appEntries[appId];
 		if (entry) {
 			var splash = document.createElement("div");
@@ -161,22 +309,42 @@
 			};
 			icon.src = entry.splash;
 			splash.appendChild(icon);
-			el.appendChild(splash);
+			face.appendChild(splash);
 			c.splash = splash;
 		}
-		el.appendChild(cover);
-		if (maximized) { window.luna.cardView(); maximized = false; document.body.classList.remove("maximized"); }
-		cards.splice(active + 1, 0, c);
+		c.dim = document.createElement("div");
+		c.dim.className = "dim";
+		face.appendChild(c.dim);
+		el.appendChild(face);
 		$("cards").appendChild(el);
-		active = cards.indexOf(c);
+		// The card it joins is the one to come back to when it goes (m_cardToRestoreToMaximized).
+		restoreTo = sibling && sibling.group ? sibling : null;
+		restoreAfter = restoreTo ? c : null;
+		var g = sibling && sibling.group;
+		if (!g) { g = { cards: [], active: null, left: 0, right: 0 }; groups.splice(activeGroup ? groups.indexOf(activeGroup) + 1 : groups.length, 0, g); }
+		g.cards.push(c); c.group = g; g.active = c;
+		setActiveGroup(g);
 		// setActiveCardOffScreen: full size, its top at the bottom of the screen; then up into the card view.
-		el.classList.remove("animate");
-		transform(c, 0, AREA, 1);
-		el.getBoundingClientRect();
-		layout(true);
+		setPose(c, { gx: 0, rx: 0, cy: AREA + AREA / 2, scale: 1, rot: 0 });
+		apply(c, 0, "", 0, "");
+		topCard = c; restack();
+		c.el.getBoundingClientRect();
+		if (maximized) { window.luna.cardView(); maximized = false; upCard = null; activating = null; document.body.classList.remove("maximized"); }
+		launchingCards.add(c);
+		topCard = null;
+		run(layout(true), function () { return [SLIDE_MS, EASE.outQuart, SLIDE_MS, EASE.outQuart]; });
 		setTitle();
-		wire(c);
 		return c;
+	}
+
+	/**
+	 * The card a new one joins, by CardHost's rule: the card that is up, if the new card is a
+	 * window its own app opened ([fromParent]), or one an app opened for the app that launched it ([launcher]).
+	 */
+	function siblingFor(appId, fromParent, launcher) {
+		var up = maximized ? cur() : null;
+		if (!up) { return null; }
+		return (fromParent && up.appId === appId) || (launcher && launcher !== appId && up.appId === launcher) ? up : null;
 	}
 
 	/**
@@ -184,10 +352,10 @@
 	 * host has been asked, and takes the app's first card when main.js makes it. One that no
 	 * card ever claims (the app only raised a dashboard, or couldn't start) goes again.
 	 */
-	function launching(entry) {
-		if (cards.some(function (c) { return c.appId === entry.id; })) { return; }
-		var c = newCard(entry.id, entry.title);
-		c.waiting = setTimeout(function () { if (!c.id) { dropCard(c, false); } }, 10000);
+	function launching(entry, launcher) {
+		if (allCards().some(function (c) { return c.appId === entry.id; })) { return; }
+		var c = newCard(entry.id, entry.title, siblingFor(entry.id, false, launcher));
+		c.waiting = setTimeout(function () { if (!c.id) { removeCard(c); } }, 10000);
 	}
 
 	/** A card main.js has made (a launch, or an app's window.open): it takes the loading card the tap put up, or comes in with its own. */
@@ -195,7 +363,7 @@
 		closeJustType();
 		closeLauncher();
 		clearGlow();
-		var c = cards.filter(function (k) { return !k.id && k.appId === d.appId; })[0] || newCard(d.appId, d.title);
+		var c = allCards().filter(function (k) { return !k.id && k.appId === d.appId; })[0] || newCard(d.appId, d.title, siblingFor(d.appId, d.fromParent, d.launcher));
 		clearTimeout(c.waiting);
 		c.id = d.id;
 		setTitle();
@@ -203,91 +371,263 @@
 		c.timer = setTimeout(function () { ready({ id: c.id }); }, 15000);
 	}
 
-	/** The card's page has loaded: the card maximizes by itself, as a launching card does (CardLayer.ready), and its page takes the splash's place. */
+	/**
+	 * The card's page is ready: a launching card maximizes by itself (CardLayer.ready), unless
+	 * another card has come up meanwhile or the card view is in hand, and its page takes the
+	 * splash's place. Not before it has reached the card view: the launch is seen to arrive there.
+	 */
 	function ready(d) {
-		var i = cardIndex(d.id);
-		if (i < 0 || cards[i].pageReady) { return; }
-		var c = cards[i];
+		var c = cardById(d.id);
+		if (!c || c.pageReady) { return; }
 		c.pageReady = true;
 		clearTimeout(c.timer);
-		if (maximized && cards[active] === c) { showLive(c); return; }
-		// Not before it has reached the card view: the launch is seen to arrive there first.
+		if (maximized && cur() === c) { showLive(c); return; }
 		var wait = Math.max(0, SLIDE_MS - (performance.now() - c.born));
-		setTimeout(function () { var k = cards.indexOf(c); if (k >= 0 && !maximized) { maximize(k); } }, wait);
+		setTimeout(function () {
+			if (!launchingCards.has(c) || !c.group) { return; }
+			if ((maximized && cur() !== c) || cardDrag) { return; }
+			maximize(c);
+		}, wait);
 	}
 
-	function dropCard(c, wasUp) {
-		var i = cards.indexOf(c);
-		if (i < 0) { return; }
-		c.el.classList.add("animate");
-		transform(c, 0, -AREA, wasUp ? 1 : ACTIVE);
-		c.el.style.opacity = "0";
-		cards.splice(i, 1);
-		setTimeout(function () { c.el.remove(); }, 320);
-		if (active >= cards.length) { active = cards.length - 1; }
-		if (wasUp) { maximized = false; document.body.classList.remove("maximized"); window.luna.cardView(); }
-		layout(true);
-		setTitle();
+	/**
+	 * A card gone (closed here, by its page, popped out, or a loading card unclaimed): out of its
+	 * group, the card behind it its group's active one; the group nearest the middle the active
+	 * group; a card that goes while it is up takes the shell back to the card view, and back up
+	 * to the card it was opened from (restoreTo).
+	 */
+	function removeCard(c) {
+		var back = restoreTo && c === restoreAfter ? restoreTo : null;
+		if (c === restoreAfter || c === restoreTo) { restoreTo = null; restoreAfter = null; }
+		var g = c.group;
+		if (!g) { return; }
+		var i = g.cards.indexOf(c), ai = g.cards.indexOf(g.active);
+		g.cards.splice(i, 1); c.group = null;
+		if (!g.cards.length) { g.active = null; groups.splice(groups.indexOf(g), 1); }
+		else if (i === ai) { g.active = i > 0 ? g.cards[i - 1] : g.cards[0]; }
+		c.el.remove();
+		launchingCards.delete(c);
+		if (reorderCard === c) { endReorder(false); }
+		if (topCard === c) { topCard = null; }
+		if (current === c) { current = null; }
+		var wasUp = (maximized && (upCard === c || activating === c));
+		if (activating === c) { activating = null; }
+		if (upCard === c) { upCard = null; }
+		setActiveGroup(g.cards.length && g === activeGroup ? g : closestGroup());
+		if (wasUp) {
+			maximized = false; document.body.classList.remove("maximized"); window.luna.cardView(); setTitle();
+			slide(null, function () { if (back && back.group && !maximized) { maximize(back); } });
+		} else if (!maximized) { slide(); }
 	}
 
-	/** A card gone (closed here, by its page, or popped out): its picture leaves upwards. */
-	function removed(d) {
-		var i = cardIndex(d.id);
-		if (i >= 0) { dropCard(cards[i], maximized && i === active); }
+	function removed(d) { var c = cardById(d.id); if (c) { removeCard(c); } }
+
+	/** Closes a card: off the top of the card area whichever way it was thrown, over 300 ms OutCubic, then gone. */
+	function throwAway(c) {
+		clearTimeout(runTimer);
+		c.lift = -(AREA * c.scale / 2) - c.cy;
+		apply(c, 0, "", DELETE_MS, EASE.outCubic);
+		setTimeout(function () { closeCard(c); }, DELETE_MS);
+	}
+	function closeCard(c) { if (!c || !c.group) { return; } if (c.id) { window.luna.close(c.id); } else { removeCard(c); } }
+
+	// ---- reorder (CardWindowManager's reorder state) ----
+
+	var reorderCard = null, zone = 0;
+	/** CardWindowManager::getReorderZone: either side of the middle W·activeScale. */
+	function zoneAt(x) { var half = W * activeScale() / 2, rel = x - W / 2; return rel < -half ? -1 : rel > half ? 1 : 0; }
+	function cx(c) { return W / 2 + c.gx + c.rx; }
+
+	/** The held card goes 80 % opaque and leaves its group's layout. */
+	function startReorder(c, x) {
+		reorderCard = c; c.fade = REORDER_OPACITY; topCard = c; restack();
+		zone = zoneAt(x);
+		document.body.classList.add("reordering");
+		apply(c, 0, "", 0, "");
+	}
+	function reorderMove(dx, dy, x) {
+		var c = reorderCard;
+		if (!c) { return; }
+		c.rx += dx; c.cy += dy; c.scale = activeScale(); c.rot = 0;
+		apply(c, 0, "", 0, "");
+		var z = zoneAt(x);
+		if (z === zone && z === 0) { moveReorderCentre(); }
+		else if (z !== zone) { zone = z; if (z === 1) { moveReorderRight(); } else if (z === -1) { moveReorderLeft(); } }
+	}
+	/** The others make room: the active group to the middle, everyone to their places. */
+	function arrangeAfterReorder(ms) {
+		var ag = activeGroup, poses = layout(true);
+		poses.delete(reorderCard);
+		run(poses, function (c) { return c.group === ag ? [SHUFFLE_MS, EASE.outCubic, ms, EASE.outCubic] : [ms, EASE.outCubic, ms, EASE.outCubic]; }, function () {
+			// A pointer still held to one side keeps going.
+			if (reorderCard) { if (zone === 1) { moveReorderRight(); } else if (zone === -1) { moveReorderLeft(); } }
+		});
+	}
+	/** CardGroup::moveActiveCard: past a sibling's centre, take its place. */
+	function moveReorderCentre() {
+		var c = reorderCard, g = c && c.group;
+		if (!g) { return; }
+		var a = g.cards.indexOf(c), x = cx(c), to = -1, i;
+		for (i = 0; i < a; i++) { if (x < cx(g.cards[i])) { to = i; break; } }
+		if (to < 0) { for (i = g.cards.length - 1; i > a; i--) { if (x > cx(g.cards[i])) { to = i; break; } } }
+		if (to < 0) { return; }
+		g.cards.splice(a, 1); g.cards.splice(to, 0, c);
+		setActiveGroup(g); arrangeAfterReorder(SHUFFLE_MS);
+	}
+	function detach(c, g) { var i = g.cards.indexOf(c); g.cards.splice(i, 1); g.active = g.cards.length ? g.cards[Math.max(0, i - 1)] : null; }
+	/** moveReorderSlotRight: one place right in the group; past its front, out of it. A card that was alone joins the next group at the back; one leaving a group starts a new one. */
+	function moveReorderRight() {
+		var c = reorderCard, g = c && c.group;
+		if (!g) { return; }
+		var a = g.cards.indexOf(c);
+		if (a < g.cards.length - 1) { g.cards[a] = g.cards[a + 1]; g.cards[a + 1] = c; setActiveGroup(g); arrangeAfterReorder(SHUFFLE_MS); }
+		else if (g !== groups[groups.length - 1] || g.cards.length > 1) {
+			var gi = groups.indexOf(g), ng;
+			detach(c, g);
+			if (!g.cards.length) { groups.splice(gi, 1); ng = groups[gi]; } else { ng = { cards: [], active: null, left: 0, right: 0 }; groups.splice(gi + 1, 0, ng); }
+			ng.cards.unshift(c); c.group = ng; ng.active = c;
+			setActiveGroup(ng); arrangeAfterReorder(GROUP_REORDER_MS);
+		}
+	}
+	/** moveReorderSlotLeft, the mirror: a card that was alone joins the previous group at the front. */
+	function moveReorderLeft() {
+		var c = reorderCard, g = c && c.group;
+		if (!g) { return; }
+		var a = g.cards.indexOf(c);
+		if (a > 0) { g.cards[a] = g.cards[a - 1]; g.cards[a - 1] = c; setActiveGroup(g); arrangeAfterReorder(SHUFFLE_MS); }
+		else if (g !== groups[0] || g.cards.length > 1) {
+			var gi = groups.indexOf(g), ng;
+			detach(c, g);
+			if (!g.cards.length) { groups.splice(gi, 1); ng = groups[Math.max(0, gi - 1)]; } else { ng = { cards: [], active: null, left: 0, right: 0 }; groups.splice(gi, 0, ng); }
+			ng.cards.push(c); c.group = ng; ng.active = c;
+			setActiveGroup(ng); arrangeAfterReorder(GROUP_REORDER_MS);
+		}
+	}
+	/** Let go: opaque again, back in its group, and everything to its place. */
+	function endReorder(animate) {
+		var c = reorderCard;
+		if (!c) { return; }
+		reorderCard = null; c.fade = 1; topCard = null;
+		document.body.classList.remove("reordering");
+		restack();
+		if (animate !== false) { slide(); }
 	}
 
-	function closeCard(i) { if (!cards[i]) { return; } if (cards[i].id) { window.luna.close(cards[i].id); } else { dropCard(cards[i], false); } }
+	// ---- touch in the card view (CardLayer.onTouchEvent) ----
 
-	/** A card's cover in the card view: tap to bring it up, flick up to close, drag sideways to slide, right-click for Luna DE's tools. */
-	function wire(c) {
-		var cover = c.el.querySelector(".cover");
-		cover.addEventListener("pointerdown", function (e) {
-			if (e.button !== 0 || maximized) { return; }
-			var x0 = e.clientX, y0 = e.clientY, axis = null, i = cards.indexOf(c);
-			var lastY = y0, lastT = e.timeStamp, vy = 0;
-			cover.setPointerCapture(e.pointerId);
-			function move(ev) {
-				var dx = ev.clientX - x0, dy = ev.clientY - y0;
-				if (!axis && Math.hypot(dx, dy) > 15) { axis = Math.abs(dx) > 0.866 * Math.abs(dy) ? "x" : "y"; }
-				if (ev.timeStamp > lastT) { vy = (ev.clientY - lastY) / (ev.timeStamp - lastT); lastY = ev.clientY; lastT = ev.timeStamp; }
-				if (axis === "y" && i === active) {
-					c.el.classList.remove("animate");
-					transform(c, 0, ORIGIN_Y - AREA / 2 + Math.min(0, dy), ACTIVE);
-				} else if (axis === "x") {
-					layout(false, dx);
+	/** The topmost card under a point, of [g] only when given. */
+	function cardAt(x, y, g) {
+		var order = allCards().slice().sort(function (a, b) { return (+a.el.style.zIndex || 0) - (+b.el.style.zIndex || 0); });
+		for (var i = order.length - 1; i >= 0; i--) {
+			var c = order[i];
+			if (g && c.group !== g) { continue; }
+			var w = W * c.scale, h = AREA * c.scale, x0 = cx(c), y0 = c.cy + c.lift;
+			if (x >= x0 - w / 2 && x <= x0 + w / 2 && y >= y0 - h / 2 && y <= y0 + h / 2) { return c; }
+		}
+		return null;
+	}
+	/** CardGroup::withinColumn. */
+	function withinColumn(g, x) { var gx = W / 2 + (g.cards[0] ? g.cards[0].gx : 0); return x >= gx - g.left && x <= gx + g.right; }
+
+	var cardDrag = null;   // the pointer's gesture in the card view, while it is down
+	(function () {
+		var box = $("cards");
+		box.addEventListener("pointerdown", function (e) {
+			if (e.button !== 0 || maximized || activating) { return; }
+			var r = box.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+			var ag = activeGroup;
+			var d = cardDrag = { kind: "undecided", x0: x, y0: y, lastX: x, lastY: y, card: ag ? cardAt(x, y, ag) : null, samples: [] };
+			if (d.card) { ag.active = d.card; }
+			d.pivot = ag && ag.cards[0] ? ag.cards[0].gx : 0;
+			box.setPointerCapture(e.pointerId);
+			// Tap-and-hold: on a card of the active group, pick it up; on the space either side, the group that way.
+			d.hold = setTimeout(function () {
+				if (d.kind !== "undecided") { return; }
+				if (d.card) { d.kind = "reorder"; startReorder(d.card, d.lastX); }
+				else {
+					d.kind = "none";
+					var i = groups.indexOf(activeGroup) + (d.x0 < W / 2 ? -1 : 1);
+					if (groups[i]) { setActiveGroup(groups[i]); slide(); }
 				}
+			}, HOLD_MS);
+			function move(ev) {
+				var mx = ev.clientX - r.left, my = ev.clientY - r.top, dx = mx - d.x0, dy = my - d.y0;
+				d.samples.push([ev.timeStamp, mx, my]); if (d.samples.length > 6) { d.samples.shift(); }
+				if (d.kind === "undecided" && Math.hypot(dx, dy) > TAP) {
+					clearTimeout(d.hold);
+					d.kind = Math.abs(dx) > AXIS_LOCK * Math.abs(dy) ? "scroll" : d.card ? "throw" : "none";
+				}
+				if (d.kind === "scroll") {
+					// slideAllGroupsTo: the groups follow the pointer, collapsing as they leave the middle.
+					d.pivot += mx - d.lastX;
+					run(layout(true, d.pivot, true), function () { return [TRACK_GROUP_MS, EASE.linear, TRACK_MS, EASE.linear]; });
+				} else if (d.kind === "throw") { d.card.lift = dy; apply(d.card, 0, "", 0, ""); }
+				else if (d.kind === "reorder") { reorderMove(mx - d.lastX, my - d.lastY, mx); }
+				d.lastX = mx; d.lastY = my;
 			}
 			function up(ev) {
-				cover.removeEventListener("pointermove", move);
-				cover.removeEventListener("pointerup", up);
-				var dx = ev.clientX - x0, dy = ev.clientY - y0;
-				if (!axis && Math.hypot(dx, dy) <= TAP) {
-					if (i === active) { maximize(i); } else { active = i; layout(true); }
-				} else if (axis === "y" && i === active) {
-					if (dy < THROW_DISTANCE * 3 || vy < THROW_VELOCITY) { closeCard(i); } else { layout(true); }
-				} else if (axis === "x") {
-					var step = Math.round(-dx / (W * OTHER + GAP));
-					active = Math.max(0, Math.min(cards.length - 1, active + step));
-					layout(true);
+				box.removeEventListener("pointermove", move); box.removeEventListener("pointerup", up); box.removeEventListener("pointercancel", up);
+				clearTimeout(d.hold);
+				cardDrag = null;
+				var vx = 0, vy = 0, s = d.samples;
+				if (s.length > 1 && ev.timeStamp - s[s.length - 1][0] < 80 && s[s.length - 1][0] > s[0][0]) {
+					var dt = (s[s.length - 1][0] - s[0][0]) / 1000; vx = (s[s.length - 1][1] - s[0][1]) / dt; vy = (s[s.length - 1][2] - s[0][2]) / dt;
+				}
+				var c = d.card;
+				if (d.kind === "scroll") {
+					// The group nearest the middle becomes active; a flick goes one further.
+					var g = closestGroup();
+					if (Math.abs(vx) > FLING_MIN && g) { g = groups[Math.max(0, Math.min(groups.length - 1, groups.indexOf(g) + (vx < 0 ? 1 : -1)))]; }
+					setActiveGroup(g); slide();
+				} else if (d.kind === "throw" && c) {
+					// Luna's rule: far enough, fast enough, and faster the shorter the drag.
+					var dist = c.lift, v = vy / 3;
+					var flung = dist < THROW_DISTANCE && v < THROW_MIN_VELOCITY && v < (THROW_VELOCITY * THROW_DISTANCE) / dist;
+					if (flung || c.cy + c.lift < 0 || c.cy + c.lift > AREA) { throwAway(c); } else { slide(); }
+				} else if (d.kind === "reorder") { endReorder(); }
+				else if (d.kind === "undecided" && ev.type === "pointerup") {
+					var ag2 = activeGroup;
+					if (c) { maximize(c); }
+					else if (ag2 && !withinColumn(ag2, d.x0)) {
+						// A tap on another group makes it the active one.
+						var other = cardAt(d.x0, d.y0);
+						if (other && other.group) { setActiveGroup(other.group); slide(); }
+					}
 				}
 			}
-			cover.addEventListener("pointermove", move);
-			cover.addEventListener("pointerup", up);
+			box.addEventListener("pointermove", move); box.addEventListener("pointerup", up); box.addEventListener("pointercancel", up);
 		});
-		cover.addEventListener("contextmenu", function (e) {
+		// Luna DE's tools for a card, by the right button.
+		box.addEventListener("contextmenu", function (e) {
 			e.preventDefault();
-			showMenu(e.clientX, e.clientY, c);
+			if (maximized) { return; }
+			var r = box.getBoundingClientRect(), c = cardAt(e.clientX - r.left, e.clientY - r.top);
+			if (c) { showMenu(e.clientX, e.clientY, c); }
 		});
+	})();
+
+	/** The card view relaid at once, for a new screen size: maximized or not. */
+	function relayout() {
+		var poses = maximized && cur() ? maximizedLayout(cur()) : layout(true);
+		poses.forEach(function (p, c) { setPose(c, p); apply(c, 0, "", 0, ""); });
+		restack();
+	}
+
+	/** The SDK emulator's keys and the wheel in the card view: the next group either way. */
+	function stepGroup(d) {
+		if (!activeGroup) { return; }
+		var i = Math.max(0, Math.min(groups.length - 1, groups.indexOf(activeGroup) + d));
+		setActiveGroup(groups[i]); slide();
 	}
 
 	// ---- Luna DE's tools for a card ----
 
 	function showMenu(x, y, c) {
-		showItems(x, y, [["Open", function () { maximize(cards.indexOf(c)); }],
+		showItems(x, y, [["Open", function () { maximize(c); }],
 		 ["Pop out to its own window", function () { window.luna.popOut(c.id); }],
 		 ["DevTools", function () { window.luna.devTools(c.id); }],
 		 ["Reload", function () { window.luna.reload(c.id); }],
-		 ["Close", function () { closeCard(cards.indexOf(c)); }]]);
+		 ["Close", function () { closeCard(c); }]]);
 	}
 
 	function showItems(x, y, items) {
@@ -951,7 +1291,7 @@
 		glow(tapped);
 		window.luna.launch(entry);
 		// The Wi-Fi tile is Luna DE's network switch, not an app: nothing loads, so no loading card.
-		var running = cards.some(function (c) { return c.appId === entry.id; }) || entry.switch;
+		var running = allCards().some(function (c) { return c.appId === entry.id; }) || entry.switch;
 		// The launcher stays, glowing, for the moment the icon needs to be seen (then the card).
 		setTimeout(function () { closeLauncher(); if (!running) { launching(entry); } }, tapped && !$("launcher").hidden ? 120 : 0);
 	}
@@ -1000,7 +1340,7 @@
 	$("devtools").addEventListener("click", function () { window.luna.log(); });
 	$("devtools").addEventListener("contextmenu", function (e) { e.preventDefault(); window.luna.toolsMenu(); });
 	// The bezel's other corner: the card that is up, or in front in the card view, popped out.
-	$("popout").addEventListener("click", function () { var c = cards[active]; if (c && c.id) { window.luna.popOut(c.id); } });
+	$("popout").addEventListener("click", function () { var c = cur(); if (c && c.id) { window.luna.popOut(c.id); } });
 	// And the device itself: a TouchPad or a Pre3, by its picture.
 	$("device").addEventListener("click", function () { window.luna.device(); });
 	/** The screen as main.js gives it (in this page's px), the device's picture, and what the device hasn't got. */
@@ -1024,16 +1364,15 @@
 		if (e.key === "F1") { e.preventDefault(); home(); }
 		else if (e.key === "Escape" && (editing || !$("scrim").hidden || sys.open)) { e.preventDefault(); home(); }
 		// Left and Right switch cards in the card view (the SDK emulator's keys).
-		else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !maximized && cards.length && $("launcher").hidden) {
-			active = Math.max(0, Math.min(cards.length - 1, active + (e.key === "ArrowRight" ? 1 : -1)));
-			layout(true);
-		} else if (e.key === "Enter" && !maximized && cards[active] && $("launcher").hidden) { maximize(active); }
+		else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !maximized && groups.length && $("launcher").hidden) {
+			stepGroup(e.key === "ArrowRight" ? 1 : -1);
+		} else if (e.key === "Enter" && !maximized && cur() && $("launcher").hidden) { maximize(cur()); }
 	});
 	// Home (the emulator's key): the card on the screen down to the card view, and up again.
 	function toggleCard() {
 		if (!$("launcher").hidden) { closeLauncher(); }
 		else if (maximized) { cardView(); }
-		else if (cards[active]) { maximize(active); }
+		else if (cur()) { maximize(cur()); }
 	}
 	// The title is the app menu's, while a card is up (the TouchPad's status bar).
 	$("title").addEventListener("click", function () { if (maximized) { window.luna.appMenu(); } });
@@ -1425,11 +1764,10 @@
 
 	// The card view slides with the wheel, as with a finger.
 	$("cards").addEventListener("wheel", function (e) {
-		if (maximized || !cards.length) { return; }
+		if (maximized || !groups.length || cardDrag) { return; }
 		var d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
 		if (Math.abs(d) < 20) { return; }
-		active = Math.max(0, Math.min(cards.length - 1, active + (d > 0 ? 1 : -1)));
-		layout(true);
+		stepGroup(d > 0 ? 1 : -1);
 	}, { passive: true });
 
 	// ---- the system menu ----
@@ -1489,7 +1827,7 @@
 		el.getBoundingClientRect();
 		document.body.classList.add("sysmenu");
 		// Over a card that is up, its live view steps aside for the menu, its picture in its place.
-		var c = maximized ? cards[active] : null;
+		var c = maximized ? cur() : null;
 		if (c && c.id && !c.splash) {
 			window.luna.snapshot(c.id).then(function (url) {
 				if (!sys.open) { return; }
@@ -1540,19 +1878,18 @@
 	window.luna.onCardAdded(added);
 	// A headless app the host started with a loading card (a launch that was no tap here: another
 	// app's, LUNA_DE_OPEN), and the host's word that the app is up and opened no card for it.
-	window.luna.onCardLoading(function (d) { launching({ id: d.appId, title: d.title }); });
+	window.luna.onCardLoading(function (d) { launching({ id: d.appId, title: d.title }, d.launcher); });
 	window.luna.onCardWithdrawn(function (d) {
-		cards.filter(function (c) { return !c.id && c.appId === d.appId; }).forEach(function (c) { clearTimeout(c.waiting); dropCard(c, false); });
+		allCards().filter(function (c) { return !c.id && c.appId === d.appId; }).forEach(function (c) { clearTimeout(c.waiting); removeCard(c); });
 	});
 	window.luna.onCardReady(ready);
 	window.luna.onCardRemoved(removed);
-	window.luna.onShow(function (d) { var i = cardIndex(d.id); if (i >= 0) { maximize(i); } });
+	window.luna.onShow(function (d) { var c = cardById(d.id); if (c) { maximize(c); } });
 	window.luna.onToggleCard(toggleCard);
 	window.luna.onLauncher(function () { if ($("launcher").hidden) { openLauncher(); } else { closeLauncher(); } });
 	window.luna.onScreen(function (d) {
 		applyScreen(d);
-		if (maximized) { cards.forEach(function (k, j) { k.el.classList.remove("animate"); transform(k, j === active ? 0 : (j < active ? -1 : 1) * (W + GAP), 0, 1); }); }
-		else { layout(false); }
+		relayout();
 		placePanels();
 	});
 	window.luna.onPanelAdded(function (d) { panels.push(d); drawNotes(); });

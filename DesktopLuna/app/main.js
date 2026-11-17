@@ -261,7 +261,7 @@ function adoptOpens(wc) {
 }
 
 /** A view the host says is a card: in the device's window, hidden until the shell brings it up. */
-function addCard(v, title) {
+function addCard(v, title, hints) {
 	const id = nextCard++;
 	const view = v.view, appId = v.appId;
 	const c = { id, appId, title: v.title || title || appId, view, popped: null, v };
@@ -281,7 +281,7 @@ function addCard(v, title) {
 		view.webContents.once("did-finish-load", c.ready);
 		view.webContents.once("did-fail-load", c.ready);
 	}
-	send("luna-de:card-added", { id, appId, title: c.title });
+	send("luna-de:card-added", Object.assign({ id, appId, title: c.title }, hints || {}));
 	// A window a page opened may have loaded before the host said it was a card.
 	if (!view.webContents.isLoading() && view.webContents.getURL()) { c.ready(); }
 	return c;
@@ -786,12 +786,12 @@ async function followHost() {
 				if (ev.type === "card") {
 					// A window that is a card: an app's first (its view made now), or one a page opened.
 					const v = viewFor(ev);
-					if (v && !v.card) { addCard(v, ev.title); }
+					if (v && !v.card) { addCard(v, ev.title, { fromParent: !!ev.fromParent, launcher: ev.launcher || "" }); }
 				} else if (ev.type === "loading") {
 					// A headless app's loading card: the shell page draws one (unless a tap already
 					// did), which the app's first card takes. Its page runs unseen.
 					viewFor(ev);
-					send("luna-de:card-loading", { appId: ev.appId, title: ev.title });
+					send("luna-de:card-loading", { appId: ev.appId, title: ev.title, launcher: ev.launcher || "" });
 				} else if (ev.type === "withdrawn") { send("luna-de:card-withdrawn", { appId: ev.appId }); }
 				else if (ev.type === "hide") { const v = viewFor(ev); if (v) { unplace(v); } }
 				else if (ev.type === "load") { const v = viewFor(ev); if (v) { v.view.webContents.loadURL(ev.url); } }

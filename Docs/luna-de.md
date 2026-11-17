@@ -240,11 +240,18 @@ API 21 gate.
   left out of the ROM as the Android account's is.
 - The network is the machine's first interface with an address, shown as the TouchPad's Wi-Fi at
   full signal with no network name; the machine counts as on the mains.
-- Where a card goes is still each platform's own: CardHost on Android, `DesktopShell` and the
-  shell page here. A headless app's placeholder card is the one rule written twice (when it goes
+- **Cards live in groups** (2026-11-17), the shell page's card view now CardLayer's: a card
+  an app opens while its own card is up joins that card's group, and so does one an app opens
+  for the app that launched it (the host says which, from the lifecycle's launchedBy); the
+  active group fanned, the others collapsing into a 10 px stagger as they leave the middle,
+  each group's x and each card's place on their own timings; the cards that aren't active
+  dimmed to 80 %; a card closed while it is up going back to the one it was opened from
+  (restoreTo). Holding a card picks it up to reorder it, in its group or out into the next one
+  or one of its own; holding the space either side goes to that group; a tap on another group
+  makes it active; a throw closes a card by Luna's rule. Where a card goes is still each
+  platform's own: CardHost on Android, `DesktopShell` and the shell page here. A headless app's placeholder card is the one rule written twice (when it goes
   if the app opens no card: CardHost.withdrawPlaceholder and DesktopShell.pageSaid, on the same
-  two timings, which are LunaCore's). Not drawn here: a card's group (a card an app opens beside
-  its own), the emulated card a TouchPad gave an app that never said `uiRevision: 2` (it gets
+  two timings, which are LunaCore's). Not drawn here: the emulated card a TouchPad gave an app that never said `uiRevision: 2` (it gets
   the whole screen), and a card held to its app's `requestedWindowOrientation`.
 - A page's first native call waits for Electron to say which window the page is in (a few ms;
   2 s at most, then it goes on as a page in no window, with a warning in the log).

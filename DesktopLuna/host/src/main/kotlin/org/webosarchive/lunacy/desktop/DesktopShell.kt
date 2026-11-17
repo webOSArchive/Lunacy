@@ -308,21 +308,27 @@ class DesktopShell(
 
     // ---- where a window goes (AppLifecycle.Screen) ----
 
-    /** Luna DE's card view has no groups yet: who launched an app changes nothing. */
-    override fun launchedBy(appId: String, launchedBy: String?) {}
+    /** The app that launched each app, until that launch's card is shown: for the group its card joins (CardHost's launchers). */
+    private val launchers = HashMap<String, String>()
+    override fun launchedBy(appId: String, launchedBy: String?) {
+        if (launchedBy != null && launchedBy != appId) launchers[appId] = launchedBy else launchers.remove(appId)
+    }
     /** The shell is Luna DE's home ([shellIsHome]): nothing is opened around it. */
     override fun openDirect(appId: String) {}
     override fun bringForward(appId: String) { events.add(event("show").put("id", appId)) }
 
     override fun showAsCard(w: DesktopView, parent: DesktopView?, placeholder: Boolean, splash: Boolean) {
+        // What the shell page needs for the group the card joins (CardHost.showAsCard): whether
+        // a window of the app opened it, and which app launched it.
+        val launcher = launchers.remove(w.appId)
         if (placeholder) {
             // A headless app's loading card, which its first card window takes: the shell page
             // draws it (it may have, at the tap), and the app's page runs unseen behind it.
             w.place = DesktopView.Place.PLACEHOLDER
-            events.add(viewEvent("loading", w).put("title", titleOf(w.appId)))
+            events.add(viewEvent("loading", w).put("title", titleOf(w.appId)).put("launcher", launcher ?: ""))
         } else {
             w.place = DesktopView.Place.CARD
-            events.add(viewEvent("card", w).put("title", titleOf(w.appId)))
+            events.add(viewEvent("card", w).put("title", titleOf(w.appId)).put("fromParent", parent != null).put("launcher", launcher ?: ""))
         }
     }
 

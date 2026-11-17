@@ -1350,6 +1350,12 @@
 	$("popout").addEventListener("click", function () { var c = cur(); if (c && c.id) { window.luna.popOut(c.id); } });
 	// And the device itself: a TouchPad or a Pre3, by its picture.
 	$("device").addEventListener("click", function () { window.luna.device(); });
+	// The bezel's right button, anywhere on it but the buttons that have their own: full screen and the device.
+	$("bezel").addEventListener("contextmenu", function (e) {
+		if (e.target.closest && e.target.closest("#devtools, #realkb")) { return; }
+		e.preventDefault();
+		window.luna.bezelMenu();
+	});
 	/** The screen as main.js gives it (in this page's px), the device's picture, and what the device hasn't got. */
 	function applyScreen(d) {
 		var wasPhone = document.body.classList.contains("phone");

@@ -771,6 +771,23 @@ ipcMain.handle("luna-de:devtools", (e, id) => { const c = cards.get(id); if (c) 
  * developer tools for that one page. (A menu of the system's own: one drawn in the shell page
  * would lie under a card that is up.)
  */
+/**
+ * The bezel's own menu, by the right button anywhere on it: full screen, and the device. (The
+ * window's title bar is the desktop's, which takes no items of an app's on Linux.)
+ */
+ipcMain.handle("luna-de:bezel-menu", () => {
+	if (!shell) { return false; }
+	const full = shell.isFullScreen();
+	const items = [
+		{ label: full ? "Leave Full Screen" : "Full Screen", accelerator: "F11", click: () => toggleFullScreen() },
+		{ type: "separator" },
+		{ label: "HP TouchPad", type: "radio", checked: device.id === "touchpad", click: () => setDevice("touchpad") },
+		{ label: "HP Pre3", type: "radio", checked: device.id === "pre3", click: () => setDevice("pre3") },
+		{ label: "This Screen (a TouchPad at the window's size)", type: "radio", checked: device.id === FILL, click: () => setDevice(FILL) },
+	];
+	Menu.buildFromTemplate(items).popup({ window: shell });
+	return true;
+});
 ipcMain.handle("luna-de:tools-menu", () => {
 	const items = [...cards.values()].filter((c) => !c.view.webContents.isDestroyed()).map((c) => ({
 		label: "Inspect " + (c.title || c.appId), click: () => c.view.webContents.openDevTools({ mode: "detach" }) }));

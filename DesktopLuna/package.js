@@ -399,8 +399,10 @@ function signingPlan() {
 				artifactName: "luna-de-${version}-${os}-${arch}.${ext}",
 				// No auto-update: no update files beside the packages.
 				publish: null,
-				// The icon: Lunacy's moon (build-resources/make-icon.py).
-				linux: { target: ["AppImage", "tar.gz"], category: "Development", executableName: "luna-de", icon: "build-resources/icon.png" },
+				// The icon: Lunacy's moon (build-resources/make-icon.py). Linux takes a folder of
+				// sizes: the icon theme a launcher reads has none above 512, and a lone 1024 px
+				// picture left the integrated AppImage without an icon.
+				linux: { target: ["AppImage", "tar.gz"], category: "Development", executableName: "luna-de", icon: "build-resources/icons" },
 				// Signed with the Developer ID in the keychain (or CSC_LINK), under the hardened
 				// runtime, which needs the JVM's and Node's entitlements. Notarised by
 				// signing/mac.js's afterSign, not electron-builder's own (notarize: false), so that

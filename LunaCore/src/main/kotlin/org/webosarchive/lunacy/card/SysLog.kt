@@ -35,7 +35,8 @@ object SysLog {
     /** Starts writing to root/var/log/messages. */
     @Synchronized fun start(root: File) {
         if (file != null) return
-        file = File(root, "var/log/messages").also { it.parentFile?.mkdirs() }
+        // There from the start, as on a device: `palm-log -f` follows it before anything is logged.
+        file = File(root, "var/log/messages").also { it.parentFile?.mkdirs(); runCatching { if (!it.exists()) it.createNewFile() } }
         Thread({ while (true) write(queue.take()) }, "syslog").apply { isDaemon = true }.start()
     }
 

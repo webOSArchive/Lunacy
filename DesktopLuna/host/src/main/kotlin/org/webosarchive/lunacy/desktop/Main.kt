@@ -95,6 +95,9 @@ fun main(args: Array<String>) {
     val addedLaunchPoints = org.webosarchive.lunacy.card.LaunchPoints(webosRoot, files)
     val shell = DesktopShell(main, bus, registry, files, packages, addedLaunchPoints, data)
     val windows = shell.windows
+    // novacomd's device side, for the SDK's tools: palm-install, palm-launch, palm-log and novacom
+    // reach Luna DE through novacomd's local relay (DesktopNovacom).
+    DesktopNovacom(main, bus, webosRoot, desktopRoot, data).start()
     systemService.hostPreference = { key ->
         org.webosarchive.lunacy.card.SystemService.devicePreference(key, java.util.Locale.getDefault(), false,
             shell.device.carrierCode, DEFAULT_WALLPAPER)
@@ -292,6 +295,17 @@ fun main(args: Array<String>) {
     http.createContext("/page") { ex -> ex.use {
         val q = query(ex)
         shell.pageIn(q["w"].orEmpty(), q["view"].orEmpty())
+        send(ex, 204, "text/plain", ByteArray(0))
+    } }
+    // An app page's console message (Electron's console-message), for /var/log/messages, as
+    // Android's AppWindow sends it; nothing from an app that handles people's own data.
+    http.createContext("/console") { ex -> ex.use {
+        val m = runCatching { JSONObject(ex.requestBody.readBytes().toString(Charsets.UTF_8)) }.getOrNull()
+        val app = m?.optString("app").orEmpty()
+        if (m != null && app.isNotEmpty() && !org.webosarchive.lunacy.card.Bus.handlesPeople(app)) {
+            org.webosarchive.lunacy.card.SysLog.console(app, when (m.optString("level")) { "warning" -> "warning"; "error" -> "crit"; else -> "notice" },
+                m.optString("message"), m.optString("source").ifEmpty { null }, m.optInt("line"))
+        }
         send(ex, 204, "text/plain", ByteArray(0))
     } }
     http.createContext("/view-gone") { ex -> ex.use {

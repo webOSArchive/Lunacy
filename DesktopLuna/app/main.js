@@ -848,6 +848,11 @@ function logLine(wc, level, message, line, source) {
 		app: appId, message: String(message), source: where ? where + ":" + line : "" };
 	logLines.push(entry);
 	if (logLines.length > LOG_MAX) { logLines.shift(); }
+	// And to /var/log/messages in the webOS root, where palm-log reads it, as webOS's syslogd had it.
+	if (host) {
+		net.fetch(host + "/console", { method: "POST", headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ app: appId, level: entry.level, message: entry.message, source: where ? "file://" + where : "", line: line || 0 }) }).catch(() => {});
+	}
 	if (logWindow && !logWindow.isDestroyed()) { logWindow.webContents.send("luna-de:log-line", entry); }
 }
 function showLog() {

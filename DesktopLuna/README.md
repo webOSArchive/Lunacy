@@ -63,12 +63,18 @@ window; or press Ctrl/Cmd+O for a package, Ctrl/Cmd+Shift+O for a folder; or sta
 `LUNA_DE_INSTALL=<path>`. It appears on the launcher's Downloads tab. Drop a folder again after
 changing it; right-click an installed app's tile to remove it.
 
+**The SDK's tools** (webos-sdk-redux's novacomd, from the version after 0.4.1, finds a running
+Luna DE on the same machine): `novacom -l` lists it as `local luna-de`, and `palm-install`,
+`palm-launch` and `palm-log` work against `-d luna-de`. Luna DE runs no program of the host's for
+them, only its own few commands inside its webOS root, so `novaterm` and package scripts aren't
+there yet. See "The SDK's tools" in [Docs/luna-de.md](../Docs/luna-de.md).
+
 **Wi-Fi** in the launcher's Settings is a developer's switch: it simulates the network connection
 being lost (apps are told, and their requests fail) until it is tapped again.
 
 - `LUNA_DE_DATA=<folder>`: where Luna DE keeps its data (default: Electron's userData/data).
-  Installed apps go in `<folder>/cryptofs/apps/usr/palm/applications/<id>/` until `palm-install`
-  works (milestone 5).
+  Installed apps go in `<folder>/cryptofs/apps/usr/palm/applications/<id>/`, and its nduid
+  (how the SDK's tools tell copies apart) is `<folder>/nduid`.
 - `LUNA_DE_OPEN=<app id>`: open that app at start.
 
 The first test app, the Enyo 1 Sampler: `DesktopLuna/install-sampler.sh <data folder>` (it fetches

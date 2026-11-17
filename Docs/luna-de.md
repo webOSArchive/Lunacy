@@ -181,7 +181,7 @@ API 21 gate.
   `LUNA_DE_INSTALL`. A package goes through Lunacy's package installer, as from the App Catalog; a
   folder is copied in under its id, and dropped again to replace the copy. A banner says how it
   went, and the app is on the launcher's Downloads tab. A right-click on an installed app's tile
-  offers Remove. (`palm-install` comes with milestone 5.)
+  offers Remove. `palm-install` works too (see "The SDK's tools").
 - **WebSQL** (`openDatabase`), which Electron's Chromium no longer has: WebSql is in LunaCore on
   the same `core.Sql` as db8, with the typed statements and SQLite's own error messages each
   platform has to give alike (`SqlError`). `WebSqlSuite` runs on both SQLites. Mojo's Depot and
@@ -302,7 +302,9 @@ API 21 gate.
 2. *(Done 2026-11-16: WebSQL's native half is in LunaCore; see above.)*
 3. *(Done 2026-11-17: AppLifecycle is in LunaCore and both shells run it; see above. CardHost's
    own decisions, a card's group and placeholder, stay per platform for now.)*
-4. Milestone 5's tools (Novacom, the novacomd `local` transport), then packaging.
+4. *(Done 2026-11-17, not yet in a released SDK: Novacom's protocol is in LunaCore, and
+   webos-sdk-redux's novacomd has the `local` relay; see "The SDK's tools". `novaterm` and package
+   scripts wait for open question 2.)* Then packaging.
 
 **Checked on Android** after these moves (2026-11-16, luna-de build 668): `device-test.sh` on the
 Fold3, installed over 1.0.1's data (three mail accounts, 231 contacts): 50 passed, 0 failed
@@ -531,38 +533,60 @@ Not every move is a pure one, and the plan doesn't pretend otherwise:
 
 ### The SDK's tools
 
+*(Built 2026-11-17: design A, as codepoet chose it. The SDK change ships in its next minor
+version.)*
+
 Lunacy on Android serves novacom's device protocol on an abstract socket, and the SDK's
 novacomd reaches it through the adb server (webos-sdk-redux `novacomd/src/host/adb_relay.c`).
-On the desktop there is no adb. Two ways:
+On the desktop there is no adb, and Luna DE pretends to be no device: no adb, no emulator.
 
-- **A (recommended):** LunaCore's novacom listens locally. novacomd gains a small `local`
-  transport, which probes for it the way `adb_relay.c` probes adb and splices each connection
-  through unchanged. Luna DE is then listed in `novacom -l` like any device, `-d lunacy` still
-  picks it, and the protocol stays the same.
-- **B:** reuse novacomd's existing TCP transport (`novacom-tcp`). It speaks the device
-  daemon's framing and nduid handshake, which Lunacy's novacom doesn't implement today, so
-  this means more new protocol code in Lunacy.
+- **The protocol is LunaCore's** `NovacomProtocol`: one channel per connection, the command line,
+  `ok 0`, the 0xdecafbad packets, the return code. It is Android's `Novacom.kt` moved; Android
+  keeps its socket, its check on who connects and how a command runs (busybox in the webOS root),
+  and Luna DE has its own (`DesktopNovacom`).
+- **The socket** is a Unix-domain socket of the user running Luna DE: on Linux and macOS
+  `/tmp/luna-de-<uid>/novacom-<pid>.sock`, in a folder only that user can open; on Windows
+  `%ProgramData%\luna-de\novacom-<pid>.sock`. One per running copy, so two never collide. Its
+  nduid is made once and kept in Luna DE's data folder.
+- **novacomd's `local` relay** (webos-sdk-redux `novacomd/src/host/local_relay.c`) looks there
+  every 3 s, reads each copy's nduid with `get file:///proc/nduid` as `adb_relay.c` does, gives
+  it a port and splices every client connection through unchanged. `novacom -l` lists it as
+  `<port> <nduid> local luna-de`, and the tools reach it with `-d luna-de`. On Linux and macOS a
+  folder or socket that isn't owned by the user its name says is passed over. `-L`
+  (`--no-local`) turns the search off. `webos-tools.jar` needed nothing: Luna DE's build info
+  says `Lunacy Luna DE`, which it already knows.
+- **No host program runs.** A `run` is one of Luna DE's own commands, each held inside the webOS
+  root (a path that leaves it, by `..` or otherwise, is refused): `luna-send` (on the private
+  bus, as `novacomd`, as root's was), `tail` (with `-f`, for `palm-log`), `cat`, `ls`, `mkdir`,
+  `rm`, `rmdir`, `uname`, and `sh -c` holding one of those (the tools wrap luna-send as `exec
+  /usr/bin/luna-send … 2>/dev/null`; anything with a pipe, a list or other redirection is
+  refused). These are exactly what `palm-install`, `palm-launch`, `palm-log` and `palm-run` send,
+  measured on the Fold3 on 2026-11-17. Anything else answers `file does not exist`, the truth on
+  this device. `get` and `put` reach files in the root only.
+- **Not yet:** `open tty://` (`novaterm`) and package scripts, which need a shell that is held
+  inside the root on every host (open question 2). `connect tcp-port://` (the debugger), as on
+  Android: use Electron's DevTools.
+- **Apps' console output goes to `/var/log/messages`** (2026-11-17), as AndroidLuna's AppWindow
+  sends it (nothing from an app that handles people's own data), so `palm-log -f <app>` follows
+  an app; the file is made when Luna DE starts, as a device always had one.
 
-`run file://` commands (postinsts, `novacom run`, `novaterm`) run in Lunacy's webOS root with
-busybox on Android. On the desktop, Linux and macOS can use a host busybox or the system shell
-with webOS paths mapped; Windows needs a bundled busybox-w32 or an equivalent. This is an
-open question.
+**Who may connect.** The socket is the user's own, but novacomd (root, or Windows' service)
+gives each device a port on 127.0.0.1, which any local user can reach: the same as a TouchPad on
+USB, or a Lunacy device through a shared adb server. What a connection can do is what the
+commands above can, inside Luna DE's root. On Windows the ProgramData folder is open to the
+machine's users; tightening it to the user's own ACL is an open item.
 
-Two things Android gave for free have to be built here:
-
-- **Who may connect.** On Android, novacom serves only a peer running as root or adb's shell
-  user (`Novacom.kt`, by the socket's peer credentials). A fixed localhost TCP port has no
-  such check: any process on the machine could run commands as the developer. So the listener
-  is a per-user Unix socket or named pipe (the JVM and Windows 10 both have them), or a TCP
-  port that demands a token kept in the user's own files. Two running copies of Luna DE must
-  not collide either.
-- **Containment.** On Android a postinst or `novacom run` is held by the app's sandbox. On the
-  desktop a script run by "the system shell with webOS paths mapped" runs as the developer on
-  their real machine, and an absolute path in it is the host's path. Package scripts have to
-  run, and have to be unable to reach outside the webOS root. How (a namespace or chroot
-  where the host has one, a busybox that resolves paths inside the root, or something else)
-  is open question 2, and it is settled before milestone 5 ships anything that installs
-  packages.
+**Checked** (2026-11-17, Linux): through a test build of novacomd on other ports (the installed
+one is shared with the TouchPad, and swapping it waits for codepoet), Luna DE was listed as `local
+luna-de`; palm-install's commands (`mkdir -p`, `put`, `ls -l`, `installNoVerify`, `rm -f`),
+palm-launch's (`listApps`, `launch`, `running`, `close`) and palm-log's (`tail -f
+/var/log/messages`, following the Clock's console as it started) all worked, and the tail's
+thread was gone once the client went; `run` of a host program, a `get` outside the root, `cat`
+of `/etc/../../…` and `sh -c` with a list were all refused. The real `palm-*` tools find a device
+through the installed novacomd, so they run against Luna DE once it has the relay. Android after
+the move, on the Fold3 through the installed novacomd: palm-install, `--list`, palm-launch and
+`-c`, palm-log `-f`, `-r`, `novacom run`, `open tty://0`, stderr and a return code of 3. Not
+built or run on Windows or macOS yet.
 
 ## Rule 0
 
@@ -648,7 +672,8 @@ Settled: `luna-de` stays on its branch until stable; main is bug fixes only mean
 onto `luna-de`, and nothing goes back until the refactoring is done and proven (codepoet,
 2026-11-15; "The branch" under Risks).
 
-1. The novacom transport: A (a novacomd `local` transport) or B (the TCP transport)?
+1. *(Settled 2026-11-17, codepoet: A, a novacomd `local` relay; no adb, no emulator. See "The
+   SDK's tools".)*
 2. The webOS root's shell: how package scripts are kept inside the root on each host, and on
    Windows a bundled busybox-w32 or a mapped minimal shell?
 3. Does Luna DE share a version number with Lunacy, or have its own?

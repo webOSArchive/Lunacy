@@ -183,7 +183,7 @@ fun main(args: Array<String>) {
     // on its category's or keywords' page, alphabetically. No "android" tab: on Android it
     // holds Android's own apps (shell/AndroidApps).
     val launcherPages = LauncherPages(assets)
-    val launcher = org.webosarchive.lunacy.card.LauncherLayout(launcherPages, File(data, "launcher.json"), setOf("favorites"))
+    val launcher = org.webosarchive.lunacy.card.LauncherLayout(launcherPages, FileKeyedStore(File(data, "launcher.json")), setOf("favorites"))
     http.createContext("/shell") { ex -> ex.use {
         val apps = registry.launchPoints
         val phone = shell.device == org.webosarchive.lunacy.card.DeviceProfile.PRE3

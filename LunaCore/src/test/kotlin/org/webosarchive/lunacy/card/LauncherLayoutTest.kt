@@ -18,7 +18,13 @@ class LauncherLayoutTest {
     private val assetsDir = File("../AndroidLuna/src/main/assets")
     private lateinit var registry: AppRegistry
     private lateinit var layout: LauncherLayout
-    private lateinit var file: File
+    private lateinit var store: MapStore
+    class MapStore : org.webosarchive.lunacy.core.KeyedStore {
+        val map = LinkedHashMap<String, String>()
+        override fun all(): Map<String, String> = map
+        override fun put(key: String, value: String) { map[key] = value }
+        override fun remove(key: String) { map.remove(key) }
+    }
 
     private fun app(dir: File, id: String, extra: String = "") {
         File(dir, id).mkdirs()
@@ -32,8 +38,8 @@ class LauncherLayoutTest {
         app(bundled, "com.example.prefs", ""","keywords":["settings"]""")
         val assets = FolderAssets(listOf("" to assetsDir, "apps/" to bundled))
         registry = AppRegistry(AppFiles(assets, File(tmp, "installed").apply { mkdirs() }))
-        file = File(tmp, "launcher.json")
-        layout = LauncherLayout(LauncherPages(assets), file, setOf("favorites"))
+        store = MapStore()
+        layout = LauncherLayout(LauncherPages(assets), store, setOf("favorites"))
     }
 
     private fun apps() = registry.launchPoints
@@ -94,5 +100,28 @@ class LauncherLayoutTest {
         assertEquals(listOf("com.example.b", "com.example.a"), layout.dock(apps()).map { it.id })
         layout.saveDock(JSONArray())
         assertTrue(layout.dock(apps()).isEmpty())
+    }
+
+    @Test fun aHiddenAppKeepsItsPlace() {
+        layout.saveTabs(JSONArray(listOf(tab("apps", "apps", "com.example.c", "com.example.a", group("G", "com.example.b", "com.example.d")))))
+        // a and b are hidden: the launcher saves without them, and they keep their places.
+        layout.saveTabs(JSONArray(listOf(tab("apps", "apps", "com.example.c", group("G", "com.example.d")))), setOf("com.example.a", "com.example.b"))
+        assertEquals("apps:c,a,G(b+d) | download: | prefs:prefs", show())
+    }
+
+    @Test fun aLauncherFromBeforeTabsIsReadByIndex() {
+        store.put("pages", "[[\"com.example.d\",\"com.example.b\"]]")
+        assertEquals("apps:d,b,a,c | download: | prefs:prefs", show())
+    }
+
+    @Test fun thePlatformsHooksPlaceItsOwnApps() {
+        val l = LauncherLayout(LauncherPages(FolderAssets(listOf("" to assetsDir))), store, alias = { id, _ -> if (id == "com.palm.app.browser") "com.example.c" else null },
+            platformPage = { a -> if (a.id == "com.example.d") "prefs" else null }, rename = { d, n -> if (d == "apps" && n == "old") "new" else n })
+        store.put("tabs", "[{\"designator\":\"apps\",\"name\":\"old\",\"apps\":[]}]")
+        val tabs = l.tabs(apps())
+        assertEquals("new", tabs.first { it.designator == "apps" }.name)
+        assertTrue(tabs.first { it.designator == "prefs" }.tiles.any { (it as? LauncherLayout.Tile.App)?.app?.id == "com.example.d" })
+        // The default layout's first app on the apps page is the browser, which stands for c here.
+        assertEquals("com.example.c", (tabs.first { it.designator == "apps" }.tiles.first() as LauncherLayout.Tile.App).app.id)
     }
 }

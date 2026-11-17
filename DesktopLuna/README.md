@@ -31,8 +31,8 @@ tap on the status bar's title opens the app's menu; banners and dashboards show 
 | Esc | The back gesture |
 | F6, F7, F8, F9 | Turn the device up, down, right, left (portrait is 768 x 1024) |
 | The bezel's right corner | Turn the device between wide and tall |
-| The device's picture, beside it | An HP TouchPad, an HP Pre3 (480 x 800, webOS 2.2.4), or **this screen**: a TouchPad at the size of Luna DE's window, which is then resizable and starts filling the display, as Lunacy fills an Android tablet's screen. Changing it closes the open apps; Luna DE starts as the device it was last |
-| F11, or the bezel's right-click menu | Full screen, as this screen (becoming it first), and back out. The same menu picks the device |
+| The device's picture, beside it | An HP TouchPad, an HP Pre3 (480 x 800, webOS 2.2.4), or **Full Screen (windowed)**: a TouchPad at the size of Luna DE's window, which is then resizable and starts filling the display, as Lunacy fills an Android tablet's screen. Changing it closes the open apps; Luna DE starts as the device it was last |
+| F11, or the bezel's right-click menu | Full Screen: the whole display, edge to edge (becoming Full Screen (windowed) first), and back out. The same menu picks the device |
 | The bezel's magnifying glass (as a Pre3) | Phone Zoom for the app whose card is up: laid out 640 px wide and shown whole, for an app written for a TouchPad |
 | The bezel's `</>` button | The log window: every app's console in one place, from when Luna DE started. Right-click it to inspect a card with Electron's developer tools (F12 does the same) |
 | The bezel's keyboard button | A real keyboard attached (lit) or not: without one, webOS's on-screen keyboard comes up for a text field and the app is resized and told, as on a device. Right-click it for the on-screen keyboard's size (XS, S, M, L) |

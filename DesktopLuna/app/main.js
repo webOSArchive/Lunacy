@@ -779,11 +779,12 @@ ipcMain.handle("luna-de:bezel-menu", () => {
 	if (!shell) { return false; }
 	const full = shell.isFullScreen();
 	const items = [
-		{ label: full ? "Leave Full Screen" : "Full Screen", accelerator: "F11", click: () => toggleFullScreen() },
+		{ label: "Full Screen", type: "checkbox", checked: full, accelerator: "F11", click: () => toggleFullScreen() },
 		{ type: "separator" },
 		{ label: "HP TouchPad", type: "radio", checked: device.id === "touchpad", click: () => setDevice("touchpad") },
 		{ label: "HP Pre3", type: "radio", checked: device.id === "pre3", click: () => setDevice("pre3") },
-		{ label: "This Screen (a TouchPad at the window's size)", type: "radio", checked: device.id === FILL, click: () => setDevice(FILL) },
+		// The names codepoet gave them: the device at the window's size is "Full Screen (windowed)".
+		{ label: "Full Screen (windowed)", type: "radio", checked: device.id === FILL, click: () => setDevice(FILL) },
 	];
 	Menu.buildFromTemplate(items).popup({ window: shell });
 	return true;

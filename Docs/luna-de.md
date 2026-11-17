@@ -89,8 +89,9 @@ API 21 gate.
   folder, and an app's goes when the app is removed. Not done: Device Info's own Phone Zoom
   list (`system/setFixedViewport` on Lunacy's service) and its width setting, and the list of
   defaults is a copy of AndroidLuna's until FixedViewport moves into LunaCore.
-- **This screen** (2026-11-17, codepoet: "have Luna fill the available space, like it does on
-  Android"). A third device beside the TouchPad and the Pre3: a TouchPad at whatever size Luna
+- **Full Screen (windowed)** (2026-11-17, codepoet: "have Luna fill the available space, like it
+  does on Android"; first called "this screen", renamed by codepoet the same day, with F11's
+  edge-to-edge mode named plain "Full Screen"). A third device beside the TouchPad and the Pre3: a TouchPad at whatever size Luna
   DE's window is. The window is then resizable and starts maximized, and F11 fills the display
   (from either other device it becomes this one first). Apps are told a TouchPad whose screen
   is the window's, in TouchPad px, as `ShellActivity.deviceInfo` tells them on an Android tablet;

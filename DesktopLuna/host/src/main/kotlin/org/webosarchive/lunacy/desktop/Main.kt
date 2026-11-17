@@ -197,7 +197,7 @@ fun main(args: Array<String>) {
             .put("userAgent", shell.device.userAgent)
             // The device Luna DE is being, for Electron to size and scale its window by.
             .put("device", JSONObject().put("id", if (shell.filling) "screen" else if (shell.device == org.webosarchive.lunacy.card.DeviceProfile.PRE3) "pre3" else "touchpad")
-                .put("name", if (shell.filling) "This screen" else shell.device.deviceName).put("width", shell.screenWidth).put("height", shell.screenHeight)
+                .put("name", if (shell.filling) "Full Screen (windowed)" else shell.device.deviceName).put("width", shell.screenWidth).put("height", shell.screenHeight)
                 .put("scale", shell.scale).put("orientation", shell.orientation)
                 .put("virtualKeyboard", shell.device == org.webosarchive.lunacy.card.DeviceProfile.TOUCHPAD))
             .put("phoneZoom", shell.phoneZoom())

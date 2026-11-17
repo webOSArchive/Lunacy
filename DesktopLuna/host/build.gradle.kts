@@ -30,3 +30,18 @@ dependencies {
     implementation("org.xerial:sqlite-jdbc:3.46.1.3")
     implementation("com.ibm.icu:icu4j:75.1")
 }
+
+/**
+ * Text Assist's corrector is LunaKeyboard's own (Corrector.kt, plain Kotlin, adapted from Pre
+ * Keyboard under Apache 2.0: LunaKeyboard/NOTICE), compiled into the host as it is, so Luna DE's
+ * keyboard corrects as Lunacy's does. LunaKeyboard depends on nothing in Lunacy and stays so: the
+ * file is copied in at build time, not shared as a module.
+ */
+val keyboardCorrector = tasks.register<Copy>("keyboardCorrector") {
+    // With the keymap it measures keys' nearness on (plain Kotlin too).
+    from(rootProject.file("LunaKeyboard/src/main/java/org/webosarchive/keyboard/Corrector.kt"),
+         rootProject.file("LunaKeyboard/src/main/java/org/webosarchive/keyboard/Keymap.kt"))
+    into(layout.buildDirectory.dir("generated/keyboard/org/webosarchive/keyboard"))
+}
+kotlin.sourceSets["main"].kotlin.srcDir(layout.buildDirectory.dir("generated/keyboard"))
+tasks.named("compileKotlin") { dependsOn(keyboardCorrector) }

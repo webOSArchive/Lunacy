@@ -257,8 +257,19 @@ API 21 gate.
   2 s at most, then it goes on as a page in no window, with a warning in the log).
 - An app installed from its folder is a copy: an edit to the folder shows after it is dropped
   again (a link to the folder would be read as outside the app's tree and refused).
-- The on-screen keyboard has no press-and-hold alternates, no caret dragging from its trackball,
-  no emoji layer and no auto-capitalisation yet; its Enter key always says "Enter".
+- **The on-screen keyboard is LunaKeyboard's** (2026-11-17): the press-and-hold balloon of
+  alternates (over the card, which steps aside for it as for the system menu), backspace's
+  repeat (letters, then whole words after 1.5 s), the trackball's caret (with shift, a
+  selection), the emoji layer (CE's list and OpenMoji pictures, page by page), shift's lock,
+  auto-capitalization, and Return's label from the field (Done for one line, Enter for many, or
+  what `enterkeyhint` asks). **Text Assist** runs in the app's page (`textassist.js`), what
+  LunaKeyboard's service does to the field: auto-correction by LunaKeyboard's own Corrector
+  (its source compiled into the host, its word list read there), the plop, the gray dots under
+  a corrected word and the bubble of alternates a tap on it opens, undo by backspace, Double
+  Space For Period. Text goes in as an input method commits it; Backspace, Return, Tab and the
+  arrows go as real keys, as on Android. Not here: Shortcuts (Android's personal dictionary,
+  which a desktop hasn't got) and Text Assist's switches (all on, as the reference TouchPad
+  had them).
 - As a Pre3, the launcher follows AndroidLuna's phone rules too (Launcher.Phone: a 40 px tab bar
   of 150 px tabs that scrolls sideways, 84 x 112 cells, 56 px icons, 13 px bold labels; three
   columns held tall, six held wide). Not carried over: a phone's two permanent tabs, groups and

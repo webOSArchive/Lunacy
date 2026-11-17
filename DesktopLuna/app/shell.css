@@ -383,6 +383,9 @@ body.phone #zoom { display: block; }
 /* The virtual keyboard: the screen's foot, over the card area, under the status bar's menus. */
 #keyboard { position: absolute; left: 0; bottom: 0; z-index: 35; display: block; }
 #keyboard[hidden] { display: none; }
+/* Its press-and-hold balloon, over the keyboard and the card above it; it takes no pointer (the keyboard keeps it). */
+#keyboard-popup { position: absolute; left: 0; bottom: 0; z-index: 36; display: block; pointer-events: none; }
+#keyboard-popup[hidden] { display: none; }
 /* And in the other corner: the card on the screen (or the one in front in the card view) popped
    out into a window of its own. A window outline with an arrow leaving it. */
 #popout { position: absolute; left: 14px; top: 50%; width: 30px; height: 30px; margin-top: -15px; border: 0; background: transparent; cursor: pointer; opacity: 0.7; }

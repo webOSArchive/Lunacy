@@ -440,6 +440,9 @@ function callMojo(wc, fn, args) {
 
 async function raiseKeyboard(c) {
 	const r = cardRect(), wc = c.view.webContents;
+	// The page's Text Assist starts clean for this field, with its pictures, and says what to show.
+	wc.executeJavaScript("window.__lunaDeKeyboard?(__lunaDeKeyboard.setArt(" + JSON.stringify(textAssistArt()) + "),__lunaDeKeyboard.reset()):null", true)
+		.then((s) => { if (s) { send("luna-de:kb-state", s); } }).catch(() => {});
 	c.shrunk = c.keyboardResizes !== false;
 	await callMojo(wc, "keyboardShown", "true");
 	if (keyboardCard !== c) { return; }
@@ -461,18 +464,57 @@ async function lowerKeyboard(c, blur) {
 }
 
 /** A key of the virtual keyboard, typed into the card it is up for. */
+/**
+ * What the on-screen keyboard pressed, for the card it is up for: [key] is { text }, { emoji },
+ * { backspace, word }, { enter }, { tab }, { hide }, { cursor }. The page's Text Assist
+ * (textassist.js) does what LunaKeyboard's service does to the field, and answers with the key
+ * events to send (Backspace, Return, Tab, the arrows: real keys, as on Android) and what the
+ * keyboard is to show. In order, one at a time, as an input method's edits are.
+ */
+let keyChain = Promise.resolve();
 function typeKey(key) {
 	const c = keyboardCard;
 	if (!c || c.view.webContents.isDestroyed()) { return; }
 	const wc = c.view.webContents;
-	wc.focus();
-	if (key.hide) { lowerKeyboard(c, true); keyboardCard = null; send("luna-de:keyboard", { show: false, height: KEYBOARD }); return; }
-	const code = key.code || key.text;
-	wc.sendInputEvent({ type: "keyDown", keyCode: code });
-	if (key.text) { for (const ch of key.text) { wc.sendInputEvent({ type: "char", keyCode: ch }); } }
-	else if (key.code === "Return") { wc.sendInputEvent({ type: "char", keyCode: "\r" }); }
-	wc.sendInputEvent({ type: "keyUp", keyCode: code });
+	keyChain = keyChain.then(async () => {
+		if (wc.isDestroyed()) { return; }
+		wc.focus();
+		let r = null;
+		try { r = await wc.executeJavaScript("window.__lunaDeKeyboard?__lunaDeKeyboard.handle(" + JSON.stringify(key) + "):null", true); } catch (e) {}
+		if (!r) {
+			// No Text Assist in the page (it hasn't loaded): the plain thing.
+			if (key.text || key.emoji) { wc.insertText(key.text || key.emoji); }
+			r = { keys: key.backspace ? [{ key: "Backspace" }] : key.enter ? [{ key: "Return" }] : key.tab ? [{ key: "Tab" }] : [] };
+		}
+		for (const k of r.keys || []) { sendKey(wc, k.key, k.shift); }
+		if (r.state) { send("luna-de:kb-state", r.state); }
+		if (key.hide) { lowerKeyboard(c, true); keyboardCard = null; send("luna-de:keyboard", { show: false, height: KEYBOARD }); }
+	});
 }
+function sendKey(wc, code, shift) {
+	const modifiers = shift ? ["shift"] : [];
+	wc.sendInputEvent({ type: "keyDown", keyCode: code, modifiers });
+	if (code === "Return") { wc.sendInputEvent({ type: "char", keyCode: "\r", modifiers }); }
+	wc.sendInputEvent({ type: "keyUp", keyCode: code, modifiers });
+}
+
+/** Text Assist's pictures (the ate-* art the reference TouchPad's WebKit drew), as data URLs for the pages. */
+let assistArt = null;
+function textAssistArt() {
+	if (assistArt) { return assistArt; }
+	const dir = path.join(REPO, "LunaKeyboard", "src", "main", "assets", "assist");
+	const names = { left: "ate-left", middle: "ate-middle", right: "ate-right", down: "ate-arrow-down", up: "ate-arrow-up", divider: "ate-divider",
+		corrected: "ate-underline-corrected", misspelled: "ate-underline-mispelled" };
+	assistArt = {};
+	for (const k of Object.keys(names)) {
+		try { assistArt[k] = "data:image/png;base64," + fs.readFileSync(path.join(dir, names[k] + ".png")).toString("base64"); } catch (e) {}
+	}
+	return assistArt;
+}
+// The page's Text Assist says what the keyboard should show (a capital next, Return's label),
+// and when it corrected a word (the plop, which the shell plays).
+ipcMain.on("luna-de:kb-state", (e, s) => { if (keyboardCard && keyboardCard.view.webContents === e.sender) { send("luna-de:kb-state", s); } });
+ipcMain.on("luna-de:kb-plop", () => send("luna-de:kb-plop"));
 
 function removeCard(id) {
 	const c = cards.get(id);

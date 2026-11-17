@@ -42,6 +42,8 @@ contextBridge.exposeInMainWorld("luna", {
 	realKeyboard: () => ipcRenderer.invoke("luna-de:real-keyboard"),
 	keyboardSize: (size) => ipcRenderer.invoke("luna-de:keyboard-size", size),
 	onKeyboard: on("luna-de:keyboard"),
+	onKeyboardState: on("luna-de:kb-state"),
+	onKeyboardPlop: on("luna-de:kb-plop"),
 	onToggleCard: on("luna-de:toggle-card"),
 	onLauncher: on("luna-de:launcher"),
 	onScreen: on("luna-de:screen"),

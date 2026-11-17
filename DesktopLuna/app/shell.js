@@ -1846,6 +1846,24 @@
 		setTimeout(function () { if (!sys.open) { $("sysmenu").hidden = true; } }, 200);
 	}
 
+	/**
+	 * The on-screen keyboard's balloon reaches above the keyboard, over the card that is up: its
+	 * live view steps aside while the balloon is there, its picture (the page above a keyboard
+	 * [kbHeight] tall) in its place, as for the system menu.
+	 */
+	var kbCover = null;
+	window.__lunaCover = function (on, kbHeight) {
+		var c = maximized ? cur() : null;
+		if (!on) { if (kbCover) { var k = kbCover; kbCover = null; k.img.style.height = ""; window.luna.cover(false); } return; }
+		if (!c || !c.id || kbCover) { return; }
+		kbCover = c;
+		window.luna.snapshot(c.id).then(function (url) {
+			if (kbCover !== c) { return; }
+			if (url) { c.img.src = url; c.img.style.height = (AREA - (kbHeight || 0)) + "px"; }
+			window.luna.cover(true);
+		});
+	};
+
 	/** SystemMenu.qml's closeMenuTimer. */
 	function sysCloseIn(ms) { clearTimeout(sys.closer); sys.closer = setTimeout(sysClose, ms); }
 

@@ -205,6 +205,15 @@ fun main(args: Array<String>) {
         send(ex, 200, "application/json; charset=utf-8", out.toString().toByteArray())
     } }
 
+    // Text Assist for the on-screen keyboard: what a finished word becomes, and a word put back.
+    val textAssist = DesktopTextAssist(File(repo, "LunaKeyboard/src/main/assets/assist/dictionary.txt")).also { it.start() }
+    http.createContext("/assist") { ex -> ex.use {
+        val q = query(ex)
+        q["learn"]?.let { textAssist.learn(it) }
+        val out = q["w"]?.let { textAssist.correct(it) } ?: JSONObject()
+        send(ex, 200, "application/json; charset=utf-8", out.toString().toByteArray())
+    } }
+
     // Just Type: what a text finds (with content=1, the apps' content searches too), and a choice made.
     val justType by lazy { DesktopJustType(main, bus, registry, shell.universalSearch!!, ::entryOf) }
     http.createContext("/justtype") { ex -> ex.use {

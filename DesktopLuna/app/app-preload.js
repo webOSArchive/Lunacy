@@ -39,6 +39,8 @@
 	// sent from a window as window.open makes it was never answered, and hung the app.
 	var ipc = null;
 	try { ipc = require("electron").ipcRenderer; ipc.send("luna-de:page", page); } catch (e) {}
+	// Text Assist, for the on-screen keyboard's typing into this page's fields (textassist.js).
+	try { require("./textassist.js")(window, ipc); } catch (e) { console.error("Luna DE: text assist: " + e); }
 	// window.close() closes this page's own window (its card, its dashboard), as on webOS. Electron's
 	// own would close the window the view sits in, which is the whole device, and Luna DE with it.
 	if (ipc) { try { window.close = function () { ipc.send("luna-de:close-self"); }; } catch (e) {} }

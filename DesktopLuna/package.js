@@ -390,6 +390,9 @@ function signingPlan() {
 					{ from: assetsZip, to: "assets.zip" },
 					{ from: repo("AndroidLuna/src/main/assets/luna"), to: "AndroidLuna/src/main/assets/luna" },
 					{ from: repo("LunaKeyboard/src/main/assets/keyboard"), to: "LunaKeyboard/src/main/assets/keyboard" },
+					// The emoji layer's pictures and Text Assist's word list and sound.
+					{ from: repo("LunaKeyboard/src/main/assets/emoji"), to: "LunaKeyboard/src/main/assets/emoji" },
+					{ from: repo("LunaKeyboard/src/main/assets/assist"), to: "LunaKeyboard/src/main/assets/assist" },
 					{ from: nodeHome, to: "DesktopLuna/node" },
 					{ from: path.join(stage, "host"), to: "host" },
 					{ from: path.join(stage, "jre"), to: "jre" },

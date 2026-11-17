@@ -109,8 +109,8 @@ enyo.kind({
 			{name: "notifications", kind: "VFlexBox", className: "page", align: "center", pack: "center", components: [
 				{content: $L("Notifications"), className: "title"},
 				{kind: "VFlexBox", className: "contentDefaults box", components: [
-					{content: $L("Lunacy can show your Android apps' notifications the webOS way, as banners and dashboards."), className: "text"},
-					{content: $L("To use: turn on notification access for Lunacy in Android's settings, then come back here. Lunacy only shows them: it keeps none and sends none anywhere."), className: "text"},
+					{content: $L("Lunacy can show your Android notifications like webOS did: as banners and dashboards."), className: "text"},
+					{content: $L("To use: turn on notification access for Lunacy in Android's settings. Notification data will not be used in any other way."), className: "text"},
 					{name: "notificationsOk", className: "ok", showing: false},
 					{name: "notificationsMessage", className: "message", showing: false}
 				]},
@@ -335,7 +335,7 @@ enyo.kind({
 				if (inResponse.askAgain === false) {
 					this.locationViaSettings = true;
 					this.$.locationAllow.setCaption($L("Open Android Settings"));
-					this.$.locationMessage.setContent($L("Not allowed, and Android won't ask again. The System menu can't list Wi-Fi networks, and webOS apps can't find you, unless Location is allowed under Permissions in Android's settings for Lunacy."));
+					this.$.locationMessage.setContent($L("Not allowed, and Android won't ask again. The System menu can't list Wi-Fi networks, and webOS apps can't find you, unless Location is allowed in Android's settings."));
 				} else {
 					this.$.locationMessage.setContent($L("Not allowed. The System menu can't list Wi-Fi networks, and webOS apps can't find you, until it is allowed."));
 				}
@@ -344,7 +344,7 @@ enyo.kind({
 		}
 		// Android 13 and later can grey the switch out for an app installed from a file.
 		if (inResponse.permission == "notifications" && inResponse.opened && inResponse.restrictable) {
-			this.$.notificationsMessage.setContent($L("If Android shows the switch grayed out as a restricted setting, open Lunacy's App info in Android's settings, choose Allow restricted settings from its menu, then try again."));
+			this.$.notificationsMessage.setContent($L("If Android shows the switch grayed out, open Lunacy's App info in Android's settings, choose Allow restricted settings, then try again."));
 			this.$.notificationsMessage.setShowing(true);
 		}
 		this.$.status.call({});

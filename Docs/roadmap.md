@@ -110,6 +110,11 @@ The first 1.0.1 build of the day (647) was stopped: the inventory held an APK ag
 first (1714852) and the release built with it. Still to do: the F-Droid feed, the GitHub
 release, the release notes (step 7).
 
+**1.0.2 (2026-11-17):** one change since 1.0.1. Two people on 1.0.1 got no Android
+notifications in Lunacy, because they never found the Android Apps switch in Screen & Lock.
+First Use now offers Notification access once, on a page of its own, and from Android 11 the
+switch opens Lunacy's own entry on Android's screen (f337bfb, f524b4d; luna-deltas B14).
+
 **Then Luna DE**, on the `luna-de` branch (Docs/luna-de.md there): Lunacy on the desktop for
 webOS developers, in one Electron window running the shell, sharing LunaCore with this Android
 build. Main stays bug fixes only, each cherry-picked onto luna-de, until that work is done and

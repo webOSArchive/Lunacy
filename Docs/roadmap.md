@@ -142,8 +142,9 @@ Tier 2:            fresh-install.sh      Nexus 5 (Android 6.0.1, arm32 debug), t
 Tier 3:            codepoet's, not run
 
 What this run does NOT decide, despite being green:
-                   - First Use's Notifications page by eye: the fresh install finishes First Use
-                     over the bus and walks no page. A tiny screen is still to be seen (codepoet)
+                   - First Use's Notifications page: the fresh install finishes First Use over
+                     the bus and walks no page, so no script saw it. codepoet looked at the page
+                     themselves (2026-11-17); which device is not recorded
                    - the grant being noticed on the page after Android's screen
                    - the Fold3 (it stays on the luna-de build, codepoet), the Nexus 7 and the
                      A7 Lite (off the network)
@@ -151,7 +152,8 @@ What this run does NOT decide, despite being green:
                    - the update path from 1.0.1 through F-Droid (codepoet's, on the Kyocera)
 ```
 
-Still to do: the F-Droid feed, the GitHub release, the release notes.
+The F-Droid feed carries 652 (2026-11-17: codepoet uploaded it, and all 65 files on the server
+match the local copy). Still to do: the GitHub release, the release notes.
 
 **Then Luna DE**, on the `luna-de` branch (Docs/luna-de.md there): Lunacy on the desktop for
 webOS developers, in one Electron window running the shell, sharing LunaCore with this Android

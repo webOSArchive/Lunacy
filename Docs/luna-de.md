@@ -115,8 +115,9 @@ API 21 gate.
   click does what a hold does on a tab and on the bar. **The quick-launch bar:** holding an
   icon picks it up, to another slot or up and out of the bar. All of it is kept by the host in
   `launcher.json`, by LunaCore's `LauncherLayout`: Launcher.setApps' rules and LauncherStore's
-  saved shape, with `LauncherLayoutTest`. AndroidLuna's launcher still runs its own copy of
-  those rules in its view; moving it onto LauncherLayout is not done. **Pages swipe**
+  saved shape, with `LauncherLayoutTest`. AndroidLuna's launcher places its pages with it too
+  (2026-11-17, its "launcher" preferences as the store, and hooks for Android's own: its apps'
+  tab, the device's phone and camera). **Pages swipe**
   (2026-11-17): a sideways drag pans them, the neighbours alongside and a fifth of a page past
   either end; let go it snaps to the nearest over 250 ms, or a flick goes on to the next (200 to
   1200 ms by its speed), as Launcher's pagePos does; a tab tapped slides there; a drag up or down
@@ -136,8 +137,8 @@ API 21 gate.
   them): a search launches its app with the words encoded under its launchParam, an action
   with the words as typed, a content search runs the app's db8 query with the words and opens
   a result with its `launchParamDbField`; all as `com.palm.launcher` on the bus.
-  `JustTypeSearchTest` holds it with an app that declares all three. AndroidLuna's panel
-  still carries its own copy of those rules. At parity with Lunacy on Android (codepoet,
+  `JustTypeSearchTest` holds it with an app that declares all three. AndroidLuna's
+  JustTypePanel runs the same rules (2026-11-17), keeping only its drawing. At parity with Lunacy on Android (codepoet,
   2026-11-17: parity, no further), its spacing measured against JustTypePanel's: contacts
   aren't searched and no recent searches are kept, there as here.
 - **The system menu** (2026-11-17, codepoet: the date and Wi-Fi for now). The status bar's

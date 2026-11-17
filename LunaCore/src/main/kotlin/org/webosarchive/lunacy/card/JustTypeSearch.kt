@@ -8,8 +8,7 @@ import org.json.JSONObject
  * LaunchAndSearch.js, Actions.js, DbSearch.js, Util) and as AndroidLuna's JustTypePanel has
  * it: which apps a text matches, whether it reads as an address or an email address, the db8
  * call each app's content search makes with the words, and the launch each choice makes. No
- * drawing: Luna DE's shell draws from this; AndroidLuna's panel still carries its own copy of
- * these rules (Docs/luna-de.md).
+ * drawing: Luna DE's shell and AndroidLuna's JustTypePanel both draw from this.
  */
 object JustTypeSearch {
     /** SEARCHITEMSLIMIT, ACTIONITEMSLIMIT: four, then More…. */

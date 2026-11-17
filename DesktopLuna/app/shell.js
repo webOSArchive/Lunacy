@@ -1347,7 +1347,11 @@
 			var on = !sys.online;
 			window.luna.setNetwork(on);
 			sysCloseIn(on ? 1000 : 300);
-		}, true));
+		}));
+		// Where a device listed its networks: grey, and not to be tapped, so it is plain that this
+		// switches Luna DE's own simulated network and leaves the machine's alone (codepoet).
+		drawer.appendChild(divider());
+		drawer.appendChild(row("sub info", "Simulated connectivity", null, true));
 		box.appendChild(drawer);
 		drawer.style.height = sys.wifiOpen ? "auto" : "0px";
 		if (sys.wifiOpen) { drawer.style.height = drawer.scrollHeight + "px"; }

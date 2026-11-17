@@ -399,7 +399,7 @@ body.sysmenu #sysmenu { opacity: 1; }
 #sysmenu .row.selectable:active::before { content: ""; position: absolute; left: 4px; right: 4px; top: 0; bottom: 0; z-index: -1; box-sizing: border-box;
 	border-style: solid; border-width: 0 19px; border-image: url("../../AndroidLuna/src/main/assets/luna/images/menu-selection-gradient-default.png") 0 19 fill / 0 19px stretch; }
 #sysmenu .row.selectable.last:active::before { border-image-source: url("../../AndroidLuna/src/main/assets/luna/images/menu-selection-gradient-last.png"); }
-#sysmenu .row.date { color: #aaa; }
+#sysmenu .row.date, #sysmenu .row.info { color: #aaa; }
 #sysmenu .row.sub { padding-left: 30px; }
 #sysmenu .row .text { overflow: hidden; text-overflow: ellipsis; }
 #sysmenu .row .state { margin-left: auto; padding: 0 14px 0 12px; font-size: 13px; color: #aaa; text-transform: uppercase; }

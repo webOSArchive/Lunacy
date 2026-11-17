@@ -139,7 +139,9 @@ API 21 gate.
   right-hand group opens it, drawn as AndroidLuna's SystemMenu draws SystemMenu.qml (300 px in
   menu-dropdown-bg.png, 42 px rows, the 200 ms fade, the group's tab behind it while it is
   open). It holds the date and the Wi-Fi drawer, whose Turn off / Turn on WiFi is the simulated
-  network (the same switch as the Wi-Fi tile), its header saying ON or OFF; the menu goes 300 ms
+  network (the same switch as the Wi-Fi tile), its header saying ON or OFF; under it, where a
+  device listed its networks, a grey "Simulated connectivity" that can't be tapped, so it is
+  plain the machine's own network isn't being changed (codepoet); the menu goes 300 ms
   after Turn off and a second after Turn on, as on a device. A tap outside closes it and is
   eaten. Not there yet: the battery, brightness, Bluetooth, Airplane Mode, Rotation Lock, Mute.
   **Delta:** over a card that is up, the card's live view steps aside for the menu and its

@@ -5,6 +5,11 @@ Status: **runs Enyo apps with their data and the shell's notifications** (2026-1
 
 ## Where it stands (2026-11-17)
 
+**Released 2026-11-17: Luna DE 0.5.0, with webOS SDK Redux 0.5** (its version is the SDK's;
+source: tag `luna-de-0.5`). Linux, macOS (Apple Silicon native, Intel) and Windows (installer,
+portable), each checked by codepoet or here. Done for now; next is Lunacy 1.1.0, which brings
+this branch's refactors to `main` (Docs/roadmap.md).
+
 **In LunaCore now** (moved, packages unchanged, Android calling the same classes): the bus,
 AppServer and its transforms, the app registry, **db8** (on `core.Sql`: android.database.sqlite
 on Android, SQLite over JDBC on the desktop, with ICU's collation on both), the **Configurator**,

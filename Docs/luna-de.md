@@ -116,8 +116,12 @@ API 21 gate.
   icon picks it up, to another slot or up and out of the bar. All of it is kept by the host in
   `launcher.json`, by LunaCore's `LauncherLayout`: Launcher.setApps' rules and LauncherStore's
   saved shape, with `LauncherLayoutTest`. AndroidLuna's launcher still runs its own copy of
-  those rules in its view; moving it onto LauncherLayout is not done. Not here: pages swiped
-  sideways (a tab is tapped), and an install's progress on the downloads page.
+  those rules in its view; moving it onto LauncherLayout is not done. **Pages swipe**
+  (2026-11-17): a sideways drag pans them, the neighbours alongside and a fifth of a page past
+  either end; let go it snaps to the nearest over 250 ms, or a flick goes on to the next (200 to
+  1200 ms by its speed), as Launcher's pagePos does; a tab tapped slides there; a drag up or down
+  scrolls the page; a trackpad's sideways swipe turns it. Not here: an install's progress on
+  the downloads page.
 - **Just Type, with the apps' own integrations** (2026-11-17), so a developer can test theirs.
   The pill in the card view, or any printable key there or in the launcher, opens it: Palm's
   Just Type app as AndroidLuna's JustTypePanel draws it (the field, the filter tabs, LAUNCH,

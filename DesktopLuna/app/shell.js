@@ -449,6 +449,116 @@
 		$("empty-page").hidden = cells.length > 0;
 	}
 
+	// ---- the pages side by side (Launcher's pagePos) ----
+	//
+	// A sideways drag on a page that started on no icon (or on one, outside edit mode) pans the
+	// pages with the pointer, the neighbours alongside, up to a fifth of a page past either end.
+	// Let go, it snaps to the nearest page over 250 ms InQuad, or, flicked faster than 500 px/s,
+	// goes on to the next that way, as long as the flick's speed would take it (200 to 1200 ms,
+	// OutCubic). A tab tapped slides there the same 250 ms. Up and down, a drag scrolls the page.
+	var SNAP_MS = 250, FLICK_V = 500, FLICK_MIN_MS = 200, FLICK_MAX_MS = 1200;
+	var IN_QUAD = "cubic-bezier(0.55, 0.085, 0.68, 0.53)", OUT_CUBIC = "cubic-bezier(0.215, 0.61, 0.355, 1)";
+	var strip = null;   // the neighbours while the pages move: { ghosts: { -1: el, 1: el }, offset }
+
+	/** A picture of page [n], laid out as the grid is, for beside it while the pages move. */
+	function ghostOf(n) {
+		var grid = $("grid"), g = document.createElement("div"), cs = getComputedStyle(grid);
+		g.className = "page-ghost";
+		["gridTemplateColumns", "gridAutoRows", "rowGap", "paddingTop", "paddingLeft", "paddingRight", "paddingBottom", "alignContent"].forEach(function (k) { g.style[k] = cs[k]; });
+		g.style.top = grid.offsetTop + "px"; g.style.height = grid.offsetHeight + "px";
+		(pages[n] ? pages[n].apps : []).forEach(function (c) { var t = tileFor(c); t.style.pointerEvents = "none"; g.appendChild(t); });
+		$("launcher").appendChild(g);
+		return g;
+	}
+
+	function stripOpen() {
+		if (strip) { return strip; }
+		strip = { ghosts: {}, offset: 0 };
+		[-1, 1].forEach(function (d) { if (pages[page + d]) { strip.ghosts[d] = ghostOf(page + d); } });
+		return strip;
+	}
+
+	/** The pages [px] along from where the current one rests (negative: towards the next). */
+	function stripTo(px, ms, easing) {
+		var s = stripOpen();
+		s.offset = px;
+		var t = ms ? "transform " + ms + "ms " + easing : "none";
+		$("grid").style.transition = t;
+		$("grid").style.transform = "translateX(" + px + "px)";
+		Object.keys(s.ghosts).forEach(function (d) {
+			var g = s.ghosts[d];
+			g.style.transition = t;
+			g.style.transform = "translateX(" + (px + d * W) + "px)";
+		});
+	}
+
+	function stripClose() {
+		if (!strip) { return; }
+		Object.keys(strip.ghosts).forEach(function (d) { strip.ghosts[d].remove(); });
+		strip = null;
+		$("grid").style.transition = ""; $("grid").style.transform = "";
+	}
+
+	/** To page [target]: from where the strip is, over [ms] with [easing]; the tab shows it at once. */
+	var settling = null;
+	function slideTo(target, ms, easing) {
+		target = Math.max(0, Math.min(pages.length - 1, target));
+		clearTimeout(settling);
+		if (target === page && !strip) { showPage(target); return; }
+		if (Math.abs(target - page) > 1) { stripClose(); showPage(target); return; }
+		[].forEach.call($("tabs").children, function (b, i) { b.classList.toggle("selected", i === target); });
+		stripOpen();
+		$("grid").getBoundingClientRect();
+		stripTo((page - target) * W, ms, easing);
+		settling = setTimeout(function () { stripClose(); showPage(target); }, ms);
+	}
+
+	(function () {
+		var grid = $("grid");
+		grid.addEventListener("pointerdown", function (e) {
+			if (e.button !== 0 || drag || settling && strip) { return; }
+			var onTile = e.target.closest && e.target.closest(".tile");
+			if (editing && onTile) { return; }   // in edit mode a drag on an icon picks it up
+			var x0 = e.clientX, y0 = e.clientY, axis = null, scroll0 = grid.scrollTop, samples = [];
+			function move(ev) {
+				var dx = ev.clientX - x0, dy = ev.clientY - y0;
+				if (!axis && Math.max(Math.abs(dx), Math.abs(dy)) > TAP) { axis = Math.abs(dx) >= Math.abs(dy) ? "x" : "y"; }
+				if (drag) { axis = null; return; }   // an icon was picked up meanwhile
+				samples.push([ev.timeStamp, ev.clientX]); if (samples.length > 6) { samples.shift(); }
+				if (axis === "x") {
+					// Up to a fifth of a page past either end.
+					var pos = Math.max(-0.2, Math.min(pages.length - 0.8, page - dx / W));
+					stripTo((page - pos) * W, 0);
+				} else if (axis === "y") { grid.scrollTop = scroll0 - dy; }
+			}
+			function up(ev) {
+				window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up);
+				if (axis !== "x" || !strip) { return; }
+				// The pointer's speed over its last moves; held still before it was let go, none.
+				var vx = 0;
+				if (samples.length > 1 && ev.timeStamp - samples[samples.length - 1][0] < 80) {
+					var a = samples[0], b = samples[samples.length - 1]; if (b[0] > a[0]) { vx = (b[1] - a[1]) / (b[0] - a[0]) * 1000; }
+				}
+				var pos = page - strip.offset / W;
+				if (Math.abs(vx) > FLICK_V) {
+					var target = Math.max(0, Math.min(pages.length - 1, page + (vx < 0 ? 1 : -1)));
+					var ms = Math.max(FLICK_MIN_MS, Math.min(FLICK_MAX_MS, Math.abs(target - pos) * W / (Math.abs(vx) / 1000)));
+					slideTo(target, Math.round(ms), OUT_CUBIC);
+				} else { slideTo(Math.round(Math.max(0, Math.min(pages.length - 1, pos))), SNAP_MS, IN_QUAD); }
+			}
+			window.addEventListener("pointermove", move); window.addEventListener("pointerup", up); window.addEventListener("pointercancel", up);
+		});
+		// A trackpad's sideways swipe turns the page too.
+		var wheelX = 0, wheelTimer = null;
+		grid.addEventListener("wheel", function (e) {
+			if (Math.abs(e.deltaX) <= Math.abs(e.deltaY) || strip) { return; }
+			e.preventDefault();
+			wheelX += e.deltaX;
+			clearTimeout(wheelTimer); wheelTimer = setTimeout(function () { wheelX = 0; }, 200);
+			if (Math.abs(wheelX) > 80) { var d = wheelX > 0 ? 1 : -1; wheelX = 0; slideTo(page + d, SNAP_MS, IN_QUAD); }
+		}, { passive: false });
+	})();
+
 	// ---- edit mode ----
 
 	function enterEdit() {
@@ -609,7 +719,7 @@
 				press(e, {
 					hold: editing ? 0 : TAB_HOLD_MS,
 					onHold: function () { renameTab(i); },
-					onTap: function () { if (!tabDragged) { showPage(i); } },
+					onTap: function () { if (!tabDragged) { slideTo(i, SNAP_MS, IN_QUAD); } },
 				});
 			});
 			b.addEventListener("contextmenu", function (e) { e.preventDefault(); if (!editing) { renameTab(i); } });

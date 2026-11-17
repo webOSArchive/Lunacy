@@ -87,6 +87,9 @@ body.maximized .card { border-radius: 0; }
 	display: flex; flex-direction: column;
 }
 #launcher[hidden] { display: none; }
+#launcher { overflow: hidden; }
+#grid { will-change: transform; }
+.page-ghost { position: absolute; left: 0; width: 100%; box-sizing: border-box; display: grid; overflow: hidden; pointer-events: none; }
 #tabbar { display: flex; align-items: center; height: 50px; flex: none; position: relative;
 	background: url("../../AndroidLuna/src/main/assets/luna/images/launcher3/tab-bg.png") repeat-x; }
 #tabs { display: flex; height: 100%; flex: 0 1 auto; min-width: 0; }

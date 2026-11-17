@@ -21,14 +21,43 @@ class Served(
  * An app-origin URL as AppServer reads it, with android.net.Uri's answers for the parts it uses:
  * the host, the path decoded and as sent, and a query parameter decoded (a "+" stays a "+", as
  * Uri.getQueryParameter leaves it).
+ *
+ * Read by its delimiters alone, as android.net.Uri reads one, and never refused: a caller that
+ * builds a URL from a device path sends it as it is, and java.net.URI, which this was until
+ * 2026-11-17, threw on the space in "/media/internal/ringtones/Cymbells (short).mp3", so a
+ * chosen ringtone was "not found" and the class's default sound played in its place.
  */
-class ServeUrl(url: String) {
-    private val uri = runCatching { java.net.URI(url) }.getOrNull()
-    val host: String? = uri?.host
-    /** The path, percent-decoded; null if the URL doesn't parse. */
-    val path: String? = uri?.rawPath?.let(::decode)
-    val encodedPath: String? = uri?.rawPath
-    private val rawQuery: String? = uri?.rawQuery
+class ServeUrl(private val url: String) {
+    /** The host, percent-decoded: the authority without its user info and port; null without "//". */
+    val host: String?
+    /** The path as sent: from the authority's end to the "?" or "#". */
+    val encodedPath: String?
+    /** The path, percent-decoded. */
+    val path: String?
+    private val rawQuery: String?
+
+    init {
+        val colon = url.indexOf(':')
+        val fragment = url.indexOf('#', colon + 1).let { if (it < 0) url.length else it }
+        val question = url.indexOf('?', colon + 1).let { if (it < 0 || it > fragment) -1 else it }
+        var pathStart = colon + 1
+        var authority: String? = null
+        if (url.startsWith("//", colon + 1)) {
+            var end = colon + 3
+            while (end < url.length && url[end] !in "/\\?#") end++
+            authority = url.substring(colon + 3, end)
+            pathStart = end
+        }
+        host = authority?.substringAfterLast('@')?.let { a ->
+            // A port is a colon after the last "]": an IPv6 host has colons of its own.
+            val port = a.lastIndexOf(':')
+            decode(if (port > a.lastIndexOf(']')) a.substring(0, port) else a)
+        }
+        val pathEnd = if (question >= 0) question else fragment
+        encodedPath = if (pathStart <= pathEnd) url.substring(pathStart, pathEnd) else ""
+        path = decode(encodedPath)
+        rawQuery = if (question >= 0) url.substring(question + 1, fragment) else null
+    }
 
     fun getQueryParameter(name: String): String? {
         val q = rawQuery ?: return null
@@ -40,7 +69,7 @@ class ServeUrl(url: String) {
         return null
     }
 
-    override fun toString(): String = uri?.toString().orEmpty()
+    override fun toString(): String = url
 
     companion object {
         /** Percent-decoding as android.net.Uri.decode does it: UTF-8, and "+" left alone. */

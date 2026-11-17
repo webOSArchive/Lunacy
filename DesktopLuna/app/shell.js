@@ -1367,7 +1367,8 @@
 		// The bezel is Luna DE's own, not the device's screen: it keeps its size at any scale.
 		if (d.bezel) { document.documentElement.style.setProperty("--unzoom", String(d.bezel / 44)); }
 		$("device").querySelector("img").src = "images/device-" + (d.device || "touchpad") + (d.device === "screen" ? ".svg" : ".png");
-		$("device").title = "The device: " + ({ pre3: "an HP Pre3", screen: "Full Screen (windowed): a TouchPad at the window's size; F11 for Full Screen" }[d.device] || "an HP TouchPad") + ". Click for the next: TouchPad, Pre3, this screen (changing it closes the open apps)";
+		$("device").title = "Screen mode: " + ({ pre3: "HP Pre3", resizable: "Resizable (a TouchPad at the window's size)", full: "Full Screen (a TouchPad the size of the display; F11)" }[d.mode] || "HP TouchPad") +
+			". Click for the next (TouchPad, Pre3, Resizable, Full Screen), or right-click the bezel for all four. Changing between devices closes the open apps";
 		$("realkb").style.display = d.virtualKeyboard === false ? "none" : "";
 	}
 	window.luna.screenNow().then(applyScreen);

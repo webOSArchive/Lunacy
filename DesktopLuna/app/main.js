@@ -64,7 +64,7 @@ const cardRect = () => { const s = screenSize(); return { x: 0, y: statusPx(), w
 /** What the shell page is told of the screen: in its own px, which are the device's over its scale. */
 const screenForShell = () => {
 	const s = screenSize();
-	return { width: Math.round(s.width / device.scale), height: Math.round(s.height / device.scale), orientation, device: device.id,
+	return { width: Math.round(s.width / device.scale), height: Math.round(s.height / device.scale), orientation, device: device.id, mode,
 		bezel: BEZEL / device.scale, virtualKeyboard: device.virtualKeyboard };
 };
 
@@ -547,6 +547,8 @@ function openShell() {
 	// As this screen, the window's size is the screen's: every change of it is the screen changing.
 	shell.on("resize", () => { if (filling()) { fillChanged(); } });
 	for (const ev of ["enter-full-screen", "leave-full-screen", "maximize", "unmaximize"]) { shell.on(ev, () => { if (filling()) { fillChanged(); } }); }
+	// Out of full screen by the desktop's own means: the window is Resizable now.
+	shell.on("leave-full-screen", () => { if (mode === "full" && !modeChanging) { mode = "resizable"; saveDevice(mode); send("luna-de:screen", screenForShell()); } });
 }
 
 /** The window's screen area as it is now: its content, less the bezel. */
@@ -594,9 +596,12 @@ function shapeWindow() {
 	if (filling()) {
 		shell.setResizable(true);
 		shell.setMinimumSize(MIN_FILL.width, MIN_FILL.height + BEZEL);
-		// A moment after it became resizable: asked at once, the desktop (GNOME on Wayland) took it
-		// for a window that couldn't be maximized and left it at the device's size.
-		setTimeout(() => { if (shell && filling() && !shell.isFullScreen() && !shell.isMaximized()) { shell.maximize(); } }, 100);
+		// Full Screen: the whole display, a moment after the window became resizable (asked at once,
+		// GNOME on Wayland took it for a window that couldn't change size). Resizable: a window as
+		// it is, to be sized by hand.
+		const full = mode === "full";
+		if (!full && shell.isFullScreen()) { shell.setFullScreen(false); }
+		if (full) { setTimeout(() => { if (shell && mode === "full" && !shell.isFullScreen()) { shell.setFullScreen(true); } }, 100); }
 		return;
 	}
 	if (shell.isFullScreen()) { shell.setFullScreen(false); }
@@ -608,16 +613,38 @@ function shapeWindow() {
 	shell.setResizable(false);
 }
 
-/** F11: Luna DE fills the display, as this screen (becoming it first), and comes back out of it. */
-async function toggleFullScreen() {
-	if (!shell) { return; }
-	if (!filling()) { await setDevice(FILL); }
-	shell.setFullScreen(!shell.isFullScreen());
+/**
+ * The screen modes, one at a time (codepoet): Full Screen (a TouchPad the size of the display),
+ * HP TouchPad and HP Pre3 (their own screens, in a window of that size), and Resizable (a
+ * TouchPad the size of a window sized by hand). Full Screen and Resizable are the same device
+ * to the host ("screen"); only the window differs.
+ */
+const MODES = [["full", "Full Screen"], ["touchpad", "HP TouchPad"], ["pre3", "HP Pre3"], ["resizable", "Resizable"]];
+let mode = "touchpad", beforeFull = "resizable", modeChanging = false;
+async function setMode(m) {
+	if (!shell || !MODES.some((x) => x[0] === m)) { return mode; }
+	if (m === "full" && mode !== "full") { beforeFull = mode; }
+	modeChanging = true;
+	try {
+		mode = m;
+		if (m === "full" || m === "resizable") { if (!filling()) { await setDevice(FILL); } else { shapeWindow(); } }
+		else { await setDevice(m); }
+	} finally { setTimeout(() => { modeChanging = false; }, 500); }
+	saveDevice(mode);
+	send("luna-de:screen", screenForShell());
+	return mode;
 }
+
+/** F11: into Full Screen, and back out to the mode it came from. */
+async function toggleFullScreen() { await setMode(mode === "full" ? beforeFull : "full"); }
 
 /** The device Luna DE was last, kept beside its data: it starts as that again. */
 const savedDeviceFile = () => path.join(dataDir(), "luna-de-device.json");
-function savedDevice() { try { return JSON.parse(fs.readFileSync(savedDeviceFile(), "utf8")).device || ""; } catch (e) { return ""; } }
+function savedDevice() {
+	let d = "";
+	try { d = JSON.parse(fs.readFileSync(savedDeviceFile(), "utf8")).device || ""; } catch (e) {}
+	return d === "screen" ? "resizable" : d;   // saved before the modes had their names
+}
 function saveDevice(id) { try { fs.mkdirSync(dataDir(), { recursive: true }); fs.writeFileSync(savedDeviceFile(), JSON.stringify({ device: id })); } catch (e) {} }
 
 /**
@@ -781,15 +808,10 @@ ipcMain.handle("luna-de:devtools", (e, id) => { const c = cards.get(id); if (c) 
  */
 ipcMain.handle("luna-de:bezel-menu", () => {
 	if (!shell) { return false; }
-	const full = shell.isFullScreen();
-	const items = [
-		{ label: "Full Screen", type: "checkbox", checked: full, accelerator: "F11", click: () => toggleFullScreen() },
-		{ type: "separator" },
-		{ label: "HP TouchPad", type: "radio", checked: device.id === "touchpad", click: () => setDevice("touchpad") },
-		{ label: "HP Pre3", type: "radio", checked: device.id === "pre3", click: () => setDevice("pre3") },
-		// The names codepoet gave them: the device at the window's size is "Full Screen (windowed)".
-		{ label: "Full Screen (windowed)", type: "radio", checked: device.id === FILL, click: () => setDevice(FILL) },
-	];
+	const items = [];
+	for (const [id, label] of MODES) {
+		items.push({ label, type: "radio", checked: mode === id, accelerator: id === "full" ? "F11" : undefined, click: () => setMode(id) });
+	}
 	Menu.buildFromTemplate(items).popup({ window: shell });
 	return true;
 });
@@ -1057,17 +1079,17 @@ async function setDevice(id) {
 	await net.fetch(host + "/device?" + q.toString(), { method: "POST" }).catch(() => {});
 	await readDevice();
 	if (filling()) { fill = windowFill(); device.scale = fillScale(fill); orientation = fill.height > fill.width ? "up" : "right"; }
+	if (!filling()) { mode = device.id; }
 	shapeWindow();
 	try { shell.webContents.setZoomFactor(device.scale); } catch (e) {}
 	send("luna-de:keyboard", { show: false, height: KEYBOARD });
 	send("luna-de:screen", screenForShell());
-	saveDevice(device.id);
 	return device.id;
 }
 ipcMain.handle("luna-de:fullscreen", async () => { await toggleFullScreen(); return !!(shell && shell.isFullScreen()); });
-/** The bezel's device button goes round them: a TouchPad, a Pre3, this screen. */
-const DEVICES = ["touchpad", "pre3", FILL];
-ipcMain.handle("luna-de:device", (e, id) => setDevice(id || DEVICES[(DEVICES.indexOf(device.id) + 1) % DEVICES.length]));
+/** The bezel's device button goes round the modes: TouchPad, Pre3, Resizable, Full Screen. */
+const CYCLE = ["touchpad", "pre3", "resizable", "full"];
+ipcMain.handle("luna-de:device", (e, id) => setMode(id === FILL ? "resizable" : id || CYCLE[(CYCLE.indexOf(mode) + 1) % CYCLE.length]));
 ipcMain.handle("luna-de:screen-now", () => screenForShell());
 
 /** The user agent every app page gives: the device's own, which webOS apps look for (DeviceProfile.userAgent, from the host). */
@@ -1129,7 +1151,7 @@ app.whenReady().then(async () => {
 	followHost();
 	// As the device it was last time.
 	const last = savedDevice();
-	if (DEVICES.includes(last) && last !== device.id) { shell.webContents.once("did-finish-load", () => setDevice(last)); }
+	if (CYCLE.includes(last) && last !== mode) { shell.webContents.once("did-finish-load", () => setMode(last)); }
 	// LUNA_DE_OPEN=<app id>[,<app id>...] launches those apps once the shell is ready.
 	ipcMain.once("luna-de:ready", () => {
 		// LUNA_DE_INSTALL=<package or app folder>[<path separator><another>...] installs those first.

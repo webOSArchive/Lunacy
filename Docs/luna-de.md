@@ -89,21 +89,22 @@ API 21 gate.
   folder, and an app's goes when the app is removed. Not done: Device Info's own Phone Zoom
   list (`system/setFixedViewport` on Lunacy's service) and its width setting, and the list of
   defaults is a copy of AndroidLuna's until FixedViewport moves into LunaCore.
-- **Full Screen (windowed)** (2026-11-17, codepoet: "have Luna fill the available space, like it
-  does on Android"; first called "this screen", renamed by codepoet the same day, with F11's
-  edge-to-edge mode named plain "Full Screen"). A third device beside the TouchPad and the Pre3: a TouchPad at whatever size Luna
-  DE's window is. The window is then resizable and starts maximized, and F11 fills the display
-  (from either other device it becomes this one first). Apps are told a TouchPad whose screen
-  is the window's, in TouchPad px, as `ShellActivity.deviceInfo` tells them on an Android tablet;
-  a TouchPad px is one of the desktop's own (device-independent) pixels, so the desktop's own
-  display scaling sizes it on a dense monitor, as Android's density does on a phone: a 2560 x
-  1440 display at 100 % is a 2560 x 1396 TouchPad. (Android's tablet rule, the short side over
-  768, came first and made it enormous on a monitor: codepoet, 2026-11-17.) A resize is the screen changing size (each page hears a resize), and a change between
-  wide and tall is the device turning; the rotate button swaps the window's sides where the
-  window is free to. The bezel stays, in full screen too. Always a TouchPad: the phone layout
-  for a narrow window is not done. The two exact devices are unchanged, for checking an app
-  against a real screen. Luna DE starts as the device it was last (`luna-de-device.json`
-  beside its data).
+- **Four screen modes, one at a time** (2026-11-17, codepoet: "have Luna fill the available
+  space, like it does on Android", then the modes named and made mutually exclusive the same
+  day): HP TouchPad and HP Pre3, each its own screen in a window of that size; **Resizable**, a
+  TouchPad the size of a window sized by hand; and **Full Screen**, a TouchPad the size of the
+  display. The bezel's device button goes round them, its right-click menu lists them, and F11
+  goes into Full Screen and back to the mode before; leaving full screen by the desktop's own
+  means makes it Resizable. In the two that fit the window, apps are told a TouchPad whose
+  screen is the window's, in TouchPad px, as `ShellActivity.deviceInfo` tells them on an Android
+  tablet, and a TouchPad px is one of the desktop's own (device-independent) pixels, so the
+  desktop's display scaling sizes it on a dense monitor, as Android's density does on a phone: a
+  2560 x 1440 display at 100 % is a 2560 x 1396 TouchPad. (Android's tablet rule, the short side
+  over 768, came first and made it enormous on a monitor: codepoet.) A resize is the screen
+  changing size, and a change between wide and tall is the device turning; the rotate button
+  swaps a Resizable window's sides. The bezel stays, in Full Screen too. Always a TouchPad: the
+  phone layout for a narrow window is not done. Luna DE starts in the mode it was last
+  (`luna-de-device.json` beside its data).
 - **The launcher is its owner's to arrange** (2026-11-17), as LunaCE's is and AndroidLuna's
   Launcher has it. Holding an icon begins edit mode and picks it up (in edit mode a drag does):
   it takes the cell it is held over, the others moving aside; held over the middle of another

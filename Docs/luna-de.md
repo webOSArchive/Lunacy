@@ -347,14 +347,20 @@ runs the machine's own program where the root has none (`/bin/df`), and gives a 
 webOS root at `/`. **Owed on Android for these:** a device run (SystemProperties, FileIndex and
 Sounds' rules moved; host.js changed for every platform). **Not there:** a frame from another
 origin has no interface (Android's has); photos, music and video have no index, so the picker
-lists documents only; `/media/internal` holds only what is put there (codepoet, 2026-11-18: it
-stays Luna DE's own folder, with the folders Lunacy shows an app on Android made in it and the
-bezel's menu opening it in the desktop's file manager; none of the desktop's are mapped, since
-every installed app, a file manager among them, would have the developer's own files); hybrid apps' plug-ins don't run and nothing says so in the log.
+lists documents only; hybrid apps' plug-ins don't run and nothing says so in the log.
+
+**`/media/internal` (codepoet, 2026-11-18):** its `documents`, `downloads`, `music`, `photos` and
+`video` are the desktop's own Documents, Downloads, Music, Pictures and Videos (Electron's
+`app.getPath`, handed to the host as `--folders`; `HostFolders` on the desktop), as Android's
+shared storage is on Android; `ringtones`, `wallpapers` and everything else are Luna DE's own
+folder, which the bezel's menu opens. Apps and services read and write them as on a device, so a
+file manager app deletes real files: a ratchet item, below.
 
 **Ratchet items (desktop):** Electron runs with `--no-sandbox` in development (the Linux
 setuid helper needs root); app windows share the page's world with the preload
-(`contextIsolation: false`), as Android's WebView binding does.
+(`contextIsolation: false`), as Android's WebView binding does. Every installed app can read and
+write the person's Documents, Downloads, Music, Pictures and Videos through `/media/internal`,
+with nothing asked.
 
 ## Goals
 

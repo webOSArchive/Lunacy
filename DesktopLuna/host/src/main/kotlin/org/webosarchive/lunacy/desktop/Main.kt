@@ -96,12 +96,23 @@ fun main(args: Array<String>) {
     val romNow = runCatching { assets.open("rootfs.index").use { it.readBytes() }.contentHashCode().toString() }.getOrDefault("")
     if (!romStamp.isFile || romStamp.readText() != romNow) { rom.syncRom(); romStamp.writeText(romNow) }
     rom.makeFolders(installed)
-    // /media/internal is Luna DE's own folder, not the desktop's (HostFolders: none here): an app
-    // sees only what a developer puts in it. It starts with the folders Lunacy shows an app on
-    // Android, so an app tested here finds the tree it will find there (and a place for each kind
-    // of test file); the bezel's menu opens it in the desktop's file manager (main.js).
-    for (d in listOf("documents", "downloads", "music", "photos", "ringtones", "video", "wallpapers"))
-        File(webosRoot, "media/internal/$d").mkdirs()
+    // /media/internal's folders, as Lunacy shows them to an app on Android (codepoet, 2026-11-18):
+    // documents, downloads, music, photos and video are the desktop's own (--folders, from
+    // Electron, which knows where each system keeps them), as Android's shared storage is there;
+    // ringtones and wallpapers are Luna DE's own. A folder of that name in Luna DE's own tree is
+    // the one a path names (UserFiles.resolve), so an empty one left there is taken away: it hid
+    // the desktop's. Apps read and write these as they did a device's: a file manager can delete.
+    val folders = LinkedHashMap<String, File>()
+    runCatching { JSONObject(opt["folders"] ?: "{}") }.getOrNull()?.let { j ->
+        for (k in listOf("documents", "downloads", "music", "photos", "video")) j.optString(k).takeIf { it.isNotEmpty() }?.let { folders[k] = File(it) }
+    }
+    Platform.hostFolders = object : org.webosarchive.lunacy.core.HostFolders {
+        override val names: List<String> get() = folders.keys.toList()
+        override fun dir(name: String): File? = folders[name]
+    }
+    for (name in folders.keys) File(webosRoot, "media/internal/$name").let { if (it.isDirectory) it.delete() }
+    for (d in listOf("ringtones", "wallpapers")) File(webosRoot, "media/internal/$d").mkdirs()
+    Log.i(Lunacy.TAG, "media/internal: " + folders.entries.joinToString(", ") { "${it.key} = ${it.value.path}" }.ifEmpty { "no folders of the desktop's" })
     val version = "Luna DE" + (opt["version"]?.removeSuffix(".0")?.let { " $it" } ?: "")
     rom.writeBuildInfo(version, "0")
 

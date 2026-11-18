@@ -40,9 +40,10 @@ const WEBOS = new RegExp("^/(" + DIRS + ")(/|$)");
 // name ends the word or is followed by a slash (/library is not /lib).
 const IN_COMMAND = new RegExp("(^|[\\s'\"=(;|&<>`])(/(?:" + DIRS + ")(?=$|[/\\s'\";|&<>)`])(?:/[^\\s'\";|&<>)`]*)?)", "gm");
 // /media/internal's folders that are Android's ("photos=/storage/emulated/0/Pictures:..."), as
-// UserFiles.kt maps them: a folder Lunacy's own tree hasn't got is Android's.
+// UserFiles.kt maps them: a folder Lunacy's own tree hasn't got is Android's. Luna DE's are the
+// desktop's, listed with the system's own separator (a Windows path has a colon in it).
 const MEDIA = {};
-for (const e of (process.env.LUNACY_MEDIA || "").split(":")) {
+for (const e of (process.env.LUNACY_MEDIA || "").split(path.delimiter)) {
 	const i = e.indexOf("=");
 	if (i > 0) { MEDIA[e.slice(0, i).toLowerCase()] = e.slice(i + 1); }
 }

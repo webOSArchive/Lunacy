@@ -706,6 +706,10 @@ class DesktopRoot(override val root: File, override val hostScripts: File, priva
     override fun mapPaths(s: String): String =
         if (ROOTS.any { s == "/$it" || s.startsWith("/$it/") }) File(root, s.trimStart('/')).path else s
 
+    /** A JS service's: /media/internal's folders that are the desktop's (UserFiles), as on Android. */
+    override fun serviceEnvironment(name: String): Map<String, String> = environment(name) +
+        ("LUNACY_MEDIA" to org.webosarchive.lunacy.card.UserFiles.mappedFolders().joinToString(File.pathSeparator) { (n, dir) -> "$n=${dir.path}" })
+
     override fun environment(caller: String): Map<String, String> = mapOf(
         "PATH" to listOf("usr/sbin", "usr/bin", "sbin", "bin").joinToString(File.pathSeparator) { File(root, it).path } +
             File.pathSeparator + System.getenv("PATH").orEmpty(),

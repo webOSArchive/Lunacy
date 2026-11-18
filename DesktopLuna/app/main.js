@@ -109,6 +109,14 @@ function startHost() {
 	// for a checkout, to try a package's assets without packaging.
 	const zip = app.isPackaged ? path.join(process.resourcesPath, "assets.zip") : process.env.LUNA_DE_ASSETS;
 	if (zip) { args.push("--assets", zip); }
+	// The desktop's own folders that stand for a device's under /media/internal, as Android's
+	// shared storage does there (codepoet, 2026-11-18): the person's documents, downloads, music,
+	// pictures and videos, wherever this system keeps them. One that can't be found isn't mapped.
+	const folders = {};
+	for (const [name, key] of [["documents", "documents"], ["downloads", "downloads"], ["music", "music"], ["photos", "pictures"], ["video", "videos"]]) {
+		try { folders[name] = app.getPath(key); } catch (e) {}
+	}
+	args.push("--folders", JSON.stringify(folders));
 	if (app.isPackaged) {
 		// Packaged: the Java runtime and the host's jars the package carries, started directly (no
 		// launcher script, so nothing on the machine's PATH or in its JAVA_HOME is needed). SQLite's
@@ -818,9 +826,9 @@ ipcMain.handle("luna-de:bezel-menu", () => {
 	for (const [id, label] of MODES) {
 		items.push({ label, type: "radio", checked: mode === id, accelerator: id === "full" ? "F11" : undefined, click: () => setMode(id) });
 	}
-	// The device's user storage, /media/internal, in the desktop's own file manager: where a
-	// developer puts the files an app is to find (a book for the file picker, a photo, a song).
-	// It is Luna DE's own folder: no app here sees the desktop's.
+	// Luna DE's own part of the device's user storage, /media/internal, in the desktop's file
+	// manager: ringtones, wallpapers and whatever apps and services have written there. The
+	// documents, downloads, music, photos and video folders are the desktop's own (startHost).
 	items.push({ type: "separator" });
 	items.push({ label: "Open the Device's Files (/media/internal)", click: () => {
 		const dir = path.join(dataDir(), "webos", "media", "internal");

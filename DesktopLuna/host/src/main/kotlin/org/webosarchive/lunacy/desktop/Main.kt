@@ -115,7 +115,7 @@ fun main(args: Array<String>) {
     val windows = shell.windows
     // novacomd's device side, for the SDK's tools: palm-install, palm-launch, palm-log and novacom
     // reach Luna DE through novacomd's local relay (DesktopNovacom).
-    DesktopNovacom(main, bus, webosRoot, desktopRoot, data).start()
+    val novacom = DesktopNovacom(main, bus, webosRoot, desktopRoot, data).also { it.start() }
     systemService.hostPreference = { key ->
         org.webosarchive.lunacy.card.SystemService.devicePreference(key, java.util.Locale.getDefault(), false,
             shell.device.carrierCode, DEFAULT_WALLPAPER)
@@ -123,6 +123,12 @@ fun main(args: Array<String>) {
     main.call {
         db8.register(bus); tempdb.register(bus)
         systemService.register(bus)
+        // The device's read-only properties, as the screen mode's device (a TouchPad or a Pre3) gave
+        // them. The nduid is this copy of Luna DE's own, the one novacom lists it by; the serial is
+        // made up from it in HP's shape, as on Android. An app that signs in by device id (Apollo,
+        // to Pandora) sent "null" without it.
+        org.webosarchive.lunacy.card.SystemProperties({ shell.device }, { novacom.nduid },
+            { profile -> org.webosarchive.lunacy.card.DeviceProfile.serialFor(profile, novacom.nduid) }).register(bus)
         // Lunacy's own service, on its own name: the environment it really runs in. An app that
         // asks whether it is on Lunacy (App Catalog does, to install through Lunacy's installer
         // rather than look for Preware) finds it here as on Android. What that service does for

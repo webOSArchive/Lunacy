@@ -1,6 +1,5 @@
 package org.webosarchive.lunacy.card
 
-import android.content.Context
 import org.json.JSONObject
 
 /**
@@ -14,13 +13,18 @@ import org.json.JSONObject
  *
  * A subscription gets the one reply and no updates, as on the TouchPad.
  */
-class SystemProperties(private val context: Context) {
-    /** The layout's, read at each call: a foldable can change it while Lunacy runs (FormFactor.shown). */
-    private val profile get() = DeviceProfile.forScreen(context)
-    /** Read afresh each time: the device id can be changed while Lunacy is running. */
+class SystemProperties(
+    /** Which device this is answering as, read at each call: a foldable, or Luna DE's screen mode, can change it. */
+    private val device: () -> DeviceProfile,
+    /** This install's device id, read afresh each time: it can be changed while Lunacy is running. */
+    private val nduid: () -> String,
+    /** This install's serial, in HP's shape for the profile. */
+    private val serial: (DeviceProfile) -> String,
+) {
+    private val profile get() = device()
     private val live: Map<String, () -> String> = mapOf(
-        "com.palm.properties.nduid" to { DeviceProfile.nduid(context) },
-        "com.palm.properties.ProdSN" to { DeviceProfile.serial(context, profile) },
+        "com.palm.properties.nduid" to { nduid() },
+        "com.palm.properties.ProdSN" to { serial(profile) },
     )
     private val values: Map<String, String> get() = mapOf(
         "com.palm.properties.version" to profile.versionString,

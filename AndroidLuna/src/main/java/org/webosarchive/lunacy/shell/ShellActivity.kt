@@ -1244,7 +1244,8 @@ class ShellActivity : Activity(), WindowHost {
     }
 
     private fun registerServices() {
-        SystemProperties(this).register(bus)
+        SystemProperties({ DeviceProfile.forScreen(this) }, { DeviceProfile.nduid(this) },
+            { profile -> DeviceProfile.serial(this, profile) }).register(bus)
         // webOS's preference and wallpaper store, and the two display settings Android lets
         // Lunacy really set. See Docs/architecture.md, "Settings".
         displayService = DisplayService(this)

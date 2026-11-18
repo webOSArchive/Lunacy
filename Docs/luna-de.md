@@ -564,7 +564,8 @@ On the desktop there is no adb, and Luna DE pretends to be no device: no adb, no
   runtime folder) `/tmp/luna-de-<uid>/novacom-<pid>.sock`, in a folder only that user can open; on Windows
   `%ProgramData%\luna-de\<user>\novacom-<pid>.sock`, in a folder whose access list is that
   user's and SYSTEM's alone (novacomd's service runs as SYSTEM). One per running copy, so two never collide. Its
-  nduid is made once and kept in Luna DE's data folder.
+  nduid is made once and kept in Luna DE's data folder; an app that asks for the device's id
+  (`com.palm.preferences/systemProperties/Get`) is given the same one.
 - **novacomd's `local` relay** (webos-sdk-redux `novacomd/src/host/local_relay.c`) looks in both
   every 3 s, reads each copy's nduid with `get file:///proc/nduid` as `adb_relay.c` does, gives
   it a port and splices every client connection through unchanged. `novacom -l` lists it as

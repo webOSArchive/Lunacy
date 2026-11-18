@@ -56,8 +56,11 @@ class DesktopNovacom(
 ) {
     private var socketFile: File? = null
 
-    /** This copy of Luna DE's nduid: forty hex digits, made once and kept with its data, as a device's was fixed. */
-    private val nduid: String by lazy {
+    /**
+     * This copy of Luna DE's nduid: forty hex digits, made once and kept with its data, as a device's was fixed.
+     * The one id for the SDK's tools and for an app that asks (systemProperties/Get).
+     */
+    val nduid: String by lazy {
         val f = File(data, "nduid")
         f.takeIf { it.isFile }?.readText()?.trim()?.takeIf { Regex("[0-9a-f]{40}").matches(it) } ?: run {
             val b = ByteArray(20).also { SecureRandom().nextBytes(it) }

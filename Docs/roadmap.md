@@ -109,6 +109,12 @@ What this run does NOT decide, despite being green:
                    - sleep and wake, the fold mid-use, Exhibition, the keyboard app (not reinstalled)
 ```
 
+**Since (2026-11-18): the version name is 1.1.0** (e5bba2f, build 780, debug; `./build.sh debug
+--test`: 12 passed, 1 skipped, both APKs' inventories clean). The code is build 775's: the commits
+between are tests, scripts and these notes. It is on the Fold3 and the Pixel Tablet, installed over
+775 with their data kept, for codepoet to use daily before a release; the other four devices stay
+on 775. Not released, not merged into `main`, no release build made.
+
 ## Where things stood (2026-11-15, end of day)
 
 **1.0 is out** (build 635, released by codepoet; F-Droid feed verified). That evening two bugs

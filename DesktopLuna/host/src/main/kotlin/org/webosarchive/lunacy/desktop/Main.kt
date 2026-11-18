@@ -96,6 +96,12 @@ fun main(args: Array<String>) {
     val romNow = runCatching { assets.open("rootfs.index").use { it.readBytes() }.contentHashCode().toString() }.getOrDefault("")
     if (!romStamp.isFile || romStamp.readText() != romNow) { rom.syncRom(); romStamp.writeText(romNow) }
     rom.makeFolders(installed)
+    // /media/internal is Luna DE's own folder, not the desktop's (HostFolders: none here): an app
+    // sees only what a developer puts in it. It starts with the folders Lunacy shows an app on
+    // Android, so an app tested here finds the tree it will find there (and a place for each kind
+    // of test file); the bezel's menu opens it in the desktop's file manager (main.js).
+    for (d in listOf("documents", "downloads", "music", "photos", "ringtones", "video", "wallpapers"))
+        File(webosRoot, "media/internal/$d").mkdirs()
     val version = "Luna DE" + (opt["version"]?.removeSuffix(".0")?.let { " $it" } ?: "")
     rom.writeBuildInfo(version, "0")
 

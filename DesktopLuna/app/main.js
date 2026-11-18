@@ -12,7 +12,7 @@
 // makes the views it names, tells it of each window a page opens and each view that goes, and
 // places them as its events say (followHost).
 "use strict";
-const { app, BaseWindow, BrowserWindow, Menu, WebContentsView, dialog, ipcMain, net, session } = require("electron");
+const { app, BaseWindow, BrowserWindow, Menu, WebContentsView, dialog, ipcMain, net, session, shell: electronShell } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
@@ -818,6 +818,14 @@ ipcMain.handle("luna-de:bezel-menu", () => {
 	for (const [id, label] of MODES) {
 		items.push({ label, type: "radio", checked: mode === id, accelerator: id === "full" ? "F11" : undefined, click: () => setMode(id) });
 	}
+	// The device's user storage, /media/internal, in the desktop's own file manager: where a
+	// developer puts the files an app is to find (a book for the file picker, a photo, a song).
+	// It is Luna DE's own folder: no app here sees the desktop's.
+	items.push({ type: "separator" });
+	items.push({ label: "Open the Device's Files (/media/internal)", click: () => {
+		const dir = path.join(dataDir(), "webos", "media", "internal");
+		electronShell.openPath(dir).then((err) => { if (err) { console.error("Luna DE: " + dir + ": " + err); } });
+	} });
 	Menu.buildFromTemplate(items).popup({ window: shell });
 	return true;
 });

@@ -1,10 +1,8 @@
 package org.webosarchive.lunacy.card
 
-import android.media.ExifInterface
-import android.media.MediaMetadataRetriever
-import android.os.Build
 import org.json.JSONArray
 import org.json.JSONObject
+import org.webosarchive.lunacy.core.Platform
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -42,6 +40,9 @@ import java.util.TimeZone
  * The kinds, their indexes and consumers are filenotifyd's registrations, and a consumer may
  * create, read, change and delete records (measured with the photos app and service; other
  * apps are refused). Records an account synced (type other than "local") are left alone.
+ *
+ * What a file says about itself (its EXIF, a movie's header, a song's tags) is read by the
+ * platform ([org.webosarchive.lunacy.core.MediaTags]); the records made from it are the same.
  */
 class MediaIndex(private val webosRoot: File) {
     /** The music library's songs (MusicLibrary), filed in the audio kind beside the ringtones. */
@@ -117,9 +118,9 @@ class MediaIndex(private val webosRoot: File) {
      * do after every pass (mediaParent's processPostComplete, "calling into photos service to
      * take over app caching").
      */
-    private fun cacheThumbnails(bus: Bus) = android.os.Handler(android.os.Looper.getMainLooper()).post {
+    private fun cacheThumbnails(bus: Bus) = Platform.scheduler.post(Runnable {
         if (bus.has(PHOTOS_SERVICE)) bus.call(INDEXER, "palm://$PHOTOS_SERVICE/cacheThumbnails", "{}", privateBus = true) {}
-    }
+    })
 
     private fun local(o: JSONObject) = o.optString("type") == "local"
 
@@ -145,7 +146,7 @@ class MediaIndex(private val webosRoot: File) {
 
     /** Every image and video under /media/internal, as records without their albumId; read at most every second. */
     @Synchronized private fun scan(): List<JSONObject> {
-        val now = android.os.SystemClock.uptimeMillis()
+        val now = System.nanoTime() / 1_000_000
         if (scanned != 0L && now - scanned < 1000) return media
         val paths = HashSet<String>()
         val out = UserFiles.walkMedia(webosRoot) { p, f ->
@@ -167,9 +168,8 @@ class MediaIndex(private val webosRoot: File) {
     private fun image(path: String, f: File): JSONObject? {
         var created = 0.0
         var offset = 0L; var length = 0L
-        try {
-            val exif = ExifInterface(f.path)
-            (exif.getAttribute(ExifInterface.TAG_DATETIME) ?: exif.getAttribute(TAG_DATETIME_ORIGINAL))?.let { d ->
+        Platform.mediaTags?.exif(f)?.let { exif ->
+            exif.dateTime?.let { d ->
                 val a = d.replace(" ", ":").split(":").map { it.trim().toIntOrNull() }
                 created = if (a.size >= 6 && a.take(6).all { it != null }) {
                     // new Date(y, m - 1, d, h, min, s): local time, the month at least January.
@@ -177,13 +177,12 @@ class MediaIndex(private val webosRoot: File) {
                         clear(); set(a[0]!!, Math.max(a[1]!! - 1, 0), a[2]!!, a[3]!!, a[4]!!, a[5]!!)
                     }.timeInMillis / 1000.0
                 } else 0.0
-                val sub = exif.getAttribute(TAG_SUBSEC_TIME) ?: exif.getAttribute(TAG_SUBSEC_TIME_ORIGINAL)
-                sub?.trim()?.takeIf { it.isNotEmpty() }?.toIntOrNull()?.let { s ->
+                exif.subSec?.trim()?.takeIf { it.isNotEmpty() }?.toIntOrNull()?.let { s ->
                     created += s / Math.pow(10.0, s.toString().length.toDouble())
                 }
             }
-            if (Build.VERSION.SDK_INT >= 24) exif.thumbnailRange?.let { offset = it[0]; length = it[1] }
-        } catch (e: Exception) {}
+            offset = exif.thumbnailOffset; length = exif.thumbnailLength
+        }
         return JSONObject().put("path", path).put("type", "local").put("albumPath", albumPath(path))
             .put("createdTime", created)
             .put("thumbnails", JSONArray().put(JSONObject().put("type", "embedded")
@@ -192,25 +191,16 @@ class MediaIndex(private val webosRoot: File) {
     }
 
     private fun video(path: String, f: File): JSONObject? {
-        val r = MediaMetadataRetriever()
-        try {
-            r.setDataSource(f.path)
-            if (r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) != "yes") return null
-            val duration = (r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L) / 1000.0
-            val title = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)?.takeIf { it.isNotEmpty() }
-                ?: f.name.substringBeforeLast('.').ifEmpty { f.name }
-            return JSONObject().put("path", path).put("type", "local").put("albumPath", albumPath(path))
-                .put("capturedOnDevice", path.startsWith("/media/internal/DCIM/") || albumPath(path) == CAMERA_ROLL)
-                .put("createdTime", movieDate(r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE)))
-                .put("modifiedTime", f.lastModified() / 1000).put("size", f.length())
-                .put("title", title).put("searchKey", title).put("description", "")
-                .put("thumbnails", JSONArray()).put("duration", Math.round(duration * 100) / 100.0)
-                .put("playbackPosition", 0).put("mediaType", "video").put("appCacheComplete", "unattempted")
-        } catch (e: Exception) {
-            return null
-        } finally {
-            runCatching { r.release() }
-        }
+        val v = Platform.mediaTags?.video(f) ?: return null
+        val duration = v.durationMs / 1000.0
+        val title = v.title?.takeIf { it.isNotEmpty() } ?: f.name.substringBeforeLast('.').ifEmpty { f.name }
+        return JSONObject().put("path", path).put("type", "local").put("albumPath", albumPath(path))
+            .put("capturedOnDevice", path.startsWith("/media/internal/DCIM/") || albumPath(path) == CAMERA_ROLL)
+            .put("createdTime", movieDate(v.date))
+            .put("modifiedTime", f.lastModified() / 1000).put("size", f.length())
+            .put("title", title).put("searchKey", title).put("description", "")
+            .put("thumbnails", JSONArray()).put("duration", Math.round(duration * 100) / 100.0)
+            .put("playbackPosition", 0).put("mediaType", "video").put("appCacheComplete", "unattempted")
     }
 
     /** The movie header's creation time (Android gives it as "20261001T120000.000Z"), in seconds; 0 without one. */
@@ -319,23 +309,12 @@ class MediaIndex(private val webosRoot: File) {
              * picker's ringtone list shows the same title and artist (LunacyService).
              */
             fun audioRecord(path: String, f: File): JSONObject {
-            var title: String? = null; var artist: String? = null; var album: String? = null
-            var albumArtist: String? = null; var genre: String? = null; var track = 0; var disc = 1
-            val r = MediaMetadataRetriever()
-            try {
-                r.setDataSource(f.path)
-                fun tag(k: Int) = r.extractMetadata(k)?.trim()?.takeIf { it.isNotEmpty() }
-                title = tag(MediaMetadataRetriever.METADATA_KEY_TITLE)
-                artist = tag(MediaMetadataRetriever.METADATA_KEY_ARTIST)
-                album = tag(MediaMetadataRetriever.METADATA_KEY_ALBUM)
-                albumArtist = tag(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST)
-                genre = tag(MediaMetadataRetriever.METADATA_KEY_GENRE)
-                track = tag(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER)?.substringBefore('/')?.toIntOrNull() ?: 0
-                disc = tag(MediaMetadataRetriever.METADATA_KEY_DISC_NUMBER)?.substringBefore('/')?.toIntOrNull() ?: 1
-            } catch (e: Exception) {
-            } finally {
-                runCatching { r.release() }
-            }
+            fun tag(v: String?) = v?.trim()?.takeIf { it.isNotEmpty() }
+            val tags = Platform.mediaTags?.audio(f)
+            val title = tag(tags?.title); val artist = tag(tags?.artist); val album = tag(tags?.album)
+            val albumArtist = tag(tags?.albumArtist); val genre = tag(tags?.genre)
+            val track = tag(tags?.track)?.substringBefore('/')?.toIntOrNull() ?: 0
+            val disc = tag(tags?.disc)?.substringBefore('/')?.toIntOrNull() ?: 1
             val name = f.name.substringBeforeLast('.').ifEmpty { f.name }
             val t = title ?: name
             val alb = album ?: UNKNOWN_ALBUM
@@ -405,9 +384,5 @@ class MediaIndex(private val webosRoot: File) {
             "/media/internal/screencaptures" to ("Screen captures" to 900), "/media/internal/wallpapers" to ("Wallpapers" to 900))
         private val IMAGES = setOf("jpg", "jpeg", "png", "bmp")
         private val VIDEOS = setOf("mp4", "m4v", "mov", "3gp", "3g2", "wmv", "asf", "avi")
-        // ExifInterface's names for these came in API 24; the tags are the same.
-        private const val TAG_DATETIME_ORIGINAL = "DateTimeOriginal"
-        private const val TAG_SUBSEC_TIME = "SubSecTime"
-        private const val TAG_SUBSEC_TIME_ORIGINAL = "SubSecTimeOriginal"
     }
 }

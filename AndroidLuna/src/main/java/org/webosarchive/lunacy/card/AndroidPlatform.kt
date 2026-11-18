@@ -80,6 +80,50 @@ object AndroidImages : Images {
     }
 }
 
+/** ExifInterface and MediaMetadataRetriever, as LunaCore's [org.webosarchive.lunacy.core.MediaTags]: what MediaIndex read itself before LunaCore. */
+object AndroidMediaTags : org.webosarchive.lunacy.core.MediaTags {
+    // ExifInterface's names for these came in API 24; the tags are the same.
+    private const val TAG_DATETIME_ORIGINAL = "DateTimeOriginal"
+    private const val TAG_SUBSEC_TIME = "SubSecTime"
+    private const val TAG_SUBSEC_TIME_ORIGINAL = "SubSecTimeOriginal"
+
+    override fun exif(f: File): org.webosarchive.lunacy.core.MediaTags.Exif? = try {
+        val exif = android.media.ExifInterface(f.path)
+        var offset = 0L; var length = 0L
+        if (android.os.Build.VERSION.SDK_INT >= 24) exif.thumbnailRange?.let { offset = it[0]; length = it[1] }
+        org.webosarchive.lunacy.core.MediaTags.Exif(
+            exif.getAttribute(android.media.ExifInterface.TAG_DATETIME) ?: exif.getAttribute(TAG_DATETIME_ORIGINAL),
+            exif.getAttribute(TAG_SUBSEC_TIME) ?: exif.getAttribute(TAG_SUBSEC_TIME_ORIGINAL), offset, length)
+    } catch (e: Exception) { null }
+
+    override fun video(f: File): org.webosarchive.lunacy.core.MediaTags.Video? {
+        val r = android.media.MediaMetadataRetriever()
+        return try {
+            r.setDataSource(f.path)
+            if (r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) != "yes") null
+            else org.webosarchive.lunacy.core.MediaTags.Video(
+                r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L,
+                r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE),
+                r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DATE))
+        } catch (e: Exception) { null } finally { runCatching { r.release() } }
+    }
+
+    override fun audio(f: File): org.webosarchive.lunacy.core.MediaTags.Audio? {
+        val r = android.media.MediaMetadataRetriever()
+        return try {
+            r.setDataSource(f.path)
+            org.webosarchive.lunacy.core.MediaTags.Audio(
+                r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE),
+                r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ARTIST),
+                r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUM),
+                r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST),
+                r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_GENRE),
+                r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER),
+                r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DISC_NUMBER))
+        } catch (e: Exception) { null } finally { runCatching { r.release() } }
+    }
+}
+
 /** The WebViews' cookie jar, as LunaCore's [org.webosarchive.lunacy.core.Cookies]: native requests and pages share it. */
 object AndroidCookies : org.webosarchive.lunacy.core.Cookies {
     override fun get(url: String): String? = android.webkit.CookieManager.getInstance().getCookie(url)

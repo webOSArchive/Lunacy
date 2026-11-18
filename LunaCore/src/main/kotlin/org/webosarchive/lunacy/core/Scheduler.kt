@@ -29,6 +29,9 @@ object Platform {
     /** Image decoding; null where the platform has none (an icon's size then isn't checked). */
     @Volatile var images: Images? = null
 
+    /** Reading a media file's own tags, for the media index; null where the platform has none. */
+    @Volatile var mediaTags: MediaTags? = null
+
     /** The host's folders mapped into /media/internal; null where there are none. */
     @Volatile var hostFolders: HostFolders? = null
 

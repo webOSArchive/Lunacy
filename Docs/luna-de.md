@@ -345,9 +345,8 @@ the file picker works, with db8's picker relay and the documents' index (FileInd
 over Luna DE's own `/media/internal`; and the service host maps an `exec`'s command line once,
 runs the machine's own program where the root has none (`/bin/df`), and gives a service the
 webOS root at `/`. **Owed on Android for these:** a device run (SystemProperties, FileIndex and
-Sounds' rules moved; host.js changed for every platform). **Not there:** a frame from another
-origin has no interface (Android's has); photos, music and video have no index, so the picker
-lists documents only; hybrid apps' plug-ins don't run and nothing says so in the log.
+Sounds' rules, Extractfs and MediaIndex moved; host.js changed for every platform). **Not there:** a frame from another
+origin has no interface (Android's has); hybrid apps' plug-ins don't run and nothing says so in the log.
 
 **`/media/internal` (codepoet, 2026-11-18):** its `documents`, `downloads`, `music`, `photos` and
 `video` are the desktop's own Documents, Downloads, Music, Pictures and Videos (Electron's
@@ -356,7 +355,11 @@ shared storage is on Android; `ringtones`, `wallpapers` and everything else are 
 folder, which the bezel's menu opens. Apps and services read and write them as on a device, so a
 file manager app deletes real files: a ratchet item, below. Pages are served those files, and
 webOS's thumbnailer (Extractfs, in LunaCore since; the desktop scales with javax.imageio) reads
-them, for pages and for services.
+them, for pages and for services. The media index is LunaCore's too (MediaIndex), so Photos &
+Videos lists them and the photos service makes its thumbnails (kept in Luna DE's own
+`/media/internal/.photosApp`, not in the desktop's folders). On the desktop a JPEG's EXIF and an
+MP4 or QuickTime header are read by hand (`DesktopMediaTags`); a movie's title, a WMV's or AVI's
+length and a sound file's tags aren't, and there is no music library (Android's is MediaStore's).
 
 **Ratchet items (desktop):** Electron runs with `--no-sandbox` in development (the Linux
 setuid helper needs root); app windows share the page's world with the preload

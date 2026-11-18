@@ -63,6 +63,7 @@ fun main(args: Array<String>) {
     val main = DesktopScheduler()
     Platform.scheduler = main
     Platform.images = DesktopImages
+    Platform.mediaTags = DesktopMediaTags
     Platform.sql = org.webosarchive.lunacy.core.JdbcSql
     Platform.collation = DesktopCollation
     Platform.links = DesktopLinks
@@ -141,10 +142,12 @@ fun main(args: Array<String>) {
     main.call {
         db8.register(bus); tempdb.register(bus)
         // The file picker's reads of the media index (webOS's own picker, which enyo.FilePicker
-        // loads in a frame), and the documents' index, answered from the files under Luna DE's own
-        // /media/internal as on Android (FileIndex). Photos, music and video have no index here yet.
+        // loads in a frame), and the documents', photos' and videos' indexes, answered from the files
+        // under /media/internal as on Android (FileIndex, MediaIndex). Music has none here: Android's
+        // is its own media library's (MusicLibrary); the audio kind holds the ringtones.
         db8.registerPickerRelay(bus)
         org.webosarchive.lunacy.card.FileIndex(webosRoot).attach(db8)
+        org.webosarchive.lunacy.card.MediaIndex(webosRoot).also { it.attach(db8, bus); it.registerState(bus) }
         systemService.register(bus)
         // The device's read-only properties, as the screen mode's device (a TouchPad or a Pre3) gave
         // them. The nduid is this copy of Luna DE's own, the one novacom lists it by; the serial is

@@ -3,7 +3,14 @@
 Status: **runs Enyo apps with their data and the shell's notifications** (2026-11-16). Branch
 `luna-de`. Reviewed, and being built.
 
-## Where it stands (2026-11-17)
+## Where it stands (2026-11-18)
+
+**2026-11-18:** a round of fixes from codepoet's first Catalog apps (listed under "2026-11-18"
+below), all in Lunacy 1.1.0's code and checked on Android in its round
+([roadmap.md](roadmap.md), "The 1.1.0 candidate's round"): the device runs this page says are owed
+(an Android 5 device, a fresh install) were made there, on build 775. No Luna DE release holds
+these fixes yet.
+
 
 **Released 2026-11-17: Luna DE 0.5.0, with webOS SDK Redux 0.5** (its version is the SDK's;
 source: tag `luna-de-0.5`). Linux, macOS (Apple Silicon native, Intel) and Windows (installer,
@@ -344,7 +351,7 @@ interface (`nodeIntegrationInSubFrames`: the preload runs in frames, and no fram
 the file picker works, with db8's picker relay and the documents' index (FileIndex in LunaCore)
 over Luna DE's own `/media/internal`; and the service host maps an `exec`'s command line once,
 runs the machine's own program where the root has none (`/bin/df`), and gives a service the
-webOS root at `/`. **Owed on Android for these:** a device run (SystemProperties, FileIndex and
+webOS root at `/`. **Owed on Android for these** (made 2026-11-18, in 1.1.0's round, all green)**:** a device run (SystemProperties, FileIndex and
 Sounds' rules, Extractfs and MediaIndex moved; host.js changed for every platform). **Not there:** a frame from another
 origin has no interface (Android's has); hybrid apps' plug-ins don't run and nothing says so in the log.
 

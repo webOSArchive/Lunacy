@@ -34,19 +34,36 @@ after 1.0.
 Before shipping 1.0, as for every release: the latest App Catalog bundled (6.3.2931 since
 2026-11-15, codepoet's package for 1.0).
 
-## Where things stand (2026-11-17, end of day)
+## Where things stand (2026-11-18, end of day)
 
 **Released:** Lunacy 1.0.2 (build 652; GitHub and the F-Droid feed). **webos-sdk-redux 0.5**
 (tag `0.5-Release`), with **Luna DE 0.5.0**, Lunacy's desktop shell, as its packages for Linux,
-macOS and Windows; their source is this repository's tag `luna-de-0.5` (branch `luna-de`). Checked
-on all three systems: the SDK's tools against a TouchPad, Lunacy on the Fold3 and Luna DE alike
-(Docs/luna-de.md, "The SDK's tools"). Luna DE is done for now.
+macOS and Windows; their source is this repository's tag `luna-de-0.5` (branch `luna-de`).
 
-**Next: Lunacy 1.1.0** (codepoet; its round on build 775 is below, 2026-11-18): merge `luna-de`'s refactors (the moves into LunaCore; the shared
-AppLifecycle, LauncherLayout, JustTypeSearch and NovacomProtocol) into `main`, so Android and Luna
-DE run the same code. `luna-de` is about 110 commits ahead of `main`; `main` has two of its own
-(codepoet's "update images" and "limit height"). Owed before it ships, from the Luna DE plan:
-`device-test.sh` on an Android 5 device and `fresh-install.sh`, since first-run code moved.
+**In hand: Lunacy 1.1.0** (codepoet), which brings `luna-de`'s refactors to Android: the moves
+into LunaCore and the shared AppLifecycle, LauncherLayout, JustTypeSearch and NovacomProtocol, so
+Android and Luna DE run the same code.
+- **Where it is:** branch `luna-de`, version name 1.1.0, build 780 (e5bba2f). `main` is still
+  1.0.2 and has nothing `luna-de` lacks. The two branches stay apart until 1.1.0 is released, then
+  `luna-de` merges into `main` (codepoet, 2026-11-18: "a day or two"). A fix for 1.1.0 goes on
+  `luna-de`.
+- **Tested:** the round below, on build 775 (the same code as 780), green on six devices with two
+  fresh installs (Android 14 and Android 5.0.1, which were the two things owed from the Luna DE
+  plan) and 1.0.2 compared with it on one device.
+- **Now:** codepoet is using 1.1.0's debug build daily on the Fold3 and the Pixel Tablet, to
+  catch what a round can't. The other four test devices are on 775.
+- **Before it ships:** whatever that turns up; `./build.sh release` (no release build of 1.1.0
+  exists) and the test plan's section 13 on it; tier 3, codepoet's; the latest App Catalog
+  bundled; then the merge into `main`.
+
+**Luna DE (2026-11-18)** got a round of fixes from codepoet's first Catalog apps in it
+([luna-de.md](luna-de.md), "2026-11-18"): the device's properties, window scrollbars, activation at
+`stageReady`, notification sounds, the file picker, a service's shell commands, the desktop's own
+folders under `/media/internal`, the thumbnailer, the media index (Photos & Videos), the chosen
+wallpaper, and Screen & Lock without Android's rows. They are in 1.1.0's code; a Luna DE release
+with them hasn't been made (its version is the SDK's). Open there: whether Screen & Lock's
+brightness, timeout and Secure Unlock rows should hide in Luna DE too; no music library; a frame
+from another app's origin has no bridge; `listAllHandlersForUrl` is unanswered (on Android too).
 
 ### The 1.1.0 candidate's round (2026-11-18)
 

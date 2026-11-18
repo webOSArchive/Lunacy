@@ -307,7 +307,10 @@ else:
          "the thumbnailer -- the picture %s, in 64x64 %s, the long form %s" % (o.get("full"), o.get("thumb"), str(o.get("json"))[:90]))
 ')
   # Screen & Lock's own rows for Android show once the environment has answered: they start
-  # hidden since 1.1.0, for Luna DE, which has none of them (its card is open from section 4).
+  # hidden since 1.1.0, for Luna DE, which has none of them. Brought up again first: on a phone
+  # with some twenty cards open its page had gone by now (the Nexus 5, the baseline run on 652).
+  $A shell am start -n $PKG/.shell.ShellActivity --es launch com.palm.app.screenlock </dev/null >/dev/null 2>&1
+  for i in 1 2 3 4 5 6 7 8 9 10; do sleep 2; [ -n "$(evalall 1 /com.palm.app.screenlock/)" ] && break; done; sleep 4
   r=$(js /com.palm.app.screenlock/ '(function(){var t=document.body.innerText,m=[];["Screen Layout","Android Apps","Use on Android","Edge swipe for home","Change Wallpaper"].forEach(function(k){if(t.indexOf(k)<0)m.push(k)});return m.length?"missing: "+m.join(", "):"all"})()')
   [ "$r" = all ] && P "15 core  Screen & Lock shows its Android rows (the layout, Android's notifications and wallpaper, the edge swipe)" || F "15 core  Screen & Lock's rows -- ${r:-no card}"
 else S "15 core  the shared core's answers (release build)"; fi

@@ -39,6 +39,15 @@
 	// sent from a window as window.open makes it was never answered, and hung the app.
 	var ipc = null;
 	try { ipc = require("electron").ipcRenderer; ipc.send("luna-de:page", page); } catch (e) {}
+	// webOS drew no scrollbars on a window: apps scroll in their frameworks' own scrollers. Chromium
+	// on a desktop draws them on a page larger than its window, and each takes 15 px from the page,
+	// which makes it larger than its window the other way too (a Mojo scene laid out at the card's
+	// size). The window's bars only, as Android's AppWindow turns its WebView's off; a scroller
+	// inside the page keeps what it draws.
+	try {
+		require("electron").webFrame.insertCSS(
+			"html::-webkit-scrollbar, body::-webkit-scrollbar { display: none !important; }", { cssOrigin: "user" });
+	} catch (e) { console.error("Luna DE: window scrollbars: " + e); }
 	// Text Assist, for the on-screen keyboard's typing into this page's fields (textassist.js).
 	try { require("./textassist.js")(window, ipc); } catch (e) { console.error("Luna DE: text assist: " + e); }
 	// window.close() closes this page's own window (its card, its dashboard), as on webOS. Electron's

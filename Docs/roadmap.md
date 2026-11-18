@@ -42,11 +42,72 @@ macOS and Windows; their source is this repository's tag `luna-de-0.5` (branch `
 on all three systems: the SDK's tools against a TouchPad, Lunacy on the Fold3 and Luna DE alike
 (Docs/luna-de.md, "The SDK's tools"). Luna DE is done for now.
 
-**Next: Lunacy 1.1.0** (codepoet): merge `luna-de`'s refactors (the moves into LunaCore; the shared
+**Next: Lunacy 1.1.0** (codepoet; its round on build 775 is below, 2026-11-18): merge `luna-de`'s refactors (the moves into LunaCore; the shared
 AppLifecycle, LauncherLayout, JustTypeSearch and NovacomProtocol) into `main`, so Android and Luna
 DE run the same code. `luna-de` is about 110 commits ahead of `main`; `main` has two of its own
 (codepoet's "update images" and "limit height"). Owed before it ships, from the Luna DE plan:
 `device-test.sh` on an Android 5 device and `fresh-install.sh`, since first-run code moved.
+
+### The 1.1.0 candidate's round (2026-11-18)
+
+Nothing was left on `main` to cherry-pick: its three commits ahead of the merge base are on
+`luna-de` already ("limit height", "update images", and this page's 2026-11-17 note). Between the
+branches the bundled apps, frameworks and compat scripts are the same files but for `host.js`,
+`curl.js` and Screen & Lock; the difference is the Kotlin that moved into LunaCore. The round
+used the test plan and added to it (sections 15 and 16).
+
+```
+Build under test:  1.0.2 (the version name is codepoet's to change), build 775, commit 52f362e (branch luna-de)
+                   out/SHA256SUMS sha256 de7d5c4c6afe860b420d63fda697be62c2233276901bd1d2a9db88a6a35a8918
+                                                       (debug only: both ABIs and the keyboard; no
+                                                        release build was made)
+Tier 1:            ./test.sh             11 passed / 0 failed / 1 skipped (build.sh debug --test ran it);
+                                         since, with the round's new tests: the service host's child
+                                         processes, and LunaCore's 98 unit tests (8 new)
+                   apk-inventory         both APKs: 9762 and 9763 files by content, 26 patches, 0 problems
+Tier 2:            fresh-install.sh      A7 Lite (Android 14): 49 passed / 0 failed    test-results/775/fresh-a7lite.txt
+                                         (3 test Android contacts -> the account, 3 people, 17 activities live)
+                                         HP 10 G2 (Android 5.0.1): 45 passed / 1 failed / 1 skipped
+                                                                                       test-results/775/fresh-hp10g2.txt
+                                         (the one: "Email's account query not seen (inconclusive)"; the
+                                         tablet's 256 KB log had dropped the line: streamed to a file, the
+                                         query was there, once. The check now keeps the log as it comes:
+                                         the pass again on that install, 46 passed, 0 failed, 1 skipped  test-results/775/hp10g2-after-fresh.txt)
+                   device-test.sh        every device on build 775, installed over what it had, data kept
+                   Fold3      (from 757) 55 passed / 0 failed                test-results/775/fold3.txt
+                   Pixel      (from 652) 54 passed / 0 failed                test-results/775/pixel-tablet.txt
+                   Nexus 5    (from 652) 48 passed / 0 failed / 1 skipped    test-results/775/nexus5.txt
+                   Nexus 7    (from 648) 47 passed / 0 failed / 1 skipped    test-results/775/nexus7.txt
+                   HP 10 G2   (from 617) 47 passed / 0 failed / 1 skipped    test-results/775/hp10g2.txt
+                                         (its first pass, straight after the jump from 0.9.7: Calendar,
+                                         Clock, Email and Messaging "no card within 25 s"; not reproduced
+                                         by script or by codepoet's hands on a second 617 -> 775 upgrade,
+                                         where each opened in 2 to 7 s: first-runs/)
+                   pdk-sweep.sh          Fold3 17/17                          test-results/775/pdk-fold3.txt
+                   app-sweep.sh          Fold3, 22 third-party web apps: every web app a card, no crash;
+                                         three uncaught errors, each the app's or the unchanged framework's
+                                         and the same on main (MeTube: listAllHandlersForUrl is unanswered
+                                         on both; Cable News: Mojo's WebView has no pageFocused; FeedSpider:
+                                         its own Cordova plugin)               test-results/775/apps-fold3.txt
+Against 1.0.2:     the Nexus 5's pass on 652 first (46 passed, 2 failed: a phone's late card, and the new
+                   Screen & Lock check's own mistake, since fixed), then on 775: first-runs/baseline-652-nexus5.txt
+                   Nexus 7: 652 fresh (47 / 0 / 1), 775 over it (47 / 0 / 1)  test-results/775/nexus7-upgraded-from-652.txt
+                   A7 Lite: 652 fresh, bus-snapshot.sh, 775 over it, again: 94 calls, and the diff is which apps
+                   were open, process ids and free storage; Lunacy's preference files unchanged
+                                                                               test-results/775/bus-snapshot-a7lite-652-to-775.diff
+By hand, driven over adb (Pixel Tablet, Nexus 5, A7 Lite): Photos & Videos' albums, thumbnails and a picture
+                   full screen; the file picker from Screen & Lock; notification sounds (two players start);
+                   the launcher's own tabs, a group and the dock kept through 652 -> 775; Just Type;
+                   palm-install, palm-launch, list and remove over the relay; a JS service's exec of curl
+                   (PWA Installer's fetch) through the changed host.js
+Tier 3:            not run: sections 7 to 14 are codepoet's
+
+What this run does NOT decide, despite being green:
+                   - anything only a person sees: rule 0 is tier 3, never tier 2
+                   - a release build (none was made), and section 13's install paths
+                   - mail beyond "no account has an error" (the Fold3's three accounts): nothing was sent
+                   - sleep and wake, the fold mid-use, Exhibition, the keyboard app (not reinstalled)
+```
 
 ## Where things stood (2026-11-15, end of day)
 

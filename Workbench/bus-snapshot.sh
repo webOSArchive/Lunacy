@@ -79,9 +79,13 @@ c(P+"com.palm.tempdb/find",{query:{from:"com.palm.account.syncstate:1"},count:tr
 ["misc.file","image.file","image.album","video.file","audio.file","types"].forEach(function(k){c(P+"org.webosarchive.lunacy/media/find",{query:{from:"com.palm.media."+k+":1",limit:500}})});
 return "sent"})()' >/dev/null
 sleep 12
-js 'JSON.stringify(window.__snap||{})' | python3 -c '
+# Through a file, not a pipe: Node leaves before a pipe has taken a value this long (some 130 KB),
+# and the snapshot came out cut off at the pipe's 64 KB.
+RAW=$(mktemp); trap 'rm -f "$RAW"' EXIT
+js 'JSON.stringify(window.__snap||{})' > "$RAW"
+python3 -c '
 import json, sys
-t = sys.stdin.read().strip()
+t = open(sys.argv[2]).read().strip()
 try: o = json.loads(json.loads(t))
 except Exception: print("no snapshot: " + t[:200], file=sys.stderr); sys.exit(1)
 # What changes by itself, or names a moment or a record rather than a behaviour.
@@ -103,4 +107,4 @@ for k, v in sorted(o.items()):
         v = {"returnValue": v.get("returnValue"), "apps": sorted((a.get("id"), a.get("title"), a.get("main"), bool(a.get("visible", True)), a.get("type")) for a in o[k].get("apps", []))}
     out[k] = v
 json.dump(out, open(sys.argv[1], "w"), indent=1, sort_keys=True, ensure_ascii=False)
-print("%d calls, %d without a reply" % (len(out), sum(1 for v in out.values() if v == "(no reply)")))' "$OUT"
+print("%d calls, %d without a reply" % (len(out), sum(1 for v in out.values() if v == "(no reply)")))' "$OUT" "$RAW"

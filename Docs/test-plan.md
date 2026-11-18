@@ -47,6 +47,9 @@ Legend: `[ ]` not yet run · `[Pass]` · `[Fail]` · `[Human]` needs eyes or han
   caught, the fix adds the check: to `test.sh` or a unit test if it can run on the build
   machine, to `device-test.sh` if it needs a device, and as a `[Human]` line here if it needs
   eyes. Section 5 is where they collect.
+- **Don't edit a script while a pass is running it.** Bash reads a script as it goes: a change
+  to `device-test.sh` mid-round cut one device's pass short without an error (the A7 Lite's
+  fresh install, 2026-11-18). Finish the passes, then change the script, then run them again.
 - **Don't trust a green log over the screen** where they disagree; and don't trust the
   screen's colours from a TouchPad screenshot ([dev-workflow.md](dev-workflow.md)).
 
@@ -190,6 +193,10 @@ Each line is a bug that reached a device, with the check that would see it again
 - [Human] **Messaging's broken avatar** (6071f3c): a chat with someone new shows their avatar,
       or the generic one, from the first message; never a broken image. Section 4's image
       check covers an open chat only if one is open.
+      *Wrong signal, found 2026-11-18:* on the HP 10 G2 a fresh install's pass read "not
+      seen": Android 5's log is 256 KB and can't be enlarged, and the query, made as Email
+      loads at boot, had scrolled out before its card opened. The check keeps the log as it
+      streams as well.
 - [ ] **An app launched as Lunacy starts** (970b21c): Clock, launched by the intent that
       starts Lunacy, opens its card after the boot settles. *Seen failing:* 617 on the Fold3,
       every time ("no card opened; the placeholder goes").

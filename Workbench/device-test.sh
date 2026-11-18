@@ -335,10 +335,17 @@ else S "15 core  the shared core's answers (release build)"; fi
 # Fold3 with 7 accounts: 16 before the fix, 1 after. None means the load wasn't seen.
 CRASHLOG() { $A logcat -d -s Lunacy -s AndroidRuntime -s DEBUG -s ActivityManager </dev/null; }
 L1=$(CRASHLOG)    # sections 2 to 4, for section 6
+# The log from this start is kept as it comes as well as read back at the end: a device whose
+# log is 256 KB and can't be made larger (the HP 10 G2, Android 5) had dropped Email's query,
+# made as it loads at boot, before its card was open (a fresh install's first minutes log a lot),
+# and the check read "not seen" (build 775's fresh pass; streamed, the query was there, once).
+EL=$(mktemp); $A logcat -s Lunacy </dev/null > "$EL" 2>/dev/null & ELP=$!
 fresh
 $A shell am start -n $PKG/.shell.ShellActivity --es launch com.palm.app.email </dev/null >/dev/null 2>&1
 wait_log "\\[com.palm.app.email\\] loaded .* viewport \\\"[1-9]" 25; sleep 10
-n=$(lunalog | grep "bus \[com.palm.app.email\] com.palm.db/find" | grep -c '"from":"com.palm.mail.account:1"},"watch":true')
+kill $ELP 2>/dev/null
+n=$( { cat "$EL"; lunalog; } | tr -d '\r' | sort -u | grep "bus \[com.palm.app.email\] com.palm.db/find" | grep -c '"from":"com.palm.mail.account:1"},"watch":true')
+rm -f "$EL"
 if [ "$n" = 0 ]; then F "5 regr  Email's account query not seen from start to card (inconclusive)"
 elif [ "$n" -le 2 ]; then P "5 regr  Email queried its accounts $n time(s) from start to card (22fa049)"
 else F "5 regr  Email reloaded its accounts $n times from start to card (22fa049: db8 waking watches for nothing)"; fi

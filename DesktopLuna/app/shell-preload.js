@@ -63,4 +63,6 @@ contextBridge.exposeInMainWorld("luna", {
 	onApps: on("luna-de:apps"),
 	onBanner: on("luna-de:banner"),
 	onSound: on("luna-de:sound"),
+	onWallpaper: on("luna-de:wallpaper"),
+	wallpaper: () => ipcRenderer.invoke("luna-de:wallpaper"),
 });

@@ -820,6 +820,10 @@ ipcMain.handle("luna-de:devtools", (e, id) => { const c = cards.get(id); if (c) 
  * The bezel's own menu, by the right button anywhere on it: full screen, and the device. (The
  * window's title bar is the desktop's, which takes no items of an app's on Linux.)
  */
+/** The wallpaper as the host has it now (the one chosen in Screen & Lock, else the TouchPad's own); a new address each time, so it is read again. */
+function wallpaperUrl() { return host + "/wallpaper?t=" + Date.now(); }
+ipcMain.handle("luna-de:wallpaper", () => wallpaperUrl());
+
 ipcMain.handle("luna-de:bezel-menu", () => {
 	if (!shell) { return false; }
 	const items = [];
@@ -970,7 +974,8 @@ async function followHost() {
 				else if (ev.type === "banner") {
 					send("luna-de:banner", { id: ev.id, appId: ev.appId, message: ev.message, params: ev.params,
 						icon: ev.icon || (ev.appId ? host + "/icon?id=" + encodeURIComponent(ev.appId) : "") });
-				} else if (ev.type === "sound") {
+				} else if (ev.type === "wallpaper") { send("luna-de:wallpaper", wallpaperUrl()); }
+				else if (ev.type === "sound") {
 					// A banner's sound or playSoundNotification's (DesktopShell.sound): the app's own
 					// file from its origin, else the class's default from the host.
 					send("luna-de:sound", { url: ev.url || host + "/sound?name=" + encodeURIComponent(ev.name), duration: ev.duration });

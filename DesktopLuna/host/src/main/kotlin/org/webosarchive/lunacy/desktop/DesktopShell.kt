@@ -206,6 +206,9 @@ class DesktopShell(
     }
     fun removeBanner(id: Int) { events.add(event("banner-remove").put("id", id)) }
 
+    /** The wallpaper preference changed (Screen & Lock): the shell page draws the new one. */
+    fun wallpaperChanged() { events.add(event("wallpaper")) }
+
     /** Whether an app origin's URL is a file that is there (Main sets it: AppServer's answer). */
     var served: (String) -> Boolean = { false }
 

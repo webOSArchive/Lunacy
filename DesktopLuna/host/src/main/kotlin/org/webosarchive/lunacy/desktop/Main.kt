@@ -131,6 +131,7 @@ fun main(args: Array<String>) {
     val addedLaunchPoints = org.webosarchive.lunacy.card.LaunchPoints(webosRoot, files)
     val shell = DesktopShell(main, bus, registry, files, packages, addedLaunchPoints, data)
     val windows = shell.windows
+    systemService.onPreferenceChanged = { key, _ -> if (key == "wallpaper") shell.wallpaperChanged() }
     shell.served = { url -> server.serve(url)?.let { s -> s.data?.close(); s.statusCode == 200 } == true }
     // novacomd's device side, for the SDK's tools: palm-install, palm-launch, palm-log and novacom
     // reach Luna DE through novacomd's local relay (DesktopNovacom).
@@ -314,6 +315,15 @@ fun main(args: Array<String>) {
             runCatching { assets.open("luna/sounds/$name").use { it.readBytes() } }.getOrNull() else null
         if (bytes == null) send(ex, 404, "text/plain", ByteArray(0))
         else send(ex, 200, if (name.endsWith(".mp3")) "audio/mpeg" else "audio/wav", bytes)
+    } }
+
+    // The wallpaper: the one chosen (systemservice's "wallpaper" preference, which Screen & Lock
+    // sets after wallpaper/importWallpaper), else the TouchPad's own, as ShellChrome.showWallpaper.
+    http.createContext("/wallpaper") { ex -> ex.use {
+        val chosen = systemService.fileOf(systemService.get("wallpaper") as? JSONObject)
+        val bytes = runCatching { chosen?.readBytes() ?: assets.open("luna/wallpapers/$DEFAULT_WALLPAPER").use { it.readBytes() } }.getOrNull()
+        if (bytes == null) send(ex, 404, "text/plain", ByteArray(0))
+        else send(ex, 200, if ((chosen?.name ?: DEFAULT_WALLPAPER).lowercase().endsWith(".png")) "image/png" else "image/jpeg", bytes)
     } }
 
     http.createContext("/icon") { ex -> ex.use {

@@ -1928,6 +1928,22 @@
 	window.luna.onPanelAdded(function (d) { panels.push(d); drawNotes(); });
 	window.luna.onPanelRemoved(function (d) { panels = panels.filter(function (p) { return p.id !== d.id; }); drawNotes(); });
 	window.luna.onBanner(function (d) { banners.push(d); nextBanner(); });
+	// The wallpaper: the one chosen in Screen & Lock, drawn as LunaSysMgr drew it (ShellChrome.
+	// showWallpaper on Android, measured on the TouchPad): an image that can fill a TouchPad's
+	// screen one way up or the other covers the screen; a smaller one is drawn at its own size,
+	// centred, over the scene's dark grey. Until it has loaded, the one before stays.
+	function showWallpaper(url) {
+		var img = new Image();
+		img.onload = function () {
+			var w = img.naturalWidth, h = img.naturalHeight;
+			var fills = (w >= 1024 && h >= 768) || (w >= 768 && h >= 1024);
+			var s = document.getElementById("screen").style;
+			s.background = (fills ? "#000" : "#808080") + " url(\"" + url + "\") center / " + (fills ? "cover" : "auto") + " no-repeat";
+		};
+		img.src = url;
+	}
+	window.luna.onWallpaper(showWallpaper);
+	window.luna.wallpaper().then(showWallpaper);
 	// A notification's sound (a banner's, or PalmSystem.playSoundNotification's): played here, cut
 	// off at its duration when it has one, and several at once as LunaSysMgr's were.
 	window.luna.onSound(function (d) {

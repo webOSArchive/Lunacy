@@ -129,6 +129,44 @@ NODE
     && P "curl  curl.js takes WebDAV Client's PROPFIND (--noproxy, credentials in the URL and -u, -d, -w)" || F "curl  WebDAV Client's PROPFIND -- $r"
 else S "curl  no node on this machine"; fi
 
+# ---- The service host's child processes (host.js), as a JS service on a desktop runs them: the
+# webOS root under a folder that is itself a webOS folder name (/tmp here, /home there) and has a
+# space and a quote in its name. Each was a way every `exec` failed in Luna DE (PWA Installer's
+# "curl exit 1", 2026-11-18): the command line mapped twice (Node's exec goes through the wrapped
+# execFile and spawn), and the root's own space splitting a bare path in two. With them: a
+# program the root hasn't got is the machine's own (/bin/df), and "/" is the root's top.
+# Android's half (no host shell, the root under /data) can't run on this machine.
+if command -v node >/dev/null; then
+  HR="$WORK/Luna DE/ro'ot"; mkdir -p "$HR/usr/bin" "$HR/tmp" "$HR/media/internal"
+  printf '#!/bin/sh\nfor a in "$@"; do printf "[%%s]" "$a"; done\n' > "$HR/usr/bin/curl"; chmod +x "$HR/usr/bin/curl"
+  r=$(LUNACY_SHELL=/bin/sh LUNACY_ROOT_AT_SLASH=1 node - "AndroidLuna/src/main/assets/lunacy/services/host.js" "$HR" <<'NODE'
+const fs0 = require("fs"), w = process.stdout.write, c = Object.assign({}, console);
+const src = fs0.readFileSync(process.argv[2], "utf8").split("// ---- node 0.4 ----")[0];
+const ROOT = process.argv[3];
+process.argv = [process.argv[0], "host.js", ROOT, "/usr/palm/services/x"];
+new Function("require", "process", src)(require, process);          // the path and child-process shims
+process.stdout.write = w; Object.assign(console, c);                 // the bus link took them
+const cp = require("child_process"), o = {};
+cp.exec('/usr/bin/curl -o "/tmp/out file" bare /tmp/z \'/tmp/q\'', (e, out) => {
+  o.exec = e ? "failed: " + e.message.split("\n")[0] : out;
+  cp.execFile("/usr/bin/curl", ["/tmp/a b", "x"], (e2, out2) => {
+    o.execFile = e2 ? "failed" : out2;
+    const d = cp.spawn("/bin/df", ["-k", "/media/internal"]);
+    d.on("error", () => { o.df = "failed to start"; done(); });
+    d.on("exit", (code) => { o.df = code; done(); });
+  });
+});
+function done() {
+  o.slash = fs0.readdirSync("/").sort().join(",");
+  o.want = { exec: "[-o][" + ROOT + "/tmp/out file][bare][" + ROOT + "/tmp/z][" + ROOT + "/tmp/q]", execFile: "[" + ROOT + "/tmp/a b][x]", df: 0, slash: "media,tmp,usr" };
+  console.log(JSON.stringify(o));
+}
+NODE
+)
+  echo "$r" | python3 -c 'import json,sys; r=json.load(sys.stdin); w=r.pop("want"); sys.exit(0 if r==w else 1)' 2>/dev/null \
+    && P "host  host.js maps an exec once, quotes a root with a space, runs the machine's df, and \"/\" is the root" || F "host  a service's child processes -- $(echo "$r" | cut -c1-400)"
+else S "host  no node on this machine"; fi
+
 # ---- the JVM tests (Robolectric: db8 on a real SQLite, the transforms, the page hooks, ...).
 if [ -z "$QUICK" ]; then
   rm -rf AndroidLuna/build/test-results/testArm64DebugUnitTest

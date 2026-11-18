@@ -253,6 +253,65 @@ for entry in $APPS; do
   else P "4 apps  $id: card in $secs s ($how), no uncaught errors${DEBUG:+, no broken images}"; fi
 done
 
+# ---------------------------------------------------------------- 15. the shared core (1.1.0)
+# What moved out of the Android shell into LunaCore for Luna DE, asked as an app asks it: each
+# answered on main (seen passing on 1.0.2, build 652, on the Nexus 5 before the moves were
+# trusted), so a failure here is a regression of the move. Sent, then read back (section 2).
+if [ -n "$DEBUG" ]; then
+  js /com.palm.app.email/index.html '(function(){var o=window.__dtv={};window.__dtvb=[];
+function c(u,p,k,f){var b=new PalmServiceBridge();window.__dtvb.push(b);b.onservicecallback=function(t){try{o[k]=f(JSON.parse(t))}catch(e){o[k]="bad reply"}};b.call(u,JSON.stringify(p))}
+c("palm://com.palm.preferences/systemProperties/Get",{key:"com.palm.properties.nduid"},"nduid",function(r){return /^[0-9a-f]{40}$/.test(r["com.palm.properties.nduid"])});
+c("palm://com.palm.preferences/systemProperties/Get",{key:"com.palm.properties.deviceName"},"name",function(r){return r["com.palm.properties.deviceName"]});
+c("palm://com.palm.preferences/systemProperties/Get",{key:"com.palm.properties.nope"},"nokey",function(r){return r.returnValue===false&&r.errorText});
+["misc.file","image.file","image.album","video.file","audio.file"].forEach(function(k){
+ c("palm://org.webosarchive.lunacy/media/find",{query:{from:"com.palm.media."+k+":1",limit:500}},k,function(r){return r.returnValue===true&&r.results?r.results.length:("error "+r.errorCode)})});
+c("palm://org.webosarchive.lunacy/media/find",{query:{from:"com.palm.account:1"}},"relayOther",function(r){return r.returnValue===false?r.errorCode:"answered"});
+c("palm://com.palm.db/find",{query:{from:"com.palm.media.image.file:1",limit:1}},"direct",function(r){return r.returnValue===false?r.errorCode:"answered"});
+var b=new PalmServiceBridge();window.__dtvb.push(b);b.onservicecallback=function(t){var r=JSON.parse(t),p=r.results&&r.results[0]&&r.results[0].path;if(!p){o.thumb="no image";return}
+ var i=new Image();i.onload=function(){o.thumb=i.naturalWidth+"x"+i.naturalHeight};i.onerror=function(){o.thumb="failed"};i.src="/var/luna/data/extractfs"+encodeURIComponent(p)+":0:0:64:64:3";
+ var j=new Image();j.onload=function(){o.full=j.naturalWidth+"x"+j.naturalHeight};j.onerror=function(){o.full="failed"};j.src=encodeURI(p);
+ var x=new XMLHttpRequest();x.open("GET","/var/luna/data/extractfs"+encodeURIComponent(p)+"::3:0:0:0:0:3:0:0:200:200:3");x.onload=function(){o.json=x.responseText};x.onerror=function(){o.json="failed"};x.send()};
+b.call("palm://org.webosarchive.lunacy/media/find",JSON.stringify({query:{from:"com.palm.media.image.file:1",limit:1}}));
+return "sent"})()' >/dev/null
+  sleep 8
+  r=$(js /com.palm.app.email/index.html 'JSON.stringify(window.__dtv||{})')
+  while IFS=$'\t' read -r k rest; do case $k in P) P "$rest";; F) F "$rest";; I) I "$rest";; S) S "$rest";; esac; done < <(echo "$r" | python3 -c '
+import json, re, sys
+try: o = json.loads(sys.stdin.read())
+except Exception: o = None
+if not isinstance(o, dict) or not o: print("F\t15 core  the checks never answered"); sys.exit()
+def line(ok, good, bad): print(("P\t15 core  " + good) if ok else ("F\t15 core  " + bad))
+line(o.get("nduid") is True and isinstance(o.get("name"), str) and o["name"] and o.get("nokey") == "no such key",
+     "systemProperties: an nduid of 40 hex digits, the device is \"%s\", an unknown key is \"no such key\"" % o.get("name"),
+     "systemProperties -- nduid %s, deviceName %s, unknown key %s" % (o.get("nduid"), o.get("name"), o.get("nokey")))
+kinds = ["misc.file", "image.file", "image.album", "video.file", "audio.file"]
+bad = [k for k in kinds if not isinstance(o.get(k), int)]
+line(not bad, "the media index answers the file picker: " + ", ".join("%s %s" % (o.get(k), k) for k in kinds),
+     "the media index -- " + ", ".join("%s: %s" % (k, o.get(k)) for k in bad))
+line(o.get("relayOther") == -3963 and o.get("direct") == -3963, "the picker relay reads the media kinds only, and db8 refuses Email the image kind",
+     "media permissions -- another kind through the relay: %s, the image kind directly: %s" % (o.get("relayOther"), o.get("direct")))
+if o.get("thumb") == "no image": print("S\t15 core  the thumbnailer: no image on this device")
+else:
+    def wh(v):
+        m = re.match(r"^(\d+)x(\d+)$", str(v)); return (int(m.group(1)), int(m.group(2))) if m else None
+    t, f = wh(o.get("thumb")), wh(o.get("full"))
+    try: j = json.loads(o.get("json") or "")
+    except Exception: j = {}
+    # The short form fits the box and never grows; the long form (crop 3) fits it and may grow.
+    def fits(size, box, grow):
+        if not size or not f: return False
+        s = min(box / f[0], box / f[1]);  s = s if grow else min(s, 1.0)
+        return abs(size[0] - max(1, round(f[0] * s))) <= 1 and abs(size[1] - max(1, round(f[1] * s))) <= 1
+    ok = fits(t, 64, False) and (j.get("original-width"), j.get("original-height")) == f and fits((j.get("output-width", 0), j.get("output-height", 0)), 200, True)
+    line(ok, "the thumbnailer: a %sx%s picture fits 64x64 as %sx%s, and its long form says %sx%s for 200x200" % (f + t + (j.get("output-width"), j.get("output-height"))) if ok else "",
+         "the thumbnailer -- the picture %s, in 64x64 %s, the long form %s" % (o.get("full"), o.get("thumb"), str(o.get("json"))[:90]))
+')
+  # Screen & Lock's own rows for Android show once the environment has answered: they start
+  # hidden since 1.1.0, for Luna DE, which has none of them (its card is open from section 4).
+  r=$(js /com.palm.app.screenlock/ '(function(){var t=document.body.innerText,m=[];["Screen Layout","Android Apps","Use on Android","Edge swipe for home","Change Wallpaper"].forEach(function(k){if(t.indexOf(k)<0)m.push(k)});return m.length?"missing: "+m.join(", "):"all"})()')
+  [ "$r" = all ] && P "15 core  Screen & Lock shows its Android rows (the layout, Android's notifications and wallpaper, the edge swipe)" || F "15 core  Screen & Lock's rows -- ${r:-no card}"
+else S "15 core  the shared core's answers (release build)"; fi
+
 # ---------------------------------------------------------------- 5. regressions a script can see
 # 22fa049: Email reloaded its accounts once per account as it loaded, from db8 waking watches on
 # merges that changed nothing (seen as the screen flashing). Counted from Lunacy's start until

@@ -42,6 +42,37 @@ object DesktopImages : Images {
     override fun size(input: InputStream): IntArray? =
         runCatching { ImageIO.read(input)?.let { intArrayOf(it.width, it.height) } }.getOrNull()
 
+    /** Extractfs's scaling: the whole image, or with [fill] its centre in the box's shape, drawn at the size. */
+    override fun scaled(open: () -> InputStream?, w: Int, h: Int, fill: Boolean, jpeg: Boolean): ByteArray? = runCatching {
+        val src = open()?.use { ImageIO.read(it) } ?: return null
+        var sx = 0; var sy = 0; var sw = src.width; var sh = src.height
+        if (fill) {
+            val scale = maxOf(w.toDouble() / src.width, h.toDouble() / src.height)
+            sw = minOf(src.width, Math.round(w / scale).toInt()); sh = minOf(src.height, Math.round(h / scale).toInt())
+            sx = (src.width - sw) / 2; sy = (src.height - sh) / 2
+        }
+        // A JPEG has no transparency: Java's writer refuses an image with an alpha channel.
+        val out = BufferedImage(w, h, if (jpeg) BufferedImage.TYPE_INT_RGB else BufferedImage.TYPE_INT_ARGB)
+        out.createGraphics().apply {
+            setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+            if (jpeg) { color = java.awt.Color.WHITE; fillRect(0, 0, w, h) }
+            // Halved in steps while it is more than twice the size, so a large photo isn't a mosaic.
+            var from: java.awt.Image = src.getSubimage(sx, sy, sw, sh)
+            var fw = sw; var fh = sh
+            while (fw / 2 >= w && fh / 2 >= h) {
+                fw /= 2; fh /= 2
+                val half = BufferedImage(fw, fh, BufferedImage.TYPE_INT_ARGB)
+                half.createGraphics().apply {
+                    setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+                    drawImage(from, 0, 0, fw, fh, null); dispose()
+                }
+                from = half
+            }
+            drawImage(from, 0, 0, w, h, null); dispose()
+        }
+        ByteArrayOutputStream().also { ImageIO.write(out, if (jpeg) "jpg" else "png", it) }.toByteArray()
+    }.getOrNull()
+
     override fun jpegThumbnail(file: File, px: Int): ByteArray? = runCatching {
         val src = ImageIO.read(file) ?: return null
         val scale = minOf(1.0, px.toDouble() / minOf(src.width, src.height))

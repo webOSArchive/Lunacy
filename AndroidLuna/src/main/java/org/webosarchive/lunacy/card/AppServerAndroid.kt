@@ -31,10 +31,5 @@ object AndroidServerHooks : ServerHooks {
     }
 
     override val pre3Dashboards: Boolean get() = FormFactor.pre3Dashboards
-    override fun userFile(webosRoot: File, rel: String): File? = UserFiles.resolve(webosRoot, rel)
     override fun playlist(s: InputStream, name: String, url: String): InputStream = LocalNet.playlist(s, name, url)
-    override fun extractfs(spec: String, open: (String) -> (() -> InputStream?)?): Served? =
-        Extractfs.read(spec, Extractfs.Opener { open(it) })?.let {
-            Served(it.mime, null, 200, "OK", mapOf("Cache-Control" to "max-age=600"), ByteArrayInputStream(it.bytes))
-        }
 }

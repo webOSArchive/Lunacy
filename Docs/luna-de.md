@@ -354,7 +354,9 @@ lists documents only; hybrid apps' plug-ins don't run and nothing says so in the
 `app.getPath`, handed to the host as `--folders`; `HostFolders` on the desktop), as Android's
 shared storage is on Android; `ringtones`, `wallpapers` and everything else are Luna DE's own
 folder, which the bezel's menu opens. Apps and services read and write them as on a device, so a
-file manager app deletes real files: a ratchet item, below.
+file manager app deletes real files: a ratchet item, below. Pages are served those files, and
+webOS's thumbnailer (Extractfs, in LunaCore since; the desktop scales with javax.imageio) reads
+them, for pages and for services.
 
 **Ratchet items (desktop):** Electron runs with `--no-sandbox` in development (the Linux
 setuid helper needs root); app windows share the page's world with the preload

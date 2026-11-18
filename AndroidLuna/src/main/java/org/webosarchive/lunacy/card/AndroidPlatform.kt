@@ -22,6 +22,31 @@ object AndroidImages : Images {
         return if (bounds.outWidth > 0) intArrayOf(bounds.outWidth, bounds.outHeight) else null
     }
 
+    /** Extractfs's scaling, as it did it itself before LunaCore: sampled down as it is decoded, then drawn at the size. */
+    override fun scaled(open: () -> InputStream?, w: Int, h: Int, fill: Boolean, jpeg: Boolean): ByteArray? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        open()?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        val sw = bounds.outWidth; val sh = bounds.outHeight
+        if (sw <= 0 || sh <= 0) return null
+        var sample = 1
+        while (sw / (sample * 2) >= w && sh / (sample * 2) >= h) sample *= 2
+        val bmp = open()?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) } ?: return null
+        val src = if (fill) {
+            val scale = maxOf(w.toFloat() / bmp.width, h.toFloat() / bmp.height)
+            val cw = Math.min(bmp.width, Math.round(w / scale)); val ch = Math.min(bmp.height, Math.round(h / scale))
+            android.graphics.Rect((bmp.width - cw) / 2, (bmp.height - ch) / 2, (bmp.width - cw) / 2 + cw, (bmp.height - ch) / 2 + ch)
+        } else android.graphics.Rect(0, 0, bmp.width, bmp.height)
+        val out = if (src.width() == w && src.height() == h && src.left == 0 && src.top == 0) bmp else
+            Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also {
+                android.graphics.Canvas(it).drawBitmap(bmp, src, android.graphics.Rect(0, 0, w, h), android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG))
+                bmp.recycle()
+            }
+        val bytes = java.io.ByteArrayOutputStream()
+        out.compress(if (jpeg) Bitmap.CompressFormat.JPEG else Bitmap.CompressFormat.PNG, if (jpeg) 90 else 100, bytes)
+        out.recycle()
+        return bytes.toByteArray()
+    }
+
     override fun jpegThumbnail(file: File, px: Int): ByteArray? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.path, bounds)

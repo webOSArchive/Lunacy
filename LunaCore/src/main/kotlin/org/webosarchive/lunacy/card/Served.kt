@@ -95,8 +95,8 @@ class ServeUrl(private val url: String) {
 /**
  * What AppServer needs from its platform beyond files: the parts of serving that are Android's
  * own (Android's folders in user storage, the local-network playlist rewrite, the notifications
- * app's icons, the phone's dashboards). Luna DE answers each in the plain way (no mapping, no
- * rewrite, no route).
+ * app's icons, the phone's dashboards). Luna DE answers each in the plain way (no rewrite, no
+ * route); user storage and the thumbnailer are the same for both.
  */
 interface ServerHooks {
     /** A route of the platform's own, tried before the rest; null if [path] isn't one. */
@@ -104,10 +104,12 @@ interface ServerHooks {
     /** Whether dashboards wear the Pre3's boxes (a phone's bottom area: FormFactor.pre3Dashboards). */
     val pre3Dashboards: Boolean get() = false
     /** [rel] under /media/internal, as a file (UserFiles.resolve on Android). */
-    fun userFile(webosRoot: File, rel: String): File? =
-        File(webosRoot, "media/internal/$rel").takeIf { org.webosarchive.lunacy.core.WebosPaths.inside(it, File(webosRoot, "media/internal")) }
+    fun userFile(webosRoot: File, rel: String): File? = UserFiles.resolve(webosRoot, rel)
     /** A media file served from user storage, as the platform rewrites playlists (LocalNet.playlist). */
     fun playlist(s: InputStream, name: String, url: String): InputStream = s
-    /** webOS's thumbnailer (Extractfs on Android); null where the platform has none. */
-    fun extractfs(spec: String, open: (String) -> (() -> InputStream?)?): Served? = null
+    /** webOS's thumbnailer ([Extractfs]); null where the read fails, as a device's did. */
+    fun extractfs(spec: String, open: (String) -> (() -> InputStream?)?): Served? =
+        Extractfs.read(spec, Extractfs.Opener { open(it) })?.let {
+            Served(it.mime, null, 200, "OK", mapOf("Cache-Control" to "max-age=600"), java.io.ByteArrayInputStream(it.bytes))
+        }
 }

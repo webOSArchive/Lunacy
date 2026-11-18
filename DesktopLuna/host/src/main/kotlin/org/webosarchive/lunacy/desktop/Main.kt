@@ -212,7 +212,10 @@ fun main(args: Array<String>) {
         // where their logs and the apps' go, as on a device.
         org.webosarchive.lunacy.card.SysLog.start(webosRoot)
         desktopRoot.prepare()
-        val js = org.webosarchive.lunacy.card.JsServices(bus, installed, desktopRoot)
+        val js = org.webosarchive.lunacy.card.JsServices(bus, installed, desktopRoot) { spec, open ->
+            // A service's read of webOS's thumbnailer, as a page's (Extractfs).
+            org.webosarchive.lunacy.card.Extractfs.read(spec, org.webosarchive.lunacy.card.Extractfs.Opener(open))?.bytes
+        }
         shell.jsServices = js
         js.reload()
         Runtime.getRuntime().addShutdownHook(Thread { runCatching { js.stopAll() } })

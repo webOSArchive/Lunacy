@@ -1928,6 +1928,14 @@
 	window.luna.onPanelAdded(function (d) { panels.push(d); drawNotes(); });
 	window.luna.onPanelRemoved(function (d) { panels = panels.filter(function (p) { return p.id !== d.id; }); drawNotes(); });
 	window.luna.onBanner(function (d) { banners.push(d); nextBanner(); });
+	// A notification's sound (a banner's, or PalmSystem.playSoundNotification's): played here, cut
+	// off at its duration when it has one, and several at once as LunaSysMgr's were.
+	window.luna.onSound(function (d) {
+		var a = new Audio(d.url);
+		var stop = d.duration > 0 ? setTimeout(function () { a.pause(); a.src = ""; }, d.duration) : 0;
+		a.onended = a.onerror = function () { clearTimeout(stop); };
+		a.play().catch(function (e) { console.error("sound " + d.url + ": " + e); });
+	});
 	window.luna.onBannerRemove(function (d) {
 		banners = banners.filter(function (b) { return d.id ? b.id !== d.id : b.appId !== d.appId; });
 		if (bannerOn && (d.id ? bannerOn.id === d.id : bannerOn.appId === d.appId)) { endBanner(); }

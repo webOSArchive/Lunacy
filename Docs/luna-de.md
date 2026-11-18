@@ -335,6 +335,21 @@ ready); build 737 (UniversalSearch in LunaCore) 50 passed, 0 failed
 the move (ten entries, each on or off as it was). Still owed, as above: an Android 5 device and
 a fresh install.
 
+**2026-11-18, from codepoet's first round of Catalog apps** (each in `Docs/fix-log.md`):
+`systemProperties/Get` (SystemProperties in LunaCore; the nduid is novacom's); a window draws no
+scrollbars; a page hears its activation at `stageReady` or a drawn frame, not at load; a
+notification's sound plays (NotificationSound in LunaCore, the shell page plays it; Chromium's
+autoplay rule is off, so a sound needs no click first); a page's same-origin frames share its
+interface (`nodeIntegrationInSubFrames`: the preload runs in frames, and no frame gets Node), so
+the file picker works, with db8's picker relay and the documents' index (FileIndex in LunaCore)
+over Luna DE's own `/media/internal`; and the service host maps an `exec`'s command line once,
+runs the machine's own program where the root has none (`/bin/df`), and gives a service the
+webOS root at `/`. **Owed on Android for these:** a device run (SystemProperties, FileIndex and
+Sounds' rules moved; host.js changed for every platform). **Not there:** a frame from another
+origin has no interface (Android's has); photos, music and video have no index, so the picker
+lists documents only; `/media/internal` holds only what is put there (no folders of the
+desktop's are mapped); hybrid apps' plug-ins don't run and nothing says so in the log.
+
 **Ratchet items (desktop):** Electron runs with `--no-sandbox` in development (the Linux
 setuid helper needs root); app windows share the page's world with the preload
 (`contextIsolation: false`), as Android's WebView binding does.

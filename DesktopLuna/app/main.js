@@ -199,8 +199,10 @@ function routeAppOrigins() {
 function pagePrefs() {
 	// http:// images and media in an app's https page load, as on the TouchPad, where a page's
 	// file:// origin never blocked them (Android: LocalNet and the WebView's mixed-content mode).
+	// The preload runs in a page's frames too (nodeIntegrationInSubFrames; the name is Electron's, and
+	// no frame gets Node): a frame shares its page's interface, as on Android (app-preload.js).
 	return { preload: path.join(__dirname, "app-preload.js"), contextIsolation: false, sandbox: false, nodeIntegration: false,
-		allowRunningInsecureContent: true };
+		nodeIntegrationInSubFrames: true, allowRunningInsecureContent: true };
 }
 
 function appIdOf(url) {
@@ -952,6 +954,10 @@ async function followHost() {
 				else if (ev.type === "banner") {
 					send("luna-de:banner", { id: ev.id, appId: ev.appId, message: ev.message, params: ev.params,
 						icon: ev.icon || (ev.appId ? host + "/icon?id=" + encodeURIComponent(ev.appId) : "") });
+				} else if (ev.type === "sound") {
+					// A banner's sound or playSoundNotification's (DesktopShell.sound): the app's own
+					// file from its origin, else the class's default from the host.
+					send("luna-de:sound", { url: ev.url || host + "/sound?name=" + encodeURIComponent(ev.name), duration: ev.duration });
 				} else if (ev.type === "banner-remove") { send("luna-de:banner-remove", { id: ev.id }); }
 				else if (ev.type === "banner-clear") { send("luna-de:banner-remove", { appId: ev.appId }); }
 				else if (ev.type === "network") { send("luna-de:network", { online: ev.online }); }
@@ -1172,5 +1178,8 @@ app.whenReady().then(async () => {
 	});
 });
 
+// A sound plays when an app or the system asks, as on webOS, whether or not a person has clicked in
+// that page first (a notification's sound in the shell page, an alarm's in an app's).
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 app.on("window-all-closed", () => app.quit());
 app.on("quit", () => { if (hostProcess) { hostProcess.kill(); } });

@@ -205,6 +205,28 @@ class DesktopShell(
         return id
     }
     fun removeBanner(id: Int) { events.add(event("banner-remove").put("id", id)) }
+
+    /** Whether an app origin's URL is a file that is there (Main sets it: AppServer's answer). */
+    var served: (String) -> Boolean = { false }
+
+    /**
+     * A banner's sound, or PalmSystem.playSoundNotification's: what plays is NotificationSound's
+     * to say, as on Android; the shell page plays it, through the machine's own sound and at its
+     * volume. A file the app names that isn't there plays the class's default, as on Android.
+     * Not here: Sounds & Alerts' switches, and Android's own sound for "ringtones".
+     */
+    fun sound(appId: String, soundClass: String, soundFile: String, durationMs: Int) {
+        if (soundClass.isEmpty() && soundFile.isEmpty()) return
+        val cls = org.webosarchive.lunacy.card.NotificationSound.classOf(soundClass) ?: return
+        val locale = java.util.Locale.getDefault().let { it.language + "_" + it.country.lowercase() }
+        val url = if (soundFile.isEmpty()) null else
+            org.webosarchive.lunacy.card.NotificationSound.candidates(appId, soundFile, locale, registry.get(appId)?.dir ?: appId)
+                .firstOrNull { served(it) }
+        if (soundFile.isNotEmpty() && url == null) Log.w(Lunacy.TAG, "[$appId] sound not found: $soundFile")
+        events.add(event("sound").put("url", url ?: "")
+            .put("name", org.webosarchive.lunacy.card.NotificationSound.defaultFile(cls))
+            .put("duration", org.webosarchive.lunacy.card.NotificationSound.duration(cls, durationMs)))
+    }
     fun clearBanners(w: DesktopWindow) { events.add(event("banner-clear").put("appId", w.appId)) }
     fun activate(w: DesktopWindow) { events.add(event("activate").put("page", w.pageId)) }
     fun keyboardWanted(w: DesktopWindow, show: Boolean) { events.add(event("keyboard").put("page", w.pageId).put("show", show)) }
@@ -695,6 +717,8 @@ class DesktopRoot(override val root: File, override val hostScripts: File, priva
         // Windows has none of its own: Git for Windows' sh if it is installed, else nothing, and a
         // service's shell command fails as a command that couldn't start (the truth, rule 2).
         "LUNACY_SHELL" to (if (WINDOWS) windowsShell?.path ?: "" else "/bin/sh"),
+        // "/" is the webOS root's top for a service, not the machine's own (host.js).
+        "LUNACY_ROOT_AT_SLASH" to "1",
     )
 
     private companion object {

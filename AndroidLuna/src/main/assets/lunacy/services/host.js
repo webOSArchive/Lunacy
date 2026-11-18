@@ -50,7 +50,12 @@ const exists0 = fs.existsSync;
 // The host's own shell, where the webOS root has no /bin/sh of its own (Luna DE, which has no
 // busybox): LUNACY_SHELL. Android's root has busybox's, and its fallback is /system/bin/sh.
 const HOST_SHELL = process.env.LUNACY_SHELL || "";
+// Luna DE: "/" itself is the webOS root's top (LUNACY_ROOT_AT_SLASH). On Android "/" is Android's
+// own, which shows a service next to nothing; a desktop's is the developer's whole machine, and a
+// file manager that starts at "/" (Topaz Explorer) listed it as if it were the device's.
+const ROOT_AT_SLASH = !!process.env.LUNACY_ROOT_AT_SLASH;
 function real(p) {
+	if (ROOT_AT_SLASH && p === "/") { return ROOT; }
 	if (typeof p !== "string" || !WEBOS.test(p)) { return p; }
 	// A path already inside the root is real. On Android the root is under /data, which is no
 	// webOS folder; on a desktop it can be under /home or /tmp, which are, and a path the host
@@ -62,9 +67,37 @@ function real(p) {
 	if (android && !exists0(ROOT + "/media/internal/" + m[1])) { return android + (m[2] || ""); }
 	return ROOT + p;
 }
+/** How the shell is quoting at [index] of a command line: "'", '"' or "" for a bare word. */
+function quotedAt(s, index) {
+	let q = "";
+	for (let i = 0; i < index; i++) {
+		const c = s[i];
+		if (q === "'") { if (c === "'") { q = ""; } }
+		else if (c === "\\") { i++; }
+		else if (q === '"') { if (c === '"') { q = ""; } }
+		else if (c === "'" || c === '"') { q = c; }
+	}
+	return q;
+}
+/** [text] as the shell reads it back unchanged inside quoting [q]. */
+function forShell(text, q) {
+	if (q === "'") { return text.replace(/'/g, "'\\''"); }
+	if (q === '"') { return text.replace(/(["$`\\])/g, "\\$1"); }
+	return text.replace(/([^A-Za-z0-9_\/.:=+,@%-])/g, "\\$1");
+}
 function realAll(s) {
-	// Absolute webOS paths inside a shell command line.
-	return String(s).replace(IN_COMMAND, (m, pre, p) => pre + real(p));
+	// Absolute webOS paths inside a shell command line. What the mapping adds is written so the
+	// shell reads it as part of the same word: Luna DE's root is under the user's own folders,
+	// where a name has spaces ("Luna DE", "Application Support") and a bare `/usr/bin/curl` became
+	// two words. What the command itself wrote (a `$name` in the path) is left for the shell.
+	s = String(s);
+	return s.replace(IN_COMMAND, (m, pre, p, at) => {
+		const r = real(p);
+		if (r === p) { return m; }
+		const q = quotedAt(s, at + pre.length);
+		const kept = r.length > p.length && r.slice(-p.length) === p ? p : "";
+		return pre + forShell(r.slice(0, r.length - kept.length), q) + kept;
+	});
 }
 
 function wrap(obj, name, argIndexes) {
@@ -207,6 +240,13 @@ function childOptions(o) {
 	if (o.cwd) { o.cwd = real(o.cwd); }
 	return o;
 }
+// A program to run. Where the webOS root has no commands of its own (Luna DE: no busybox, the
+// machine's shell for /bin/sh), one the root hasn't got is the machine's own at that path: a
+// service's /bin/df is the desktop's df, as its shell commands' tools already are by PATH.
+function program(file) {
+	const r = real(file);
+	return HOST_SHELL && r !== file && !exists0(r) && exists0(file) ? file : r;
+}
 function childArgs(file, args) {
 	const shell = /(^|\/)sh$/.test(file) && args[0] === "-c";
 	return args.map((a, i) => shell && i === 1 ? realAll(a) : real(a));
@@ -216,30 +256,40 @@ function splitArgs(args, opts) {
 	return [args, opts];
 }
 const spawn0 = cp.spawn, execFile0 = cp.execFile, exec0 = cp.exec, spawnSync0 = cp.spawnSync, execSync0 = cp.execSync, execFileSync0 = cp.execFileSync;
+// Node's exec and execSync start their shell through execFile and spawn, the ones below: a
+// command line they have mapped is not mapped a second time on its way through. On Android the
+// root is under /data, which is no webOS folder, and the second pass changed nothing; Luna DE's is
+// under /home, which is one, and every exec ran <root>/home/.../<root>/usr/bin/curl: no such file.
+let mapped = 0;
+function once(f) { mapped++; try { return f(); } finally { mapped--; } }
 cp.spawn = function (file, args, opts) {
+	if (mapped) { return spawn0.apply(cp, arguments); }
 	if (!Array.isArray(args)) { opts = args; args = []; }
-	return withExtracts(args, (a) => spawn0.call(cp, real(file), childArgs(file, a), childOptions(opts)));
+	return withExtracts(args, (a) => spawn0.call(cp, program(file), childArgs(file, a), childOptions(opts)));
 };
 cp.spawnSync = function (file, args, opts) {
+	if (mapped) { return spawnSync0.apply(cp, arguments); }
 	if (!Array.isArray(args)) { opts = args; args = []; }
-	return spawnSync0.call(cp, real(file), childArgs(file, args), childOptions(opts));
+	return spawnSync0.call(cp, program(file), childArgs(file, args), childOptions(opts));
 };
 cp.execFile = function (file, args, opts, cb) {
+	if (mapped) { return execFile0.apply(cp, arguments); }
 	if (typeof args === "function") { cb = args; args = []; opts = {}; }
 	else if (!Array.isArray(args)) { cb = opts; opts = args; args = []; }
 	if (typeof opts === "function") { cb = opts; opts = {}; }
-	return withExtracts(args, (a) => execFile0.call(cp, real(file), childArgs(file, a), childOptions(opts), cb));
+	return withExtracts(args, (a) => execFile0.call(cp, program(file), childArgs(file, a), childOptions(opts), cb));
 };
 cp.execFileSync = function (file, args, opts) {
+	if (mapped) { return execFileSync0.apply(cp, arguments); }
 	if (!Array.isArray(args)) { opts = args; args = []; }
-	return execFileSync0.call(cp, real(file), childArgs(file, args), childOptions(opts));
+	return execFileSync0.call(cp, program(file), childArgs(file, args), childOptions(opts));
 };
 cp.exec = function (cmd, opts, cb) {
 	if (typeof opts === "function") { cb = opts; opts = {}; }
-	return exec0.call(cp, realAll(cmd), Object.assign(childOptions(opts), { shell: HOST_SHELL || "/system/bin/sh" }), cb);
+	return once(() => exec0.call(cp, realAll(cmd), Object.assign(childOptions(opts), { shell: HOST_SHELL || "/system/bin/sh" }), cb));
 };
 cp.execSync = function (cmd, opts) {
-	return execSync0.call(cp, realAll(cmd), Object.assign(childOptions(opts), { shell: HOST_SHELL || "/system/bin/sh" }));
+	return once(() => execSync0.call(cp, realAll(cmd), Object.assign(childOptions(opts), { shell: HOST_SHELL || "/system/bin/sh" })));
 };
 
 // ---- node 0.4 ----

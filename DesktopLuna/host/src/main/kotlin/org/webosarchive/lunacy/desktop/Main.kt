@@ -113,6 +113,7 @@ fun main(args: Array<String>) {
     val addedLaunchPoints = org.webosarchive.lunacy.card.LaunchPoints(webosRoot, files)
     val shell = DesktopShell(main, bus, registry, files, packages, addedLaunchPoints, data)
     val windows = shell.windows
+    shell.served = { url -> server.serve(url)?.let { s -> s.data?.close(); s.statusCode == 200 } == true }
     // novacomd's device side, for the SDK's tools: palm-install, palm-launch, palm-log and novacom
     // reach Luna DE through novacomd's local relay (DesktopNovacom).
     val novacom = DesktopNovacom(main, bus, webosRoot, desktopRoot, data).also { it.start() }
@@ -122,6 +123,11 @@ fun main(args: Array<String>) {
     }
     main.call {
         db8.register(bus); tempdb.register(bus)
+        // The file picker's reads of the media index (webOS's own picker, which enyo.FilePicker
+        // loads in a frame), and the documents' index, answered from the files under Luna DE's own
+        // /media/internal as on Android (FileIndex). Photos, music and video have no index here yet.
+        db8.registerPickerRelay(bus)
+        org.webosarchive.lunacy.card.FileIndex(webosRoot).attach(db8)
         systemService.register(bus)
         // The device's read-only properties, as the screen mode's device (a TouchPad or a Pre3) gave
         // them. The nduid is this copy of Luna DE's own, the one novacom lists it by; the serial is
@@ -275,6 +281,16 @@ fun main(args: Array<String>) {
         body.optJSONArray("tabs")?.let { launcher.saveTabs(it) }
         body.optJSONArray("dock")?.let { launcher.saveDock(it, shell.device == org.webosarchive.lunacy.card.DeviceProfile.PRE3) }
         send(ex, 204, "text/plain", ByteArray(0))
+    } }
+
+    // A sound class's default, webOS's own from /usr/palm/sounds (DesktopShell.sound): the names
+    // NotificationSound gives and no others.
+    http.createContext("/sound") { ex -> ex.use {
+        val name = query(ex)["name"].orEmpty()
+        val bytes = if (name in setOf("alert.wav", "notification.wav", "ringtone.mp3"))
+            runCatching { assets.open("luna/sounds/$name").use { it.readBytes() } }.getOrNull() else null
+        if (bytes == null) send(ex, 404, "text/plain", ByteArray(0))
+        else send(ex, 200, if (name.endsWith(".mp3")) "audio/mpeg" else "audio/wav", bytes)
     } }
 
     http.createContext("/icon") { ex -> ex.use {

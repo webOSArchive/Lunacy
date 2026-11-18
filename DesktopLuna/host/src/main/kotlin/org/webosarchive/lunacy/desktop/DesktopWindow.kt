@@ -99,7 +99,13 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
         "clipboardHasText" -> "false"
         // PalmSystem.addBannerMessage(message, launch params, icon ...): the shell shows it, and a
         // tap on it launches the app with those params.
-        "addBanner" -> shell.banner(this, a.optString(0), a.optString(1), a.optString(2)).toString()
+        // Its sound, if it names one (a class, a file, a duration), plays as the banner goes up.
+        "addBanner" -> {
+            shell.sound(appId, a.optString(3), a.optString(4), a.optInt(5))
+            shell.banner(this, a.optString(0), a.optString(1), a.optString(2)).toString()
+        }
+        // PalmSystem.playSoundNotification(class, file, duration): a banner's sound without the banner.
+        "playSound" -> { shell.sound(appId, a.optString(0), a.optString(1), a.optInt(2)); "null" }
         "removeBanner" -> { shell.removeBanner(a.optInt(0)); "null" }
         "clearBanners" -> { shell.clearBanners(this); "null" }
         // The page wants the keyboard up or down (a field took or lost the focus, or the app

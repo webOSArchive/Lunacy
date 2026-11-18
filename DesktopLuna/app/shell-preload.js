@@ -62,4 +62,5 @@ contextBridge.exposeInMainWorld("luna", {
 	onShow: on("luna-de:show"),
 	onApps: on("luna-de:apps"),
 	onBanner: on("luna-de:banner"),
+	onSound: on("luna-de:sound"),
 });

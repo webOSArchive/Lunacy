@@ -4,6 +4,17 @@
 // Bus replies come back as scripts, which a long poll fetches and runs in the page.
 "use strict";
 (function () {
+	// A frame inside a page. On webOS every frame of a window had the window's bindings, and
+	// Android's WebView gives its interface to every frame; Electron runs this script in a frame
+	// only when asked (nodeIntegrationInSubFrames, main.js). A frame is part of its card's page, not
+	// a page of its own: it shares the top frame's interface, so its calls are that page's and the
+	// compat layer's bridge hands its replies on (bridge.js, "Frames"). Without it webOS's own
+	// cross-app UI, the file picker enyo.FilePicker loads in an iframe, came up blank. A frame from
+	// another origin can't reach the top's and gets none: not done here (Android's does).
+	if (window.top !== window) {
+		try { if (window.top.LunacyNative) { window.LunacyNative = window.top.LunacyNative; } } catch (e) {}
+		return;
+	}
 	// Each load of a page is a page of its own: a reply meant for the last one never reaches this.
 	var page = Date.now().toString(36) + Math.random().toString(36).slice(2);
 	var base = location.origin + "/__luna-de/";

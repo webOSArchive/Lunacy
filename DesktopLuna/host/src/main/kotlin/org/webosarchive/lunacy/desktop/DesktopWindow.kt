@@ -93,7 +93,7 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
             // The app says its stage is ready (or its page has drawn): its card can come up.
             if (method != "pageLoaded") shell.pageReady(this)
             if (method == "stageReady") stageReady = true
-            main.post { pageUp(); shell.pageSaid(this, method) }; "null"
+            main.post { pageUp(); if (method != "pageLoaded") pageReady(); shell.pageSaid(this, method) }; "null"
         }
         "scriptResult" -> { val t = a.optInt(0); val v = a.optBoolean(1); main.post { results.remove(t)?.invoke(v) }; "null" }
         "clipboardHasText" -> "false"
@@ -160,12 +160,20 @@ class DesktopWindow(val pageId: String, val appId: String, private val bus: Bus,
             waitingRelaunches.clear()
             waiting.forEach { (params, done) -> relaunch(params, done) }
         }
-        if (!pageReady) {
-            pageReady = true
-            // Until now it believed itself inactive, which is how a page starts.
-            if (active || focusPending) deliverActive() else told = false
-            focusPending = false
-        }
+    }
+
+    /**
+     * The page can be told of its focus: it has called stageReady or drawn a frame, and not merely
+     * loaded (AppWindow.onPageReady). On a TouchPad the activation came after stageReady, when a
+     * Mojo app's first scene is up and listening: MeTube starts on its launch parameters at that
+     * activation, and told at the page's load it heard nothing.
+     */
+    private fun pageReady() {
+        if (pageReady) return
+        pageReady = true
+        // Until now it believed itself inactive, which is how a page starts.
+        if (active || focusPending) deliverActive() else told = false
+        focusPending = false
     }
 
     // ---- what the shell tells the page (AppWindow's, on Android) ----

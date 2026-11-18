@@ -313,6 +313,19 @@ else:
   for i in 1 2 3 4 5 6 7 8 9 10; do sleep 2; [ -n "$(evalall 1 /com.palm.app.screenlock/)" ] && break; done; sleep 4
   r=$(js /com.palm.app.screenlock/ '(function(){var t=document.body.innerText,m=[];["Screen Layout","Android Apps","Use on Android","Edge swipe for home","Change Wallpaper"].forEach(function(k){if(t.indexOf(k)<0)m.push(k)});return m.length?"missing: "+m.join(", "):"all"})()')
   [ "$r" = all ] && P "15 core  Screen & Lock shows its Android rows (the layout, Android's notifications and wallpaper, the edge swipe)" || F "15 core  Screen & Lock's rows -- ${r:-no card}"
+  # A notification's sound: Android's own record of the players a process makes (dumpsys audio,
+  # Android 8 and later) gains one for the notifications class with no file (webOS's
+  # notification.wav) and one for a file that isn't there (the class's default, with a line in
+  # the log). It makes a sound on the device, twice, at the notification volume.
+  LPID=$($A shell pidof $PKG </dev/null | tr -d '\r')
+  players() { $A shell dumpsys audio </dev/null 2>/dev/null | grep -c "new player piid.*/$LPID "; }
+  if $A shell dumpsys audio </dev/null 2>/dev/null | grep -q "new player piid"; then
+    n0=$(players)
+    js /com.palm.app.email/index.html '(function(){PalmSystem.playSoundNotification("notifications","");PalmSystem.playSoundNotification("alerts","lunacy-device-test-none.mp3");return "asked"})()' >/dev/null
+    sleep 4; n1=$(players)
+    if [ $((n1 - n0)) -ge 2 ] && lunalog | grep -q "sound not found: lunacy-device-test-none.mp3"; then P "15 core  a notification's sound plays, and a file that isn't there plays the class's default"
+    else F "15 core  notification sounds -- $((n1 - n0)) player(s) started for 2 sounds$(lunalog | grep -q 'sound not found: lunacy-device-test-none.mp3' || echo ', and no \"sound not found\" line')"; fi
+  else S "15 core  notification sounds: this Android keeps no record of players (before Android 8)"; fi
 else S "15 core  the shared core's answers (release build)"; fi
 
 # ---------------------------------------------------------------- 5. regressions a script can see

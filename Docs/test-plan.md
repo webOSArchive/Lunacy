@@ -88,6 +88,9 @@ Workbench/fresh-install.sh 192.168.10.27:5555 out/AndroidLuna-arm64-debug.apk Do
 # Tier 2, on each device, the candidate installed and First Use done
 Workbench/device-test.sh 192.168.10.36:5555 NNN Docs/test-results/NNN/hp10g2.txt
 
+# For a release that moves code: the bus's answers before and after, on one device (section 16)
+Workbench/bus-snapshot.sh 192.168.10.27:5555 before.json    # then install the candidate; after.json; diff
+
 # PDK and hybrid apps: the scenarios and a random sample (section 12)
 Workbench/pdk-sweep.sh 192.168.10.175:5555 scenarios Workbench/results/pdk-NNN-fold3 16
 cp Workbench/results/pdk-NNN-fold3/summary.txt Docs/test-results/NNN/pdk-fold3.txt
@@ -123,7 +126,10 @@ before calling it a failure.
 - the account templates and the OAuth providers agree (ids, folders, fallbacks);
 - the preload's host tests, in C (mail auth, the Exchange adapters, back-off, PDK sends);
 - the bundled apps' own Node tests (Calendar's iCal import, Contacts' vCards);
-- the JVM unit tests (db8 on a real SQLite, the transforms, the page hooks, EAS dates, ...).
+- the service host's child processes (`host.js`) with a root as a desktop has it;
+- the JVM unit tests (db8 on a real SQLite, the transforms, the page hooks, EAS dates, ...), and
+  LunaCore's own (the launcher's pages, Just Type, the app lifecycle, the thumbnailer's sizes, the
+  notification sounds' rules, novacom's protocol), with its API 21 gate.
 
 Palm's Jasmine spec for Contacts is listed as skipped: it needs a browser harness.
 
@@ -285,6 +291,57 @@ libSDL_cinema, and a hybrid's plug-in. No app in the corpus uses SDL 2: the PDK 
 - [ ] The startup sound (webOS's boot.mp3) plays once as a fresh Lunacy appears, and not
       again on Home, on returning to Lunacy, on a fold, or when Exhibition starts it; with
       Sounds & Alerts' System Sounds off, it doesn't play at all.
+
+## 15. The shared core — *automated, debug build* (since 1.1.0)
+
+What moved out of the Android shell into LunaCore, where Luna DE runs it too
+([luna-de.md](luna-de.md)), asked the way an app asks. Each check was seen passing on the release
+before the moves (1.0.2, build 652, on the Nexus 5), so a failure is a regression of a move.
+
+- [ ] `systemProperties/Get`: an nduid of 40 hex digits, the device's name, and "no such key"
+      for a key there isn't.
+- [ ] The media index answers the file picker's relay for each kind (documents, images, albums,
+      videos, audio), with a count each.
+- [ ] The relay reads the media kinds and nothing else, and db8 refuses an app that isn't a
+      consumer of the image kind.
+- [ ] The thumbnailer: the first indexed picture read through
+      `/var/luna/data/extractfs`, short form in a 64 x 64 box (fitted, never grown) and the long
+      form's JSON for 200 x 200 (fitted, grown if smaller). `LunaCore`'s `ExtractfsTest` holds the
+      sizes to the TouchPad's measured ones on the build machine.
+- [ ] Screen & Lock shows its Android rows (they start hidden and show when the environment
+      answers, for Luna DE, which has none). *Wrong signal, found on the baseline:* on a phone
+      with twenty cards open its page had gone; the check brings the card up again first.
+- [ ] *(build machine, `test.sh`)* `host.js` runs a service's `exec`, `execFile` and `spawn`
+      with the webOS root under a folder that is itself a webOS folder name and has a space in
+      its name. *Seen failing:* the host.js before 2026-11-18 ("Command failed", the path mapped
+      twice).
+- [Human] A notification's sound: an app's own file (Check Mate's moves), a banner's, and the
+      class's default when it names none; cut off at its duration.
+- [Human] Photos & Videos lists the device's albums and pictures and opens one full screen;
+      a new picture appears without restarting; the file picker's four tabs each list.
+
+## 16. Against the last release, on one device — *automated compare, read by a person*
+
+For a release that moves or rewrites code rather than adding to it. On a device that can be
+wiped: the last release's debug build installed fresh and set up
+(`Workbench/fresh-install.sh <device> <its debug apk>`), then
+
+```sh
+Workbench/bus-snapshot.sh <device> before.json      # the last release's answers
+adb -s <device> install -r out/AndroidLuna-<abi>-debug.apk
+Workbench/bus-snapshot.sh <device> after.json       # the candidate's, over the same data
+diff before.json after.json
+```
+
+`bus-snapshot.sh` asks some hundred read-only bus methods from Email's page (the system
+service, the application manager, the connection manager, the activity manager, the device's
+properties, Just Type's lists, power, display, audio, the media kinds, db8's counts, and an
+unknown service, method and kind for their errors) and leaves out what changes by itself.
+
+- [ ] The diff is empty, or every line of it is explained in the release's notes.
+- [ ] After the upgrade the device pass is green, and what a person set before it is as they
+      left it: the launcher's pages and quick-launch bar, Just Type's settings, the wallpaper,
+      the accounts.
 
 ## If something is off — first places to look
 

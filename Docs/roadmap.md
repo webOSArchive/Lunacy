@@ -57,7 +57,8 @@ Android and Luna DE run the same code.
   opened behind its lock screen, which the pass now names and stops at.
 - **Before it ships:** `./build.sh release` (no release build of 1.1.0 exists) and the test
   plan's section 13 on it; tier 3, codepoet's; the push. The latest App Catalog is in: 6.3.3000, bundled after
-  build 789's passes.
+  build 789's passes; in build 791 it opens as 6.3.3000 with no errors on the Pixel Tablet, the
+  Fold3 and the Nexus 5 (no full pass was run on 791).
 
 **Luna DE (2026-11-18)** got a round of fixes from codepoet's first Catalog apps in it
 ([luna-de.md](luna-de.md), "2026-11-18"): the device's properties, window scrollbars, activation at

@@ -44,7 +44,7 @@ macOS and Windows; their source is this repository's tag `luna-de-0.5`.
 into LunaCore and the shared AppLifecycle, LauncherLayout, JustTypeSearch and NovacomProtocol, so
 Android and Luna DE run the same code.
 - **Where it is:** `luna-de` was merged into `main` on 2026-11-19 (codepoet) and the two branches
-  are the same commit; build 789 is the candidate. Not pushed, not released.
+  are the same commit, pushed. Not released.
 - **Since the round below** (build 775), from codepoet's daily use of 780: Email's message stays
   at the zoom it is pinched to, Clock has no white edge on a card that isn't a whole number of
   its px (the Fold3's cover screen), and Screen & Lock in Luna DE is its Wallpaper group alone
@@ -55,8 +55,10 @@ Android and Luna DE run the same code.
   Pixel Tablet only, and confirmed there by codepoet's hands; Clock's edge on the Fold3 only.
   Build 788's passes are in `Docs/test-results/788`: the Fold3's two there failed on cards
   opened behind its lock screen, which the pass now names and stops at.
-- **Before it ships:** `./build.sh release` (no release build of 1.1.0 exists) and the test
-  plan's section 13 on it; tier 3, codepoet's; the push. The latest App Catalog is in: 6.3.3000, bundled after
+- **Built:** `./build.sh publish` on 2026-11-19, build 792 from 91f29a6 (pushed, `main` and
+  `luna-de`): the three release APKs, the three debug ones and the GPL source archive in `out/`,
+  `out/SHA256SUMS` sha256 0e26f620ae9e321e541358b6b2e62d771b8f6c667d3109799d91cab2182de32f.
+- **Before it ships:** the test plan's section 13 on the release build; tier 3, codepoet's. The latest App Catalog is in: 6.3.3000, bundled after
   build 789's passes; in build 791 it opens as 6.3.3000 with no errors on the Pixel Tablet, the
   Fold3 and the Nexus 5 (no full pass was run on 791).
 

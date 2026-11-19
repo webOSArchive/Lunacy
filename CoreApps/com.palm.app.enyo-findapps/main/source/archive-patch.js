@@ -19,7 +19,18 @@
             // they sat against the left edge; centered, the page-turn arrows move with them.
             // (Vertical centering on taller screens is done in centerMagazinePage below: the
             // page's parent is a plain absolutely-positioned block, where auto top margins are 0.)
-            ".magazinepage>.enyo-view>.enyo-vflexbox{margin-left:auto;margin-right:auto;}";
+            ".magazinepage>.enyo-view>.enyo-vflexbox{margin-left:auto;margin-right:auto;}" +
+            // Sort buttons (Recommended / Newest / Alphabetic). The search view pins the group
+            // at 315px and the buttons flex, so each was squeezed to its 110px minimum: less
+            // its two 16px end caps that left 78px, too little for "Recommended", which spilled
+            // into the next button. Let the group be as wide as its buttons and each button as
+            // wide as its own caption (never under the 110px minimum build.css gives them) instead.
+            ".radiohead .enyo-radiogroup{width:auto !important;}" +
+            ".radiohead .enyo-radiobutton{-webkit-box-flex:0 !important;}" +
+            // On a narrow screen, tighten the end caps and the type so all three still fit.
+            "@media (max-width:480px){" +
+            ".radiohead .enyo-radiobutton{border-left-width:8px;border-right-width:8px;font-size:13px;min-width:0;}" +
+            "}";
         document.head.appendChild(s);
     }());
 
@@ -100,9 +111,12 @@
     // -----------------------------------------------------------------------
     var CATEGORIES = [
         {id: 0,  categoryId: "CAT_HOME",   label: "Home",               name: "Home",               iconLocation: "category-icons/home/",               subcategories: []},
+        // The two virtual categories are pinned directly under All Apps; the rest are A-Z.
+        // Rows are looked up by position and then by id/categoryId, so the ids stay as they were.
+        {id: 3,  categoryId: "CAT_PICKS",  label: "Curator's Choice",   name: "Curator's Choice",   iconLocation: "category-icons/home/",               subcategories: []},
+        {id: 17, categoryId: "CAT_RETRO",  label: "Revisionist History",name: "Revisionist History",iconLocation: "category-icons/home/",               subcategories: []},
         {id: 1,  categoryId: "CAT_BOOKS",  label: "Books",              name: "Books",              iconLocation: "category-icons/books/",              subcategories: []},
         {id: 2,  categoryId: "CAT_BIZ",    label: "Business",           name: "Business",           iconLocation: "category-icons/business/",           subcategories: []},
-        {id: 3,  categoryId: "CAT_PICKS",  label: "Curator's Choice",   name: "Curator's Choice",   iconLocation: "category-icons/home/",               subcategories: []},
         {id: 4,  categoryId: "CAT_EDU",    label: "Education",          name: "Education",          iconLocation: "category-icons/education/",          subcategories: []},
         {id: 5,  categoryId: "CAT_ENT",    label: "Entertainment",      name: "Entertainment",      iconLocation: "category-icons/entertainment/",      subcategories: []},
         {id: 6,  categoryId: "CAT_FIN",    label: "Finance",            name: "Finance",            iconLocation: "category-icons/finance/",            subcategories: []},
@@ -116,7 +130,6 @@
         {id: 14, categoryId: "CAT_PHOTO",  label: "Photography",        name: "Photography",        iconLocation: "category-icons/photography/",        subcategories: []},
         {id: 15, categoryId: "CAT_PROD",   label: "Productivity",       name: "Productivity",       iconLocation: "category-icons/productivity/",       subcategories: []},
         {id: 16, categoryId: "CAT_REF",    label: "Reference",          name: "Reference",          iconLocation: "category-icons/reference/",          subcategories: []},
-        {id: 17, categoryId: "CAT_RETRO",  label: "Revisionist History",name: "Revisionist History",iconLocation: "category-icons/home/",               subcategories: []},
         {id: 18, categoryId: "CAT_SOC",    label: "Social Networking",  name: "Social Networking",  iconLocation: "category-icons/social-networking/",  subcategories: []},
         {id: 19, categoryId: "CAT_SPORTS", label: "Sports",             name: "Sports",             iconLocation: "category-icons/sports/",             subcategories: []},
         {id: 20, categoryId: "CAT_TRAVEL", label: "Travel",             name: "Travel",             iconLocation: "category-icons/travel/",             subcategories: []},
@@ -572,6 +585,25 @@
         };
         xhr.onerror = function () { callSuccess(inProps, makeResp(null)); };
         xhr.send();
+    };
+
+    // -----------------------------------------------------------------------
+    // The header above a category's app list is HP's subcategory picker: the
+    // category itself, then its subcategories. The archive has no subcategories
+    // (every entry in CATEGORIES has an empty list), so the picker offered only
+    // the category you were already in. HP hid the arrow and disabled the
+    // picker for All Apps; do the same for any category with nothing to pick.
+    // The category's icon and name stay as the header.
+    // -----------------------------------------------------------------------
+    var _origRenderSubCategories = findApps.Apps.prototype.renderSubCategories;
+    findApps.Apps.prototype.renderSubCategories = function () {
+        _origRenderSubCategories.apply(this, arguments);
+        var cat = this.topCategory, picker = this.$.sub_categories;
+        if (picker && cat && cat.id != 0 && !(cat.subcategories && cat.subcategories.length)) {
+            picker.setHideArrow(true);
+            picker.disabled = true;
+            picker.render();
+        }
     };
 
     // -----------------------------------------------------------------------

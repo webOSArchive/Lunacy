@@ -31,8 +31,8 @@ after 1.0.
 - ~~**Exhibition:** a button in its settings that opens Android's Screen Saver settings~~ done
   2026-11-08 (luna-deltas B24).
 
-Before shipping 1.0, as for every release: the latest App Catalog bundled (6.3.2931 since
-2026-11-15, codepoet's package for 1.0).
+Before shipping 1.0, as for every release: the latest App Catalog bundled (6.3.3000 since
+2026-11-19, codepoet's package for 1.1.0; 6.3.2931 was 1.0's).
 
 ## Where things stand (2026-11-19)
 
@@ -56,7 +56,8 @@ Android and Luna DE run the same code.
   Build 788's passes are in `Docs/test-results/788`: the Fold3's two there failed on cards
   opened behind its lock screen, which the pass now names and stops at.
 - **Before it ships:** `./build.sh release` (no release build of 1.1.0 exists) and the test
-  plan's section 13 on it; tier 3, codepoet's; the latest App Catalog bundled; the push.
+  plan's section 13 on it; tier 3, codepoet's; the push. The latest App Catalog is in: 6.3.3000, bundled after
+  build 789's passes.
 
 **Luna DE (2026-11-18)** got a round of fixes from codepoet's first Catalog apps in it
 ([luna-de.md](luna-de.md), "2026-11-18"): the device's properties, window scrollbars, activation at

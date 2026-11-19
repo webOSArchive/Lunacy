@@ -25,7 +25,7 @@ and each of those changes is marked `[Lunacy]` in its source.
 | Date & Time | `com.palm.app.dateandtime` | 1.0.0 | Lunacy's shortcut to Android's date and time settings |
 | Device Info | `com.palm.app.deviceinfo` | 1.0.0 | Lunacy's own, in Palm's look |
 | Email | `com.palm.app.email` | 3.0.13600 | Palm, HP webOS 3.x (abandonware), with Lunacy's phone-layout changes |
-| App Catalog | `com.palm.app.enyo-findapps` | 6.3.2931 | webOS Archive's restoration of the TouchPad's own |
+| App Catalog | `com.palm.app.enyo-findapps` | 6.3.3000 | webOS Archive's restoration of the TouchPad's own |
 | Exhibition | `com.palm.app.exhibitionpreferences` | 1.0.0 | Palm, HP webOS 3.x (abandonware) |
 | Help | `com.palm.app.help` | 2.0.0 | Palm, HP webOS 3.x, content host moved to help.webosarchive.org |
 | Messaging | `com.palm.app.messaging` | 3.2.0 | Palm, HP webOS 3.0.5 (abandonware), with the webOS CE project's changes |

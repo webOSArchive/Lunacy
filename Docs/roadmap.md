@@ -34,27 +34,29 @@ after 1.0.
 Before shipping 1.0, as for every release: the latest App Catalog bundled (6.3.2931 since
 2026-11-15, codepoet's package for 1.0).
 
-## Where things stand (2026-11-18, end of day)
+## Where things stand (2026-11-19)
 
 **Released:** Lunacy 1.0.2 (build 652; GitHub and the F-Droid feed). **webos-sdk-redux 0.5**
 (tag `0.5-Release`), with **Luna DE 0.5.0**, Lunacy's desktop shell, as its packages for Linux,
-macOS and Windows; their source is this repository's tag `luna-de-0.5` (branch `luna-de`).
+macOS and Windows; their source is this repository's tag `luna-de-0.5`.
 
 **In hand: Lunacy 1.1.0** (codepoet), which brings `luna-de`'s refactors to Android: the moves
 into LunaCore and the shared AppLifecycle, LauncherLayout, JustTypeSearch and NovacomProtocol, so
 Android and Luna DE run the same code.
-- **Where it is:** branch `luna-de`, version name 1.1.0, build 780 (e5bba2f). `main` is still
-  1.0.2 and has nothing `luna-de` lacks. The two branches stay apart until 1.1.0 is released, then
-  `luna-de` merges into `main` (codepoet, 2026-11-18: "a day or two"). A fix for 1.1.0 goes on
-  `luna-de`.
-- **Tested:** the round below, on build 775 (the same code as 780), green on six devices with two
-  fresh installs (Android 14 and Android 5.0.1, which were the two things owed from the Luna DE
-  plan) and 1.0.2 compared with it on one device.
-- **Now:** codepoet is using 1.1.0's debug build daily on the Fold3 and the Pixel Tablet, to
-  catch what a round can't. The other four test devices are on 775.
-- **Before it ships:** whatever that turns up; `./build.sh release` (no release build of 1.1.0
-  exists) and the test plan's section 13 on it; tier 3, codepoet's; the latest App Catalog
-  bundled; then the merge into `main`.
+- **Where it is:** `luna-de` was merged into `main` on 2026-11-19 (codepoet) and the two branches
+  are the same commit; build 789 is the candidate. Not pushed, not released.
+- **Since the round below** (build 775), from codepoet's daily use of 780: Email's message stays
+  at the zoom it is pinched to, Clock has no white edge on a card that isn't a whole number of
+  its px (the Fold3's cover screen), and Screen & Lock in Luna DE is its Wallpaper group alone
+  ([fix-log.md](fix-log.md), 2026-11-19).
+- **Tested, build 789 (2026-11-19):** `test.sh` 12 passed, 0 failed, 1 skipped; `device-test.sh`
+  on the Pixel Tablet (55 passed, 0 failed), the Fold3 folded (56, 0) and the Nexus 5 (48, 0, 1
+  skipped: the sound check on Android 6), `Docs/test-results/789`. The pinch was driven on the
+  Pixel Tablet only, and confirmed there by codepoet's hands; Clock's edge on the Fold3 only.
+  Build 788's passes are in `Docs/test-results/788`: the Fold3's two there failed on cards
+  opened behind its lock screen, which the pass now names and stops at.
+- **Before it ships:** `./build.sh release` (no release build of 1.1.0 exists) and the test
+  plan's section 13 on it; tier 3, codepoet's; the latest App Catalog bundled; the push.
 
 **Luna DE (2026-11-18)** got a round of fixes from codepoet's first Catalog apps in it
 ([luna-de.md](luna-de.md), "2026-11-18"): the device's properties, window scrollbars, activation at

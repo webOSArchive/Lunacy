@@ -68,7 +68,7 @@ more than one device is attached. The test devices:
 
 | Device | Address | Note |
 |---|---|---|
-| Nexus 5 (Android 6, the phone layout) | `192.168.10.195:5555` (it moves between .193 and .195; .195 on 2026-11-18) | `adb tcpip` over the cable after a reboot. Asleep, its Wi-Fi may not answer the first `adb connect` ("No route to host"): wake it, or ping this machine from it over the cable, and connect again |
+| Nexus 5 (Android 6, the phone layout) | `192.168.10.193:5555` (it moves between .193 and .195; .193 on 2026-11-19) | `adb tcpip` over the cable after a reboot. Asleep, its Wi-Fi may not answer the first `adb connect` ("No route to host"): wake it, or ping this machine from it over the cable, and connect again |
 | Nexus 7 2012 (Android 5.1.1) | `192.168.10.198:5555` | the same |
 | Pixel Tablet (Android 17, arm64 only) | `192.168.10.153:5555` | `adb tcpip` as above (it answered on 5555 on 2026-10-03); wireless debugging's pairing port varies per reboot, so prefer tcpip |
 | HP 10 G2 (Android 5.0.1, the reference) | `192.168.10.36:5555` (it moves between .36 and .38; .36 on 2026-11-14) | `adb tcpip` over the cable after a reboot (it answered there on 2026-10-04) |

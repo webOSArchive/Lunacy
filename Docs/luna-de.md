@@ -12,7 +12,11 @@ below), all in Lunacy 1.1.0's code and checked on Android in its round
 these fixes yet.
 
 **Luna DE 0.5.1 (2026-11-19):** a maintenance release of Luna DE alone, on the SDK's 0.5: the
-2026-11-18 fixes below and Screen & Lock's rows, from the code Lunacy 1.1.0 shipped.
+2026-11-18 fixes below and Screen & Lock's rows, from the code Lunacy 1.1.0 shipped (`main`
+3b05fc8; the `luna-de` branch was merged into `main` and deleted that day). Linux's packages were
+built on the development machine with `npm run dist -- --release`; the AppImage, started on an
+empty data folder, reports "Luna DE 0.5.1" and shows Screen & Lock with its Wallpaper group
+alone. The Mac's and Windows' are codepoet's to build.
 
 **2026-11-19:** Screen & Lock in Luna DE is its Wallpaper group alone. Auto Dim, Brightness,
 Turn off After and Secure Unlock are left out (codepoet): the host's `system/getEnvironment`

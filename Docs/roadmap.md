@@ -44,7 +44,7 @@ macOS and Windows; their source is this repository's tag `luna-de-0.5`.
 into LunaCore and the shared AppLifecycle, LauncherLayout, JustTypeSearch and NovacomProtocol, so
 Android and Luna DE run the same code.
 - **Where it is:** `luna-de` was merged into `main` on 2026-11-19 (codepoet) and the two branches
-  are the same commit, pushed. Not released.
+  were the same commit until the branch was deleted that day: everything is on `main` now.
 - **Since the round below** (build 775), from codepoet's daily use of 780: Email's message stays
   at the zoom it is pinched to, Clock has no white edge on a card that isn't a whole number of
   its px (the Fold3's cover screen), and Screen & Lock in Luna DE is its Wallpaper group alone

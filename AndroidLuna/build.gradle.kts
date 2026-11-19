@@ -145,9 +145,18 @@ kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 // Plain-JVM tests of the pure functions (src/test): ./gradlew :AndroidLuna:testArm32DebugUnitTest.
 // android.jar's org.json is a stub off the device, so the tests get the real one.
 dependencies {
+    // Lunacy's platform-neutral core, shared with Luna DE (Docs/luna-de.md).
+    implementation(project(":LunaCore"))
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20231013")
     // Android's own classes off the device, for the tests that need SQLite (Db8Test): test-only,
     // nothing of it ships in the APK.
     testImplementation("org.robolectric:robolectric:4.14.1")
 }
+
+// LunaCore's API 21 gate runs with every Android build, not only `gradle check`: a class that
+// would crash Android 5 stops the APK (LunaCore/build.gradle.kts).
+tasks.named("preBuild") { dependsOn(":LunaCore:animalsnifferMain") }
+
+// The suites LunaCore runs on SQLite over JDBC run here on Android's SQLite too (Db8Test, SqlTest).
+android.sourceSets["test"].java.srcDir("../LunaCore/src/sharedTest/kotlin")

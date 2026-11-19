@@ -1,5 +1,6 @@
 package org.webosarchive.lunacy.shell
 
+import org.webosarchive.lunacy.card.androidComponent
 import android.annotation.TargetApi
 import android.content.ComponentName
 import android.content.Context
@@ -136,7 +137,7 @@ class PinnedShortcuts(
             type = "android", version = version, userInstalled = true, visible = true,
             androidSettings = "", splashIcon = "", uiRevision = 2, category = "android",
             keywords = emptyList(), appinfo = JSONObject(), files = files!!,
-            androidComponent = activity ?: ComponentName(pkg, ""), androidIcon = icon, androidShortcut = id,
+            hostApp = activity ?: ComponentName(pkg, ""), androidIcon = icon, androidShortcut = id,
         )
     }
 

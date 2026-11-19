@@ -1,5 +1,6 @@
 package org.webosarchive.lunacy.shell
 
+import org.webosarchive.lunacy.card.serve
 import android.content.Context
 import android.media.AudioManager
 import android.media.MediaPlayer
@@ -7,23 +8,17 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import org.webosarchive.lunacy.card.AppServer
+import org.webosarchive.lunacy.card.NotificationSound
 
 /**
  * The sounds a banner or PalmSystem.playSoundNotification asks for, played as LunaSysMgr's
  * BannerMessageHandler::playSound did: a sound class, an optional file, an optional duration.
- *
- * - No class and no file, or the class "none": nothing.
- * - A file named by the app plays: an absolute path is a path on the device (served from the
- *   app's origin, like any /usr/palm or /media/internal path; a file:// path or the app's own
- *   URL names one too), a relative one is looked up in the app's resources/<locale>/ and then
- *   its own folder.
- * - Otherwise the class's default: webOS's notification sound for "notifications" (and for
- *   any class it doesn't know), its alert sound for "alerts", "alarm" and "calendar", and
- *   Android's notification sound for "ringtones" (see [androidSound]; webOS's ringtone if
- *   Android's can't be read). Measured on the reference TouchPad: "notifications" played
- *   `sysmgr_notification` and "alerts" `sysmgr_alert`, the preloaded copies of
- *   /usr/palm/sounds/notification.wav and alert.wav, which Lunacy ships (assets/luna/sounds).
- * - A notification with no duration of its own is cut off at notificationSoundDuration, 5 s.
+ * What plays is [NotificationSound]'s to say (the rules, shared with Luna DE), with one thing of
+ * Android's own: "ringtones" with no file plays Android's notification sound (see
+ * [androidSound]; webOS's ringtone if Android's can't be read). Measured on the reference
+ * TouchPad: "notifications" played `sysmgr_notification` and "alerts" `sysmgr_alert`, the
+ * preloaded copies of /usr/palm/sounds/notification.wav and alert.wav, which Lunacy ships
+ * (assets/luna/sounds).
  *
  * Each plays on the Android stream that matches, so the ringer switch and the volumes are
  * Android's: a notification is silent when the tablet is.
@@ -49,15 +44,9 @@ class Sounds(private val context: Context, private val server: AppServer, privat
     fun play(appId: String, soundClass: String, soundFile: String, durationMs: Int) {
         if (soundClass.isEmpty() && soundFile.isEmpty()) return
         if (allMuted()) return
-        val cls = when (soundClass) {
-            "alert" -> "alerts"; "notification" -> "notifications"; "ringtone" -> "ringtones"
-            "alerts", "alarm", "calendar", "notifications", "ringtones", "feedback" -> soundClass
-            "none", "vibrate" -> return  // the tablet has no vibrator
-            else -> "notifications"
-        }
+        val cls = NotificationSound.classOf(soundClass) ?: return
         val file = if (soundFile.isEmpty()) null else appFile(appId, soundFile)
-        var duration = durationMs
-        if (cls == "notifications" && duration <= 0) duration = NOTIFICATION_MS
+        val duration = NotificationSound.duration(cls, durationMs)
         val stream = when (cls) {
             "alarm" -> AudioManager.STREAM_ALARM
             "ringtones" -> AudioManager.STREAM_RING
@@ -71,11 +60,7 @@ class Sounds(private val context: Context, private val server: AppServer, privat
                 if (fromAndroid == android.net.Uri.EMPTY) return@start false
                 player.setDataSource(context, fromAndroid)
             }
-            else context.assets.openFd("luna/sounds/" + when (cls) {
-                "alerts", "alarm", "calendar" -> "alert.wav"
-                "ringtones" -> "ringtone.mp3"
-                else -> "notification.wav"
-            }).use { player.setDataSource(it.fileDescriptor, it.startOffset, it.length) }
+            else context.assets.openFd("luna/sounds/" + NotificationSound.defaultFile(cls)).use { player.setDataSource(it.fileDescriptor, it.startOffset, it.length) }
             true
         } ?: return
         if (duration > 0) main.postDelayed({ if (player in playing) release(player) }, duration.toLong())
@@ -183,16 +168,8 @@ class Sounds(private val context: Context, private val server: AppServer, privat
 
     /** The app's sound file, copied out of the app server into the cache so MediaPlayer can open it. */
     private fun appFile(appId: String, entry: String): java.io.File? {
-        val base = "https://$appId${AppServer.HOST_SUFFIX}"
-        // Apps that build the path from their own location (enyo.fetchAppRootPath, minus the
-        // "file://" a device's had) name it by the app's URL here, as Messaging does its sent
-        // and received sounds; a file:// path is a device path too.
-        val candidates = if (entry.startsWith("$base/")) listOf(entry)
-        else if (entry.startsWith("file:///")) listOf(base + entry.removePrefix("file://"))
-        else if (entry.startsWith("/")) listOf(base + entry) else {
-            val locale = context.resources.configuration.locale.let { it.language + "_" + it.country.lowercase() }
-            listOf(AppServer.appUrl(appId, "resources/$locale/$entry", dirOf(appId)), AppServer.appUrl(appId, entry, dirOf(appId)))
-        }
+        val locale = context.resources.configuration.locale.let { it.language + "_" + it.country.lowercase() }
+        val candidates = NotificationSound.candidates(appId, entry, locale, dirOf(appId))
         for (url in candidates) {
             // The extension only if it is one: the rest of the name is the app's, and could climb out of the cache.
             val ext = entry.substringAfterLast('.', "snd").takeIf { e -> e.isNotEmpty() && e.length <= 8 && e.all { it.isLetterOrDigit() } } ?: "snd"
@@ -210,8 +187,6 @@ class Sounds(private val context: Context, private val server: AppServer, privat
     }
 
     private companion object {
-        /** luna.conf's notificationSoundDuration. */
-        const val NOTIFICATION_MS = 5000
         /** The samples Lunacy has a use for; see assets/luna/sounds/NOTICE. */
         val FEEDBACK = listOf("appclose", "birdappclose", "carddrag", "LauncherOpenApp", "LauncherCloseApp", "AdjustVolume")
     }

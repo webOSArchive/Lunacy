@@ -46,7 +46,7 @@ class LogExport(private val context: Context, private val webosRoot: File) {
                 section(w, "Android permissions") { w.write(JSONObject(permissions).apply { remove("returnValue") }.toString(2)) }
                 // Written now: the index logs only when its result changes, and that line may
                 // have left Android's log by the time a log is saved.
-                section(w, "Media folders") { w.write(UserFiles.diagnose(context)) }
+                section(w, "Media folders") { w.write(AndroidFolders.diagnose(context)) }
                 section(w, "Android log (Lunacy's own lines)") { logcat(w) }
                 section(w, "webOS log (/var/log/messages)") {
                     for (f in listOf(File(webosRoot, "var/log/messages.0"), File(webosRoot, "var/log/messages")))

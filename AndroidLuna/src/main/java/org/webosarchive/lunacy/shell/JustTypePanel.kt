@@ -24,6 +24,7 @@ import android.widget.FrameLayout
 import org.json.JSONArray
 import org.json.JSONObject
 import org.webosarchive.lunacy.card.AppInfo
+import org.webosarchive.lunacy.card.JustTypeSearch
 import org.webosarchive.lunacy.card.UniversalSearch
 
 /**
@@ -101,18 +102,13 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         const val TILE_PITCH_Y = 138f            // 10 + 113 + 15
         const val PHONE_MARGIN = 12f
         const val PHONE_TILE_GAP = 10f
-        const val LIMIT = 4                      // SEARCHITEMSLIMIT, ACTIONITEMSLIMIT
-        const val DB_MIN = 2                     // DbSearch's SEARCHMINLENGTH
-        const val INLINE_MAX = 5                 // Email's results open under it up to this many
-        const val EMAIL = "com.palm.app.email"
-        const val BROWSER = "com.palm.app.browser"
-        private val DELIMITERS = " ,._-:;()\\[]{}\"/".toSet()
-        // Just Type's Util: what reads as an address, and as an email address.
-        private val REG_URL = Regex("^((((http|https)://))|(www\\.))[-a-zA-Z0-9@:%_+.~#?&/=]+$")
-        private val URL_DOMAIN = Regex("^([0-9a-zA-Z\\-]+\\.)+[a-zA-Z]{2,6}(:[0-9]+)?(\\S*)?$")
-        private val EMAIL_RE = Regex("^([A-Za-z0-9_\\-.])+@([A-Za-z0-9_\\-.@])+\\.([A-Za-z]{2,4}) *$")
-        // Util.Template's syntax: #{name}.
-        private val TEMPLATE = Regex("#\\{\\s*(\\w+)\\s*\\}")
+        // Just Type's rules - which apps match, what reads as an address or an email address, the
+        // launch each choice makes - are LunaCore's JustTypeSearch, shared with Luna DE.
+        const val LIMIT = JustTypeSearch.LIMIT
+        const val DB_MIN = JustTypeSearch.DB_MIN
+        const val INLINE_MAX = JustTypeSearch.INLINE_MAX
+        const val EMAIL = JustTypeSearch.EMAIL
+        const val BROWSER = JustTypeSearch.BROWSER
         /** The tab row's cells: the four filters in cells 1 to 4, empty cells at either end on a tablet. */
         const val TAB_CELLS = 6
         private fun cellOf(f: Filter) = f.ordinal + 1
@@ -260,7 +256,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         }
         // updateEmailOrWebDiv runs on every keystroke from three characters.
         if (text.length >= 3) {
-            if (EMAIL_RE.matches(text)) { actionsOnly = true; view = Filter.ACTIONS; detail = null }
+            if (JustTypeSearch.isEmail(text)) { actionsOnly = true; view = Filter.ACTIONS; detail = null }
             else if (actionsOnly) { actionsOnly = false; view = Filter.ALL }
         }
         handler.postDelayed(runSearch, SEARCH_DELAY_MS)
@@ -274,16 +270,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         term = text
         moreSearch = false; moreActions = false
         if (firstSearch) scroll = 0f
-        val t = text.trim().lowercase()
-        results = if (t.isEmpty() || !appSearchOn) emptyList() else {
-            val byTitle = apps.filter { titleMatch(it.title, t) >= 0 }.sortedBy { it.title.lowercase() }
-            val byKeyword = apps.filter { it !in byTitle }.filter { app ->
-                val kw = app.keywords.map { it.lowercase() }
-                (if (t.length >= 3) kw.any { it.startsWith(t) } else kw.any { it == t }) ||
-                    app.title.lowercase().startsWith(t)
-            }.sortedBy { it.title.lowercase() }
-            byTitle + byKeyword
-        }
+        results = if (!appSearchOn) emptyList() else JustTypeSearch.matchApps(apps, text)
         handler.removeCallbacks(runDb)
         val dbFailed = dbFailedFor
         if (text.length < DB_MIN || (dbFailed != null && text.startsWith(dbFailed))) {
@@ -305,34 +292,11 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         val got = LinkedHashMap<String, List<JSONObject>>()
         var left = on.size
         for (item in on) {
-            val j = item.json
-            val batch = j.optBoolean("batchQuery", false)
-            val q = j.opt("dbQuery")
-            if (q == null) { left--; continue }
-            val params: JSONObject
-            if (batch && q is JSONArray) {
-                val ops = JSONArray(q.toString())
-                // "It supports one field in the Where clause per query in the batch."
-                for (i in 0 until ops.length()) ops.optJSONObject(i)?.optJSONObject("params")?.optJSONObject("query")
-                    ?.optJSONArray("where")?.optJSONObject(0)?.put("val", text)
-                params = JSONObject().put("operations", ops)
-            } else if (q is JSONObject) {
-                val query = JSONObject(q.toString())
-                query.optJSONArray("where")?.let { w ->
-                    for (i in 0 until w.length()) w.optJSONObject(i)?.let { c -> if (c.optString("val").isBlank() && c.opt("val") !is Boolean) c.put("val", text) }
-                }
-                params = JSONObject().put("query", query)
-            } else { left--; continue }
-            db(if (batch) "batch" else "search", params) { r ->
+            val (method, params) = JustTypeSearch.dbCall(item, text) ?: run { left--; null } ?: continue
+            db(method, params) { r ->
                 post {
                     if (gen != dbGeneration) return@post
-                    val list = ArrayList<JSONObject>()
-                    if (r.optBoolean("returnValue", false)) {
-                        r.optJSONArray("responses")?.let { rs ->
-                            for (i in 0 until rs.length()) rs.optJSONObject(i)?.optJSONArray("results")?.let { a -> for (k in 0 until a.length()) a.optJSONObject(k)?.let(list::add) }
-                        } ?: r.optJSONArray("results")?.let { a -> for (k in 0 until a.length()) a.optJSONObject(k)?.let(list::add) }
-                    }
-                    got[item.id] = list
+                    got[item.id] = JustTypeSearch.dbResults(r)
                     if (--left <= 0) dbDone(on, got)
                 }
             }
@@ -349,64 +313,31 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
         invalidate()
     }
 
-    /** LaunchPoint::matchesTitle: the title starts with it, or a word in it does. */
-    private fun titleMatch(title: String, term: String): Int {
-        val t = title.lowercase()
-        if (t.startsWith(term)) return 0
-        var i = t.indexOf(term, 1)
-        while (i > 0) {
-            if (t[i - 1] in DELIMITERS) return i
-            i = t.indexOf(term, i + 1)
-        }
-        return -1
-    }
-
-    private fun isUrl(s: String) = REG_URL.matches(s) || URL_DOMAIN.matches(s)
+    private fun titleMatch(title: String, term: String) = JustTypeSearch.titleMatch(title, term)
+    private fun isUrl(s: String) = JustTypeSearch.isUrl(s)
     private fun showGoToWeb() = term.length >= 3 && isUrl(term) && !actionsOnly
 
     // ---- launching, as Palm's code builds each call ----
 
-    private fun encoded(s: String) = android.net.Uri.encode(s, "-_.!~*'()")   // encodeURIComponent
-
-    private fun evaluate(template: String, words: String, json: Boolean): String =
-        TEMPLATE.replace(template) { m ->
-            when (m.groupValues[1]) {
-                "searchTerms", "searchTerm" -> if (json) JSONObject.quote(words).let { it.substring(1, it.length - 1) } else words
-                else -> ""
-            }
+    /** What a choice does, by Palm's code (JustTypeSearch): a page for the Web app, an app launched, or a target opened. */
+    private fun go(g: JustTypeSearch.Go?) {
+        when (g) {
+            is JustTypeSearch.Go.Web -> onSearch(g.url)
+            is JustTypeSearch.Go.Launch -> onLaunchApp(g.appId, g.params)
+            is JustTypeSearch.Go.Open -> onOpenTarget(g.target)
+            null -> {}
         }
-
-    /** A launchParam that is JSON text is an object; anything else is a name. */
-    private fun launchObject(param: String): JSONObject? =
-        param.trim().takeIf { it.startsWith("{") }?.let { runCatching { JSONObject(it) }.getOrNull() }
+    }
 
     /** LaunchAndSearch.handleLaunchAndSearchSelected. */
-    private fun searchWith(item: UniversalSearch.Item) {
-        val words = encoded(term)
-        if (item.type == "web" || item.type == "opensearch") {
-            onSearch(evaluate(item.url, words, false))
-            return
-        }
-        val params = if (launchObject(item.launchParam) != null)
-            runCatching { JSONObject(evaluate(item.launchParam, words, true)) }.getOrNull() ?: return
-        else JSONObject().put(item.launchParam, words)
-        onLaunchApp(item.url, params)
-    }
+    private fun searchWith(item: UniversalSearch.Item) = go(JustTypeSearch.searchWith(item, term))
 
-    /** Actions.handleActionItemSelected: the words as typed, not encoded. */
-    private fun act(item: UniversalSearch.Item) {
-        if (item.url == EMAIL && actionsOnly) { onOpenTarget("mailto:$term"); return }
-        val params = if (launchObject(item.launchParam) != null)
-            runCatching { JSONObject(evaluate(item.launchParam, term, true)) }.getOrNull() ?: return
-        else JSONObject().put(item.launchParam, term)
-        onLaunchApp(item.url, params)
-    }
+    /** Actions.handleActionItemSelected: the words as typed, not encoded; an email address to Email is a mailto:. */
+    private fun act(item: UniversalSearch.Item) =
+        go(if (item.url == EMAIL && actionsOnly) JustTypeSearch.Go.Open("mailto:$term") else JustTypeSearch.act(item, term))
 
     /** DbSearch.handleContentItemTap: the app, with the result's field under its launchParam. */
-    private fun openResult(item: UniversalSearch.Item, result: JSONObject) {
-        val value = fieldOf(result, item.json.optString("launchParamDbField")) ?: return
-        onLaunchApp(item.id, JSONObject().put(item.launchParam, value))
-    }
+    private fun openResult(item: UniversalSearch.Item, result: JSONObject) = go(JustTypeSearch.openResult(item, result))
 
     private fun defaultItem(): UniversalSearch.Item? =
         if (!defaultSearchOn) null else engines.firstOrNull { it.id == defaultEngine && it.type != "app" }
@@ -682,18 +613,7 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
 
     /** ContentItem: up to two of the item's display fields, the typed words underlined. */
     private fun drawResult(c: Canvas, r: RectF, item: UniversalSearch.Item, result: JSONObject, l1: Float, l2: Float, kindIcon: Boolean) {
-        val fields = item.json.optJSONArray("displayFields") ?: JSONArray()
-        val lines = ArrayList<String>()
-        for (i in 0 until minOf(2, fields.length())) {
-            val f = fields.opt(i)
-            val name = (f as? JSONObject)?.optString("name") ?: f.toString()
-            var v = fieldOf(result, name)?.toString().orEmpty()
-            if ((f as? JSONObject)?.optString("type") == "timestamp") v.toLongOrNull()?.let { ms ->
-                // DateFmt({date:"long", time:"short", twelveHourFormat:true}).
-                v = java.text.SimpleDateFormat("MMMM d, yyyy h:mm a", java.util.Locale.getDefault()).format(java.util.Date(ms))
-            }
-            lines += v
-        }
+        val lines = JustTypeSearch.displayLines(item, result)
         // The first row under a caption is shorter by the caption's overlap.
         val top = if (r.height() < px(CONTENT_ROW_H) - 1 && kindIcon) r.top - px(CAPTION_OVERLAP) else r.top
         val maxW = px(500f)
@@ -724,13 +644,6 @@ class JustTypePanel(context: Context, private val luna: Luna) : FrameLayout(cont
             val x1 = x + p.measureText(t, 0, m.range.last + 1)
             luna.tile(c, "justtype/underline.png", RectF(x0, baseline + px(1f), x1, baseline + px(4f)))
         }
-    }
-
-    /** A field of a db8 result by its dotted name ("from.name"). */
-    private fun fieldOf(o: JSONObject, name: String): Any? {
-        var cur: Any? = o
-        for (part in name.split('.')) cur = (cur as? JSONObject)?.opt(part) ?: return null
-        return cur
     }
 
     private fun iconFor(item: UniversalSearch.Item): Bitmap? = when {

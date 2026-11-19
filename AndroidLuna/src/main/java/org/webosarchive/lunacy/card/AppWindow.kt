@@ -111,7 +111,7 @@ interface WindowHost : WindowLifecycle, WindowBanners, DeviceFacts
 @SuppressLint("ViewConstructor", "SetJavaScriptEnabled", "AddJavascriptInterface")
 open class AppWindow(
     context: Context,
-    val appId: String,
+    override val appId: String,
     private val host: WindowHost,
     /**
      * Whether this window is one of webOS's *emulated* cards: the phone-sized card a TouchPad
@@ -121,7 +121,7 @@ open class AppWindow(
      * it - see [Native.deviceInfo] and [Native.screenSize].
      */
     val emulated: Boolean = false,
-) : WebView(context) {
+) : WebView(context), LifecycleWindow {
     /** A native web view is drawn without the parts the page draws over it (BrowserViews.Browser.holesInCard). */
     override fun drawChild(canvas: android.graphics.Canvas, child: android.view.View, drawingTime: Long): Boolean {
         val holes = (child as? BrowserViews.Browser)?.holesInCard()
@@ -145,7 +145,7 @@ open class AppWindow(
     /** webOS window attributes from window.open: "window" is card, dashboard, popupalert or dockMode. */
     var attributes = JSONObject()
     /** The window's type ([WindowType.named]), or null for a name the shell doesn't know. */
-    val type: WindowType? get() = WindowType.named(attributes.optString("window", WindowType.CARD.wire))
+    override val type: WindowType? get() = WindowType.named(attributes.optString("window", WindowType.CARD.wire))
     /**
      * The orientation the app has fixed its card at - "up", "down", "left", "right",
      * "landscape" or "portrait" - or null while it lets the card turn with the screen
@@ -153,7 +153,7 @@ open class AppWindow(
      * CardWebApp did; the frameworks then ask for "free" on the app's behalf unless the app
      * says otherwise. An emulated card ignores it (the shell doesn't turn for one).
      */
-    @Volatile var fixedOrientation: String? = null
+    @Volatile override var fixedOrientation: String? = null
     /** What the app last asked for through PalmSystem.enableFullScreenMode; a PDK app's card is full screen from the start. */
     var fullScreen = false
         protected set
@@ -188,7 +188,7 @@ open class AppWindow(
     /** The webOS device this window reports itself as. */
     private val profile = DeviceProfile.forScreen(context)
     /** This window's "process id": webOS gave one per window, and apps print it. */
-    val pid = nextPid.getAndIncrement()
+    override val pid = nextPid.getAndIncrement()
     /** enyo.WebView's native views in this window, made when a page first asks for one. */
     private val browserViews by lazy { BrowserViews(this, host.server.webosRoot, host.server) }
     @Volatile private var hasBrowserViews = false
@@ -224,9 +224,9 @@ open class AppWindow(
         net = NetShim(appId, settings.userAgentString, profile.carrierCode, { page }) { id ->
             main.post { if (!destroyed) evaluateJavascript(PageHooks.call(PageHooks.NET_DONE, "$id"), null) }
         }
-        sql = WebSql(context, appId, { page }) { id ->
+        sql = WebSql(java.io.File(context.filesDir, "websql"), appId, { page }, { id ->
             main.post { if (!destroyed) evaluateJavascript(PageHooks.call(PageHooks.SQL_DONE, "$id"), null) }
-        }
+        }, AndroidWebSqlMigration(context)::migrate)
         // 1 CSS px = 1 TouchPad px, as the shell uses; the layout width follows from it. On a
         // phone that may be scaled down ([fit]); the display's own size stands in for the
         // card's until it is laid out, and the viewport meta sets the scale for real.
@@ -244,7 +244,11 @@ open class AppWindow(
                     return true
                 }
                 Log.i(AppServer.TAG, "[$appId] ${m.messageLevel()} ${m.sourceId()?.substringAfterLast('/')}:${m.lineNumber()} ${m.message()}")
-                SysLog.console(appId, m.messageLevel(), m.message(), m.sourceId(), m.lineNumber())
+                SysLog.console(appId, when (m.messageLevel()) {
+                    android.webkit.ConsoleMessage.MessageLevel.WARNING -> "warning"
+                    android.webkit.ConsoleMessage.MessageLevel.ERROR -> "crit"
+                    else -> "notice"
+                }, m.message(), m.sourceId(), m.lineNumber())
                 return true
             }
             override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
@@ -359,7 +363,7 @@ open class AppWindow(
      * dashboard tells its app it was swiped away from there (Enyo's onUserClose). A page that
      * doesn't answer within [UNLOAD_MS] is destroyed anyway.
      */
-    fun close() {
+    override fun close() {
         if (destroyed) return
         var done = false
         val finish = { if (!done) { done = true; destroy() } }
@@ -387,8 +391,11 @@ open class AppWindow(
         open.forEach { it.cancel() }
     }
 
+    /** Starts the window's page (LifecycleWindow). */
+    override fun load(url: String) = loadUrl(url)
+
     /** Calls a lifecycle hook the way LunaSysMgr did: a function on the page's Mojo object. */
-    fun callMojo(fn: String, argsJson: String = "") =
+    override fun callMojo(fn: String, argsJson: String) =
         evaluateJavascript(jsSafe("(function(){try{if(window.Mojo&&Mojo.$fn){Mojo.$fn($argsJson);}}catch(e){console.error('Mojo.$fn: '+e);}})()"), null)
 
     /**
@@ -414,7 +421,7 @@ open class AppWindow(
      * still starting headless at boot (Calendar, Clock, Email, launched from Android as Lunacy
      * started: no card, 0.9.0's sweep). The page then hears it as a running app does.
      */
-    open fun relaunch(params: String, done: (Boolean) -> Unit) {
+    override fun relaunch(params: String, done: (Boolean) -> Unit) {
         if (!pageLoaded) {
             Log.i(AppServer.TAG, "[$appId] relaunch waits for the page to load")
             waitingRelaunches += params to done

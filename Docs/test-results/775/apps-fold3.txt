@@ -1,0 +1,22 @@
+com.accuweather.accuweather card=1 errors=0
+com.codepoet.tapmap card=1 errors=0
+com.drnull.drpodder card=1 errors=0
+com.jmtk.apollo card=1 errors=0
+com.jonandnic.metube card=1 errors=1 UNCAUGHT: urlassist-model.js:33 Uncaught ReferenceError: response is not defined
+com.lazydayproject.cablenews card=1 errors=1 UNCAUGHT: palmInitFramework506.js:24846 Uncaught TypeError: this.adapter.pageFocused is not a function
+com.othelloventures.feedspider2 card=1 errors=5 UNCAUGHT: index.html:98 Uncaught TypeError: Cannot read properties of undefined (reading 'open')
+com.palm.app.codepoet.simplechat card=1 errors=0
+com.palm.app.maps card=1 errors=0
+com.palm.app.webosaccount card=1 errors=0
+com.palm.codepoet.papyrus card=1 errors=0
+com.palm.stark.files card=1 errors=0
+com.palm.webosarchive.checkmatehd card=1 errors=2
+com.tehtorq.reddit card=1 errors=0
+com.usatoday.webos card=1 errors=0
+com.wosa.bluebubbles card=1 errors=0
+de.zefanjas.biblezhdpro card=1 errors=0
+org.webosarchive.flyingtoasters card=1 errors=0
+org.webosarchive.lunecast card=0 errors=0
+org.webosarchive.lunedrop card=1 errors=0
+org.webosarchive.pwainstaller card=1 errors=0
+org.webosarchive.webcal.app card=1 errors=4

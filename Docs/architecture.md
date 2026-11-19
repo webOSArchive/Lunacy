@@ -1327,7 +1327,8 @@ no `openDatabase` at all, and Lunacy provides it in JS instead:
   Lunacy through the host's adb server and lists it as `adb lunacy` (its
   [LUNACY.md](https://github.com/webOSArchive/webos-sdk-redux/blob/main/LUNACY.md)).
   `Novacom.kt` is novacomd's device side on the abstract socket
-  `org.webosarchive.lunacy.novacomd`: `get` and `put` of files in the webOS root, `run` of a
+  `org.webosarchive.lunacy.novacomd`, speaking LunaCore's `NovacomProtocol` (shared with Luna
+  DE since 2026-11-17): `get` and `put` of files in the webOS root, `run` of a
   command in it (busybox, path mapping and luna-send as a package script gets them, calling
   the bus as `novacomd` on the private bus, as root's luna-send did), and `open tty` for
   novaterm, through busybox's `script`. It serves only peers that are root or adb's shell

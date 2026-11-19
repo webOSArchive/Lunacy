@@ -1,0 +1,16 @@
+# Notarisation of Luna DE's Mac package (DesktopLuna/signing/mac.js).
+# Copy this file to set-apple-vars.sh in this folder (git-ignored) and fill in the values;
+# `npm run dist` reads it. Variables already in the environment win over the file.
+#
+# Also needed: a "Developer ID Application" certificate in the keychain (not "Mac Installer
+# Distribution"): Xcode → Settings → Accounts → your Apple account → Manage Certificates → + →
+# Developer ID Application.
+#
+#   APPLE_ID                     your Apple ID's email
+#   APPLE_APP_SPECIFIC_PASSWORD  appleid.apple.com → Sign-In and Security → App-Specific Passwords
+#   APPLE_TEAM_ID                developer.apple.com/account, top right (10 characters); the
+#                                Developer ID certificate's team
+
+export APPLE_ID="you@example.com"
+export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+export APPLE_TEAM_ID="XXXXXXXXXX"

@@ -4,20 +4,39 @@
 # build that asks for it includes (./gradlew assembleDebug -PtestApps): it is a test app that
 # users shouldn't get (codepoet). Nothing here is committed.
 # See Docs/android5-setup.md and Docs/roadmap.md.
+#
+#   fetch-assets.sh             everything, for the Android build (the development machine)
+#   fetch-assets.sh --desktop   Luna DE's part only: the frameworks and the system's files, patched,
+#                               without what is built or run for Android (Node for Android, the
+#                               mail and messaging engines, busybox, the PDK runtime, the test
+#                               apps). It needs nothing but what get-assets-from-touchpad.sh
+#                               fetches, so anyone with a TouchPad can make it.
 set -e
 cd "$(dirname "$0")"
 HERE=$(pwd)
-V=../Workbench/vendor
-L=local-assets
+DESKTOP=
+[ "$1" = --desktop ] && DESKTOP=1
+V=${LUNACY_VENDOR:-../Workbench/vendor}
+L=${LUNACY_ASSETS_OUT:-local-assets}
 T=local-test-apps
-rm -rf $L $T && mkdir -p $L/fw/enyo $L/apps $T/apps
+# GNU's sha256sum, realpath and patch (for --follow-symlinks), by whichever name the machine has
+# them: a Mac's own aren't GNU's, and Homebrew's are gsha256sum, grealpath and gpatch.
+SHA256SUM=sha256sum; command -v sha256sum >/dev/null 2>&1 || SHA256SUM=gsha256sum
+REALPATH=realpath; realpath -m --relative-to=/ /x >/dev/null 2>&1 || REALPATH=grealpath
+PATCH=patch; patch --follow-symlinks --version >/dev/null 2>&1 || PATCH=gpatch
+for tool in $SHA256SUM $REALPATH $PATCH; do
+    command -v $tool >/dev/null 2>&1 || { echo "fetch-assets: needs GNU coreutils and GNU patch (no $tool); on a Mac: brew install coreutils gpatch" >&2; exit 1; }
+done
+[ -d $V/touchpad/enyo-0.10 ] || { echo "fetch-assets: no $V/touchpad: AndroidLuna/get-assets-from-touchpad.sh fetches it from a TouchPad (then fetch-assets.sh --desktop)" >&2; exit 1; }
+if [ -n "$DESKTOP" ]; then rm -rf $L && mkdir -p $L/fw/enyo $L/apps
+else rm -rf $L $T && mkdir -p $L/fw/enyo $L/apps $T/apps; fi
 # Every patch this run applies, with its hash and the folder it went into, as a file the APK
 # carries (assets/patches.applied). A patch that doesn't apply stops this script, so a patch
 # listed here is in these assets; Workbench/apk-inventory.py holds each APK's list against
 # LunaRuntimes/. Why: Mojo 0005 was committed after a fetch and reported fixed, and no build
 # had it (2026-11-15).
 applied() {
-    echo "$(sha256sum < "$1" | cut -d' ' -f1)  ${1#../}  $2" >> "$HERE/$L/patches.applied"
+    echo "$($SHA256SUM < "$1" | cut -d' ' -f1)  ${1#../}  $2" >> "$HERE/$L/patches.applied"
 }
 # Enyo as the reference TouchPad has it: /usr/palm/frameworks/enyo/0.10 off the device
 # (webOS CE 3.1.0), the build HP shipped, with the libraries (networkproxy among them) and the
@@ -28,7 +47,7 @@ cp -r $V/touchpad/enyo-0.10 $L/fw/enyo/1.0
 # what each one is and why. A patch that no longer applies is a build failure, not a silent skip.
 for patch in ../LunaRuntimes/enyo-1.0/patches/*.patch; do
     [ -e "$patch" ] || continue
-    (cd $L/fw/enyo/1.0 && patch -p1 --forward --silent --fuzz=0 --follow-symlinks < "$HERE/$patch") ||
+    (cd $L/fw/enyo/1.0 && $PATCH -p1 --forward --silent --fuzz=0 --follow-symlinks < "$HERE/$patch") ||
         { echo "fetch-assets: $patch does not apply to the TouchPad's Enyo" >&2; exit 1; }
     applied "$patch" "$L/fw/enyo/1.0"
     echo "enyo: applied $(basename "$patch")"
@@ -42,7 +61,7 @@ cp -r $V/webos-ce/system/usr/palm/frameworks/enyo/0.10/framework/lib/accounts/. 
 # series, since the SDK takes the TouchPad's library and not this one.
 for patch in ../LunaRuntimes/enyo-accounts/patches/*.patch; do
     [ -e "$patch" ] || continue
-    (cd $L/fw/enyo/1.0/framework/lib/accounts && patch -p1 --forward --silent --fuzz=0 < "$HERE/$patch") ||
+    (cd $L/fw/enyo/1.0/framework/lib/accounts && $PATCH -p1 --forward --silent --fuzz=0 < "$HERE/$patch") ||
         { echo "fetch-assets: $patch does not apply to webOS CE's accounts library" >&2; exit 1; }
     applied "$patch" "$L/fw/enyo/1.0/framework/lib/accounts"
     echo "enyo accounts: applied $(basename "$patch")"
@@ -56,7 +75,7 @@ them) are Palm/HP's, distributed by Lunacy as abandonware, like Mojo. lib/accoun
 webOS CE project's (the community enyo-accounts 1.1.1.1, with CE's strings and App Catalog icon),
 with Lunacy's patches (LunaRuntimes/enyo-accounts/patches).
 NOTICE
-cp -r ../Workbench/apps-src/com.ingloriousapps.glimpse/usr/palm/applications/com.ingloriousapps.glimpse $T/apps/
+[ -n "$DESKTOP" ] || cp -r ../Workbench/apps-src/com.ingloriousapps.glimpse/usr/palm/applications/com.ingloriousapps.glimpse $T/apps/
 # Palm's own settings apps that Lunacy ships (Screen & Lock, Help) are committed under
 # ../CoreApps/ with their NOTICE, like Mojo and the fonts. Any others under
 # Workbench/vendor/settings-apps/ are copied here for testing and stay out of the repo.
@@ -75,7 +94,7 @@ links() {  # links <tree> <manifest>
     tree=$1; out=$2; : > "$out"
     find "$tree" -type l | sort | while read -r l; do
         rel=${l#"$tree"/}
-        t=$(realpath -m --relative-to="$tree" "$(dirname "$l")/$(readlink "$l")")
+        t=$($REALPATH -m --relative-to="$tree" "$(dirname "$l")/$(readlink "$l")")
         case $t in ../*|/*) echo "fetch-assets: link $rel -> $t leaves the tree; dropped" >&2; continue;; esac
         [ -e "$tree/$t" ] || { echo "fetch-assets: link $rel -> $t is dangling; dropped" >&2; continue; }
         echo "$rel $t" >> "$out"
@@ -97,7 +116,7 @@ chmod -R u+w $L/fw/mojo $L/fw/mojocommon
 # Lunacy's changes to Mojo, as diffs against the device's own copy (LunaRuntimes/mojo/CHANGES.md).
 for patch in ../LunaRuntimes/mojo/patches/*.patch; do
     [ -e "$patch" ] || continue
-    (cd $L/fw/mojo && patch -p1 --forward --silent --fuzz=0 --follow-symlinks < "$HERE/$patch") ||
+    (cd $L/fw/mojo && $PATCH -p1 --forward --silent --fuzz=0 --follow-symlinks < "$HERE/$patch") ||
         { echo "fetch-assets: $patch does not apply to the TouchPad's Mojo" >&2; exit 1; }
     applied "$patch" "$L/fw/mojo"
     echo "mojo: applied $(basename "$patch")"
@@ -136,7 +155,7 @@ calendar_framework() {
     cp -r $V/webos-ce/system/usr/palm/frameworks/calendar/. "$1/"
     for patch in ../LunaRuntimes/calendar/patches/*.patch; do
         [ -e "$patch" ] || continue
-        (cd "$1" && patch -p1 --forward --silent --fuzz=0 < "$HERE/$patch") ||
+        (cd "$1" && $PATCH -p1 --forward --silent --fuzz=0 < "$HERE/$patch") ||
             { echo "fetch-assets: $patch does not apply to CE's calendar framework" >&2; exit 1; }
         applied "$patch" "$1"
     done
@@ -165,6 +184,7 @@ NOTICE
 # The SDK samples load Enyo by an SDK-tree relative path; packaging them as apps points them
 # at the framework path installed apps use (what palm-package'd samples needed on a device too).
 for s in Sampler HelloWorld; do
+    [ -z "$DESKTOP" ] || break
     id=com.palmdts.enyo.$(echo $s | tr A-Z a-z)
     cp -r $V/enyo-1.0/support/examples/$s $T/apps/$id
     sed -i 's#"../../../../1.0/framework/enyo.js"#"/usr/palm/frameworks/enyo/1.0/framework/enyo.js"#' $T/apps/$id/index.html
@@ -186,6 +206,7 @@ done
 # has 16 KB pages. libc++_shared.so and the launcher come from NDK r28, which aligns 64-bit
 # libraries to 16 KB by itself. Palm's service frameworks are the reference TouchPad's
 # (Workbench/vendor/touchpad/services-fw), with their version symlinks resolved.
+if [ -z "$DESKTOP" ]; then   # Node for Android: not Luna DE's (down to the "fi" before the ROM)
 NDK=${ANDROID_NDK:-$HOME/Android/Sdk/ndk/android-ndk-r28c}
 TC=$NDK/toolchains/llvm/prebuilt/linux-x86_64
 [ -x $TC/bin/clang++ ] || { echo "fetch-assets: no NDK at $NDK (set ANDROID_NDK; BUILDING.md)" >&2; exit 1; }
@@ -212,6 +233,7 @@ for ABI in armeabi-v7a arm64-v8a; do
     $TC/bin/$CXX -pie -fPIE -O2 -s -Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384 -o $J/liblunacynode.so tools/node-launcher.cpp -L$NM -lnode -llog
     echo "node: $ABI from $NM"
 done
+fi
 # The webOS root filesystem's ROM (WebosRoot.kt): what the TouchPad's rootfs held for JS
 # services and package scripts, laid into Lunacy's files/webos. Palm's service frameworks and
 # jsservicelauncher, the system's own JS services and the db8 kinds they own, from the
@@ -238,6 +260,25 @@ cp -r $V/touchpad/os-services/com.palm.service.accounts $R/usr/palm/services/
 # <file>.stock; those go back in place and the package's own additions come out, so that the
 # package patches Lunacy's copy exactly as it patches a device's.
 P=$R/usr/palm/services/com.palm.service.palmprofile
+if [ -n "$DESKTOP" ]; then
+    # Luna DE ships webOS CE's version of the service (codepoet, 2026-11-16): the one a current
+    # CE image carries, already changed for the webOS Archive account, which is what a builder's
+    # own TouchPad gives. The development machine keeps a copy of it beside its older one
+    # (Workbench/vendor/touchpad/ce-image), since that older one is what Android's is made from.
+    PP=$V/touchpad/ce-image/com.palm.service.palmprofile
+    [ -d $PP ] || PP=$V/touchpad/os-services/com.palm.service.palmprofile
+    [ -z "$(find $PP -name '*.stock')" ] ||
+        { echo "fetch-assets: $PP is an older image's (it has .stock files), not webOS CE's own: get-assets-from-touchpad.sh --force takes a current one" >&2; exit 1; }
+    cp -r $PP $P
+    cat > $P/NOTICE <<'NOTICE'
+The palmprofile service (bus name com.palm.accountservices) as webOS CE 3.1.0 ships it: HP's,
+with the webOS CE project's changes for the webOS Archive account
+(https://github.com/webOSArchive/webOS-Community-Edition), copied from
+/usr/palm/services/com.palm.service.palmprofile on a TouchPad running it. HP's part: copyright
+Palm, Inc. / Hewlett-Packard, never released under an open licence, distributed by Lunacy as
+abandonware, like Mojo.
+NOTICE
+else
 cp -r $V/touchpad/os-services/com.palm.service.palmprofile $P
 find $P -name '*.stock' | while read f; do mv "$f" "${f%.stock}"; done
 rm -f $P/handlers/UpdateUsernameCommandAssistant.js $P/handlers/SyncDeviceNameCommandAssistant.js $P/handlers/SignOutCommandAssistant.js
@@ -248,6 +289,7 @@ with the files the webOS Community Account Manager patches restored from the sto
 keeps. Copyright Palm, Inc. / Hewlett-Packard. Never released under an open licence;
 distributed by Lunacy as abandonware, like Mojo.
 NOTICE
+fi
 # Calendar's reminders service, which schedules each event's reminder as an activity and
 # shows it through the app (Docs/architecture.md, "Calendar").
 cp -r $V/touchpad/os-services/com.palm.service.calendar.reminders $R/usr/palm/services/
@@ -301,7 +343,7 @@ rm -f $R/usr/palm/services/com.palm.service.photos/install-on-device.sh
 # Lunacy's changes to it, as diffs against the TouchPad's (LunaRuntimes/photos-service/CHANGES.md).
 for patch in ../LunaRuntimes/photos-service/patches/*.patch; do
     [ -e "$patch" ] || continue
-    (cd $R/usr/palm/services/com.palm.service.photos && patch -p1 --forward --silent --fuzz=0 < "$HERE/$patch") ||
+    (cd $R/usr/palm/services/com.palm.service.photos && $PATCH -p1 --forward --silent --fuzz=0 < "$HERE/$patch") ||
         { echo "fetch-assets: $patch does not apply to the TouchPad's photos service" >&2; exit 1; }
     applied "$patch" "$R/usr/palm/services/com.palm.service.photos"
 done
@@ -383,6 +425,7 @@ NOTICE
 # that shim's path are left out. From Workbench/vendor/touchpad/email.
 E=$V/touchpad/email
 mkdir -p $R/usr/bin $R/usr/lib $R/usr/share/dbus-1/system-services $R/etc/palm/db_kinds $R/etc/palm/filecache_types
+if [ -z "$DESKTOP" ]; then   # the programs and their libraries: Android's only
 cp $E/usr/bin/mojomail-imap $E/usr/bin/mojomail-smtp $E/usr/bin/filecache $R/usr/bin/
 for l in libmojocore.so libmojoluna.so libmojodb.so libemail-common.so libpalmsocket.so libPmLogLib.so \
          libPmStateMachineEngine.so libglib-2.0.so.0 libgthread-2.0.so.0 libgio-2.0.so.0 libgobject-2.0.so.0 \
@@ -399,6 +442,7 @@ cp $E/usr/lib/ssl11mail/libssl_compat.so $E/usr/lib/ssl11mail/libcurl.so.4.5.0 $
 for l in libcrypto.so.0.9.8 libcrypto.so.1.1; do ln -sfn ../ssl11/libcrypto.so.1.1 $R/usr/lib/ssl11mail/$l; done
 for l in libssl.so.0.9.8 libssl.so.1.1; do ln -sfn ../ssl11/libssl.so.1.1 $R/usr/lib/ssl11mail/$l; done
 ln -sfn libcurl.so.4.5.0 $R/usr/lib/ssl11mail/libcurl.so.4
+fi
 for s in com.palm.imap com.palm.smtp com.palm.filecache; do
     cp $E/usr/share/dbus-1/system-services/$s.service $R/usr/share/dbus-1/system-services/
 done
@@ -425,8 +469,8 @@ cp $V/touchpad/command-resource-handlers.json $R/usr/palm/
 # tasks and task lists, which the TouchPad keeps in /etc/palm whether or not Tasks is there)
 # come with it. From Workbench/vendor/touchpad/eas, and etc-db for the tasks.
 A=$V/touchpad/eas
-cp $A/usr/bin/mojomail-eas $R/usr/bin/
-cp $A/sysroot/usr/lib/libxml2.so.2 $R/usr/lib/
+[ -n "$DESKTOP" ] || cp $A/usr/bin/mojomail-eas $R/usr/bin/
+[ -n "$DESKTOP" ] || cp $A/sysroot/usr/lib/libxml2.so.2 $R/usr/lib/
 cp $A/usr/share/dbus-1/system-services/com.palm.eas.service $R/usr/share/dbus-1/system-services/
 cp $A/etc/palm/db/kinds/* $R/etc/palm/db/kinds/
 cp $A/etc/palm/db/permissions/com.palm.securitypolicy.eas $R/etc/palm/db/permissions/
@@ -467,8 +511,8 @@ NOTICE
 # Hybrid apps' plugins (Docs/pdk.md, "Hybrid apps"). Quick Office's links the rest of the
 # TouchPad's ICU 3.6 (its io, layout and paragraph-layout libraries), beside the four the mail
 # services brought. From Workbench/vendor/touchpad/icu.
-cp $V/touchpad/icu/usr/lib/libicuio.so.36 $V/touchpad/icu/usr/lib/libicule.so.36 $V/touchpad/icu/usr/lib/libiculx.so.36 $R/usr/lib/
-cat > $R/usr/lib/NOTICE.icu <<'NOTICE'
+[ -n "$DESKTOP" ] || cp $V/touchpad/icu/usr/lib/libicuio.so.36 $V/touchpad/icu/usr/lib/libicule.so.36 $V/touchpad/icu/usr/lib/libiculx.so.36 $R/usr/lib/
+[ -n "$DESKTOP" ] || cat > $R/usr/lib/NOTICE.icu <<'NOTICE'
 libicuio.so.36, libicule.so.36 and libiculx.so.36: ICU 3.6 (ICU licence,
 https://github.com/unicode-org/icu/blob/main/LICENSE), as the reference TouchPad (webOS CE
 3.1.0) ships them in /usr/lib.
@@ -487,10 +531,12 @@ mkdir -p $R/usr/lib/purple-2 $R/usr/lib/synergy-runtime $R/etc/palm/tempdb/kinds
 # The transport itself is rebuilt from codepoet's imlibpurpleservice fork (the auto-away, buddy
 # removal crash and presence fixes, on their way to Herrie's repository as a pull request) by
 # webos-doctor-ce's transport build; Workbench/vendor/im/transport/SOURCE says from what.
+if [ -z "$DESKTOP" ]; then
 cp $V/im/transport/imlibpurpletransport $R/usr/bin/
 cp $M/libpurple.so.0.14.13 $R/usr/lib/libpurple.so.0
 cp $M/usr/lib/synergy-runtime/* $R/usr/lib/synergy-runtime/
 for p in libaim.so idle.so newline.so offlinemsg.so autoaccept.so statenotify.so; do cp $M/usr/lib/purple-2/$p $R/usr/lib/purple-2/; done
+fi
 cat > $R/usr/share/dbus-1/system-services/com.palm.imlibpurple.service <<'SVC'
 [D-BUS Service]
 Name=com.palm.imlibpurple
@@ -504,6 +550,8 @@ cp $M/etc/palm/tempdb/permissions/com.palm.imbuddystatus $R/etc/palm/tempdb/perm
 cp -r $M/etc/palm/activities/* $R/etc/palm/activities/
 cp $M/etc/palm/contact_linker_plugins/* $R/etc/palm/contact_linker_plugins/
 cp -r $M/usr/palm/services/com.palm.messaging.chatthreader $R/usr/palm/services/
+# A device webOS Chat's enabler has run on keeps its backups beside the file it changed; not the ROM's.
+rm -f $R/usr/palm/services/com.palm.messaging.chatthreader/assistants/*.webos-chat-*
 cp -r $M/usr/palm/frameworks/messaging.library $M/usr/palm/frameworks/contacts.plugin.messaging $R/usr/palm/frameworks/
 # The Android account type, Lunacy's own: its page is the core app beside it.
 cp -r ../CoreApps/org.webosarchive.lunacy.androidaccount/account $R/usr/palm/public/accounts/org.webosarchive.lunacy.androidaccount
@@ -584,6 +632,7 @@ MTAB
 # OpenAL's configuration, as the TouchPad had it: its OpenAL Soft 1.11 (the PDK runtime's
 # libopenal.so.1) plays through SDL with these settings. PDK apps read /etc/openal through
 # the preload (LunaRuntimes/pdk/libpreload), which looks it up here.
+if [ -z "$DESKTOP" ]; then   # OpenAL's settings, busybox: the PDK's and package scripts', Android's only
 mkdir -p $R/etc/openal
 cp $V/touchpad/etc-openal/alsoft.conf $R/etc/openal/
 cat > $R/etc/openal/NOTICE <<'NOTICE'
@@ -608,6 +657,7 @@ https://busybox.net/downloads/busybox-1.37.0.tar.bz2 by AndroidLuna/tools/build-
 holds the configuration: defconfig with FEATURE_SUID, STATIC and the applets Android's libc
 can't build turned off, compiled against bionic with -DBB_GLOBAL_CONST= .
 NOTICE
+fi
 # The ROM's symlinks, made on the device as links (WebosRoot.syncRom), and its file list, so
 # that Lunacy needn't walk it with AssetManager.list(), which reads the APK's whole asset
 # index on every call.
@@ -620,5 +670,12 @@ links $R $L/rootfs.links
 (cd $L/rootfs && find . -type f | sed 's#^\./##' | sort) > $L/rootfs.index
 # The PDK runtime goes into local-assets and local-jni, both emptied above, so it is built
 # again on every run (its downloads and builds are kept in local-build/pdk).
+if [ -n "$DESKTOP" ]; then
+    # The folders the native programs would have had are empty here, and go.
+    rmdir $R/usr/lib/purple-2 $R/usr/lib/synergy-runtime $R/usr/lib 2>/dev/null || true
+    echo "Made by fetch-assets.sh --desktop: Luna DE's part only, without the Android build's native programs." > $L/DESKTOP-ONLY
+    echo "local-assets ready for Luna DE: $(du -sh $L | cut -f1)"
+    exit 0
+fi
 NDK=$NDK sh tools/build-pdk.sh > /dev/null || { echo "fetch-assets: tools/build-pdk.sh failed" >&2; exit 1; }
 echo "local-assets ready: $(du -sh $L | cut -f1); local-jni: $(du -sh local-jni | cut -f1)"

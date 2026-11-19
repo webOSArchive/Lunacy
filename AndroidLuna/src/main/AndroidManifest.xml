@@ -58,6 +58,7 @@
          (WebosLinks.androidPackage); from Android 8 the installer needs this to accept it. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application
+        android:name=".shell.LunacyApplication"
         android:label="Lunacy"
         android:icon="@mipmap/ic_launcher"
         android:hardwareAccelerated="true"

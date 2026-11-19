@@ -1,5 +1,6 @@
 package org.webosarchive.lunacy.shell
 
+import org.webosarchive.lunacy.card.androidComponent
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
@@ -36,7 +37,7 @@ import kotlin.math.roundToInt
  */
 @SuppressLint("ViewConstructor")
 class Launcher(context: Context, private val luna: Luna, private val onLaunch: (AppInfo) -> Unit) : View(context) {
-    private companion object {
+    companion object {
         /** The default layout's name for the device's own phone (an Android app). */
         const val ANDROID_PHONE = "android:phone"
         /** ...and for its own camera. */
@@ -295,71 +296,24 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
      * anything that names doesn't cover goes by its keywords, alphabetically.
      */
     fun setApps(apps: List<AppInfo>) {
-        val byId = apps.associateBy { it.id }
-        val placed = HashSet<String>()
         // Titles and icons may have changed with the list (an Android app updated in place).
         labels.clear(); groupComposites.clear()
-        pages.forEach { it.tiles.clear() }
-        fun app(id: String) = byId[id]?.takeIf { placed.add(it.id) }?.let { Tile.App(it) }
-        /** A saved cell: an app's id, or a group ({"group": name, "uid": ..., "apps": [ids]}). */
-        fun tile(entry: Any?): Tile? = when (entry) {
-            is String -> app(entry)
-            is JSONObject -> {
-                val ids = entry.optJSONArray("apps")
-                val members = (0 until (ids?.length() ?: 0)).mapNotNull { byId[ids!!.optString(it)]?.takeIf { a -> placed.add(a.id) } }
-                // A group left with one member is that app again (it dissolves, as LunaCE's does).
-                when (members.size) {
-                    0 -> null
-                    1 -> Tile.App(members[0])
-                    else -> Tile.Group(entry.optString("uid").ifEmpty { "group_" + java.util.UUID.randomUUID() }, entry.optString("group", "Group"), members.toMutableList())
-                }
+        // LunaCore's LauncherLayout places them, by the rules Luna DE's launcher keeps too: the
+        // user's tabs and places, then the default layout, then each app's category or keywords.
+        // A page that was here keeps its object (and its scroll).
+        val had = pages.associateBy { it.designator }
+        val placed = store.layout.tabs(apps).map { t ->
+            val page = had[t.designator] ?: Page(t.designator, t.name)
+            page.title = t.name
+            page.tiles.clear()
+            for (c in t.tiles) page.tiles += when (c) {
+                is org.webosarchive.lunacy.card.LauncherLayout.Tile.App -> Tile.App(c.app)
+                is org.webosarchive.lunacy.card.LauncherLayout.Tile.Group -> Tile.Group(c.uid, c.name, c.members.toMutableList())
             }
-            else -> null
+            page
         }
-        val tabs = store.savedTabs()
-        if (tabs != null) {
-            // The user's own tabs: the stock ones by designator, keeping their names, and any
-            // they added, in their order.
-            for (i in 0 until tabs.length()) {
-                val t = tabs.optJSONObject(i) ?: continue
-                val d = t.optString("designator")
-                val page = pages.firstOrNull { it.designator == d } ?: Page(d, t.optString("name")).also { pages += it }
-                page.title = t.optString("name", page.title)
-                // Proof of concept: the old default name for favorites gives way to "android".
-                if (d == "favorites" && page.title == "games") page.title = "android"
-                val ids = t.optJSONArray("apps")
-                for (j in 0 until (ids?.length() ?: 0)) tile(ids!!.opt(j))?.let { page.tiles += it }
-            }
-            val order = (0 until tabs.length()).mapNotNull { tabs.optJSONObject(it)?.optString("designator") }
-            pages.sortBy { p -> order.indexOf(p.designator).let { if (it < 0) Int.MAX_VALUE else it } }
-        } else {
-            // Before tabs could change: each page's apps by index.
-            val saved = store.legacyPages()
-            for (pi in 0 until minOf(saved.length(), pages.size)) {
-                val ids = saved.optJSONArray(pi) ?: continue
-                for (i in 0 until ids.length()) app(ids.optString(i))?.let { pages[pi].tiles += it }
-            }
-        }
-        // Then the apps Lunacy ships with, where and in the order the default layout puts them.
-        // "android:phone" there is the device's own phone, whatever its package (AndroidApps.dialers).
-        val phone by lazy {
-            val launchers = apps.mapNotNull { it.androidComponent }
-            val dialers = AndroidApps.dialers(context, launchers)
-            apps.firstOrNull { it.androidComponent in dialers }?.id
-        }
-        // "android:camera" the device's own camera (AndroidApps.cameraPackages).
-        val camera by lazy {
-            val cams = AndroidApps.cameraPackages(context)
-            apps.firstOrNull { it.androidComponent?.packageName in cams }?.id
-        }
-        for ((designator, ids) in store.defaultLayout) {
-            val page = pages.indexOfFirst { it.designator == designator }.takeIf { it >= 0 } ?: continue
-            for (id in ids) (when (id) { ANDROID_PHONE -> phone; ANDROID_CAMERA -> camera; else -> id })?.let { app(it) }?.let { pages[page].tiles += it }
-        }
-        // Everything else by its keywords, alphabetically.
-        for (app in apps.filter { it.id !in placed }.sortedBy { it.title.lowercase() }) {
-            pages[store.pageFor(app, pages)].tiles += Tile.App(app)
-        }
+        pages.clear(); pages += placed
+        pagePos = pagePos.coerceIn(0f, (pages.size - 1).toFloat())
         // A tile being dragged while the list changed is the new one with its id, if any.
         dragging = dragging?.let { d -> pages.flatMap { it.tiles }.firstOrNull { it.id == d.id } }
         invalidate()

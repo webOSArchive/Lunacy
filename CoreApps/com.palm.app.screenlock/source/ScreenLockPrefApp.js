@@ -16,7 +16,10 @@ enyo.kind({
                                                                                	{content: $L("Loading Preferences...")}
                                                                 ]},
     		{kind:"Control",  name:"prefView", className:"box-center", components:[                               
-				{kind: "RowGroup", style:"margin-top:24px", components: [
+				// [Lunacy] The screen's own settings and Secure Unlock are Palm's, and show unless the
+				// environment says it has no such thing (handleGetEnvironment): Luna DE's screen is
+				// a window on a desktop, which it neither dims, turns off nor locks.
+				{kind: "RowGroup", name:"screenGroup", style:"margin-top:24px", components: [
 					{kind: "Item", tapHighlight: false, layoutKind: "HFlexLayout", components: [
 						{flex:1, content: $L("Auto Dim")},
 						{kind: "ToggleButton", name:"autodim", state:true, onChange:"toggleAutoDim"}
@@ -39,7 +42,10 @@ enyo.kind({
 	        	// [Lunacy] The shell's layout, phone or tablet (Docs/phone.md), as a setting of
 	        	// the screen: codepoet's exception to rules 0 and 5, 2026-10-03. A TouchPad had
 	        	// no such setting; everything else in this app is Palm's.
-	        	{kind: "RowGroup", caption:$L("Layout"), components: [
+	        	// [Lunacy] What is Android's alone (the layout, Android's notifications and wallpaper,
+	        	// the edge swipe) shows where the environment says it has it (handleGetEnvironment),
+	        	// as Blink Notifications does: Luna DE, on a desktop, has none of these.
+	        	{kind: "RowGroup", name:"layoutGroup", showing:false, caption:$L("Layout"), components: [
 	        		{kind: "Item", layoutKind:"HFlexLayout", tapHighlight: false, components: [
 	        			{flex:1, content:$L("Screen Layout")},
 	        			{kind: "ListSelector", value: "auto", name:"layoutSelector", onChange:"handleLayoutChange", items: [
@@ -49,10 +55,10 @@ enyo.kind({
 	        			]}
 	        		]}
 	        	]},
-	        	{name:"layoutText", content: $L("Lunacy will restart to apply."), className:"accounts-gestures-text"},
+	        	{name:"layoutText", showing:false, content: $L("Lunacy will restart to apply."), className:"accounts-gestures-text"},
 	        	// [Lunacy] Apps' icons in the notifications in colour, as on webOS phones, or grey,
 	        	// as on the TouchPad: the owner's choice, on every layout (codepoet, 2026-10-16).
-	        	{kind: "RowGroup", caption:$L("Notifications"), components: [
+	        	{kind: "RowGroup", name:"notificationsGroup", showing:false, caption:$L("Notifications"), components: [
 	        		{kind: "Item", tapHighlight: false, layoutKind: "HFlexLayout", components: [
 	        			{flex:1, content: $L("App Icons")},
 	        			{kind: "ToggleButton", name:"colourNotificationIcons", state:true, onLabel:$L("Color"), offLabel:$L("Gray"), onChange:"toggleNotificationIcons"}
@@ -64,19 +70,19 @@ enyo.kind({
 	        			{kind: "ToggleButton", name:"androidNotifications", state:false, onChange:"toggleAndroidNotifications"}
 	        		]}
 	        	]},
-	        	{content: $L("Apps' icons in notifications show in color, as on webOS phones, or gray, as on the TouchPad."), className:"accounts-gestures-text"},
-	        	{content: $L("Android apps' notifications show here once you allow Lunacy on Android's Notification access screen. Lunacy only shows them: it keeps none and sends none anywhere."), className:"accounts-gestures-text"},
+	        	{name:"notificationIconsText", showing:false, content: $L("Apps' icons in notifications show in color, as on webOS phones, or gray, as on the TouchPad."), className:"accounts-gestures-text"},
+	        	{name:"androidNotificationsText", showing:false, content: $L("Android apps' notifications show here once you allow Lunacy on Android's Notification access screen. Lunacy only shows them: it keeps none and sends none anywhere."), className:"accounts-gestures-text"},
 	        	{kind: "RowGroup", caption:$L("Wallpaper"),
 	        		components: [
 	        		             {kind: "Item", tapHighlight: true, layoutKind: "HFlexLayout", onclick:"launchFilePicker", components: [{content: $L("Change Wallpaper")}]},
 	        		             // [Lunacy] Android's own wallpaper follows this one, if the owner wants it.
-	        		             {kind: "Item", tapHighlight: false, layoutKind: "HFlexLayout", components: [
+	        		             {kind: "Item", name:"hostWallpaperItem", showing:false, tapHighlight: false, layoutKind: "HFlexLayout", components: [
 	        		             	{flex:1, content: $L("Use on Android")},
 	        		             	{kind: "ToggleButton", name:"hostWallpaper", state:false, onChange:"toggleHostWallpaper"}
 	        		             ]}
 	        	]},
-	        	{content: $L("Android's home and lock screens show this wallpaper too."), className:"accounts-gestures-text"},
-	        	{kind: "RowGroup", caption:$L("Advanced Gestures"), components: [
+	        	{name:"hostWallpaperText", showing:false, content: $L("Android's home and lock screens show this wallpaper too."), className:"accounts-gestures-text"},
+	        	{kind: "RowGroup", name:"gesturesGroup", showing:false, caption:$L("Advanced Gestures"), components: [
 	        	                                        					{kind: "Item", tapHighlight: false, layoutKind: "HFlexLayout", components: [
 	        	                                        						// [Lunacy] Palm's "Enable Gestures", the same setting, now a swipe in from a side edge as Home (Docs/luna-deltas.md B15).
 	        	                                        						{flex:1, content: $L("Edge swipe for home")},
@@ -84,9 +90,9 @@ enyo.kind({
 	        	                                        					]}
 	        	]},
 				// [Lunacy] What the edge swipe does here, or that Android's back gesture already does it.
-				{name:"edgeSwipeText", content: $L("Swipe in from the left or right edge of the screen to card an app or close what's open."), className:"accounts-gestures-text"},
-				{content: $L("Swipe up from the bottom of the screen to card an app. Swipe up again to see the Launcher."), className:"accounts-gestures-text"},
-	        	{kind: "RowGroup", caption:$L("Secure Unlock"), className:"accounts-group", 
+				{name:"edgeSwipeText", showing:false, content: $L("Swipe in from the left or right edge of the screen to card an app or close what's open."), className:"accounts-gestures-text"},
+				{name:"swipeUpText", showing:false, content: $L("Swipe up from the bottom of the screen to card an app. Swipe up again to see the Launcher."), className:"accounts-gestures-text"},
+	        	{kind: "RowGroup", name:"secureUnlockGroup", caption:$L("Secure Unlock"), className:"accounts-group", 
 	        		components: [
 	        		             {kind: "Item", name:"securityOptionsItem", tapHighlight:false, components:[
 	        		             {kind: "ListSelector", name:"securityOptions", onChange:"changeSecurityOption", value: 'none', items: [
@@ -229,6 +235,21 @@ enyo.kind({
 			this.$.blinkGroup.setShowing(inResponse.notificationLight === true);
 			this.$.blinkText.setShowing(inResponse.notificationLight === true);
 		}
+		// [Lunacy] Each of Android's own settings shows where the environment has it.
+		var has = function(k) { return !!inResponse && inResponse[k] !== undefined; };
+		this.$.hostWallpaperItem.setShowing(has("hostWallpaper"));
+		this.$.hostWallpaperText.setShowing(has("hostWallpaper"));
+		this.$.notificationsGroup.setShowing(has("colourNotificationIcons") || has("androidNotifications"));
+		this.$.notificationIconsText.setShowing(has("colourNotificationIcons"));
+		this.$.androidNotificationsText.setShowing(has("androidNotifications"));
+		this.$.gesturesGroup.setShowing(has("navigationMode"));
+		this.$.edgeSwipeText.setShowing(has("navigationMode"));
+		this.$.swipeUpText.setShowing(has("navigationMode"));
+		this.$.layoutGroup.setShowing(has("layout"));
+		// [Lunacy] Palm's own rows go only where the environment says it has no screen to set or lock.
+		this.$.screenGroup.setShowing(!inResponse || inResponse.screenSettings !== false);
+		this.$.secureUnlockGroup.setShowing(!inResponse || inResponse.secureUnlock !== false);
+		this.$.layoutText.setShowing(has("layout"));
 		if (inResponse && inResponse.hostWallpaper !== undefined) {
 			this.$.hostWallpaper.setState(inResponse.hostWallpaper);
 		}

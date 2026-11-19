@@ -1,0 +1,8 @@
+node_modules/
+host/build/
+node/
+# Signing credentials and keys (signing/*.example are the templates)
+signing/set-apple-vars.sh
+signing/set-windows-vars.sh
+*.pfx
+*.p12

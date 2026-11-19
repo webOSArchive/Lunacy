@@ -1,5 +1,9 @@
 package org.webosarchive.lunacy.shell
 
+import org.webosarchive.lunacy.card.forScreen
+import org.webosarchive.lunacy.card.nduid
+import org.webosarchive.lunacy.card.serial
+import org.webosarchive.lunacy.card.androidComponent
 import android.app.Activity
 import android.graphics.Color
 import android.os.Bundle
@@ -7,6 +11,8 @@ import android.util.Log
 import android.view.WindowManager
 import android.webkit.WebView
 import org.json.JSONObject
+import org.webosarchive.lunacy.card.AndroidAssets
+import org.webosarchive.lunacy.card.AndroidServerHooks
 import org.webosarchive.lunacy.card.AppFiles
 import org.webosarchive.lunacy.card.AppInfo
 import org.webosarchive.lunacy.card.AppRegistry
@@ -100,8 +106,8 @@ class ShellActivity : Activity(), WindowHost {
     /** Every sign of having been asleep or frozen, answered as a webOS resume. */
     private val sleepWakeLazy = lazy { SleepWake(this, power) }
     private val sleepWake by sleepWakeLazy
-    private val powerService by lazy { PowerService(this, power) }
-    private val activityManagerLazy = lazy { ActivityManager(this, power) }
+    private val powerService by lazy { PowerService(org.webosarchive.lunacy.card.AndroidKeyedStore(this, "power-timeouts"), power) }
+    private val activityManagerLazy = lazy { ActivityManager(org.webosarchive.lunacy.card.AndroidBattery(this), power) }
     private val activityManager by activityManagerLazy
     /** The shell's db8s and connection manager, closed with it ([onDestroy]). */
     private val closeOnDestroy = ArrayList<() -> Unit>()
@@ -245,7 +251,14 @@ class ShellActivity : Activity(), WindowHost {
             this@ShellActivity.install(source, requester, onProgress, banners, onDone)
         override val pdkAvailable get() = pdkRuntime.available
         override val running: Map<String, List<AppWindow>> get() = lifecycle.apps
-        override fun closeWindow(window: AppWindow) = lifecycle.windowClosed(window)
+        override fun closeWindow(window: org.webosarchive.lunacy.card.RunningWindow) { (window as? AppWindow)?.let { lifecycle.windowClosed(it) } }
+        // An Android package goes to Android's installer, and a link, an email, a phone number or a
+        // map to Android's own apps (WebosLinks).
+        override fun openHostPackage(target: String): String? =
+            org.webosarchive.lunacy.card.WebosLinks.androidPackage(target, jsServices.root)?.let { org.webosarchive.lunacy.card.WebosLinks.open(this@ShellActivity, it) }
+        override fun openHostLink(appId: String, params: JSONObject?, target: String): String? =
+            org.webosarchive.lunacy.card.WebosLinks.intentFor(appId, params, target)?.let { org.webosarchive.lunacy.card.WebosLinks.open(this@ShellActivity, it) }
+        override val freeBytes get() = filesDir.usableSpace
         override fun appsChanged() = this@ShellActivity.appsChanged()
         override fun launchPointsChanged() { setLauncherApps(); showDock() }
         override fun showDock() = chrome.showDock()
@@ -363,7 +376,7 @@ class ShellActivity : Activity(), WindowHost {
         override fun scaleChanged() { androidAppsAt = null }
     }
     /** What the apps' lifecycle asks of the shell. */
-    private val lifecycleShell = object : AppLifecycle.Host {
+    private val lifecycleShell = object : LifecyclePlatform.Shell {
         override val registry get() = this@ShellActivity.registry
         override val profile get() = this@ShellActivity.profile
         override val pdkRuntime get() = this@ShellActivity.pdkRuntime
@@ -379,7 +392,10 @@ class ShellActivity : Activity(), WindowHost {
         override fun windowGone(window: AppWindow) { if (screenAwake.remove(window)) holdScreen() }
     }
     /** The running apps and their windows (AppLifecycle). After [shellHandler], which it posts to. */
-    private val lifecycle: AppLifecycle by lazy { AppLifecycle(this, this, bus, cardHost, lifecycleShell, shellHandler) }
+    private val lifecycle: AppLifecycle by lazy {
+        val platform = LifecyclePlatform(this, this, bus, cardHost, lifecycleShell)
+        AppLifecycle(bus, platform, platform, HandlerScheduler(shellHandler))
+    }
     private fun launch(appId: String, params: JSONObject? = null, placement: Placement = Placement.CARD, launchedBy: String? = null) =
         lifecycle.launch(appId, params, placement, launchedBy)
 
@@ -414,15 +430,17 @@ class ShellActivity : Activity(), WindowHost {
         // What webOS's syslogd kept, and novacomd's device side: the SDK's tools over adb.
         SysLog.start(webos.root)
         Novacom(webos) { DeviceProfile.nduid(this) }.start()
-        files = AppFiles(assets, installed, webos.root, java.io.File(applicationInfo.sourceDir))
-        jsServices = JsServices(bus, files.root, webos)
+        files = AppFiles(AndroidAssets(assets), installed, webos.root, java.io.File(applicationInfo.sourceDir))
+        jsServices = JsServices(bus, files.root, webos) { spec, open ->
+            org.webosarchive.lunacy.card.Extractfs.read(spec, org.webosarchive.lunacy.card.Extractfs.Opener(open))?.bytes
+        }
         nativeServices = NativeServices(bus, webos) { pdkRuntime }
-        server = AppServer(assets, files, jsServices.root, java.io.File(filesDir, "framework-art"))
+        server = AppServer(AndroidAssets(assets), files, jsServices.root, java.io.File(filesDir, "framework-art"), AndroidServerHooks)
         mediaServer = MediaServer(jsServices.root)
         registry = AppRegistry(files)
         handlers = ContentHandlers(registry, webos.root)
         addedLaunchPoints = LaunchPoints(webos.root, files)
-        Http.init(assets)
+        Http.init(AndroidAssets(assets), org.webosarchive.lunacy.card.AndroidCookies)
         packages = Packages(files.root, java.io.File(cacheDir, "packages"), webos)
         // Native services already in the webOS root are on the bus from the start, before the
         // configurator sends the file cache its types, as ls-hubd knew every service file at
@@ -1054,26 +1072,8 @@ class ShellActivity : Activity(), WindowHost {
      * X-Palm-Carrier is: the reference TouchPad answers "c090-01" for both. Help builds its
      * content URL from it (help.webosarchive.org/en-us/c090-01/index.json).
      */
-    private fun hostPreference(key: String): Any? {
-        val locale = resources.configuration.locale
-        val country = locale.country.lowercase().ifEmpty { "us" }
-        val region = JSONObject().put("countryCode", country)
-            .put("countryName", java.util.Locale("", country.uppercase()).getDisplayCountry(java.util.Locale.ENGLISH))
-        return when (key) {
-            "locale" -> JSONObject().put("languageCode", locale.language.lowercase().ifEmpty { "en" })
-                .put("countryCode", country).put("phoneRegion", region)
-            "region" -> region
-            "timeFormat" -> if (android.text.format.DateFormat.is24HourFormat(this)) "HH24" else "HH12"
-            "x_palm_carrier" -> profile.carrierCode
-            // A device always has a wallpaper preference: its factory default until one is
-            // picked, in this shape with no thumbnail (/etc/palm/defaultPreferences.txt on the
-            // reference TouchPad). Lunacy's default is the one it shows, which it ships into
-            // /media/internal/wallpapers. Email's compose window draws it behind the message.
-            "wallpaper" -> JSONObject().put("wallpaperName", Luna.DEFAULT_WALLPAPER)
-                .put("wallpaperFile", "/media/internal/wallpapers/${Luna.DEFAULT_WALLPAPER}").put("wallpaperThumbFile", "")
-            else -> null
-        }
-    }
+    private fun hostPreference(key: String): Any? = SystemService.devicePreference(key, resources.configuration.locale,
+        android.text.format.DateFormat.is24HourFormat(this), profile.carrierCode, Luna.DEFAULT_WALLPAPER)
 
     /**
      * PalmSystem's locale fields and clock format. webOS reported what the device was set to,
@@ -1244,7 +1244,8 @@ class ShellActivity : Activity(), WindowHost {
     }
 
     private fun registerServices() {
-        SystemProperties(this).register(bus)
+        SystemProperties({ DeviceProfile.forScreen(this) }, { DeviceProfile.nduid(this) },
+            { profile -> DeviceProfile.serial(this, profile) }).register(bus)
         // webOS's preference and wallpaper store, and the two display settings Android lets
         // Lunacy really set. See Docs/architecture.md, "Settings".
         displayService = DisplayService(this)
@@ -1289,7 +1290,7 @@ class ShellActivity : Activity(), WindowHost {
             override fun pinStatus() = homeScreenPins.status()
             override fun pinToHome(app: AppInfo, icon: android.graphics.Bitmap?) = homeScreenPins.pin(app, icon)
         }).also { it.register(bus) }
-        val connections = ConnectionManager(this) { sleepWake.blocked }.also { it.register(bus) }
+        val connections = ConnectionManager(org.webosarchive.lunacy.card.AndroidNetwork(this) { sleepWake.blocked }).also { it.register(bus) }
         closeOnDestroy += connections::stop
         sleepWake.onBlockedChanged = connections::changed
         sleepWake.onBlocked = activityManager::networkBlocked
@@ -1354,13 +1355,13 @@ class ShellActivity : Activity(), WindowHost {
         securityPolicy = SecurityPolicy(bus, lockHost, java.io.File(filesDir, "securitypolicy.json"))
         securityPolicy.register()
         securityPolicy.load()
-        applicationManager = ApplicationManager(this, registry, handlers, addedLaunchPoints, files, packages, jsServices, webos, appManagerShell)
+        applicationManager = ApplicationManager(registry, handlers, addedLaunchPoints, files, packages, webos, appManagerShell)
             .also { it.register(bus) }
         val keys = Keys(this).also { it.register(bus) }
         // What Music plays is Android's media session too; its controls come back as webOS's media keys (NowPlaying).
         MediaBroadcast(this).register(bus)
         NowPlaying.onKey = { k -> runOnUiThread { keys.mediaKey(k) } }
-        universalSearch = UniversalSearch(this) { registry.apps }.also {
+        universalSearch = UniversalSearch(org.webosarchive.lunacy.card.UniversalSearchStore(this)) { registry.apps }.also {
             it.register(bus)
             it.onChange = { runOnUiThread { chrome.searchChanged() } }
             chrome.searchReady(it)

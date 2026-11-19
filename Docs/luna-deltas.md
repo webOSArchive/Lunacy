@@ -24,7 +24,7 @@ function to look in. The three places Lunacy's side lives:
 
 | Layer | Where |
 |---|---|
-| Shell (what LunaSysMgr drew) | [AndroidLuna/…/shell/](../AndroidLuna/src/main/java/org/webosarchive/lunacy/shell/): `ShellActivity.kt`, `ShellChrome.kt`, `CardHost.kt`, `AppLifecycle.kt`, `CardLayer.kt`, `StatusBar.kt`, `Notifications.kt`, `Launcher.kt`, `QuickLaunch.kt`, `JustType.kt` |
+| Shell (what LunaSysMgr drew) | [AndroidLuna/…/shell/](../AndroidLuna/src/main/java/org/webosarchive/lunacy/shell/): `ShellActivity.kt`, `ShellChrome.kt`, `CardHost.kt`, `LifecyclePlatform.kt` (the apps' lifecycle itself is LunaCore's `card/AppLifecycle.kt`, shared with Luna DE), `CardLayer.kt`, `StatusBar.kt`, `Notifications.kt`, `Launcher.kt`, `QuickLaunch.kt`, `JustType.kt` |
 | App-facing contract (`PalmSystem`, window properties, lifecycle) | [bridge.js](../AndroidLuna/src/main/assets/lunacy/bridge.js) (page side), [AppWindow.kt](../AndroidLuna/src/main/java/org/webosarchive/lunacy/card/AppWindow.kt) (`WindowHost` interface and `Native`), `ShellActivity.kt` (implements `WindowHost`) |
 | Bus services LunaSysMgr itself provided (`com.palm.applicationManager`, `com.palm.systemmanager`) | `ShellActivity.registerServices()`, [Bus.kt](../AndroidLuna/src/main/java/org/webosarchive/lunacy/card/Bus.kt), [DockMode.kt](../AndroidLuna/src/main/java/org/webosarchive/lunacy/card/DockMode.kt) |
 

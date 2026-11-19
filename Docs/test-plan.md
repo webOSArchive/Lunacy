@@ -190,6 +190,10 @@ Each line is a bug that reached a device, with the check that would see it again
       old `Db8.kt` gave 16 on the Fold3 (7 accounts), the fixed one 1. A first version of this
       check counted `_accountsChanged`, which the old build also logged once: a check that
       couldn't fail, found by trying.
+- [Human] **A message that won't stay zoomed** (2026-11-19): in Email, pinch a message larger,
+      and a message wider than its pane smaller. It stays at the size the fingers left it,
+      the header keeps its size and scrolls away with the message, and a fling back to the
+      top stops with the header whole and the message straight under it.
 - [Human] **Messaging's broken avatar** (6071f3c): a chat with someone new shows their avatar,
       or the generic one, from the first message; never a broken image. Section 4's image
       check covers an open chat only if one is open.

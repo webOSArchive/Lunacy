@@ -491,7 +491,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         private fun headerPx() = Math.round((headerCss * scale).toFloat())
         // No lower than the view: a header taller than the view (a phone in landscape) clips all
         // of it, where an upside-down rect clipped nothing and the view hid the header.
-        private fun clipTop() = (headerPx() - scrollY).coerceIn(0, Math.max(0, height))
+        private fun clipTop() = (headerPx() - top()).coerceIn(0, Math.max(0, height))
 
         /**
          * The view below the header strip only. A header that covers the whole view (a phone in
@@ -515,7 +515,10 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         private fun roomStyle(): String {
             val room = room()
             if (room.isEmpty()) return ""
-            return "<style id=\"__lunacy_header\">html{padding-top:$room !important}</style>"
+            // As tall as the view at least, room and all, so that a short message zoomed in can
+            // still be scrolled past the room's growth ([grown]). In the room's own unit.
+            val least = if (pageScale > 0) "${height / pageScale}px" else "${height * 100.0 / width}vw"
+            return "<style id=\"__lunacy_header\">html{padding-top:$room !important;box-sizing:border-box !important;min-height:$least !important}</style>"
         }
 
         /**
@@ -532,15 +535,69 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
             else -> "${headerPx() * 100.0 / width}vw"
         }
 
+        /**
+         * The zoom the loaded document's room was written for ([loadDoc]). A document without
+         * script (Email's message) can't be given a new room when it is pinched larger, and
+         * loading it again for one put the zoom back where it began: every pinch bounced back.
+         * So the document is left alone, its room grows with the zoom, and the growth is kept
+         * out of sight: the view is never left scrolled above it, and the header's place and
+         * scrolledTo count from it. What is seen is the plugin's: a header of the same size
+         * with the zoomed message under it.
+         */
+        private var roomScale = 0f
+        /**
+         * The document has finished loading at the zoom its room was written for. Until then a
+         * change of scale is the engine's own (a passing one as the load begins, the zoom out
+         * to fit a wide email) and the room is written again for it, as before.
+         */
+        private var settled = false
+        private var reloads = 0
+
+        /** How much taller than the header the room is drawn at the zoom the page is at now, in px. */
+        private fun grown(): Int {
+            if (!settled || headerCss <= 0 || roomScale <= 0 || lastDoc == null || settings.javaScriptEnabled) return 0
+            @Suppress("DEPRECATION") val z = getScale() / roomScale
+            return if (z < 1.01f) 0 else Math.round(headerPx() * (z - 1))
+        }
+
+        /** How far the message is scrolled, past the room's growth. */
+        private fun top() = (scrollY - grown()).coerceAtLeast(0)
+
         /** The engine zoomed the page: the room follows, if it would change. */
         fun scaleChanged(newScale: Float) {
-            if (newScale <= 0 || newScale == pageScale) return
+            if (newScale <= 0) return
+            // Zoomed in on a document without script: nothing is loaded again.
+            if (settled && roomScale > 0 && lastDoc != null && !settings.javaScriptEnabled && newScale >= roomScale * 0.99f) {
+                if (headerCss > 0 && !belowRoom()) { clip(); scrolled() }
+                return
+            }
+            if (newScale == pageScale) return
             // Unzoomed, the vw the page was given is the same room: nothing to load again.
             val density = resources.displayMetrics.density
             if (pageScale == 0f && Math.abs(newScale - density) < density * 0.01f) { pageScale = newScale; return }
             val before = room()
             pageScale = newScale
-            if (room() != before && headerCss > 0) applyHeader()
+            if (room() != before && headerCss > 0 && (settings.javaScriptEnabled || again())) applyHeader()
+        }
+
+        /** A document is loaded again for its room a few times at most, whatever the engine reports. */
+        private fun again() = reloads++ < 4
+
+        /**
+         * The load is over. A document without script has its room written for the smallest
+         * zoom it can be pinched to - the one a page wider than the view fits at, which may be
+         * smaller than the one it is shown at - and is loaded again if it wasn't; from there
+         * every zoom is a larger one, and the room's growth is kept out of sight ([grown]).
+         */
+        fun loadFinished() {
+            @Suppress("DEPRECATION") val s = getScale()
+            if (lastDoc == null || settings.javaScriptEnabled) { scaleChanged(s); return }
+            if (s <= 0 || width <= 0) return
+            val range = computeHorizontalScrollRange()
+            val least = if (range > width + 1) s * width / range else s
+            if (headerCss > 0 && Math.abs(least / roomScale - 1) > 0.01f && again()) { pageScale = least; applyHeader(); return }
+            settled = true
+            if (headerCss > 0 && !belowRoom()) { clip(); scrolled() }
         }
 
         /** The document setHtml made, without its room, and the base it was loaded with. */
@@ -558,13 +615,28 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
             } else loadDoc(doc)
         }
 
-        private fun loadDoc(doc: String) =
+        private fun loadDoc(doc: String) {
+            roomScale = if (pageScale > 0) pageScale else resources.displayMetrics.density
+            settled = false
             loadDataWithBaseURL(lastBase.also { ownLoad = it }, EmailDocument.insertAfter(doc, "<head[^>]*>", roomStyle()) ?: (roomStyle() + doc), "text/html", "utf-8", null)
+        }
+
+        /** Scrolls the view down out of the room's growth, if it is in it; true if it moved. */
+        private fun belowRoom(): Boolean {
+            val g = grown()
+            if (g <= 0 || scrollY >= g) return false
+            val before = scrollY
+            scrollTo(scrollX, g)
+            return scrollY != before
+        }
+
+        private fun scrolled() = owner.send(id, "scrolledTo", -scrollX / scale, -top() / scale)
 
         override fun onScrollChanged(l: Int, t: Int, oldl: Int, oldt: Int) {
             super.onScrollChanged(l, t, oldl, oldt)
+            if (belowRoom()) return  // the scroll it made comes here again
             if (headerCss > 0) clip()
-            owner.send(id, "scrolledTo", -l / scale, -t / scale)
+            scrolled()
         }
 
         override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
@@ -642,6 +714,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
         private fun setHtml(base: String?, html: String) {
             val obj = Regex("<object\\s[^>]*type=\"application/x-palm-email\"[^>]*>", RegexOption.IGNORE_CASE).find(html)
             lastBase = base
+            reloads = 0
             if (obj == null) { lastDoc = html; loadDoc(html); return }
             fun attr(name: String) = Regex("\\s$name=\"([^\"]*)\"", RegexOption.IGNORE_CASE).find(obj.value)?.groupValues?.get(1)?.let { EmailDocument.unescape(it) }.orEmpty()
             val path = attr("path"); val type = attr("contentmimetype").lowercase()
@@ -793,7 +866,7 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
             }
             override fun onPageFinished(view: WebView, url: String) {
                 if (settings.javaScriptEnabled) view.evaluateJavascript(PLAIN_DOWNLOAD_LINKS, null)
-                @Suppress("DEPRECATION") scaleChanged(view.getScale())
+                loadFinished()
                 owner.send(id, "loadProgressChanged", 100)
                 owner.send(id, "loadStopped")
                 owner.send(id, "documentLoadFinished")

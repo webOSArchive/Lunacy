@@ -16,7 +16,10 @@ enyo.kind({
                                                                                	{content: $L("Loading Preferences...")}
                                                                 ]},
     		{kind:"Control",  name:"prefView", className:"box-center", components:[                               
-				{kind: "RowGroup", style:"margin-top:24px", components: [
+				// [Lunacy] The screen's own settings and Secure Unlock are Palm's, and show unless the
+				// environment says it has no such thing (handleGetEnvironment): Luna DE's screen is
+				// a window on a desktop, which it neither dims, turns off nor locks.
+				{kind: "RowGroup", name:"screenGroup", style:"margin-top:24px", components: [
 					{kind: "Item", tapHighlight: false, layoutKind: "HFlexLayout", components: [
 						{flex:1, content: $L("Auto Dim")},
 						{kind: "ToggleButton", name:"autodim", state:true, onChange:"toggleAutoDim"}
@@ -89,7 +92,7 @@ enyo.kind({
 				// [Lunacy] What the edge swipe does here, or that Android's back gesture already does it.
 				{name:"edgeSwipeText", showing:false, content: $L("Swipe in from the left or right edge of the screen to card an app or close what's open."), className:"accounts-gestures-text"},
 				{name:"swipeUpText", showing:false, content: $L("Swipe up from the bottom of the screen to card an app. Swipe up again to see the Launcher."), className:"accounts-gestures-text"},
-	        	{kind: "RowGroup", caption:$L("Secure Unlock"), className:"accounts-group", 
+	        	{kind: "RowGroup", name:"secureUnlockGroup", caption:$L("Secure Unlock"), className:"accounts-group", 
 	        		components: [
 	        		             {kind: "Item", name:"securityOptionsItem", tapHighlight:false, components:[
 	        		             {kind: "ListSelector", name:"securityOptions", onChange:"changeSecurityOption", value: 'none', items: [
@@ -243,6 +246,9 @@ enyo.kind({
 		this.$.edgeSwipeText.setShowing(has("navigationMode"));
 		this.$.swipeUpText.setShowing(has("navigationMode"));
 		this.$.layoutGroup.setShowing(has("layout"));
+		// [Lunacy] Palm's own rows go only where the environment says it has no screen to set or lock.
+		this.$.screenGroup.setShowing(!inResponse || inResponse.screenSettings !== false);
+		this.$.secureUnlockGroup.setShowing(!inResponse || inResponse.secureUnlock !== false);
 		this.$.layoutText.setShowing(has("layout"));
 		if (inResponse && inResponse.hostWallpaper !== undefined) {
 			this.$.hostWallpaper.setState(inResponse.hostWallpaper);

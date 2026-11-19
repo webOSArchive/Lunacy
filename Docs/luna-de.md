@@ -11,6 +11,11 @@ below), all in Lunacy 1.1.0's code and checked on Android in its round
 (an Android 5 device, a fresh install) were made there, on build 775. No Luna DE release holds
 these fixes yet.
 
+**2026-11-19:** Screen & Lock in Luna DE is its Wallpaper group alone. Auto Dim, Brightness,
+Turn off After and Secure Unlock are left out (codepoet): the host's `system/getEnvironment`
+says `screenSettings: false` and `secureUnlock: false`, and the app leaves a group out only on
+that word, so Android, which says neither, shows them as before.
+
 
 **Released 2026-11-17: Luna DE 0.5.0, with webOS SDK Redux 0.5** (its version is the SDK's;
 source: tag `luna-de-0.5`). Linux, macOS (Apple Silicon native, Intel) and Windows (installer,

@@ -170,6 +170,9 @@ fun main(args: Array<String>) {
                 .put("host", JSONObject().put("os", System.getProperty("os.name")).put("version", System.getProperty("os.version"))
                     .put("arch", System.getProperty("os.arch")).put("java", System.getProperty("java.version")))
                 .put("webos", JSONObject().put("model", profile.modelName).put("version", profile.versionString))
+                // Screen & Lock leaves out its brightness, dimming and timeout rows and Secure
+                // Unlock: the screen is a desktop's window, and the desktop's to dim and lock.
+                .put("screenSettings", false).put("secureUnlock", false)
                 .toString())
         }
         // webOS's downloader, which apps hand every file fetch to (App Catalog's Pivot, a podcast's

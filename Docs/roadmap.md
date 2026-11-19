@@ -61,8 +61,8 @@ Android and Luna DE run the same code.
 `stageReady`, notification sounds, the file picker, a service's shell commands, the desktop's own
 folders under `/media/internal`, the thumbnailer, the media index (Photos & Videos), the chosen
 wallpaper, and Screen & Lock without Android's rows. They are in 1.1.0's code; a Luna DE release
-with them hasn't been made (its version is the SDK's). Open there: whether Screen & Lock's
-brightness, timeout and Secure Unlock rows should hide in Luna DE too; no music library; a frame
+with them hasn't been made (its version is the SDK's). Since, 2026-11-19 (codepoet): Screen &
+Lock's brightness, dimming, timeout and Secure Unlock rows are left out in Luna DE. Open there: no music library; a frame
 from another app's origin has no bridge; `listAllHandlersForUrl` is unanswered (on Android too).
 
 ### The 1.1.0 candidate's round (2026-11-18)

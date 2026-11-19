@@ -67,6 +67,10 @@ else F "1 id  build $vc installed, $EXPECT expected"; fi
 # ---------------------------------------------------------------- 2. start and the bus
 $A shell input keyevent KEYCODE_WAKEUP </dev/null; $A shell wm dismiss-keyguard </dev/null >/dev/null 2>&1
 $A shell svc power stayon true </dev/null
+# A device that locks with a PIN stays locked: a card opened behind the lock screen is laid out at
+# 0x0, and section 4 reads that as "no card" (the Fold3, 2026-11-19, three apps over two passes).
+locked() { sleep 1; $A shell dumpsys window </dev/null | grep -q "isKeyguardShowing=true"; }
+if locked; then out "[FAIL] 2 start  the device is locked: unlock it and run the pass again"; exit 1; fi
 t0=$(date +%s)
 if fresh; then P "2 start  shell up, activities running in $(( $(date +%s) - t0 - 20 )) s"
 else F "2 start  no 'activities: running' within 120 s"; fi
@@ -247,7 +251,7 @@ for entry in $APPS; do
   unc=$(echo "$L" | grep -E "\[$id\] ERROR.*Uncaught" | head -1 | sed 's/.*ERROR //' | cut -c1-100)
   img=""
   [ -n "$DEBUG" ] && [ "$carded" != 0 ] && img=$(evalall "$IMGJS" "/$dir/" | tr -d '"' | grep "^card" | grep -v "^card ok$" | head -1)
-  if [ "$carded" = 0 ]; then F "4 apps  $id: no card within 25 s ($how)"
+  if [ "$carded" = 0 ]; then F "4 apps  $id: no card within 25 s ($how)$(locked && echo ' -- the device is locked')"
   elif [ -n "$unc" ]; then F "4 apps  $id: card in $secs s, uncaught: $unc"
   elif [ -n "$img" ]; then F "4 apps  $id: card in $secs s, broken images: ${img#card }"
   else P "4 apps  $id: card in $secs s ($how), no uncaught errors${DEBUG:+, no broken images}"; fi

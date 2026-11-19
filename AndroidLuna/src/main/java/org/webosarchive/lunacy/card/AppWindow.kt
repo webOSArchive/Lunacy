@@ -290,6 +290,7 @@ open class AppWindow(
                 pageReady = false; told = null; pageLoaded = false
             }
             override fun onPageFinished(view: WebView, url: String) {
+                main.post { if (!destroyed) exactScale() }
                 host.onPageLoaded(this@AppWindow)
                 pageUp()
                 // The window.open transport resets the background; apply transparency again.
@@ -528,6 +529,42 @@ open class AppWindow(
             if (destroyed) return@evaluateJavascript
             @Suppress("DEPRECATION") val now = scale
             if (now > 0f && Math.abs(target / now - 1f) > 0.005f) zoomBy((target / now).coerceIn(0.02f, 50f))
+            else exactScale()
+        }
+    }
+
+    /**
+     * The page exactly over its window. The engine takes its starting scale as a whole
+     * percent (setInitialScale), and a page that names its own scale is shown at that: 131 %
+     * for the 131.25 % a 640 px page needs on an 840 px card, which left the page 2 px short
+     * of the card's right edge and 4 px short of its bottom, the view's white showing there
+     * (Clock on the Fold3's cover screen, codepoet 2026-11-19). So once a page has loaded it
+     * is zoomed the rest of the way. A page whose viewport Lunacy wrote is there already.
+     */
+    private fun exactScale() {
+        if (width <= 0) return
+        fun zoomTo(target: Float) {
+            @Suppress("DEPRECATION") val now = scale
+            if (now <= 0f || target <= 0f || Math.abs(target / now - 1f) <= 0.0005f) return
+            // The engine zooms about the middle of the view, which leaves the page a px or two
+            // off its corner: it is put back where it was.
+            val x = scrollX; val y = scrollY
+            zoomBy((target / now).coerceIn(0.02f, 50f))
+            for (ms in longArrayOf(0, 60, 300)) main.postDelayed({ if (!destroyed && (scrollX != x || scrollY != y)) scrollTo(x, y) }, ms)
+        }
+        // A window held at a size of its own may be fitted by its height.
+        if (designSize != null) { zoomTo(pageScale); return }
+        evaluateJavascript("window.innerWidth+'x'+window.innerHeight") { v ->
+            val laidOut = v?.trim('"')?.split('x')?.map { it.toFloatOrNull() ?: 0f } ?: return@evaluateJavascript
+            if (destroyed || laidOut.size != 2) return@evaluateJavascript
+            // The page's size is in whole px and the card's needn't be a whole number of them
+            // (1688 px laid out for a card of 1688.38): the scale that covers the card both
+            // ways, and a hair more so that no edge is left to rounding. Only the last few
+            // parts in a thousand: anything more is the page's own layout.
+            val near = { x: Float -> Math.abs(x / pageScale - 1f) < 0.01f }
+            val across = if (laidOut[0] > 0f) width / laidOut[0] else 0f
+            val down = if (laidOut[1] > 0f) height / laidOut[1] else 0f
+            if (near(across)) zoomTo(maxOf(across, if (near(down)) down else 0f) * 1.00002f)
         }
     }
 
@@ -633,7 +670,10 @@ open class AppWindow(
             val dm = context.resources.displayMetrics
             val f = if (laid) fit(w, h) else fit(dm.widthPixels, dm.heightPixels)
             val s = host.pixelScale * f
+            // `cover`: how much more than `scale` it takes for a page of that many whole px to
+            // reach the card's edges, where the card isn't a whole number of them.
             val size = if (laid) JSONObject().put("width", Math.round(w / s)).put("height", Math.round(h / s))
+                .put("cover", maxOf(1f, w / (Math.round(w / s) * s), h / (Math.round(h / s) * s)).toDouble())
                 else JSONObject(host.screenSize(emulated)).let { JSONObject().put("width", Math.round(it.getInt("width") / f)).put("height", Math.round(it.getInt("height") / f)) }
             return size.put("scale", s.toDouble()).toString()
         }

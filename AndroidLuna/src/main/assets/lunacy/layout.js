@@ -238,6 +238,12 @@
 		// 1068 x 772 instead of 1024 x 740 on a Pixel Tablet, and its hidden controls showed
 		// along the bottom (2026-10-19). So the number is carried over in the engine's unit.
 		var ratio = (size.scale || 1) / (window.devicePixelRatio || 1);
+		// And a hair more where the card isn't a whole number of the page's px: Clock, 640 x 1688
+		// on a card of 1688.38, held at its own `maximum-scale` half a device px short of the
+		// card's bottom, and the view's white showed along the bottom and right edges (a
+		// Galaxy Z Fold3's cover screen, 2026-11-19). A scale the app names is carried over as
+		// the one at which its page covers the card.
+		if (size.cover > 1 && size.cover < 1.003) { ratio *= size.cover * 1.00002; }
 		for (i = 0; i < list.length; i++) {
 			var k = list[i][0], v = list[i][1].toLowerCase();
 			if (k === "width" && v === "device-width" && size.width) { list[i][1] = String(size.width); }
@@ -245,8 +251,8 @@
 			else if (k === "initial-scale" || k === "minimum-scale" || k === "maximum-scale" ||
 				k === "user-scalable") {
 				named = true;
-				if (k !== "user-scalable" && parseFloat(v) > 0 && Math.abs(ratio - 1) > 0.001) {
-					list[i][1] = String(Math.round(parseFloat(v) * ratio * 100000) / 100000);
+				if (k !== "user-scalable" && parseFloat(v) > 0 && Math.abs(ratio - 1) > 0.00001) {
+					list[i][1] = String(Math.ceil(parseFloat(v) * ratio * 100000) / 100000);
 				}
 			}
 		}

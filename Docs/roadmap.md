@@ -36,9 +36,10 @@ Before shipping 1.0, as for every release: the latest App Catalog bundled (6.3.3
 
 ## Where things stand (2026-11-19)
 
-**Released:** Lunacy 1.0.2 (build 652; GitHub and the F-Droid feed). **webos-sdk-redux 0.5**
-(tag `0.5-Release`), with **Luna DE 0.5.0**, Lunacy's desktop shell, as its packages for Linux,
-macOS and Windows; their source is this repository's tag `luna-de-0.5`.
+**Released:** Lunacy 1.1.0 (build 792, tag `1.1.0`; GitHub and the F-Droid feed), 2026-11-19.
+**webos-sdk-redux 0.5** (tag `0.5-Release`), and **Luna DE 0.5.1**, Lunacy's desktop shell, as
+that project's release `DE-0.5.1` for Linux, macOS and Windows (2026-11-19; a maintenance
+release of Luna DE alone, built from `main` at 3b05fc8).
 
 **In hand: Lunacy 1.1.0** (codepoet), which brings `luna-de`'s refactors to Android: the moves
 into LunaCore and the shared AppLifecycle, LauncherLayout, JustTypeSearch and NovacomProtocol, so

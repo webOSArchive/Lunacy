@@ -11,6 +11,9 @@ below), all in Lunacy 1.1.0's code and checked on Android in its round
 (an Android 5 device, a fresh install) were made there, on build 775. No Luna DE release holds
 these fixes yet.
 
+**Released 2026-11-19: Luna DE 0.5.1**, by codepoet, as release `DE-0.5.1` of
+[webos-sdk-redux](https://github.com/webOSArchive/webOS-SDK-Redux/releases): Linux, macOS and Windows.
+
 **Luna DE 0.5.1 (2026-11-19):** a maintenance release of Luna DE alone, on the SDK's 0.5: the
 2026-11-18 fixes below and Screen & Lock's rows, from the code Lunacy 1.1.0 shipped (`main`
 3b05fc8; the `luna-de` branch was merged into `main` and deleted that day). Linux's packages were

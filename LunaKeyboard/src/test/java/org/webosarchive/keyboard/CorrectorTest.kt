@@ -22,6 +22,19 @@ class CorrectorTest {
 
     @Test fun theFirstLetterIsTheOnePeopleGetRight() = fixes("hte" to "the", "yhe" to "the", "sthe" to "the")
 
+    // The space bar hung for five seconds after "constantinople" on an HP 10 G2: two slips from
+    // a long word were a third of a million spellings. They are found down the sorted list now.
+    @Test fun aLongWordIsQuick() {
+        fixes("constantinople" to "Constantinople", "acknowledgemnt" to "acknowledgment",
+            "xqzjvkwpxqzjvk" to null, "supercalifragilistic" to null)
+        assertEquals(emptyList<String>(), c.alternates("constantinople", 4))
+        for (w in listOf("constantinople", "supercalifragilistic", "internationalizaton")) { c.correct(w); c.alternates(w, 4) }
+        val began = System.nanoTime()
+        for (w in listOf("constantinople", "supercalifragilistic", "internationalizaton")) { c.correct(w); c.alternates(w, 4) }
+        val ms = (System.nanoTime() - began) / 1_000_000
+        assert(ms < 400) { "three long words took \$ms ms on the build machine (they took 800 before, and 60 after)" }
+    }
+
     @Test fun wordsAreLeft() = fixes("the" to null, "well" to null, "its" to null, "NASA" to null, "hello" to null)
 
     @Test fun webOSsOwnNamesAreNotTheirNeighbours() = fixes("webos" to "webOS", "touchpad" to "TouchPad",

@@ -134,21 +134,24 @@ class Corrector(lines: Sequence<String>) {
     fun alternates(typed: String, max: Int): List<String> {
         val lower = typed.lowercase()
         if (lower.length < 2 || !typed.all { it.isLetter() }) return emptyList()
-        return nearest(lower, max).map { casedLike(typed, it) }
+        // A word that is one ("constantinople", for its capital) has no misspelling to look two
+        // slips away for: its other spellings are the words one slip from it, or none.
+        return ranked(lower, max, twoSlips = lower !in words).map { casedLike(typed, it.entry.word) }
     }
 
     private fun nearest(w: String, max: Int): List<String> = ranked(w, max).map { it.entry.word }
 
-    private fun ranked(w: String, max: Int): List<Ranked> {
+    private fun ranked(w: String, max: Int, twoSlips: Boolean = true): List<Ranked> {
         val one = HashMap<String, Float>()
-        edits(w, 0f, one, full = true)
+        edits(w, 0f, one)
         pick(w, one, maxCost = if (w.length <= 3) 0.6f else 1.3f, minScore = if (w.length <= 3) 12 else 5, max)
             .let { if (it.isNotEmpty()) return it }
-        if (w.length < 5) return emptyList()
-        // Two slips: grow every one-slip spelling once more, with a narrower set of edits so a
-        // long word stays quick even on an old phone.
+        if (w.length < 5 || !twoSlips) return emptyList()
+        // Two slips: every one-slip spelling once more, with a narrower set of edits, keeping
+        // only what is a word.
         val two = HashMap<String, Float>()
-        for ((s, c) in one) edits(s, c, two, full = false)
+        val begun = Begun(w)
+        for ((s, c) in one) wordsOneSlipFrom(s, c, two, begun)
         return pick(w, two, maxCost = 1.9f, minScore = 9, max)
     }
 
@@ -172,7 +175,7 @@ class Corrector(lines: Sequence<String>) {
     }
 
     /** Every spelling one slip away from [w], with what the slip costs, into [out]. */
-    private fun edits(w: String, base: Float, out: HashMap<String, Float>, full: Boolean) {
+    private fun edits(w: String, base: Float, out: HashMap<String, Float>) {
         fun add(s: String, c: Float) {
             val total = base + c
             val had = out[s]
@@ -195,7 +198,7 @@ class Corrector(lines: Sequence<String>) {
                 val cost = when {
                     adjacent(w[i], c) -> 0.6f
                     w[i] in VOWELS && c in VOWELS -> WRONG_VOWEL
-                    else -> if (full) 1.3f else continue
+                    else -> 1.3f
                 }
                 sb.setLength(0); sb.append(w, 0, i).append(c).append(w, i + 1, n)
                 add(sb.toString(), cost)
@@ -205,12 +208,150 @@ class Corrector(lines: Sequence<String>) {
         for (i in 0..n) {
             for (c in ALPHABET) {
                 val doubling = (i > 0 && w[i - 1] == c) || (i < n && w[i] == c)
-                if (!full && !doubling && c !in VOWELS &&
-                    !(i > 0 && adjacent(w[i - 1], c)) && !(i < n && adjacent(w[i], c))) continue
                 sb.setLength(0); sb.append(w, 0, i).append(c).append(w, i, n)
                 add(sb.toString(), if (doubling) 0.5f else MISSED)
             }
         }
+    }
+
+    /**
+     * The words one slip away from [w], with what the slip costs on top of [base], into [out]:
+     * the second slip of two, with a narrower set of edits than the first (no key that is
+     * neither next door nor a vowel for a vowel; a missed letter only where it doubles its
+     * neighbour, is a vowel or sits beside one of them).
+     *
+     * A slip at place i leaves the letters before it as they are, so it can only make a word
+     * if some word begins with them, and a letter put there only if some word goes on with
+     * it. The sorted list says so without a spelling being built: for "constantinople", whose
+     * 770 one-slip spellings used to be grown into a third of a million strings and looked up
+     * one by one, the space bar hung for five seconds on an HP 10 G2 (2026-11-20). What is
+     * found, and what it costs, is as before.
+     */
+    private fun wordsOneSlipFrom(w: String, base: Float, out: HashMap<String, Float>, begun: Begun) {
+        fun add(at: Int, c: Float) {
+            if (at < 0) return
+            val s = sorted[at]
+            val total = base + c
+            val had = out[s]
+            if (had == null || total < had) out[s] = total
+        }
+        val n = w.length
+        // As far as w is still the typed word, what begins with its letters is already known.
+        val same = begun.sharedWith(w)
+        // sorted[lo, hi) are the words that begin with w's first i letters.
+        var lo = 0; var hi = sorted.size
+        for (i in 0..n) {
+            val known = i <= same
+            if (known) { lo = begun.lo[i]; hi = begun.hi[i] }
+            if (lo >= hi) break
+            if (i < n) {
+                // An extra letter.
+                add(wordAt(lo, hi, i, NONE, NONE, w, i + 1),
+                    if (i > 0 && w[i] == w[i - 1]) 0.5f else if (adjacentToNeighbour(w, i)) EXTRA_NEAR else EXTRA_FAR)
+                // Two letters swapped.
+                if (i < n - 1 && w[i] != w[i + 1]) add(wordAt(lo, hi, i, w[i + 1], w[i], w, i + 2), 0.6f)
+                // The wrong key.
+                for (c in ALPHABET) {
+                    if (c == w[i]) continue
+                    val cost = when {
+                        adjacent(w[i], c) -> 0.6f
+                        vowel(w[i]) && vowel(c) -> WRONG_VOWEL
+                        else -> continue
+                    }
+                    if (known && !begun.goesOn[i * 26 + (c - 'a')]) continue
+                    add(wordAt(lo, hi, i, c, NONE, w, i + 1), cost)
+                }
+            }
+            // A missed letter.
+            for (c in ALPHABET) {
+                val doubling = (i > 0 && w[i - 1] == c) || (i < n && w[i] == c)
+                if (!doubling && !vowel(c) &&
+                    !(i > 0 && adjacent(w[i - 1], c)) && !(i < n && adjacent(w[i], c))) continue
+                if (known && !begun.goesOn[i * 26 + (c - 'a')]) continue
+                add(wordAt(lo, hi, i, c, NONE, w, i), if (doubling) 0.5f else MISSED)
+            }
+            if (i < n && i >= same) {
+                val from = firstWith(lo, hi, i, w[i])
+                hi = firstWith(from, hi, i, w[i] + 1)
+                lo = from
+            }
+        }
+    }
+
+    /**
+     * Where in [sorted] the word is that is spelt: the [depth] letters that sorted[lo, hi) all
+     * begin with, then [a] and [b] (each [NONE] for no letter), then [w] from [tail] on. Or -1
+     * when that is no word. Letter by letter down the sorted list, so a spelling is given up at
+     * the first letter no word goes on with, and none is ever built.
+     */
+    private fun wordAt(lo: Int, hi: Int, depth: Int, a: Char, b: Char, w: String, tail: Int): Int {
+        var from = lo; var to = hi; var d = depth
+        if (a != NONE) {
+            val f = firstWith(from, to, d, a); to = firstWith(f, to, d, a + 1); from = f; d++
+            if (from >= to) return -1
+        }
+        if (b != NONE) {
+            val f = firstWith(from, to, d, b); to = firstWith(f, to, d, b + 1); from = f; d++
+            if (from >= to) return -1
+        }
+        for (k in tail until w.length) {
+            val c = w[k]
+            val f = firstWith(from, to, d, c); to = firstWith(f, to, d, c + 1); from = f; d++
+            if (from >= to) return -1
+        }
+        return if (sorted[from].length == d) from else -1
+    }
+
+    /**
+     * What the list holds that begins as the typed word does: for each count of its first
+     * letters, where those words are in [sorted], and which letters they go on with. Every
+     * one-slip spelling is the typed word up to its slip, so this is worked out once for all
+     * of them.
+     */
+    private inner class Begun(private val typed: String) {
+        val lo = IntArray(typed.length + 1)
+        val hi = IntArray(typed.length + 1)
+        val goesOn = BooleanArray((typed.length + 1) * 26)
+
+        init {
+            var a = 0; var b = sorted.size
+            for (i in 0..typed.length) {
+                lo[i] = a; hi[i] = b
+                if (a < b) for (c in 'a'..'z') goesOn[i * 26 + (c - 'a')] = anyGoesOn(a, b, i, c)
+                if (i < typed.length && a < b) {
+                    val from = firstWith(a, b, i, typed[i])
+                    b = firstWith(from, b, i, typed[i] + 1)
+                    a = from
+                }
+            }
+        }
+
+        /** How many of [w]'s first letters are the typed word's. */
+        fun sharedWith(w: String): Int {
+            var k = 0
+            val m = minOf(w.length, typed.length)
+            while (k < m && w[k] == typed[k]) k++
+            return k
+        }
+    }
+
+    /**
+     * In sorted[lo, hi), words that all begin with the same [depth] letters: the first whose
+     * next letter is [c] or later. (The word that is just those letters comes before them all.)
+     */
+    private fun firstWith(lo: Int, hi: Int, depth: Int, c: Char): Int {
+        var a = lo; var b = hi
+        while (a < b) {
+            val m = (a + b) ushr 1
+            val word = sorted[m]
+            if (word.length <= depth || word[depth] < c) a = m + 1 else b = m
+        }
+        return a
+    }
+
+    private fun anyGoesOn(lo: Int, hi: Int, depth: Int, c: Char): Boolean {
+        val at = firstWith(lo, hi, depth, c)
+        return at < hi && sorted[at].length > depth && sorted[at][depth] == c
     }
 
     private fun adjacentToNeighbour(w: String, i: Int) =
@@ -247,6 +388,7 @@ class Corrector(lines: Sequence<String>) {
          */
         private const val FIRST_LETTER = 0.3f
         private const val ALPHABET = "abcdefghijklmnopqrstuvwxyz"
+        private const val NONE = '\u0000'
         private const val VOWELS = "aeiouy"
 
         /**
@@ -267,11 +409,19 @@ class Corrector(lines: Sequence<String>) {
             }
         }
 
-        fun adjacent(a: Char, b: Char): Boolean {
-            val p = position[a] ?: return false
-            val q = position[b] ?: return false
-            return Math.abs(p.second - q.second) <= 1 && Math.abs(p.first - q.first) <= 1.1f
+        /** [adjacent] for every pair of letters, worked out once: it is asked a million times for one long word. */
+        private val neighbours = BooleanArray(26 * 26).also { t ->
+            for (a in 'a'..'z') for (b in 'a'..'z') {
+                val p = position[a] ?: continue
+                val q = position[b] ?: continue
+                t[(a - 'a') * 26 + (b - 'a')] = Math.abs(p.second - q.second) <= 1 && Math.abs(p.first - q.first) <= 1.1f
+            }
         }
+
+        fun adjacent(a: Char, b: Char): Boolean =
+            a in 'a'..'z' && b in 'a'..'z' && neighbours[(a - 'a') * 26 + (b - 'a')]
+
+        private fun vowel(c: Char) = c == 'a' || c == 'e' || c == 'i' || c == 'o' || c == 'u' || c == 'y'
 
         /** [word] with the capitals of [typed]: "Teh" -> "The". A word's own capitals stay. */
         fun casedLike(typed: String, word: String): String =

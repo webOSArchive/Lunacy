@@ -22,6 +22,7 @@ import org.webosarchive.lunacy.card.PhotoCache
 import org.webosarchive.lunacy.card.UpdateService
 import org.webosarchive.lunacy.card.jsString
 import org.webosarchive.lunacy.card.AppServer
+import org.webosarchive.lunacy.card.ShareToEmail
 import org.webosarchive.lunacy.card.AppWindow
 import org.webosarchive.lunacy.card.ApplicationManager
 import org.webosarchive.lunacy.card.Bus
@@ -630,6 +631,12 @@ class ShellActivity : Activity(), WindowHost {
         if (intent.action == HomeScreenPins.ACTION_OPEN_APP) {
             intent.getStringExtra(HomeScreenPins.EXTRA_APP)?.let { id -> lifecycle.launchFromOutside(bootAppsToCome()) { lifecycle.openDirect(id) } }
             intent.action = null
+        }
+        // Android's Share, or a mailto: link, from another app: Email's compose card, opened
+        // as a pinned app is, so that sending or closing it goes back to that app. Taken once.
+        EmailShare.params(intent)?.let { p ->
+            lifecycle.launchFromOutside(bootAppsToCome()) { lifecycle.openDirect(ShareToEmail.EMAIL, p) }
+            intent.action = null; intent.data = null
         }
         intent.takeString("launch")?.let { id ->
             val raw = intent.takeString("params")
@@ -1322,6 +1329,8 @@ class ShellActivity : Activity(), WindowHost {
         tempdb.onWrites(SYNC_STATE_KIND) { syncStateChanged(tempdb) }
         // Not the home app, with mail: a foreground service keeps the system from being frozen (BackgroundWork).
         backgroundWork = BackgroundWork(this, db8) { homeScreenPins.lunacyIsHome() }.also { it.start(); closeOnDestroy += it::stop }
+        // With mail: Email is offered in Android's Share and for mailto: links (EmailShare).
+        EmailShare(this, db8).start()
         // Documents', photos' and videos' indexes, answered from the folders themselves (FileIndex, MediaIndex).
         FileIndex(jsServices.root).attach(db8)
         // The music library, from Android's media library (MusicLibrary): its songs go in with the ringtones.

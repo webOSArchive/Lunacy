@@ -1663,6 +1663,15 @@ the TouchPad's own mail services. What it uses, and where Lunacy answers:
 - **Sending.** The compose window saves the message to the outbox; mojomail-smtp's outbox watch
   fires, it sends (TLS, `AUTH LOGIN`) and moves the message to Sent, and mojomail-imap appends
   it on the server.
+- **From Android's Share.** With a mail account, Android lists "Email" in its share sheet and
+  for `mailto:` links (the manifest's `EmailShareAlias`, switched on and off with the accounts
+  by `EmailShare.kt`; a Lunacy without mail is in nobody's share sheet). Shared text becomes the
+  launch parameters Palm documented for apps (`summary`, `text` with `isHtml: false`,
+  `recipients`; `ShareToEmail` in LunaCore), a `mailto:` link goes as `target`, and the shell
+  opens Email with them as a pinned app is opened (`AppLifecycle.openDirect`): the compose card
+  comes up at once, and sending or closing it goes back to the Android app it came from.
+  Nothing is sent until the owner presses Send. Text only: a shared file (`EXTRA_STREAM`)
+  isn't taken yet.
 - **Not yet:** POP; attachments haven't been tried. Exchange has its own section below.
 
 ## Exchange (EAS)

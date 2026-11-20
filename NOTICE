@@ -54,6 +54,8 @@ Palm and HP's webOS, distributed as abandonware
   reference TouchPad. Copyright Palm, Inc. / Hewlett-Packard. Never released under an open
   licence; no owner has asserted rights since webOS was discontinued. The webOS Archive and
   webOS CE changes to these apps are their authors'.
+- Email's icon again as AndroidLuna/src/main/res/drawable-nodpi/share_email.png, a copy of
+  CoreApps/com.palm.app.email/icon-256x256.png, which Android shows for Email in its Share.
 
 Where to find each NOTICE
 - AndroidLuna/src/main/assets/ (fonts, images, sounds, ringtones, wallpapers, system UI,

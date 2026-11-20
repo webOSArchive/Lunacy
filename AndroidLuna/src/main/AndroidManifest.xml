@@ -114,6 +114,30 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+        <!-- Email in Android's Share, and for mailto: links: text or a link shared from
+             another app opens Email's compose card with it (shell/EmailShare.kt). An alias, so
+             that Android lists it as "Email" with Email's icon; off until there is a mail
+             account, so a Lunacy without mail is in nobody's share sheet. Text only: a shared
+             file isn't taken yet. -->
+        <activity-alias android:name=".shell.EmailShareAlias"
+            android:targetActivity=".shell.ShellActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:label="Email"
+            android:icon="@drawable/share_email">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SENDTO" />
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="mailto" />
+            </intent-filter>
+        </activity-alias>
         <!-- Android's screen saver, which Android 5 calls Daydream, showing webOS's
              Exhibition mode. The system is the only thing allowed to start it
              (BIND_DREAM_SERVICE); its label and the launcher icon are what Settings lists. -->

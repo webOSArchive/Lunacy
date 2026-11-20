@@ -239,11 +239,15 @@ class AppLifecycle<W : LifecycleWindow>(
         pendingLoads[window]?.run()
     }
 
-    /** Opens [appId] from outside the shell's launcher (its icon on Android's home screen). With the shell as the home it is an ordinary launch. */
-    fun openDirect(appId: String) {
-        if (host.shellIsHome()) { launch(appId); return }
+    /**
+     * Opens [appId] from outside the shell's launcher (its icon on Android's home screen, or
+     * Android's Share handing Email something to send, with [params]). With the shell as the
+     * home it is an ordinary launch.
+     */
+    fun openDirect(appId: String, params: JSONObject? = null) {
+        if (host.shellIsHome()) { launch(appId, params); return }
         screen.openDirect(appId)
-        launch(appId)
+        launch(appId, params)
     }
 
     /** appinfo.json's requestedWindowOrientation, which every card of the app starts with. */

@@ -43,13 +43,7 @@ class BackgroundWork(private val context: Context, private val db8: Db8, private
     /** The shell has come to the front (onStart): Android may have changed the home app meanwhile. */
     fun check() = apply()
 
-    private fun recount() = db8.count(ACCOUNT_KIND, ::isMail) { n -> mail = n > 0; apply() }
-
-    private fun isMail(a: JSONObject): Boolean {
-        if (a.optBoolean("beingDeleted")) return false
-        val providers = a.optJSONArray("capabilityProviders") ?: return false
-        return (0 until providers.length()).any { providers.optJSONObject(it)?.optString("capability") == "MAIL" }
-    }
+    private fun recount() = db8.count(ACCOUNT_KIND, { isMail(it) }) { n -> mail = n > 0; apply() }
 
     private fun apply() {
         val want = mail && !isHome()
@@ -75,6 +69,13 @@ class BackgroundWork(private val context: Context, private val db8: Db8, private
 
     companion object {
         const val ACCOUNT_KIND = "com.palm.account:1"
+
+        /** Whether [a], an account record, is one Email sends and receives with. */
+        fun isMail(a: JSONObject): Boolean {
+            if (a.optBoolean("beingDeleted")) return false
+            val providers = a.optJSONArray("capabilityProviders") ?: return false
+            return (0 until providers.length()).any { providers.optJSONObject(it)?.optString("capability") == "MAIL" }
+        }
     }
 }
 

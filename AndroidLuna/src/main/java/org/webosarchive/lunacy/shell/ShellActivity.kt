@@ -634,8 +634,11 @@ class ShellActivity : Activity(), WindowHost {
         }
         // Android's Share, or a mailto: link, from another app: Email's compose card, opened
         // as a pinned app is, so that sending or closing it goes back to that app. Taken once.
-        EmailShare.params(intent)?.let { p ->
-            lifecycle.launchFromOutside(bootAppsToCome()) { lifecycle.openDirect(ShareToEmail.EMAIL, p) }
+        // Shared files are copied into the webOS files first, off this thread, once the root is up.
+        EmailShare.shared(intent)?.let { shared ->
+            lifecycle.launchFromOutside(bootAppsToCome()) {
+                shared.params(this, webos.root) { p -> shellHandler.post { if (!isDestroyed) lifecycle.openDirect(ShareToEmail.EMAIL, p) } }
+            }
             intent.action = null; intent.data = null
         }
         intent.takeString("launch")?.let { id ->

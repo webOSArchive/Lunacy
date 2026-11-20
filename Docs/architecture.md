@@ -1670,8 +1670,15 @@ the TouchPad's own mail services. What it uses, and where Lunacy answers:
   `recipients`; `ShareToEmail` in LunaCore), a `mailto:` link goes as `target`, and the shell
   opens Email with them as a pinned app is opened (`AppLifecycle.openDirect`): the compose card
   comes up at once, and sending or closing it goes back to the Android app it came from.
-  Nothing is sent until the owner presses Send. Text only: a shared file (`EXTRA_STREAM`)
-  isn't taken yet.
+  Nothing is sent until the owner presses Send. Shared files of any kind, one or several
+  (`EXTRA_STREAM`), go as `attachments`: Android hands over an address only Lunacy's process
+  may read, and Email attaches by path, which the mail services read when they send, so each
+  file is copied into Lunacy's own `/media/internal/.lunacy-shared/` first, off the main
+  thread (hidden, so no index lists it; a week's copies are kept, for a message waiting in
+  the outbox). The sharing app chooses the address, so one that names Lunacy's own provider,
+  or a `file:` outside shared storage, is refused: nothing of Lunacy's own can be put into a
+  message this way (Lunacy's data is reachable by two paths on Android 14, so the check
+  names what is allowed, not what is Lunacy's). No size limit yet.
 - **Not yet:** POP; attachments haven't been tried. Exchange has its own section below.
 
 ## Exchange (EAS)

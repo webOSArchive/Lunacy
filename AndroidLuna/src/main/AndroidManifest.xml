@@ -117,8 +117,8 @@
         <!-- Email in Android's Share, and for mailto: links: text or a link shared from
              another app opens Email's compose card with it (shell/EmailShare.kt). An alias, so
              that Android lists it as "Email" with Email's icon; off until there is a mail
-             account, so a Lunacy without mail is in nobody's share sheet. Text only: a shared
-             file isn't taken yet. -->
+             account, so a Lunacy without mail is in nobody's share sheet. Shared files of
+             any kind, one or several, are copied in and attached. -->
         <activity-alias android:name=".shell.EmailShareAlias"
             android:targetActivity=".shell.ShellActivity"
             android:exported="true"
@@ -127,8 +127,9 @@
             android:icon="@drawable/share_email">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/plain" />
+                <data android:mimeType="*/*" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SENDTO" />

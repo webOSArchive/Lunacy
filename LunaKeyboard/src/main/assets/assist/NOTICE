@@ -14,3 +14,6 @@ Lunacy as abandonware, like Mojo and the Prelude fonts.
 
 dictionary.txt is not the TouchPad's: it is Pre Keyboard's word list (SCOWL and FrequencyWords,
 CC BY-SA 4.0). See LunaKeyboard/NOTICE.
+
+words.txt is Lunacy's own: a short list of words dictionary.txt lacks (webOS's own names, a few
+abbreviations and chat words), so that they aren't corrected into their neighbours.

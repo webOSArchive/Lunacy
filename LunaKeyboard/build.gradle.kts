@@ -43,3 +43,8 @@ android {
 }
 
 kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
+
+// WordTracker and Corrector are plain Kotlin: their tests run on the build machine (./test.sh).
+dependencies {
+    testImplementation("junit:junit:4.13.2")
+}

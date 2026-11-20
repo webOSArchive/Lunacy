@@ -28,6 +28,7 @@ import android.view.View
  * letter, so a 2x keyboard is the 1x one with each of its pixels a 2 x 2 block: still nothing
  * resampled, and the art's own size on a screen whose pixels are TouchPad-sized. Which
  * scale is [Scale.auto]'s, or the owner's choice in the setup screen.
+ * A screen too narrow for the art at that scale is the one exception: see [draw].
  *
  * The view is taller than that by [headroom], and the extra is transparent. It is where the
  * press-and-hold balloon goes, and it has to be part of this view rather than a window of its
@@ -86,18 +87,41 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
     // --- Sizes ------------------------------------------------------------------------------
 
     /**
-     * A row is as tall as its plate. Straight from the art, as LunaCE did: a plate image holds
-     * two states, so its own row height is half its height. The number row uses a short plate.
+     * Device pixels per art pixel as the keys are drawn: [scale], except on a screen too narrow
+     * for it. The art is a tablet's: a key was about 90 px wide on a TouchPad, and at [scale]
+     * a phone's is half that or less (38 px on the Galaxy Z Fold3's cover screen at 2), where
+     * the icons and "Enter" are wider than their keys, the letters touch the caps' edges and
+     * the gaps between caps are a quarter of the key (codepoet, 2026-11-20: "looks wacky on
+     * small screens"). So there the art is drawn smaller, as if the screen were
+     * [MIN_ART_WIDTH] art px wide, and only the rows keep [scale]'s height: the keyboard is as
+     * tall as before and as easy to hit, with caps, letters and icons that fit their keys.
      */
-    private fun rowHeight(row: Int): Int {
+    private var draw = scale.toFloat()
+
+    private fun drawFor(widthDev: Int): Float =
+        if (widthDev <= 0) scale.toFloat() else Math.max(1f, Math.min(scale.toFloat(), widthDev / MIN_ART_WIDTH))
+
+    /** How much taller than its plate a row is drawn: 1 unless the art is drawn smaller than [scale]. */
+    private val tall get() = scale / draw
+
+    /**
+     * A row's plate height. Straight from the art, as LunaCE did: a plate image holds two
+     * states, so its own row height is half its height. The number row uses a short plate.
+     */
+    private fun plateHeight(row: Int): Int {
         val plate = art.image(if (row == 0) "key-gray-short.png" else "key-white.png") ?: return 70
         return plate.height / 2
     }
 
-    private val keysHeight get() = Keymap.rows.indices.sumOf { rowHeight(it) }
+    /** A row is as tall as its plate, at [scale]: in art px as drawn, that is the plate's height times [tall]. */
+    private fun rowHeight(row: Int): Float = plateHeight(row) * tall
+
+    private val plateKeysHeight get() = Keymap.rows.indices.sumOf { plateHeight(it) }
+    private val keysHeight get() = plateKeysHeight * tall
 
     /** The background is a little taller than the keys; webOS left that gap above them. */
-    private val topPadding get() = Math.max(0, (art.image("keyboard-bg.png")?.height ?: 340) - keysHeight)
+    private val plateTopPadding get() = Math.max(0, (art.image("keyboard-bg.png")?.height ?: 340) - plateKeysHeight)
+    private val topPadding get() = plateTopPadding * tall
 
     /**
      * Transparent room above the keyboard for the press-and-hold balloon. The tallest balloon
@@ -107,7 +131,7 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
     val headroom get() = Math.max(0, (art.image("popup-bg-2.png")?.height ?: 150) - POPUP_TOP_TO_KEY)
 
     /** Where the keyboard proper starts, in device px: everything above this is the balloon's room. */
-    fun keyboardTop() = height - (keysHeight + topPadding) * scale
+    fun keyboardTop() = height - (plateKeysHeight + plateTopPadding) * scale
 
     // --- State ------------------------------------------------------------------------------
 
@@ -181,15 +205,21 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
     private val zones = ArrayList<Zone>()
 
     override fun onMeasure(widthSpec: Int, heightSpec: Int) {
-        setMeasuredDimension(MeasureSpec.getSize(widthSpec), (headroom + topPadding + keysHeight) * scale)
+        val w = MeasureSpec.getSize(widthSpec)
+        // The balloon's room is the balloon's own size, which is the art's as drawn.
+        setMeasuredDimension(w, Math.round(headroom * drawFor(w)) + (plateTopPadding + plateKeysHeight) * scale)
     }
 
-    /** Everything inside is laid out, drawn and touched in art px: the view's size over [scale]. */
+    /** Everything inside is laid out, drawn and touched in art px: the view's size over [draw]. */
     override fun onSizeChanged(wDev: Int, hDev: Int, ow: Int, oh: Int) {
-        val w = wDev / scale; val h = hDev / scale
+        draw = drawFor(wDev)
+        paint.isFilterBitmap = draw != scale.toFloat()
+        // Smoothed bitmaps keep hard edges: an anti-aliased edge between two tiles is a seam.
+        paint.isAntiAlias = draw == scale.toFloat()
+        val h = hDev / draw
         zones.clear()
         // The keys sit at the bottom, as they did on webOS, whatever room the host gave us.
-        var top = (h - keysHeight).toFloat()
+        var top = h - keysHeight
         for ((r, row) in Keymap.rows.withIndex()) {
             val bottom = top + rowHeight(r)
             val units = row.sumOf { Math.abs(it.weight).toDouble() }.toFloat()
@@ -197,8 +227,8 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
             var sofar = 0f
             for (key in row) {
                 sofar += Math.abs(key.weight)
-                // Whole pixels: a key boundary landing mid-pixel puts a seam down its side.
-                val right = Math.round(w * sofar / units).toFloat()
+                // Whole device pixels: a key boundary landing mid-pixel puts a seam down its side.
+                val right = Math.round(wDev * sofar / units) / draw
                 zones += Zone(key, RectF(left, top, right, bottom), r)
                 left = right
             }
@@ -218,7 +248,9 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
 
     // --- Drawing ----------------------------------------------------------------------------
 
+    /** The art's own pixels at a whole-number scale, as ever; smoothed only where [draw] is a fraction. */
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val smooth = Paint(Paint.FILTER_BITMAP_FLAG)
     private val text = Paint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
         textAlign = Paint.Align.CENTER
     }
@@ -231,10 +263,10 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
 
     override fun onDraw(c: Canvas) {
         c.save()
-        c.scale(scale.toFloat(), scale.toFloat())
-        val w = width / scale; val h = height / scale
+        c.scale(draw, draw)
+        val w = width / draw; val h = height / draw
         art.image("keyboard-bg.png")?.let {
-            c.drawBitmap(it, null, RectF(0f, (h - keysHeight - topPadding).toFloat(), w.toFloat(), h.toFloat()), null)
+            c.drawBitmap(it, null, RectF(0f, h - keysHeight - topPadding, w, h), if (draw == scale.toFloat()) null else smooth)
         }
         for (z in zones) drawKey(c, z)
         drawExtended(c)
@@ -259,13 +291,16 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
     private fun drawKey(c: Canvas, z: Zone) {
         val down = pressed === z.key
         plateFor(z)?.let { name ->
-            art.image(name)?.let { Art.plate(c, it, z.rect, down, paint) }
+            art.image(name)?.let { Art.plate(c, it, z.rect, down, paint, draw) }
         }
         if (z.key.weight < 0) return
         if (z.key.main == Fn.TRACKBALL) { drawTrackball(c, z.rect); return }
 
         // LunaCE trims the bottom of the cap area, and nudges it down while the key is held.
-        val box = RectF(z.rect.left, z.rect.top, z.rect.right, z.rect.bottom - 4)
+        // On a row drawn taller than its plate the cap keeps the plate's own height, in the
+        // middle of the key, so what is on it is arranged as it was on a TouchPad's.
+        val room = z.rect.height() - plateHeight(z.row)
+        val box = RectF(z.rect.left, z.rect.top + room / 2, z.rect.right, z.rect.bottom - room / 2 - 4)
         if (down) box.offset(0f, 2f)
 
         if (drawEmojiLayer(c, z, box)) return
@@ -301,9 +336,9 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
     private fun drawEmoji(c: Canvas, e: String, box: RectF, gray: Boolean): Boolean {
         val size = Math.min(box.width(), box.height()) * 3 / 4
         // Made at the device's own pixel size, so the canvas's scale doesn't resample it again.
-        val bmp = emoji.image(e, Math.round(size * scale), gray) ?: return false
+        val bmp = emoji.image(e, Math.round(size * draw), gray) ?: return false
         val l = Math.round(box.centerX() - size / 2).toFloat(); val t = Math.round(box.centerY() - size / 2).toFloat()
-        c.drawBitmap(bmp, null, RectF(l, t, l + bmp.width / scale.toFloat(), t + bmp.height / scale.toFloat()), emojiPaint)
+        c.drawBitmap(bmp, null, RectF(l, t, l + bmp.width / draw, t + bmp.height / draw), emojiPaint)
         return true
     }
 
@@ -324,7 +359,8 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
         when (key.main) {
             Fn.TAB -> { label(c, "Tab", box, functionColor, 22f, true); return }
             Fn.SYMBOL -> { label(c, Keymap.SYMBOL_LABEL, box, functionColor, 22f, true); return }
-            Fn.RETURN -> { drawEnter(c, box); return }
+            // Return's label keeps its corner of the whole key.
+            Fn.RETURN -> { drawEnter(c, RectF(box.left, z.rect.top, box.right, z.rect.bottom - 4)); return }
             ' '.code -> return
         }
         val main = key.main.toChar()
@@ -493,7 +529,7 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
             val x = frame.left + POPUP_LEFT + (i % line0) * POPUP_KEY_WIDTH
             val y = frame.top + POPUP_LEFT + (i / line0) * ch
             val r = RectF(x, y, x + POPUP_KEY_WIDTH, y + ch)
-            Art.plate(c, cell, r, i == extendedIndex, paint)
+            Art.plate(c, cell, r, i == extendedIndex, paint, draw)
             label(c, chars[i].toString(), r, activeColor, 22f, false)
         }
     }
@@ -505,7 +541,7 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
         val h = art.image(popupBg(chars))?.height ?: 90
         val w = POPUP_LEFT + POPUP_RIGHT + perLine(chars) * POPUP_KEY_WIDTH
         val left = (z.rect.centerX() - POPUP_KEY_WIDTH / 2f - POPUP_LEFT)
-            .coerceIn(0f, Math.max(0f, width / scale - w.toFloat()))
+            .coerceIn(0f, Math.max(0f, width / draw - w.toFloat()))
         // Above the key, which [headroom] guarantees is still inside the view.
         val top = Math.max(0f, z.rect.top - h + POPUP_TOP_TO_KEY)
         extendedFrame = RectF(left, top, left + w, top + h)
@@ -551,7 +587,7 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
-        val x = e.x / scale; val y = e.y / scale
+        val x = e.x / draw; val y = e.y / draw
         if (e.actionMasked == MotionEvent.ACTION_DOWN) { lastX = x; lastY = y }
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -705,6 +741,11 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
         private const val POPUP_LEFT = 11
         private const val POPUP_RIGHT = 10
         private const val POPUP_TOP_TO_KEY = 10
+        /**
+         * The fewest art px a screen's width is drawn as: a key is then 54 px wide or more,
+         * which holds the 50 px icons and "Enter". A TouchPad held upright was 768.
+         */
+        private const val MIN_ART_WIDTH = 600f
         private const val POPUP_POINTER_END = 62   // the balloon's pointer ends here; past it it stretches
         private const val POPUP_KEY_WIDTH = 80
         private const val POPUP_SINGLE_LINE_MAX = 5

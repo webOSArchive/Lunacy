@@ -10,7 +10,8 @@ package org.webosarchive.keyboard
  * - Contractions typed without their apostrophe get it back: "dont" -> "don't", "im" -> "I'm".
  *   Only the ones whose bare form is not itself an everyday word: "well", "were", "its",
  *   "ill", "hell", "shell", "lets" and "wed" are left alone.
- * - A lone "i", and a proper noun typed in lower case, get their capital.
+ * - A lone "i", and a proper noun typed in lower case, get their capital; a word of two or
+ *   three letters only where that is surely what it is.
  * - An unknown word becomes the dictionary word closest to it, where "close" is an edit
  *   distance that knows the keyboard: hitting the key next door, swapping two letters
  *   or doubling one costs less than any other slip. Distance is traded against how common the
@@ -75,8 +76,13 @@ class Corrector(lines: Sequence<String>) {
         CONTRACTIONS[lower]?.let { return casedLike(typed, it).takeIf { r -> r != typed } }
 
         words[lower]?.let { e ->
-            // Known. Only its capital can be wrong: "i", or "london" for "London".
-            return if (typed == lower && e.word != lower) e.word else null
+            // Known. Only its capital can be wrong: "i", or "london" for "London". Not a short
+            // word's, though: the list's two-letter capitals are chemical symbols and the ends
+            // of names ("os" is not osmium's "Os", nor "ur" the city of Ur, "cd" cadmium), and
+            // its rarer three-letter ones no likelier ("ing" is not the bank).
+            if (typed != lower || e.word == lower) return null
+            val sure = lower.length > 3 || (lower.length == 3 && e.score >= SHORT_CAPITAL_SCORE) || lower in SHORT_CAPITALS
+            return if (sure) e.word else null
         }
         if (lower.length < 2 || '\'' in lower) return null
 
@@ -203,6 +209,10 @@ class Corrector(lines: Sequence<String>) {
 
     companion object {
         private const val MAX_LENGTH = 24
+        /** A three-letter word known only with capitals gets them when it is at least this common ("Tim", not "Zen"). */
+        private const val SHORT_CAPITAL_SCORE = 13
+        /** The one- and two-letter words that do get their capitals. */
+        private val SHORT_CAPITALS = setOf("i", "ok")
         /** A one-letter prefix begins thousands of words: look through this many at most. */
         private const val COMPLETION_SCAN = 15000
         /** How many log2-frequency points one unit of edit cost is worth. */

@@ -204,5 +204,24 @@ EOF
   else F "core  $t tests, $f failed, $e errors (gradle $rc) -- $(grep -E "FAILED|Undefined|Exception" "$WORK/core.log" | head -3 | tr '\n' ' ')"; fi
 fi
 
+# ---- The keyboard's own tests: its account of the cursor and the word before it against a
+# field that reports late (WordTracker), and autocorrect against the lists it ships (Corrector).
+if [ -z "$QUICK" ]; then
+  rm -rf LunaKeyboard/build/test-results/testDebugUnitTest
+  ./gradlew :LunaKeyboard:testDebugUnitTest -q > "$WORK/keyboard.log" 2>&1
+  rc=$?
+  read t f e <<<"$(python3 - <<'EOF'
+import glob, re
+t = f = e = 0
+for p in glob.glob("LunaKeyboard/build/test-results/testDebugUnitTest/*.xml"):
+    m = re.search(r'tests="(\d+)" skipped="\d+" failures="(\d+)" errors="(\d+)"', open(p).read())
+    if m: t += int(m[1]); f += int(m[2]); e += int(m[3])
+print(t, f, e)
+EOF
+)"
+  if [ "$rc" = 0 ] && [ "$f" = 0 ] && [ "$e" = 0 ] && [ "$t" -gt 0 ]; then P "keys  $t LunaKeyboard tests"
+  else F "keys  $t tests, $f failed, $e errors (gradle $rc) -- $(grep -E "FAILED|Exception" "$WORK/keyboard.log" | head -3 | tr '\n' ' ')"; fi
+fi
+
 echo "===== $pass passed, $fail failed, $skip skipped ====="
 [ "$fail" = 0 ]

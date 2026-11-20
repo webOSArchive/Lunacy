@@ -55,22 +55,28 @@ class Art(private val context: Context) {
          * key sits above the pressed one, so a 93x140 image is really two 93x70 keys. A key is
          * as tall as the plate, so only its width ever stretches.
          */
-        fun plate(c: Canvas, b: Bitmap, dst: RectF, pressed: Boolean, p: Paint? = null) {
+        fun plate(c: Canvas, b: Bitmap, dst: RectF, pressed: Boolean, p: Paint? = null, px: Float = 1f) {
             val h = b.height / 2
             val top = if (pressed) h else 0
-            nine(c, b, Rect(0, top, b.width, top + h), dst, CORNER, p)
+            nine(c, b, Rect(0, top, b.width, top + h), dst, CORNER, p, px)
         }
 
-        /** Stretches src into dst as a nine-slice, keeping the corners at their own size. */
-        fun nine(c: Canvas, b: Bitmap, src: Rect, dst: RectF, corner: Int, p: Paint? = null) {
+        /**
+         * Stretches src into dst as a nine-slice, keeping the corners at their own size. [px]
+         * is how many device pixels one of dst's units is drawn as: where that is a fraction,
+         * the tiles' inner edges are put on whole device pixels, or each shows as a faint line
+         * across the key where two tiles' smoothed edges meet.
+         */
+        fun nine(c: Canvas, b: Bitmap, src: Rect, dst: RectF, corner: Int, p: Paint? = null, px: Float = 1f) {
+            fun snap(v: Float) = Math.round(v * px) / px
             // On a screen narrow enough to squeeze a key below two corners, the corners give
             // way rather than overlapping each other.
             val dh = Math.min(corner.toFloat(), dst.width() / 2)
             val dv = Math.min(corner.toFloat(), dst.height() / 2)
             val xs = intArrayOf(src.left, src.left + corner, src.right - corner, src.right)
             val ys = intArrayOf(src.top, src.top + corner, src.bottom - corner, src.bottom)
-            val dx = floatArrayOf(dst.left, dst.left + dh, dst.right - dh, dst.right)
-            val dy = floatArrayOf(dst.top, dst.top + dv, dst.bottom - dv, dst.bottom)
+            val dx = floatArrayOf(dst.left, snap(dst.left + dh), snap(dst.right - dh), dst.right)
+            val dy = floatArrayOf(dst.top, snap(dst.top + dv), snap(dst.bottom - dv), dst.bottom)
             val s = Rect(); val d = RectF()
             for (i in 0..2) for (j in 0..2) {
                 s.set(xs[i], ys[j], xs[i + 1], ys[j + 1]); d.set(dx[i], dy[j], dx[i + 1], dy[j + 1])

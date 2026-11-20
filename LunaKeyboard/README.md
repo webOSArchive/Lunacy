@@ -66,9 +66,36 @@ on the reference TouchPad (2026-11-04):
 What you type goes in as plain text, as on webOS, with nothing drawn under the word being
 typed, and there is no suggestion bar: webOS had none.
 
+**Which word.** The word a space ends is whatever letters stand before the cursor, by the
+keyboard's own account of the field (`WordTracker`), not the keys that were pressed. It keeps
+the cursor and the text before it up to date with every edit it makes, and takes a field's
+report of its selection for a tap only when the cursor turns up somewhere its own edits never
+put it; then the text is read again at the next key. Until 2026-11-20 it followed the keys and
+the field's reports, which come back after the keys that caused them, and a quick typist broke
+it: a first letter typed, erased and typed over left the rest of the word corrected on its own
+("Whello"), as did a word gone back into with backspace, a selection typed over and a word
+taken up after a tap, and corrections made one after another landed on the wrong letters. So:
+
+- a word the cursor was only put after is left as it is; one you type or erase in is the
+  whole word, however you came to it;
+- letters typed inside a longer word are not corrected;
+- a digit is part of a word ("mp3", "3rd"), and a word with one is never corrected;
+- the pieces of an address or a path are left as typed: a word before `@`, `_`, `/` or `\`,
+  and one straight after `@`, `.`, `/`, `\`, `_` or `#`;
+- a correction replaces the typed word by its place before the cursor, which the field has
+  just confirmed, never by a remembered position;
+- backspace is still the Delete key, as a webOS keyboard sent it, because pages act on the
+  key (Email's recipients go one at a time).
+
+The rules and the late-report cases are tests (`src/test`, run by `./test.sh`).
+
 **The words** are the keyboard's own, so corrections are the same on every device: Alan
 Morford's matcher and English word list from [Pre Keyboard](https://github.com/alan-morford/prekeyboard)
-(see NOTICE), with the TouchPad's key layout for which keys are neighbours. A typo is matched
+(see NOTICE), with the TouchPad's key layout for which keys are neighbours, and a short list
+of Lunacy's own (`assist/words.txt`) for words that list lacks and used to turn into their
+neighbours: "webos" became "webs", "pre" "pee", "usb" "sub", "haha" "aha". A two-letter word
+gets no capitals but "I" and "OK", and a three-letter one only when it is a common name: the
+list's short capitals are chemical symbols ("os" is not osmium's "Os"). A typo is matched
 to the nearest common word, where hitting the key next door, swapping two letters or doubling
 one costs less than other slips. Android's own spell checker was tried first and dropped:
 Samsung's answers every word as correct to any keyboard but Samsung's (measured on the Galaxy
@@ -162,6 +189,19 @@ that share of a screen's pixels by growing with the geometric mean of the screen
 over the TouchPad's, rounded: an HP 10 G2 and a 2012 Nexus 7 at 1, a Nexus 5 and a Pixel
 Tablet at 2 - or the owner's choice of 1x, 2x or 3x in the setup screen, taken up the next
 time the keyboard comes up.
+
+**A narrow screen** is the exception to whole numbers (codepoet, 2026-11-20: "our keyboard came
+from a tablet, and as a result looks wacky on small screens"). The art is a tablet's: a key
+was about 90 px wide on a TouchPad, and at 2x on a phone it is half that or less - 38 px on
+the Galaxy Z Fold3's cover screen (840 px wide), where the delete, shift and hide icons and
+"Enter" were wider than their keys, the letters touched the caps' edges and the gaps were a
+quarter of each key. Where the scale leaves a screen fewer than 600 art px wide, the art is
+drawn as if it were 600 wide (1.4x on the Fold3's cover, about 1.8x on a 1080 px phone), and
+only the rows keep the scale's height: the keyboard is as tall as before and its keys as easy
+to hit, a row's plate stretches through its flat middle to fill it, and each cap's lettering
+keeps the TouchPad's arrangement in the middle of its key. The art is smoothed at such a
+scale, the one place it is resampled, with the plates' tiles put on whole device pixels so no
+seam shows. Wider screens, a tablet and the Fold3 unfolded among them, are drawn as before.
 
 LunaCE offered four heights - 243, 291, 340 and 393 px - and scaled its pictures to fit
 them. Scaling costs you the glyphs and the key bevels: at anything but the tallest, the

@@ -1,0 +1,31 @@
+# Lunacy's own additions to dictionary.txt, in its format (word, tab, score): words the list
+# lacks whose nearest neighbour is another word, so that typing them was "corrected" - "webos"
+# to "webs", "pre" to "pee", "usb" to "sub", "haha" to "aha" (codepoet, 2026-11-20). A word
+# given in lower case is left as typed; one given with capitals gets them.
+webOS	12
+TouchPad	11
+LuneOS	8
+Enyo	8
+Preware	8
+pre	10
+mojo	9
+homebrew	9
+HP	11
+USB	13
+URL	12
+URLs	9
+GIF	12
+GIFs	9
+DIY	10
+ASAP	11
+Gmail	11
+app	14
+max	14
+haha	13
+hahaha	10
+lol	13
+hm	11
+jk	10
+ikr	8
+xd	8
+wi	8

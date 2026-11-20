@@ -20,8 +20,9 @@ import android.widget.FrameLayout
  * edits on whatever field has focus. How the keyboard looks and behaves lives in
  * [KeyboardView]; this class speaks to Android, and does webOS's Text Assist ([TextAssist]):
  *
- * - the word being typed goes in as plain text, as webOS's did, and the keyboard keeps track of
- *   it;
+ * - the word being typed goes in as plain text, as webOS's did; the keyboard keeps its own
+ *   account of the cursor and the text before it ([WordTracker]), and the word is whatever
+ *   letters stand before the cursor;
  * - a space or punctuation ends the word, and Auto-Correction swaps it for the word it most
  *   likely meant ([Corrector], webOS's SmartKey `auto-accept`) or a shortcut's expansion, with the plop,
  *   and the swapped word is underlined in gray dots ([AssistOverlay]). Only the swap is
@@ -48,7 +49,12 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
     override fun onCreate() {
         super.onCreate()
         Thread {
-            val c = runCatching { assets.open("assist/dictionary.txt").bufferedReader().useLines { Corrector(it) } }.getOrNull()
+            // The word list, then Lunacy's own additions to it (assist/words.txt).
+            val c = runCatching {
+                assets.open("assist/dictionary.txt").bufferedReader().use { list ->
+                    assets.open("assist/words.txt").bufferedReader().use { more -> Corrector(list.lineSequence() + more.lineSequence()) }
+                }
+            }.getOrNull()
             c?.learnAll(personal)
             corrector = c
         }.start()
@@ -106,8 +112,7 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
         // dropped it from the word, and the rest was corrected on its own, "esting" to "eating"
         // after the "T" (codepoet, 2026-11-14: "Testing" became "Teating", "Keyboard"
         // "Kkeyboard"). Chromium sends no update for where a field starts.
-        selStart = info?.initialSelStart ?: -1
-        selEnd = info?.initialSelEnd ?: -1
+        tracker.start(info?.initialSelStart ?: -1, info?.initialSelEnd ?: -1)
         requestPositions()
         updateCaps()
     }
@@ -147,11 +152,8 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
 
     // --- Text Assist ------------------------------------------------------------------------
 
-    /** The word being typed, and where in the field it ends (the cursor, as the keyboard left it). */
-    private val word = StringBuilder()
-    private var wordEnd = -1
-    private var selStart = -1
-    private var selEnd = -1
+    /** The cursor, and the text and word before it, by the keyboard's own account. */
+    private val tracker = WordTracker { SystemClock.uptimeMillis() }
     /** Words put back by the owner in this field: not corrected again. */
     private val ignored = HashSet<String>()
     /** The last correction and what ended it, while backspace can still undo it. */
@@ -167,7 +169,8 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
     private val local = HashMap<AssistOverlay.Marked, RectF>()
 
     private fun resetAssist() {
-        word.setLength(0); wordEnd = -1; ignored.clear(); undo = null; pending = null
+        tracker.forget(); ignored.clear(); undo = null; pending = null
+        main.removeCallbacks(capsLater)
         anchor = null; anchorSeen = false; local.clear()
         overlay?.clear()
     }
@@ -195,44 +198,79 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
 
     private fun tracking() = assisted() && TextAssist.autoCorrect(this)
 
-    private fun isWordChar(s: String) = s.length == 1 && (s[0].isLetter() || (word.isNotEmpty() && (s[0] == '\'' || s[0] == '’')))
+    /**
+     * A character that is part of a word: a letter, a digit ("mp3", "3rd": a word with one in
+     * it is never corrected, so a digit must not end the word before it), or an apostrophe
+     * inside one.
+     */
+    private fun isWordChar(s: String) = s.length == 1 && (s[0].isLetterOrDigit() || (tracker.word.isNotEmpty() && (s[0] == '\'' || s[0] == '’')))
+
+    /** Reads the text around the cursor when the keyboard's account of it has lapsed. */
+    private fun readContext(ic: InputConnection) {
+        if (!tracker.needsContext) return
+        val before = ic.getTextBeforeCursor(WordTracker.ASK, 0) ?: return
+        tracker.context(before, WordTracker.ASK, ic.getTextAfterCursor(1, 0) ?: "")
+    }
 
     private fun own() { lastOwnEdit = SystemClock.uptimeMillis() }
 
+    /**
+     * Whether the next letter starts a sentence, by the field's own caps mode. Judged on the
+     * keyboard's account of the text where it has one: the field's answer runs behind a Delete
+     * key still on its way, so a capital typed and erased came back in lower case.
+     */
     private fun updateCaps() {
+        main.removeCallbacks(capsLater)
         val ic = currentInputConnection
-        val on = TextAssist.autoCap(this) && word.isEmpty() && ic != null &&
-            ic.getCursorCapsMode(editor?.inputType ?: 0) != 0
+        val type = editor?.inputType ?: 0
+        val on = TextAssist.autoCap(this) && tracker.word.isEmpty() && ic != null &&
+            (tracker.textBefore?.let { android.text.TextUtils.getCapsMode(it, it.length, type) } ?: ic.getCursorCapsMode(type)) != 0
         view?.setAutoCap(on)
     }
+
+    private val capsLater = Runnable { updateCaps() }
 
     private fun correctionFor(w: String): String? {
         if (!TextAssist.autoCorrect(this) || w in ignored || w.any { it.isDigit() }) return null
         return corrector?.correct(w)
     }
 
-    /** Ends the word being typed with [sep], correcting it first if Text Assist would. */
+    /** Ends the word before the cursor with [sep], correcting it first if Text Assist would. */
     private fun endWord(sep: String) {
         val ic = currentInputConnection ?: return
-        if (word.isEmpty()) { if (sep.isNotEmpty()) { own(); ic.commitText(sep, 1) }; return }
-        val typed = word.toString()
-        val start = wordEnd - typed.length
+        val typed = tracker.word
+        // A word the cursor was only put after, a piece of an address, a word with more of it
+        // after the cursor: left as it is.
+        val assist = typed.isNotEmpty() && tracker.touched && !tracker.plain && sep !in JOINS
+        if (!assist) {
+            if (sep.isNotEmpty()) { own(); ic.commitText(sep, 1); tracker.inserted(sep) }
+            undo = null
+            return
+        }
+        val start = tracker.cursor - typed.length
         val short = if (typed !in ignored) shortcuts.expand(typed) else null
         val fix = short ?: correctionFor(typed)
-        word.setLength(0); wordEnd = -1
         own()
         // The field must still hold the word just before the cursor, as typed.
         val there = ic.getTextBeforeCursor(typed.length, 0)?.toString() == typed
         if (fix == null || fix == typed || !there) {
-            if (sep.isNotEmpty()) ic.commitText(sep, 1)
+            if (!there) tracker.forget()
+            if (sep.isNotEmpty()) { ic.commitText(sep, 1); tracker.inserted(sep) }
             undo = null
             return
         }
         val alternates = (corrector?.alternates(typed, ALTERNATES) ?: emptyList()).filter { it != fix }
         val mark = AssistOverlay.Marked(start, fix, typed, alternates)
         // The replacement goes in as composing text first, so that Android says where it is.
-        if (ic.setComposingRegion(start, start + typed.length)) ic.setComposingText(fix, 1)
-        else { ic.deleteSurroundingText(typed.length, 0); ic.setComposingText(fix, 1) }
+        // The typed word is taken out by its place before the cursor, which the field has just
+        // confirmed, never by a position: the keyboard's count of where the cursor is can run a
+        // report behind, and three corrections typed quickly ("i teh adn") then replaced the
+        // wrong letters (measured on the Galaxy Tab A7 Lite at 30 ms a key, 2026-11-20).
+        ic.beginBatchEdit()
+        ic.deleteSurroundingText(typed.length, 0)
+        ic.setComposingText(fix, 1)
+        ic.endBatchEdit()
+        tracker.replacedBefore(typed.length, fix)
         if (Build.VERSION.SDK_INT >= 21 && anchorSeen) {
             val timeout = Runnable { completePending() }
             pending = Triple(mark, sep, timeout)
@@ -250,7 +288,7 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
         val ic = currentInputConnection ?: return
         own()
         ic.finishComposingText()
-        if (sep.isNotEmpty()) ic.commitText(sep, 1)
+        if (sep.isNotEmpty()) { ic.commitText(sep, 1); tracker.inserted(sep) }
         if (bounds != null) { local[mark] = bounds; mark.screen = toScreen(bounds) }
         overlay?.marks?.add(mark)
         overlay?.invalidate()
@@ -307,21 +345,18 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
     override fun onUpdateSelection(oldSelStart: Int, oldSelEnd: Int, newSelStart: Int, newSelEnd: Int,
                                    candidatesStart: Int, candidatesEnd: Int) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
-        selStart = newSelStart; selEnd = newSelEnd
+        // One of the keyboard's own edits coming back changes nothing; anything else is the
+        // cursor moved from outside, and the text around it is read again at the next key.
+        tracker.update(newSelStart, newSelEnd)
         // Asked for while the field was starting, the positions often never come (measured on
         // the Kyocera's Android 12: the request was accepted and nothing followed), so the
         // first selection update, when the field is surely there, asks again.
         if (!anchorSeen) requestPositions()
-        // The cursor went somewhere the keyboard didn't put it: the word is finished as it stands.
-        // (An update on the way to where it did - typing outruns them - is not that.)
-        if (word.isNotEmpty() && (newSelStart != newSelEnd || newSelEnd > wordEnd || newSelEnd < wordEnd - word.length)) {
-            word.setLength(0); wordEnd = -1
-        }
         val ov = overlay ?: return
         // A tap that puts the cursor in a corrected word opens its bubble; anything else closes it.
         val ours = SystemClock.uptimeMillis() - lastOwnEdit < OWN_EDIT_MS
         if (!ours && newSelStart == newSelEnd) checkMarks(newSelStart)
-        val m = if (!ours && newSelStart == newSelEnd && word.isEmpty())
+        val m = if (!ours && newSelStart == newSelEnd && !tracker.touched)
             ov.marks.lastOrNull { newSelStart >= it.start && newSelStart <= it.end } else null
         if (m != null && stillThere(m, newSelStart)) { undo = null; ov.showBubble(m) }
         else if (ov.bubbleShowing && !ours) ov.hideBubble()
@@ -372,6 +407,7 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
         ic.setComposingRegion(m.start, m.end)
         ic.commitText(pick, 1)
         ic.endBatchEdit()
+        tracker.replacedAt(m.start, pick)
         overlay?.marks?.remove(m)
         val was = local.remove(m)
         if (pick == m.original) ignored += pick
@@ -408,10 +444,10 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
         val ic = currentInputConnection ?: return
         flushPending()
         overlay?.hideBubble()
-        if (selEnd >= 0 && word.isEmpty()) dropMarksFrom(selEnd)
-        word.setLength(0); wordEnd = -1
+        dropMarksFrom(tracker.cursor)
         own()
         ic.commitText(text, 1)
+        tracker.inserted(text)
         undo = null
         updateCaps()
     }
@@ -420,30 +456,32 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
         val ic = currentInputConnection ?: return
         flushPending()
         overlay?.hideBubble()
-        if (selEnd >= 0 && word.isEmpty()) dropMarksFrom(selEnd)
-        if (tracking() && isWordChar(text)) {
+        val track = tracking()
+        if (track) readContext(ic)
+        if (!tracker.touched) dropMarksFrom(tracker.cursor)
+        if (track && isWordChar(text)) {
             undo = null
-            if (word.isEmpty()) wordEnd = if (selEnd >= 0) selEnd else 0
-            word.append(text); wordEnd += text.length
             own()
             ic.commitText(text, 1)
+            tracker.inserted(text)
             view?.setAutoCap(false)
             return
         }
         // webOS's Double Space For Period: a second space straight after a word's makes ". ".
-        if (text == " " && assisted() && TextAssist.doubleSpace(this) && word.isEmpty()) {
+        if (text == " " && assisted() && TextAssist.doubleSpace(this) && tracker.word.isEmpty()) {
             val before = ic.getTextBeforeCursor(2, 0)?.toString() ?: ""
             if (before.length == 2 && before[1] == ' ' && before[0].isLetterOrDigit() &&
                 SystemClock.uptimeMillis() - lastSpaceAt < DOUBLE_SPACE_MS) {
                 own()
                 ic.deleteSurroundingText(1, 0)
                 ic.commitText(". ", 1)
+                tracker.replacedBefore(1, ". ")
                 lastSpaceAt = 0; undo = null
                 updateCaps()
                 return
             }
         }
-        if (word.isNotEmpty()) endWord(text) else { own(); ic.commitText(text, 1); undo = null }
+        if (track) endWord(text) else { own(); ic.commitText(text, 1); tracker.inserted(text); undo = null }
         if (text == " ") lastSpaceAt = SystemClock.uptimeMillis()
         updateCaps()
     }
@@ -454,7 +492,7 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
         overlay?.hideBubble()
         // Straight after a correction, backspace puts the word back as it was typed.
         val u = undo
-        if (u != null && this.word.isEmpty()) {
+        if (u != null && !tracker.touched) {
             val (m, sep) = u
             val before = ic.getTextBeforeCursor(m.text.length + sep.length, 0)?.toString()
             undo = null
@@ -462,6 +500,7 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
                 own()
                 ic.deleteSurroundingText(before.length, 0)
                 ic.commitText(m.original + sep, 1)
+                tracker.replacedBefore(before.length, m.original + sep)
                 ignored += m.original
                 lastSpaceAt = 0     // the space that comes back wasn't typed just now
                 overlay?.marks?.remove(m); local.remove(m); overlay?.invalidate()
@@ -470,51 +509,62 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
             }
         }
         undo = null
-        // Inside the word being typed, it gets shorter; a whole-word delete ends it.
-        if (this.word.isNotEmpty()) {
-            if (word) { this.word.setLength(0); wordEnd = -1 }
-            else { this.word.setLength(this.word.length - 1); wordEnd -= 1; if (this.word.isEmpty()) wordEnd = -1 }
+        if (tracker.cursor > 0) dropMarksFrom(tracker.cursor - 1)
+        if (!word) {
+            // The Delete key, as a webOS keyboard sent it: pages act on the key itself (Email's
+            // recipients go one at a time on a backspace in an empty field). The keyboard's
+            // account of the text moves with it, so the word before the cursor is right at the
+            // next key whether or not the field has caught up.
+            own()
+            val known = tracker.textBefore != null
+            tracker.deleted()
+            sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+            // Where the text isn't known the field is asked, once the key has reached it.
+            if (known) updateCaps() else main.postDelayed(capsLater, CAPS_AFTER_DELETE_MS)
+            return
         }
-        if (selEnd > 0) dropMarksFrom(selEnd - 1)
-        if (!word) { sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL); updateCaps(); return }
         // Held down long enough and webOS started taking whole words.
         val before = ic.getTextBeforeCursor(64, 0) ?: return
         if (before.isEmpty()) return
         var i = before.length
         while (i > 0 && before[i - 1].isWhitespace()) i--
         while (i > 0 && !before[i - 1].isWhitespace()) i--
+        own()
         ic.deleteSurroundingText(before.length - i, 0)
+        tracker.removedBefore(before.length - i)
         updateCaps()
     }
 
     override fun onEnter() {
-        if (word.isNotEmpty()) endWord("")
+        endWord("")
         flushPending()
         val action = editor?.imeOptions?.and(EditorInfo.IME_MASK_ACTION) ?: EditorInfo.IME_ACTION_NONE
         val unspecified = action == EditorInfo.IME_ACTION_NONE || action == EditorInfo.IME_ACTION_UNSPECIFIED
         val multiline = (editor?.inputType ?: 0) and InputType.TYPE_TEXT_FLAG_MULTI_LINE != 0
         if (unspecified || multiline) sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
         else currentInputConnection?.performEditorAction(action)
+        tracker.adrift()
         undo = null
         updateCaps()
     }
 
     override fun onTab() {
-        if (word.isNotEmpty()) endWord("")
+        endWord("")
         flushPending()
         sendDownUpKeyEvents(KeyEvent.KEYCODE_TAB)
+        tracker.adrift()
     }
 
     override fun onHide() {
-        if (word.isNotEmpty()) endWord("")
+        endWord("")
         flushPending()
         requestHideSelf(0)
     }
 
     override fun onCursor(dx: Int, dy: Int, select: Boolean) {
         val ic = currentInputConnection ?: return
-        word.setLength(0); wordEnd = -1
         flushPending()
+        tracker.adrift()
         val code = when {
             dx > 0 -> KeyEvent.KEYCODE_DPAD_RIGHT
             dx < 0 -> KeyEvent.KEYCODE_DPAD_LEFT
@@ -562,5 +612,9 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
         const val TOUCHPAD_LINE = 22f
         /** Other spellings offered in the bubble beside the original. */
         const val ALTERNATES = 4
+        /** How long a Delete key is given to reach the field before its caps mode is asked. */
+        const val CAPS_AFTER_DELETE_MS = 80L
+        /** What joins a word to more of an address or a path: the word before one is left as typed. */
+        val JOINS = setOf("@", "_", "/", "\\")
     }
 }

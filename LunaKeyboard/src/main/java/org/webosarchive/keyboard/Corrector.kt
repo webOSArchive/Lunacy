@@ -86,7 +86,7 @@ class Corrector(lines: Sequence<String>) {
         }
         if (lower.length < 2 || '\'' in lower) return null
 
-        val best = nearest(lower) ?: return null
+        val best = confident(lower) ?: return null
         return casedLike(typed, best).takeIf { it != typed }
     }
 
@@ -128,7 +128,26 @@ class Corrector(lines: Sequence<String>) {
 
     // --- Finding the nearest word ------------------------------------------------------------
 
-    private fun nearest(w: String): String? = nearest(w, 1).firstOrNull()
+    private class Ranked(val entry: Entry, val score: Float, val changesFirst: Boolean)
+
+    /**
+     * The word [w] is corrected to without being asked: the likeliest spelling, when it clearly
+     * leads the others. (From webOS CE's SmartKey engine, SkCorrector.cpp at c4ed085.) A rival
+     * that changes the first letter was ranked lower for it, but that is no evidence that the
+     * leader is right: when the leader keeps the typed first letter, its lead is measured as if
+     * such rivals had not been charged. "trest" is a tie between test, treat and rest, and is
+     * left as typed, with all three in the bubble.
+     */
+    private fun confident(w: String): String? {
+        val ranked = ranked(w, RIVALS)
+        val best = ranked.firstOrNull() ?: return null
+        for (i in 1 until ranked.size) {
+            val rival = ranked[i]
+            val score = if (!best.changesFirst && rival.changesFirst) rival.score + COST_WEIGHT * FIRST_LETTER else rival.score
+            if (best.score - score < AUTO_MARGIN) return null
+        }
+        return best.entry.word
+    }
 
     /** The likeliest other spellings of [typed], in its case, for the bubble. */
     fun alternates(typed: String, max: Int): List<String> {
@@ -137,29 +156,38 @@ class Corrector(lines: Sequence<String>) {
         return nearest(lower, max).map { casedLike(typed, it) }
     }
 
-    private fun nearest(w: String, max: Int): List<String> {
+    private fun nearest(w: String, max: Int): List<String> = ranked(w, max).map { it.entry.word }
+
+    private fun ranked(w: String, max: Int): List<Ranked> {
         val one = HashMap<String, Float>()
         edits(w, 0f, one, full = true)
-        pick(one, maxCost = if (w.length <= 3) 0.6f else 1.3f, minScore = if (w.length <= 3) 12 else 5, max)
+        pick(w, one, maxCost = if (w.length <= 3) 0.6f else 1.3f, minScore = if (w.length <= 3) 12 else 5, max)
             .let { if (it.isNotEmpty()) return it }
         if (w.length < 5) return emptyList()
         // Two slips: grow every one-slip spelling once more, with a narrower set of edits so a
         // long word stays quick even on an old phone.
         val two = HashMap<String, Float>()
         for ((s, c) in one) edits(s, c, two, full = false)
-        return pick(two, maxCost = 1.9f, minScore = 9, max)
+        return pick(w, two, maxCost = 1.9f, minScore = 9, max)
     }
 
-    /** The best known words among [cands]: common, and cheap to reach. Best first. */
-    private fun pick(cands: Map<String, Float>, maxCost: Float, minScore: Int, max: Int): List<String> {
-        val found = ArrayList<Pair<Entry, Float>>()
+    /**
+     * The best known words among [cands]: common, and cheap to reach. Best first. A word that
+     * does not begin as [typed] does ranks lower: the first letter is the one people get right.
+     * Two swapped first letters ("hte") are a swap, not a wrong first letter. The charge is on
+     * the rank only, so what is near enough to be offered at all is as it was.
+     */
+    private fun pick(typed: String, cands: Map<String, Float>, maxCost: Float, minScore: Int, max: Int): List<Ranked> {
+        val found = ArrayList<Ranked>()
         for ((s, cost) in cands) {
             if (cost > maxCost) continue
             val e = words[s] ?: continue
             if (e.score < minScore) continue
-            found += e to (e.score - COST_WEIGHT * cost)
+            val swapped = s.length > 1 && typed.length > 1 && s[0] == typed[1] && s[1] == typed[0]
+            val changesFirst = s.isNotEmpty() && s[0] != typed[0] && !swapped
+            found += Ranked(e, e.score - COST_WEIGHT * (cost + if (changesFirst) FIRST_LETTER else 0f), changesFirst)
         }
-        return found.sortedByDescending { it.second }.take(max).map { it.first.word }
+        return found.sortedByDescending { it.score }.take(max)
     }
 
     /** Every spelling one slip away from [w], with what the slip costs, into [out]. */
@@ -217,6 +245,12 @@ class Corrector(lines: Sequence<String>) {
         private const val COMPLETION_SCAN = 15000
         /** How many log2-frequency points one unit of edit cost is worth. */
         private const val COST_WEIGHT = 4f
+        /** What changing, dropping or missing the first letter costs on top of the slip itself (CE's firstLetter). */
+        private const val FIRST_LETTER = 0.3f
+        /** A correction is made unasked only when it leads every rival by this many points (CE's autoMargin: 0.15 of edit cost). */
+        private const val AUTO_MARGIN = 0.6f
+        /** How many of the likeliest spellings the leader is measured against. */
+        private const val RIVALS = 6
         private const val ALPHABET = "abcdefghijklmnopqrstuvwxyz"
         private const val VOWELS = "aeiouy"
 

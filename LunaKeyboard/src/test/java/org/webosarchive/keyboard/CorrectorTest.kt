@@ -15,6 +15,15 @@ class CorrectorTest {
     @Test fun slipsAreFixed() = fixes("teh" to "the", "Teh" to "The", "adn" to "and", "recieve" to "receive",
         "keybaord" to "keyboard", "dont" to "don't", "im" to "I'm", "i" to "I", "london" to "London")
 
+    // From webOS CE's SmartKey (c4ed085): the first letter counts, and a correction is made
+    // unasked only when it clearly leads the other spellings.
+    @Test fun aTieIsLeftAsTyped() = fixes("trest" to null, "helo" to null)
+
+    @Test fun theFirstLetterIsTheOnePeopleGetRight() {
+        fixes("hte" to "the", "grest" to "great")
+        assertEquals(listOf("trust", "test", "rest"), c.alternates("trest", 3))
+    }
+
     @Test fun wordsAreLeft() = fixes("the" to null, "well" to null, "its" to null, "NASA" to null, "hello" to null)
 
     @Test fun webOSsOwnNamesAreNotTheirNeighbours() = fixes("webos" to "webOS", "touchpad" to "TouchPad",

@@ -41,10 +41,10 @@ on the reference TouchPad (2026-11-04):
 
 - **Auto-Correction.** A space or punctuation ends a word, and a misspelling becomes the word
   you most likely meant, as webOS's SmartKey made it its `auto-accept` guess: "teh" becomes
-  "the", "tomorow" "tomorrow", "dont" "don't", "im" "I'm". The case you typed is kept. A
-  word that could as well be two or three others is left as you typed it, with those in the
-  bubble ("trest": trust, test, rest), and a spelling that keeps your first letter ranks
-  above one that changes it - both from webOS CE's SmartKey engine. A
+  "the", "tomorow" "tomorrow", "dont" "don't", "im" "I'm". The case you typed is kept. The
+  likelier slip wins over the commoner word - "trest" is "treat", the key next door, not
+  "rest" - and a spelling that keeps your first letter ranks above one that changes it, as
+  in webOS CE's SmartKey engine. A
   correction makes the TouchPad's little plop (`text_entry_correction`), or vibrates, or says
   nothing - Text Assist's Sound, Vibrate and Mute.
 - **The dotted line and the bubble.** A corrected word is underlined with WebKit's gray dots.

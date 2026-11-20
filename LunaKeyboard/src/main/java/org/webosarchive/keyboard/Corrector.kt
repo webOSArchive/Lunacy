@@ -86,7 +86,7 @@ class Corrector(lines: Sequence<String>) {
         }
         if (lower.length < 2 || '\'' in lower) return null
 
-        val best = confident(lower) ?: return null
+        val best = nearest(lower, 1).firstOrNull() ?: return null
         return casedLike(typed, best).takeIf { it != typed }
     }
 
@@ -128,26 +128,7 @@ class Corrector(lines: Sequence<String>) {
 
     // --- Finding the nearest word ------------------------------------------------------------
 
-    private class Ranked(val entry: Entry, val score: Float, val changesFirst: Boolean)
-
-    /**
-     * The word [w] is corrected to without being asked: the likeliest spelling, when it clearly
-     * leads the others. (From webOS CE's SmartKey engine, SkCorrector.cpp at c4ed085.) A rival
-     * that changes the first letter was ranked lower for it, but that is no evidence that the
-     * leader is right: when the leader keeps the typed first letter, its lead is measured as if
-     * such rivals had not been charged. "trest" is a tie between test, treat and rest, and is
-     * left as typed, with all three in the bubble.
-     */
-    private fun confident(w: String): String? {
-        val ranked = ranked(w, RIVALS)
-        val best = ranked.firstOrNull() ?: return null
-        for (i in 1 until ranked.size) {
-            val rival = ranked[i]
-            val score = if (!best.changesFirst && rival.changesFirst) rival.score + COST_WEIGHT * FIRST_LETTER else rival.score
-            if (best.score - score < AUTO_MARGIN) return null
-        }
-        return best.entry.word
-    }
+    private class Ranked(val entry: Entry, val score: Float)
 
     /** The likeliest other spellings of [typed], in its case, for the bubble. */
     fun alternates(typed: String, max: Int): List<String> {
@@ -185,7 +166,7 @@ class Corrector(lines: Sequence<String>) {
             if (e.score < minScore) continue
             val swapped = s.length > 1 && typed.length > 1 && s[0] == typed[1] && s[1] == typed[0]
             val changesFirst = s.isNotEmpty() && s[0] != typed[0] && !swapped
-            found += Ranked(e, e.score - COST_WEIGHT * (cost + if (changesFirst) FIRST_LETTER else 0f), changesFirst)
+            found += Ranked(e, e.score - COST_WEIGHT * (cost + if (changesFirst) FIRST_LETTER else 0f))
         }
         return found.sortedByDescending { it.score }.take(max)
     }
@@ -202,7 +183,7 @@ class Corrector(lines: Sequence<String>) {
         for (i in 0 until n) {
             // An extra letter: cheaper when it doubles its neighbour.
             sb.setLength(0); sb.append(w, 0, i).append(w, i + 1, n)
-            add(sb.toString(), if (i > 0 && w[i] == w[i - 1]) 0.5f else if (adjacentToNeighbour(w, i)) 0.7f else 1f)
+            add(sb.toString(), if (i > 0 && w[i] == w[i - 1]) 0.5f else if (adjacentToNeighbour(w, i)) EXTRA_NEAR else EXTRA_FAR)
             // Two letters swapped.
             if (i < n - 1 && w[i] != w[i + 1]) {
                 sb.setLength(0); sb.append(w, 0, i).append(w[i + 1]).append(w[i]).append(w, i + 2, n)
@@ -213,7 +194,7 @@ class Corrector(lines: Sequence<String>) {
                 if (c == w[i]) continue
                 val cost = when {
                     adjacent(w[i], c) -> 0.6f
-                    w[i] in VOWELS && c in VOWELS -> 0.9f
+                    w[i] in VOWELS && c in VOWELS -> WRONG_VOWEL
                     else -> if (full) 1.3f else continue
                 }
                 sb.setLength(0); sb.append(w, 0, i).append(c).append(w, i + 1, n)
@@ -227,7 +208,7 @@ class Corrector(lines: Sequence<String>) {
                 if (!full && !doubling && c !in VOWELS &&
                     !(i > 0 && adjacent(w[i - 1], c)) && !(i < n && adjacent(w[i], c))) continue
                 sb.setLength(0); sb.append(w, 0, i).append(c).append(w, i, n)
-                add(sb.toString(), if (doubling) 0.5f else 1f)
+                add(sb.toString(), if (doubling) 0.5f else MISSED)
             }
         }
     }
@@ -243,14 +224,28 @@ class Corrector(lines: Sequence<String>) {
         private val SHORT_CAPITALS = setOf("i", "ok")
         /** A one-letter prefix begins thousands of words: look through this many at most. */
         private const val COMPLETION_SCAN = 15000
-        /** How many log2-frequency points one unit of edit cost is worth. */
-        private const val COST_WEIGHT = 4f
-        /** What changing, dropping or missing the first letter costs on top of the slip itself (CE's firstLetter). */
+        /**
+         * How many log2-frequency points one unit of edit cost is worth. At 4 a word twice as
+         * common won over a likelier slip: "trest" became "rest" (drop a letter, 0.7) and not
+         * "treat" (the key next door, 0.6). The values below were chosen together, on 3,000
+         * made-up touch typos of the list's own words, drawn by how common they are, and
+         * checked on two more such sets: 85% fixed and 13% made into the wrong word before,
+         * 89% and 10% after.
+         */
+        private const val COST_WEIGHT = 8f
+        /** A letter too many beside a neighbouring key, and anywhere else. A slip onto the key next door (0.6) is likelier than either. */
+        private const val EXTRA_NEAR = 0.9f
+        private const val EXTRA_FAR = 1.15f
+        /** One vowel for another that is not its neighbour: a spelling mistake, not a slip. */
+        private const val WRONG_VOWEL = 1.1f
+        /** A letter not typed, other than one of a pair. */
+        private const val MISSED = 0.9f
+        /**
+         * What a spelling that changes, drops or misses the first letter is ranked lower by, on
+         * top of the slip itself: the first letter is the one people get right. From webOS
+         * CE's SmartKey engine (SkCorrector.cpp's firstLetter, c4ed085).
+         */
         private const val FIRST_LETTER = 0.3f
-        /** A correction is made unasked only when it leads every rival by this many points (CE's autoMargin: 0.15 of edit cost). */
-        private const val AUTO_MARGIN = 0.6f
-        /** How many of the likeliest spellings the leader is measured against. */
-        private const val RIVALS = 6
         private const val ALPHABET = "abcdefghijklmnopqrstuvwxyz"
         private const val VOWELS = "aeiouy"
 

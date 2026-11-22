@@ -27,7 +27,9 @@
         <!-- Sideloaded keyboards have to be enabled and then chosen by hand; this activity is
              both the launcher entry and the gear beside the entry in Language & input. -->
         <activity android:name=".SetupActivity" android:exported="true"
-            android:label="@string/app_name">
+            android:label="@string/app_name"
+            android:theme="@style/SetupTheme"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

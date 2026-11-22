@@ -33,6 +33,8 @@ webOS's tablet keyboard, rebuilt as an `InputMethodService`:
   point around. Hold shift while you drag it and it selects instead.
 - **Text Assist**: webOS's auto-correction with its plop, dotted line and bubble of
   alternates, auto-capitalization, double space for period and shortcuts (below).
+- **Tap sounds**: the TouchPad's four key clicks, and, not webOS's, an optional buzz on each
+  key (below).
 
 ## Text Assist
 
@@ -46,7 +48,9 @@ on the reference TouchPad (2026-11-04):
   "rest" - and a spelling that keeps your first letter ranks above one that changes it, as
   in webOS CE's SmartKey engine. A
   correction makes the TouchPad's little plop (`text_entry_correction`), or vibrates, or says
-  nothing - Text Assist's Sound, Vibrate and Mute.
+  nothing - Text Assist's Sound, Vibrate and Mute ("When a word is corrected" in the setup
+  screen). That is for a correction only; a click or a buzz on every key is the keys' own
+  (Tap sounds, below).
 - **The dotted line and the bubble.** A corrected word is underlined with WebKit's gray dots.
   Put the cursor in it - tap it - and webOS's bubble opens over it: the word as you typed it,
   with its orange dots, and the other likely spellings beside it. Tap one to use it. Backspace
@@ -123,7 +127,8 @@ install, but an old target counts against a sideloaded keyboard with Play Protec
 2026-11-04). What the newer target changes here, and what was done:
 
 - Android 15 draws an app under its status and navigation bars: the setup screen keeps clear
-  of them (`fitsSystemWindows`).
+  of them and of the keyboard, padding itself by the window's insets (from Android 11;
+  `fitsSystemWindows` and `adjustResize` before).
 - Android 15 lays the keyboard's own window under the navigation bar too, and draws the bar's
   buttons (back, the keyboard switcher) over whatever is there: the keyboard stands on the
   bar, over a strip in its background's bottom colour, as the system painted it before.
@@ -131,6 +136,43 @@ install, but an old target counts against a sideloaded keyboard with Play Protec
   personal dictionary's (`<queries>`), for shortcuts and learned words.
 - Nothing else applies: the keyboard posts no notifications, registers no receivers and makes
   no PendingIntents, and its service and setup screen were already marked exported.
+
+## Tap sounds, and a buzz
+
+webOS clicked as you typed. LunaSysMgr's `TabletKeyboard::makeSound` runs on every new touch
+of a key, on every repeat of a held one and on every step of the scroll ball, and
+`SysmgrIMEModel::keyDownAudioFeedback` picks one of four samples by the key: `space`,
+`backspace`, `return`, and `key` for all the rest (the scroll ball's steps use backspace's).
+They are the TouchPad's own `/usr/share/systemsounds/*.pcm`, given a WAV header
+(`assets/sounds`, see its NOTICE). So here:
+
+- a finger coming down on any key clicks at once, before the key types; sliding on to the next
+  key doesn't, as webOS's didn't;
+- a held backspace clicks with each letter or word it takes, and the scroll ball with each
+  step of the cursor;
+- the click is on unless turned off, as webOS's `TapSounds` preference was
+  (`VirtualKeyboardPreferences`), and like any system sound it is silent while the phone's
+  ringer is.
+
+The TouchPad has no vibrator, so the buzz is Android's habit and not webOS's: **Vibrate on
+keys**, off unless turned on, Light, Firmer or Strong (each felt as it is chosen), at the same
+moments as the click (`KeyFeedback`). It is the keys' own and separate from Text Assist's
+Vibrate, which buzzes only when a word is corrected.
+
+## The setup screen
+
+The launcher entry. Besides switching the keyboard on and choosing it, it has the keyboard's
+settings, each a switch with a line saying what it does: Size, Keys (Tap sounds, Vibrate on
+keys), Text Assist and the user dictionary. A change shows on the keyboard at once, even with
+the keyboard up over the screen's own field: a new size rebuilds it, and Auto-Capitalization
+relights shift; everything else is read as it is used. The **Try it here** field at the bottom
+is brought up just above the keys when the keyboard first comes up for it, and again when you
+type in it while it is out of sight; a keyboard that only changes size leaves the page where it
+is, so the buttons being tapped don't move away.
+
+Android lists the keyboard as **Luna Keyboard**, in its switcher and in its list of keyboards.
+It has no subtypes: Android would list it under the first one's name ("English (US)") with
+its own name small below.
 
 ## The scroll ball
 
@@ -190,8 +232,8 @@ at 3.7 mm a row; codepoet, 2026-10-03: "could stand to be double height"). The s
 automatic from the screen - the keyboard is 340 px of a TouchPad's 1024 x 768, and it keeps
 that share of a screen's pixels by growing with the geometric mean of the screen's two sides
 over the TouchPad's, rounded: an HP 10 G2 and a 2012 Nexus 7 at 1, a Nexus 5 and a Pixel
-Tablet at 2 - or the owner's choice of 1x, 2x or 3x in the setup screen, taken up the next
-time the keyboard comes up.
+Tablet at 2 - or the owner's choice of 1x, 2x or 3x in the setup screen, taken up at once,
+even with the keyboard up.
 
 **A narrow screen** is the exception to whole numbers (codepoet, 2026-11-20: "our keyboard came
 from a tablet, and as a result looks wacky on small screens"). The art is a tablet's: a key
@@ -281,9 +323,8 @@ away first. And replacing the APK deselects it, so `ime set` it again afterwards
 - **No suggestion bar**, so no auto-correct and no learned words.
 - **No phone layout.** The tablet layout scales down, but webOS had a separate one
   (`PhoneKeyboard.cpp`) for narrow screens.
-- **No key sounds or haptics.**
 
 ## Licence and provenance
 
 See [NOTICE](NOTICE). The art and the ported layout are LunaCE's, Apache 2.0; the Prelude
-fonts ship as abandonware; the emoji are OpenMoji's, CC BY-SA 4.0.
+fonts and the tap sounds ship as abandonware; the emoji are OpenMoji's, CC BY-SA 4.0.

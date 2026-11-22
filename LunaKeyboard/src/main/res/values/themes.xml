@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The setup screen: the device's own dark look, with no title bar - the screen's own
+         title says what it is - and a light grey for what is on (a switch, the cursor, the
+         field's underline): the theme's own accent is too dark to tell on from off on its grey. -->
+    <color name="setup_on">#D8D8D8</color>
+    <style name="SetupTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:colorAccent">@color/setup_on</item>
+        <item name="android:colorControlActivated">@color/setup_on</item>
+    </style>
+</resources>

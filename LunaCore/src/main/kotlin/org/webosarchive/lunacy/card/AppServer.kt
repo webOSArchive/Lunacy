@@ -367,7 +367,7 @@ class AppServer(
             "<script src=\"/__lunacy/media.js\"></script><script src=\"/__lunacy/layout.js\"></script>" +
             "<script src=\"/__lunacy/bridge.js\"></script>" +
             "<script src=\"/__lunacy/crypt.js\"></script>" +
-            "<script src=\"/__lunacy/textedit.js\"></script>" +
+            "<script src=\"/__lunacy/textedit.js\"></script><script src=\"/__lunacy/remote.js\"></script>" +
             "<script src=\"/__lunacy/net.js\"></script><script src=\"/__lunacy/websql.js\"></script>" + preload(app) +
             "<script src=\"/__lunacy/fonts-ready.js?t=$token\"></script>"
         val m = Regex("<head[^>]*>", RegexOption.IGNORE_CASE).find(html)

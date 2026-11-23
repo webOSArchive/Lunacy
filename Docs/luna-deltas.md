@@ -705,6 +705,11 @@ checked on the Pixel Tablet.
 
 ## D. Not deltas - so nobody chases them
 
+- **A remote's focus (branch android-tv, experimental; codepoet's call 2026-11-23).** webOS had
+  no remote and no focus, so on a TV a card shows its focused control in the frameworks' own
+  pressed states (Enyo's down and held looks, Mojo's selected), which a finger never left on
+  a control it wasn't touching. Only with a remote; touch is unchanged. See
+  [android-tv.md](android-tv.md).
 - **The startup card (was B10; changed 2026-09-26, codepoet's call).** LunaSysMgr held a
   launching card just below the screen until its app was ready (cardPrepareAddDuration +
   cardAddMaxDuration, 900 ms) and slid a slower app's card into the card view to pulse there;

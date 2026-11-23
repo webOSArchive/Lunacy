@@ -269,7 +269,8 @@ class PdkWindow(
         val down = when (e.action) { KeyEvent.ACTION_DOWN -> true; KeyEvent.ACTION_UP -> false; else -> return false }
         val sym = when (e.keyCode) {
             KeyEvent.KEYCODE_DEL -> SDLK_BACKSPACE; KeyEvent.KEYCODE_FORWARD_DEL -> SDLK_DELETE
-            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> SDLK_RETURN; KeyEvent.KEYCODE_TAB -> 9
+            // A TV remote's OK is Return too.
+            KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER, KeyEvent.KEYCODE_DPAD_CENTER -> SDLK_RETURN; KeyEvent.KEYCODE_TAB -> 9
             KeyEvent.KEYCODE_ESCAPE -> PdkHost.SDLK_ESCAPE; KeyEvent.KEYCODE_SPACE -> 32
             KeyEvent.KEYCODE_DPAD_UP -> 273; KeyEvent.KEYCODE_DPAD_DOWN -> 274
             KeyEvent.KEYCODE_DPAD_RIGHT -> 275; KeyEvent.KEYCODE_DPAD_LEFT -> 276

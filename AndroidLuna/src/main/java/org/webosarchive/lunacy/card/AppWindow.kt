@@ -349,8 +349,11 @@ open class AppWindow(
      */
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean = when (val f = focusedChild) {
         is PageDialog, is BrowserViews.Browser -> f.dispatchKeyEvent(event)
-        else -> super.dispatchKeyEvent(event)
+        else -> remote.handle(event) || super.dispatchKeyEvent(event)
     }
+
+    /** A TV remote's D-pad and OK over the page's controls (RemoteKeys, assets/lunacy/remote.js). */
+    private val remote by lazy { RemoteKeys(this) }
 
     override fun dispatchTouchEvent(e: MotionEvent): Boolean {
         val handled = super.dispatchTouchEvent(e)

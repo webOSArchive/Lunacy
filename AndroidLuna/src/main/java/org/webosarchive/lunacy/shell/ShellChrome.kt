@@ -812,6 +812,24 @@ class ShellChrome(
         return false
     }
 
+    /**
+     * A TV remote's D-pad and OK while the launcher is open (Launcher.remote; experimental,
+     * branch android-tv). Not while something over it has the keys. In a card the card takes
+     * them itself (card/RemoteKeys). True if the key was taken.
+     */
+    fun remoteKey(event: android.view.KeyEvent): Boolean {
+        if (!launcherOpen || justTypePanel.showing || tabDialog.showing || groupOverlay.showing) return false
+        val key = when (event.keyCode) {
+            android.view.KeyEvent.KEYCODE_DPAD_UP -> "up"; android.view.KeyEvent.KEYCODE_DPAD_DOWN -> "down"
+            android.view.KeyEvent.KEYCODE_DPAD_LEFT -> "left"; android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> "right"
+            android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER -> "ok"
+            else -> return false
+        }
+        if (event.action != android.view.KeyEvent.ACTION_DOWN) return true
+        if (key == "ok" && event.repeatCount > 0) return true
+        return launcher.remote(key)
+    }
+
     // ---- overlays (reference §3.1, §3.2) ----
 
     private fun toggleLauncher() = if (launcherOpen) closeLauncher() else openLauncher()

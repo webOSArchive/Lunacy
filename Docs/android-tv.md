@@ -42,18 +42,27 @@ TouchPad to be measured against. codepoet's call (2026-11-23): the focused contr
   - **Keyboards stay keyboards.** Only a non-alphabetic device (a remote, a game pad) or a key
     sent as a D-pad alone (`adb shell input dpad keyevent`) is taken; a keyboard's arrows and
     Enter reach the page as before.
+- **The launcher.** While it is open the shell takes the remote's keys first
+  (`ShellActivity.dispatchKeyEvent`, `ShellChrome.remoteKey`, `Launcher.remote`). The focused
+  icon or group wears the touch feedback a finger leaves on it (launcher-touch-feedback.png);
+  the arrows move through the page's grid, past a row's end onto the next tab's page (as a
+  swipe), and up from the top row onto the tab bar, where the focused tab is drawn as a finger
+  on it (tab-highlight.png) and left and right change tabs as a tap does. OK launches, as a
+  tap; a group opens. A finger clears the focus. The remote's Back is the TouchPad's home
+  button as before: from a card to the card view, then the launcher.
 - **PDK.** OK is SDL's Return, beside the arrows the D-pad already sent.
 
-Checked on the Chromecast (build 807): First Use from start to end with the remote alone
+Checked on the Chromecast (build 808): the launcher's icons, its tabs, past a row's end onto the
+next tab, and Clock launched with OK. Before that (build 807): First Use from start to end with the remote alone
 (Next, Android's own permission dialogs, Skip), Sounds & Alerts (Enyo: switches, the volume
 knob, a button) and Location Services (Mojo: rows, a list selector's popup and back).
 
 ## Not yet
 
-- **The shell itself**: launcher, dock, card view, status bar menus, Just Type. They are
-  Kotlin views with no focus. The remote's Back is still the TouchPad's home button (Android
-  back, `ShellChrome.homePressed`), so it reaches the card view but nothing can be picked there.
-- **webOS's back gesture** from the remote (Escape from a keyboard already sends it).
+- **The rest of the shell**: the dock, the card view (picking and closing cards), a group's
+  panel, the status bar menus, Just Type, and arranging the launcher.
+- **A long launcher page**: scrolling to a row out of view is written, but no tab on the TV
+  has enough icons to need it.
 - **Back to the opener**: after a popup closes, focus goes to the nearest control, not to the
   row that opened it.
 - **Sliders**: the knob takes focus, but left and right don't move it.

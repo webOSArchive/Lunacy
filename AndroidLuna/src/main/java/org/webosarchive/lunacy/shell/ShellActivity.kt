@@ -1486,8 +1486,10 @@ class ShellActivity : Activity(), WindowHost {
         const val SYNC_STATE_KIND = "com.palm.account.syncstate:1"
     }
 
-    /** A keyboard's printable key may open Just Type (ShellChrome.typed). */
+    /** A keyboard's printable key may open Just Type (ShellChrome.typed); a remote's D-pad works the launcher. */
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        // A TV remote in the launcher (experimental, branch android-tv); in a card, the card's own.
+        if (::chrome.isInitialized && org.webosarchive.lunacy.card.RemoteKeys.fromRemote(event) && chrome.remoteKey(event)) return true
         if (::chrome.isInitialized && chrome.typed(event)) return true
         return super.dispatchKeyEvent(event)
     }

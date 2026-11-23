@@ -513,7 +513,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val cx = centre.x; val cy = centre.y
         val iy = cy + luna.px(iconDy)
         if (editing) drawFrame(c, cx, cy)
-        if (groupTarget == g.id || feedbackId == g.id) {
+        if (groupTarget == g.id || feedbackId == g.id || remoteFocus == g.id) {
             val gh = luna.px(glow) / 2
             luna.image("launcher3/launcher-touch-feedback.png")?.let { c.drawBitmap(it, null, RectF(cx - gh, iy - gh, cx + gh, iy + gh), null) }
         }
@@ -534,7 +534,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val half = luna.px(icon) / 2
         val iy = cy + luna.px(iconDy)
         if (editing) drawFrame(c, cx, cy)
-        if (feedbackId == app.id || groupTarget == app.id) {
+        if (feedbackId == app.id || groupTarget == app.id || remoteFocus == app.id) {
             val gh = luna.px(glow) / 2
             luna.image("launcher3/launcher-touch-feedback.png")?.let { c.drawBitmap(it, null, RectF(cx - gh, iy - gh, cx + gh, iy + gh), null) }
         }
@@ -878,6 +878,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
         val page = currentPage()
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                clearRemoteFocus()
                 anim?.cancel(); drag = Drag.UNDECIDED
                 downX = e.x; downY = e.y; downPage = pagePos; downScroll = page.scrollY; downTabScroll = tabScroll
                 tabAnim?.cancel()
@@ -945,6 +946,106 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             }
         }
         return true
+    }
+
+    // ---- a TV remote (experimental, branch android-tv; Docs/android-tv.md) ----
+
+    /**
+     * The tile a remote has focused, by id, shown with the touch feedback a finger leaves on an
+     * icon (launcher-touch-feedback.png): webOS's own pressed look, as in the cards.
+     */
+    private var remoteFocus: String? = null
+    /** The tab the remote has focused on the tab bar, shown as a finger on it (tab-highlight.png); -1 when the focus is on the icons. */
+    private var remoteTab = -1
+    private var scrollAnim: ValueAnimator? = null
+
+    /** A finger is back: the remote's focus goes until the remote is used again. */
+    fun clearRemoteFocus() {
+        if (remoteFocus == null && remoteTab < 0) return
+        remoteFocus = null
+        if (remoteTab >= 0) { remoteTab = -1; highlightedTab = -1 }
+        invalidate()
+    }
+
+    /**
+     * A remote's D-pad ("up", "down", "left", "right") or OK ("ok"). The arrows move through
+     * the page's icons; past a row's end they go on to the next tab's page, as a swipe does,
+     * and up from the top row to the tab bar, where left and right change tabs as a tap on
+     * one does. OK launches what is focused, as a tap. The first press only shows the focus.
+     * False while the launcher is being arranged, which a remote can't do.
+     */
+    fun remote(key: String): Boolean {
+        if (editing || removeDialog.app != null || dragging != null) return false
+        val pi = pagePos.roundToInt().coerceIn(0, pages.size - 1)
+        val page = pages[pi]
+        if (remoteTab >= 0) {
+            when (key) {
+                "left" -> if (remoteTab > 0) focusTab(remoteTab - 1)
+                "right" -> if (remoteTab < pages.size - 1) focusTab(remoteTab + 1)
+                "down", "ok" -> if (page.tiles.isNotEmpty()) { remoteTab = -1; highlightedTab = -1; focusTile(page, firstVisible(page)) }
+            }
+            return true
+        }
+        val i = page.tiles.indexOfFirst { it.id == remoteFocus }
+        if (i < 0) {
+            if (page.tiles.isEmpty()) focusTab(pi) else focusTile(page, firstVisible(page))
+            return true
+        }
+        val n = columns(); val last = page.tiles.size - 1
+        when (key) {
+            "left" -> if (i % n > 0) focusTile(page, i - 1) else nextPage(pi - 1, i / n, fromRight = true)
+            "right" -> if (i % n < n - 1 && i < last) focusTile(page, i + 1) else nextPage(pi + 1, i / n, fromRight = false)
+            "up" -> if (i >= n) focusTile(page, i - n) else focusTab(pi)
+            "down" -> if (i + n <= last) focusTile(page, i + n) else if (i / n < last / n) focusTile(page, last)
+            "ok" -> when (val t = page.tiles[i]) {
+                is Tile.App -> { showLaunchFeedback(t.app); onLaunch(t.app) }
+                is Tile.Group -> { showLaunchFeedback(t.id); onOpenGroup(t, groupScreenCentre(t)) }
+            }
+        }
+        return true
+    }
+
+    private fun focusTile(page: Page, i: Int) {
+        remoteFocus = page.tiles[i].id
+        revealRow(page, i)
+        invalidate()
+    }
+
+    private fun focusTab(t: Int) {
+        remoteFocus = null; remoteTab = t; highlightedTab = t
+        if (t != pagePos.roundToInt()) animatePage(t, Params.SNAP_MS, Easing.InQuad) else revealTab(t)
+        invalidate()
+    }
+
+    /** The page [to], if there is one, entered at row [row] from the side the move came from. */
+    private fun nextPage(to: Int, row: Int, fromRight: Boolean) {
+        if (to < 0 || to >= pages.size) return
+        animatePage(to, Params.SNAP_MS, Easing.InQuad)
+        val page = pages[to]
+        if (page.tiles.isEmpty()) { focusTab(to); return }
+        val n = columns(); val last = page.tiles.size - 1
+        val start = (row * n).coerceAtMost(last / n * n)
+        focusTile(page, if (fromRight) min(start + n - 1, last) else start)
+    }
+
+    /** The first tile whose row is in view: where focus starts on a page that was scrolled. */
+    private fun firstVisible(page: Page): Int {
+        val n = columns()
+        val row = ((page.scrollY - luna.px(topMargin)) / rowPitch()).let { kotlin.math.ceil(it).toInt() }.coerceAtLeast(0)
+        return (row * n).coerceIn(0, page.tiles.size - 1)
+    }
+
+    /** Scrolls [page] so that tile [i]'s row is wholly in view. */
+    private fun revealRow(page: Page, i: Int) {
+        val c = cellCentre(i)
+        val top = c.y - luna.px(rowH) / 2 - luna.px(rowGap); val bottom = c.y + luna.px(rowH) / 2 + luna.px(rowGap)
+        val target = when {
+            bottom - page.scrollY > pageBottom() -> bottom - pageBottom()
+            top - page.scrollY < pageTop() -> top - pageTop()
+            else -> return
+        }.coerceIn(0f, maxScroll(page))
+        scrollAnim?.cancel()
+        scrollAnim = animateValue(page.scrollY, target, Params.SNAP_MS, Easing.InQuad) { page.scrollY = it; invalidate() }
     }
 
     private fun tap(x: Float, y: Float) {

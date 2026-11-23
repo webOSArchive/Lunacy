@@ -21,7 +21,10 @@ import java.util.concurrent.Executors
 class Db8(private val service: String, file: File?,
            /** A debuggable build: the SDK's relay may purge (see "purge"). */
            private val debuggable: Boolean = false) {
-    private val db: SqlDb = Platform.sql.open(file)
+    /** Opened on db8's thread ([open]), first in its queue. */
+    private lateinit var db: SqlDb
+    /** Why the database could not be opened, if it couldn't: every call is answered with it. */
+    private var openFailure: String? = null
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "db8 $service").also { dbThread = it } }
     @Volatile private var dbThread: Thread? = null
     /**
@@ -61,7 +64,13 @@ class Db8(private val service: String, file: File?,
     /** A reply with its db8 error, thrown from deep inside an operation. */
     private class DbError(val code: Int, val text: String) : Exception(text)
 
-    init {
+    /**
+     * The database opened and brought up to date, on db8's thread. Not in the shell's onCreate:
+     * on a busy disk (a Chromecast with Google TV just after the install, 2026-11-23) the open
+     * waited in fdatasync until Android called the shell not responding.
+     */
+    private fun open(file: File?) {
+        db = Platform.sql.open(file)
         db.exec("CREATE TABLE IF NOT EXISTS kinds (id TEXT PRIMARY KEY, spec TEXT)")
         db.exec("CREATE TABLE IF NOT EXISTS objects (id TEXT PRIMARY KEY, kind TEXT, json TEXT)")
         db.exec("CREATE INDEX IF NOT EXISTS objects_kind ON objects (kind)")
@@ -113,7 +122,7 @@ class Db8(private val service: String, file: File?,
     fun close() {
         mirrorTicker?.shutdownNow(); mirrorTicker = null
         mirrorWorker.shutdownNow()
-        work { watches.clear(); db.close() }
+        work { watches.clear(); if (::db.isInitialized) db.close() }
         worker.shutdown()
     }
 
@@ -352,7 +361,8 @@ class Db8(private val service: String, file: File?,
     }
 
     private fun handle(method: String, call: Bus.Call, caller: String = call.appId) {
-        val reply = try {
+        val failed = openFailure
+        val reply = if (failed != null) error(-1, "db: internal error: $failed") else try {
             exec(method, caller, call.params, call)
         } catch (e: DbError) {
             error(e.code, e.text)
@@ -1163,6 +1173,18 @@ class Db8(private val service: String, file: File?,
         if (q.has("from") && q.opt("from") !is String)
             throw DbError(22, "invalid parameters: caller='$caller' error='invalid type for property 'from' for property 'query''")
         return q
+    }
+
+    // Last, once every property above has its value: the database opens on db8's thread, ahead
+    // of anything asked of it, which waits in the queue behind it. A database that can't be
+    // opened leaves db8 answering every call with the reason, never a success.
+    init {
+        work {
+            try { open(file) } catch (e: Exception) {
+                openFailure = "could not open the database: ${e.message}"
+                Log.e(AppServer.TAG, "$service: could not open the database", e)
+            }
+        }
     }
 
     private fun ok() = JSONObject().put("returnValue", true).toString()

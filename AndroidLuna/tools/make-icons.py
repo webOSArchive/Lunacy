@@ -11,13 +11,15 @@ Makes Lunacy's launcher icon and notification icon from codepoet's artwork in Me
     and a white silhouette of the robot as the monochrome layer for Android 13's themed icons.
   - Android 5 to 7: ic_launcher.png, the same two layers in a rounded rectangle, 48 dp.
 - The splash logo is the robot alone (drawable-*/lunacy_logo.png), on splash_background.
+- The TV banner (drawable-xhdpi/tv_banner.png, 320 x 180 px), which Android TV's launcher
+  shows in place of an icon: the robot on the sky, beside "Lunacy" in Prelude.
 - The notification small icon is the crescent from Meta/LunaRound.png as a white silhouette
   (drawable-*/ic_stat_lunacy.png, 24 dp), as Android draws a small icon.
 
 Needs Pillow. Writes into AndroidLuna/src/main/res.
 """
 import os
-from PIL import Image, ImageChops, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 META = os.path.join(ROOT, "Meta")
@@ -32,6 +34,9 @@ LEGACY_RADIUS = 0.18
 # The legacy icon's tile within its 48 dp: Android's guideline keylines leave a 2 dp margin.
 LEGACY_TILE_DP = 44
 SPLASH_PX = 480
+# Android TV's banner: 160 x 90 dp, made at xhdpi as the TV guidelines ask.
+BANNER_PX = (320, 180)
+PRELUDE = os.path.join(ROOT, "LunaKeyboard", "src", "main", "assets", "fonts", "Prelude-Medium.ttf")
 
 
 def robot():
@@ -127,6 +132,19 @@ def main():
         small = r.resize((w, h), Image.LANCZOS)
         logo.paste(small, ((px - w) // 2, 0), small)
         save(logo, "drawable-" + name, "lunacy_logo.png")
+
+    w, h = BANNER_PX
+    banner = sky().resize((w, w), Image.LANCZOS).crop((0, (w - h) // 2, w, (w - h) // 2 + h))
+    r = robot()
+    rh = round(h * 0.72)
+    small = r.resize((round(r.width * rh / r.height), rh), Image.LANCZOS)
+    banner.paste(small, (round(h * 0.18), (h - rh) // 2), small)
+    font = ImageFont.truetype(PRELUDE, round(h * 0.23))
+    d = ImageDraw.Draw(banner)
+    tx = round(h * 0.18) + small.width + round(h * 0.10)
+    box = d.textbbox((0, 0), "Lunacy", font=font)
+    d.text((tx, (h - (box[3] - box[1])) // 2 - box[1]), "Lunacy", font=font, fill=(255, 255, 255, 255))
+    save(banner.convert("RGB"), "drawable-xhdpi", "tv_banner.png")
 
     adaptive = """<?xml version="1.0" encoding="utf-8"?>
 <!-- Made by AndroidLuna/tools/make-icons.py from Meta/LunacyRobot.png and Meta/LunaOnly.png. -->

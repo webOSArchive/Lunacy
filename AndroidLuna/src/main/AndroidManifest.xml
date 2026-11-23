@@ -57,10 +57,16 @@
     <!-- An .apk the user opens from the Web app's downloads goes to Android's installer
          (WebosLinks.androidPackage); from Android 8 the installer needs this to accept it. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Android TV (experimental, branch android-tv): a TV has no touch screen, and Play and
+         the TV's installer refuse an app that asks for one. Neither is required, so the same
+         APK still installs on tablets and phones. -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.software.leanback" android:required="false" />
     <application
         android:name=".shell.LunacyApplication"
         android:label="Lunacy"
         android:icon="@mipmap/ic_launcher"
+        android:banner="@drawable/tv_banner"
         android:hardwareAccelerated="true"
         android:largeHeap="true"
         android:resizeableActivity="false"
@@ -96,6 +102,8 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+                <!-- Android TV's launcher lists only apps in this category, with the banner. -->
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
             <!-- The way back from a sign-in in the browser: the "Back to Lunacy" button on the
                  page Lunacy's loopback shows when the provider hands back (OAuth.RETURN_URI).

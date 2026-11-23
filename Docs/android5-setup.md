@@ -606,3 +606,16 @@ WebView 153.0.8010.57. Colour e-ink screen, 1264 x 1680 at 300 dpi. No Lunacy be
 | The keyboard on a narrow screen (2026-11-20) | **Galaxy Z Fold3** (Wi-Fi adb, folded; codepoet: "take a look at the samsung fold right now"): release-signed LunaKeyboard builds of the working tree (798) with `adb install -r` over the release-signed 652, data kept, twice; the open memo in Memos tapped to bring the keyboard up, one "E" typed into it by a press-and-hold and deleted again | LunaKeyboard is an unreleased build of the working tree (798, release-signed), with the word-tracking changes too; the memo reads as it did |
 | The keyboard for codepoet's testing (2026-11-20, 9ceea93) | **Pixel Tablet** (codepoet: "put it on my pixel tablet too") and **Galaxy Z Fold3**: the release-signed LunaKeyboard of 9ceea93 (build 799) with `adb install -r`, data kept, over 648 and over the working-tree 798 | Both on LunaKeyboard 799, an unreleased build; nothing else changed (the Pixel Tablet's input method is still Gboard) |
 | The keyboard on Android 5 (2026-11-20, 9ceea93) | **HP 10 G2**: found on USB, switched with `adb tcpip 5555` (`192.168.10.36:5555`); the release-signed LunaKeyboard 799 with `adb install -r` over the release-signed 617, data kept; one test memo typed into Memos through monkey scripts (`/data/local/tmp/kb.txt`, removed) | LunaKeyboard is 799, an unreleased build; one test memo is left in Memos; Lunacy itself is still 775 |
+
+## Chromecast with Google TV, Android 14 (2026-11-23)
+
+Added as the first TV test device: no touch screen, driven by the remote's D-pad.
+
+**Device:** Chromecast with Google TV (`sabrina`), Android 14 (API 34, build
+UTTC.250917.004), 32-bit ARM only (`armeabi-v7a`), 2 GB of RAM, WebView 157.0.8103.50,
+1920 x 1080 at density 320. No Lunacy before.
+
+| Change | How | Note |
+|---|---|---|
+| Wireless debugging paired (2026-11-23) | codepoet turned on Developer options and Wireless debugging; `adb pair 192.168.10.195:<pairing port> <code>`, then `adb connect` on the connect port found by a port scan (41925) | Port 5555 is refused. An `adb connect` to the pairing port spoiled the first pairing session; a second code paired |
+| Lunacy 1.1.0 debug build 798 installed (2026-11-23) | `adb install` of the arm32 debug build (7096d15) over Wi-Fi, then `am start` of the shell | The first launch, right after the install, was an ANR: `onCreate` opening db8 waited in `fdatasync` while the TV was busy with the install. The second launch opened on First Use, left there |

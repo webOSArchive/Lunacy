@@ -69,6 +69,24 @@ next tab, and Clock launched with OK. Before that (build 807): First Use from st
 (Next, Android's own permission dialogs, Skip), Sounds & Alerts (Enyo: switches, the volume
 knob, a button) and Location Services (Mojo: rows, a list selector's popup and back).
 
+## Only on a TV
+
+Every remote control above is taken only where Android reports its leanback feature
+(`RemoteKeys.tv`; `RemoteKeysTest`). A phone or tablet with a keyboard, a D-pad or a game pad
+keeps its keys exactly as before (codepoet, 2026-11-23): checked on the Fold3, where a D-pad's
+keys still reach the page as an arrow and Enter and nothing is focused.
+
+**Round for the merge (build 811, 2026-11-23;
+[test-results/811](test-results/811)):** `test.sh` 13 passed, 1 skipped; device-test on the
+Chromecast 48/0/0 and on the Fold3 (over 791, data kept) 55/0/0; a fresh install on the
+Chromecast 48/0/0; the Fold3 folded and unfolded twice by codepoet (one process throughout,
+cards kept, db8 answering). Not run: the HP 10 G2 (Android 5, Chromium 37), Nexus 5, Nexus 7
+and A7 Lite were off the network; codepoet will test them another time.
+
+**Play Protect on the TV.** Reinstalling after an uninstall, Play Protect blocked Lunacy as
+"built for an older version of Android" (targetSdk 28, as on main); the first install that day
+had passed. **Install anyway** let it through. Anyone sideloading onto a TV may see this.
+
 ## Not yet
 
 - **The rest of the shell**: a launcher group's panel, the status bar menus, Just Type,

@@ -76,16 +76,28 @@ class RemoteKeys(private val page: WebView) {
     }
 
     companion object {
+        /**
+         * Whether this is a TV (Android's leanback feature): the only place a remote's keys are
+         * taken. A phone or tablet with a keyboard, a D-pad or a game pad keeps its keys as they
+         * were (codepoet, 2026-11-23). Set once at startup (LunacyApplication).
+         */
+        @Volatile var tv = false
+            private set
+
+        fun init(context: android.content.Context) {
+            tv = context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)
+        }
+
         private val KEYS = setOf(KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT,
             KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER)
 
         /**
-         * A remote's (or a game pad's) D-pad and OK, not a keyboard's arrows and Enter: a real
+         * On a TV, a remote's (or a game pad's) D-pad and OK, not a keyboard's arrows and Enter: a real
          * device that isn't a full keyboard, or a key sent as a D-pad's alone (`adb shell input
          * dpad keyevent`, which comes from the virtual keyboard).
          */
         fun fromRemote(e: KeyEvent): Boolean {
-            if (e.keyCode !in KEYS) return false
+            if (!tv || e.keyCode !in KEYS) return false
             val d = e.device
             if (d != null && !d.isVirtual) return d.keyboardType != InputDevice.KEYBOARD_TYPE_ALPHABETIC
             return e.isFromSource(InputDevice.SOURCE_DPAD) && !e.isFromSource(InputDevice.SOURCE_KEYBOARD)

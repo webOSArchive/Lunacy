@@ -15,6 +15,7 @@ class LunacyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         install()
+        org.webosarchive.lunacy.card.RemoteKeys.init(this)
     }
 
     companion object {

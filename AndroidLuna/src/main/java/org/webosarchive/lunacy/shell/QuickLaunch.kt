@@ -109,7 +109,7 @@ class QuickLaunch(context: Context, private val luna: Luna, private val onLaunch
         apps.forEachIndexed { i, app ->
             if (i == dragging) return@forEachIndexed
             val r = if (dragging < 0) itemRect(i) else others.indexOf(i).let { k -> itemRect(if (k >= target) k + 1 else k) }
-            if (i == feedback) luna.image("launcher3/launcher-touch-feedback.png")?.let { g ->
+            if (i == feedback || i == remoteIndex) luna.image("launcher3/launcher-touch-feedback.png")?.let { g ->
                 val gh = luna.px(Launcher.Params.FEEDBACK) / 2
                 c.drawBitmap(g, null, RectF(r.centerX() - gh, r.centerY() - gh, r.centerX() + gh, r.centerY() + gh), null)
             }
@@ -118,7 +118,7 @@ class QuickLaunch(context: Context, private val luna: Luna, private val onLaunch
         }
         luna.image("launcher3/quicklaunch-button-launcher.png")?.let { b ->
             val half = b.height / 2  // two states stacked: normal, pressed
-            val src = if (pressed == -1) Rect(0, half, b.width, b.height) else Rect(0, 0, b.width, half)
+            val src = if (pressed == -1 || remoteIndex == -1) Rect(0, half, b.width, b.height) else Rect(0, 0, b.width, half)
             c.drawBitmap(b, src, buttonRect(), null)
         }
         // The picked-up icon, under the finger, over the dock and above it.
@@ -128,6 +128,39 @@ class QuickLaunch(context: Context, private val luna: Luna, private val onLaunch
             val p = android.graphics.Paint().apply { alpha = if (dragY <= 0) 128 else 255 }
             luna.appIconOrDefault(apps[dragging])?.let { c.drawBitmap(it, null, r, p) }
         }
+    }
+
+    // ---- a TV remote (experimental, branch android-tv; Docs/android-tv.md) ----
+
+    /**
+     * The item a remote has focused: an index, -1 for the launcher button, null for none. An
+     * icon wears the launch glow a tap gives it; the launcher button its own pressed state.
+     */
+    private var remoteIndex: Int? = null
+
+    /** The remote comes down into the dock: its first icon is focused (the launcher button, if it is empty). */
+    fun remoteEnter() { remoteIndex = if (apps.isEmpty()) -1 else 0; invalidate() }
+
+    fun clearRemoteFocus() { if (remoteIndex != null) { remoteIndex = null; invalidate() } }
+
+    /**
+     * A remote's key in the dock: left and right move along it to the launcher button, OK
+     * launches (or opens the launcher) as a tap does. False for up, which leaves the dock.
+     */
+    fun remote(key: String): Boolean {
+        val i = remoteIndex ?: run { remoteEnter(); return true }
+        if (editing) return key != "up"
+        when (key) {
+            "left" -> remoteIndex = if (i == -1) apps.size - 1 else maxOf(0, i - 1)
+            "right" -> remoteIndex = if (i == -1 || i + 1 >= apps.size) -1 else i + 1
+            "ok" -> {
+                remoteIndex = null
+                if (i == -1) onLauncher() else if (i < apps.size) { glow.show(i); onLaunch(apps[i]) }
+            }
+            "up" -> { clearRemoteFocus(); return false }
+        }
+        invalidate()
+        return true
     }
 
     private fun hit(x: Float, y: Float): Int {
@@ -142,6 +175,7 @@ class QuickLaunch(context: Context, private val luna: Luna, private val onLaunch
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                clearRemoteFocus()
                 downX = e.x; dragX = e.x; downY = e.y; dragY = e.y
                 pressed = hit(e.x, e.y)
                 if (pressed >= 0 && !editing) postDelayed(hold, ViewConfiguration.getLongPressTimeout().toLong())

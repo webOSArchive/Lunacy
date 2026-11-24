@@ -945,6 +945,39 @@ class CardLayer(context: Context, private val luna: Luna, private val listener: 
         anim = thrown
     }
 
+    // ---- a TV remote (experimental, branch android-tv; Docs/android-tv.md) ----
+
+    /**
+     * A remote's D-pad ("up", "down", "left", "right") or OK ("ok") in the card view. What it
+     * picks is webOS's own current card, the one left undimmed: left and right move through
+     * the active group's cards and on to the next group, which slides to the middle as after a
+     * swipe; OK maximizes the card, as a tap; up throws it away, the gesture's own direction.
+     * False for down (the dock is below) and while a card is up or being handled.
+     */
+    fun remote(key: String): Boolean {
+        if (maximized != null || activating != null || drag != Drag.NONE || reorderCard != null) return false
+        if (key == "down") return false
+        val g = activeGroup ?: return true
+        val card = g.active ?: g.cards.lastOrNull() ?: return true
+        when (key) {
+            "left", "right" -> {
+                val d = if (key == "left") -1 else 1
+                val i = g.cards.indexOf(card) + d
+                if (i in g.cards.indices) {
+                    g.active = g.cards[i]; setCurrent(g.active); restack()
+                } else {
+                    val next = groups.getOrNull(groups.indexOf(g) + d) ?: return true
+                    // Entered from the side the move came from.
+                    next.active = if (d > 0) next.cards.firstOrNull() else next.cards.lastOrNull()
+                    setActiveGroup(next); slide()
+                }
+            }
+            "ok" -> maximize(card)
+            "up" -> throwAway(card)
+        }
+        return true
+    }
+
     // ---- reorder (reference §2.7) ----
 
     private var reorderCard: Card? = null

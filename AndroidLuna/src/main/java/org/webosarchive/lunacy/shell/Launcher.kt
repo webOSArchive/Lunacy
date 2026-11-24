@@ -983,6 +983,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
                 "left" -> if (remoteTab > 0) focusTab(remoteTab - 1)
                 "right" -> if (remoteTab < pages.size - 1) focusTab(remoteTab + 1)
                 "down", "ok" -> if (page.tiles.isNotEmpty()) { remoteTab = -1; highlightedTab = -1; focusTile(page, firstVisible(page)) }
+                    else if (key == "down") { remoteTab = -1; highlightedTab = -1; invalidate(); return false }
             }
             return true
         }
@@ -997,12 +998,24 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
             "right" -> if (i % n < n - 1 && i < last) focusTile(page, i + 1) else nextPage(pi + 1, i / n, fromRight = false)
             "up" -> if (i >= n) focusTile(page, i - n) else focusTab(pi)
             "down" -> if (i + n <= last) focusTile(page, i + n) else if (i / n < last / n) focusTile(page, last)
+                else { parked = remoteFocus; remoteFocus = null; invalidate(); return false }  // on to the dock
             "ok" -> when (val t = page.tiles[i]) {
                 is Tile.App -> { showLaunchFeedback(t.app); onLaunch(t.app) }
                 is Tile.Group -> { showLaunchFeedback(t.id); onOpenGroup(t, groupScreenCentre(t)) }
             }
         }
         return true
+    }
+
+    /** The tile the focus left for the dock from, to come back to. */
+    private var parked: String? = null
+
+    /** The remote comes back up from the dock: to the tile it left from, or the page's first. */
+    fun remoteEnter() {
+        val page = pages[pagePos.roundToInt().coerceIn(0, pages.size - 1)]
+        if (page.tiles.isEmpty()) { focusTab(pages.indexOf(page)); return }
+        val i = page.tiles.indexOfFirst { it.id == parked }
+        focusTile(page, if (i >= 0) i else firstVisible(page))
     }
 
     private fun focusTile(page: Page, i: Int) {

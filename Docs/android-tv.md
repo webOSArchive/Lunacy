@@ -50,17 +50,29 @@ TouchPad to be measured against. codepoet's call (2026-11-23): the focused contr
   on it (tab-highlight.png) and left and right change tabs as a tap does. OK launches, as a
   tap; a group opens. A finger clears the focus. The remote's Back is the TouchPad's home
   button as before: from a card to the card view, then the launcher.
+- **The card view.** What the remote picks is webOS's own current card, the one left
+  undimmed (`CardLayer.remote`): left and right move through a stack's cards and on to the
+  next group, which slides to the middle as after a swipe; OK maximizes, as a tap; up throws
+  the card away, the gesture's own direction. Down goes to the dock.
+- **The dock**, under the card view and the launcher (`QuickLaunch.remote`): the focused icon
+  wears the launch glow, the launcher button its own pressed state; left and right move along
+  it, OK launches (or opens the launcher) as a tap, and up goes back to the card view or to the
+  launcher icon the focus came down from. Down from the launcher's last row comes here.
+  `ShellChrome.remoteKey` keeps which of them has the remote.
 - **PDK.** OK is SDL's Return, beside the arrows the D-pad already sent.
 
-Checked on the Chromecast (build 808): the launcher's icons, its tabs, past a row's end onto the
+Checked on the Chromecast (build 809): the card view with Clock and Calculator (left and right,
+Calculator thrown away with up, Clock maximized with OK, its own controls then taking the
+keys), the dock from the card view (along to the launcher button) and from the launcher's last
+row and back up. Before that (build 808): the launcher's icons, its tabs, past a row's end onto the
 next tab, and Clock launched with OK. Before that (build 807): First Use from start to end with the remote alone
 (Next, Android's own permission dialogs, Skip), Sounds & Alerts (Enyo: switches, the volume
 knob, a button) and Location Services (Mojo: rows, a list selector's popup and back).
 
 ## Not yet
 
-- **The rest of the shell**: the dock, the card view (picking and closing cards), a group's
-  panel, the status bar menus, Just Type, and arranging the launcher.
+- **The rest of the shell**: a launcher group's panel, the status bar menus, Just Type,
+  dashboards, and arranging the launcher, the dock or the cards (reordering, stacking).
 - **A long launcher page**: scrolling to a row out of view is written, but no tab on the TV
   has enough icons to need it.
 - **Back to the opener**: after a popup closes, focus goes to the nearest control, not to the

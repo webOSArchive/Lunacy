@@ -813,12 +813,15 @@ class ShellChrome(
     }
 
     /**
-     * A TV remote's D-pad and OK while the launcher is open (Launcher.remote; experimental,
-     * branch android-tv). Not while something over it has the keys. In a card the card takes
-     * them itself (card/RemoteKeys). True if the key was taken.
+     * A TV remote's D-pad and OK in the launcher (Launcher.remote), the card view
+     * (CardLayer.remote) and the dock below either (QuickLaunch.remote); experimental, branch
+     * android-tv. Not while something over them has the keys. In a card the card takes them
+     * itself (card/RemoteKeys). True if the key was taken.
      */
     fun remoteKey(event: android.view.KeyEvent): Boolean {
-        if (!launcherOpen || justTypePanel.showing || tabDialog.showing || groupOverlay.showing) return false
+        if (!launcherOpen && cards.maximized != null) { remoteInDock = false; return false }
+        if (justTypePanel.showing || tabDialog.showing || groupOverlay.showing || exhibitions.exhibitionOn ||
+            notifications.menu.isOpen || systemMenu.isOpen) return false
         val key = when (event.keyCode) {
             android.view.KeyEvent.KEYCODE_DPAD_UP -> "up"; android.view.KeyEvent.KEYCODE_DPAD_DOWN -> "down"
             android.view.KeyEvent.KEYCODE_DPAD_LEFT -> "left"; android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> "right"
@@ -827,8 +830,21 @@ class ShellChrome(
         }
         if (event.action != android.view.KeyEvent.ACTION_DOWN) return true
         if (key == "ok" && event.repeatCount > 0) return true
-        return launcher.remote(key)
+        if (remoteInDock) {
+            if (key == "ok") remoteInDock = false
+            if (quickLaunch.remote(key)) return true
+            // Up, out of the dock: back to the launcher's icons, or the card view's current card.
+            remoteInDock = false
+            if (launcherOpen) launcher.remoteEnter()
+            return true
+        }
+        val used = if (launcherOpen) launcher.remote(key) else cards.remote(key)
+        if (!used && key == "down") { remoteInDock = true; quickLaunch.remoteEnter() }
+        return true
     }
+
+    /** The remote's focus is in the dock, under the launcher or the card view. */
+    private var remoteInDock = false
 
     // ---- overlays (reference §3.1, §3.2) ----
 

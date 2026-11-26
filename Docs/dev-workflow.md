@@ -76,6 +76,7 @@ more than one device is attached. The test devices:
 | Kyocera A101BM (Android 12, arm64) | `192.168.10.58:5555` | **Not to be touched** (codepoet, 2026-11-16): it is their F-Droid update test device, and holds a release installed through F-Droid. No installs, uninstalls or scripts |
 | Galaxy Z Fold3 (Android 15, foldable) | `192.168.10.175:5555` | `adb tcpip` (it answered on 5555 on 2026-11-18, and has since 2026-10-16). Wireless debugging was paired once on 2026-10-14; its connect port changes after a reboot (44439 then, refused now), pairing holds |
 | Chromecast with Google TV (Android 14, TV) | `192.168.10.195:<port>` (41925 on 2026-11-23) | No `adb tcpip`: port 5555 is refused, so it is wireless debugging only. Paired once on 2026-11-23 (pairing holds). The connect port changes after a reboot or when Wireless debugging is toggled: scan its open high ports and `adb connect` each until one answers. Never `adb connect` the pairing dialog's port, which spoils the pairing |
+| Surface Duo (Android 12, arm64, two screens) | `192.168.10.74:5555` | `adb tcpip` over the cable (2026-11-26, after allowing this machine's key on it). AT&T unit, 2784 x 1800 across both screens at density 400. Arrived with Lunacy 1.1.0 (792) installed. Two screens like the Fold3's two panels: don't `wm size` it |
 
 - `--es install <url or path>` installs a package through the same path the App Museum
   uses. To install from a local copy of the package host, serve it and forward the port:

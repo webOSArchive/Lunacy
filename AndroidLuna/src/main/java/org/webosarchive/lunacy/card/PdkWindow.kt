@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.SurfaceTexture
+import android.os.Build
 import android.util.Log
 import android.text.InputType
 import android.view.KeyEvent
@@ -49,6 +50,19 @@ class PdkWindow(
 
     /** The device's screen is landscape (the TouchPad's 1024 x 768) or portrait (the Pre3's). */
     private val landscapeDevice = runtime.screenWidth >= runtime.screenHeight
+    /**
+     * On a Surface Duo the card's shape, not the device's, decides how a game is turned, and
+     * the screen isn't held for it (codepoet, 2026-11-26). Lunacy has one of the Duo's two
+     * screens, and each is the other shape from the display as a whole: held portrait, with
+     * the screens one above the other, Lunacy's is landscape, and holding the screen
+     * "landscape" for a TouchPad game turned the whole device and squeezed Lunacy into a
+     * portrait box on it, the game sideways in it. Following the card, a game fills a
+     * landscape screen the right way up, with a guide open on the other.
+     */
+    private val followsCard = Build.MANUFACTURER.equals("Microsoft", ignoreCase = true) &&
+        Build.MODEL.startsWith("Surface Duo")
+    /** The shape a game's screen is fitted to: the card's on a Duo, the device's elsewhere. */
+    private val landscapeScreen get() = if (followsCard && width > 0 && height > 0) width >= height else landscapeDevice
     /** Where a movie's path is looked up (libSDL_cinema): the webOS root, and the installed apps' folder. */
     private val runtimeWebosRoot: java.io.File? = runtime.webos?.root
     private val appsRoot: java.io.File = runtime.appsRoot
@@ -84,7 +98,7 @@ class PdkWindow(
         setBackgroundColor(Color.BLACK)
         @Suppress("DEPRECATION")
         addView(frameView, AbsoluteLayout.LayoutParams(AbsoluteLayout.LayoutParams.MATCH_PARENT, AbsoluteLayout.LayoutParams.MATCH_PARENT, 0, 0))
-        fixedOrientation = if (landscapeDevice) "right" else "up"
+        fixedOrientation = if (followsCard) null else if (landscapeDevice) "right" else "up"
         // A PDK app had the whole screen on webOS, no status bar (codepoet); the shell slides
         // the bar away while the card is maximized, as for PalmSystem.enableFullScreenMode.
         fullScreen = true
@@ -108,8 +122,8 @@ class PdkWindow(
         // The TouchPad turns an other-shape buffer counter-clockwise, the Pre3 clockwise:
         // its top edge lands on the screen's right (measured 2026-10-03 with an 800 x 480
         // buffer on a Pre3; the TouchPad's on 2026-10-02).
-        turn = if ((gw >= gh) == landscapeDevice) 0 else if (landscapeDevice) -90 else 90
-        val o = if (landscapeDevice) "right" else "up"
+        turn = if ((gw >= gh) == landscapeScreen) 0 else if (landscapeDevice) -90 else 90
+        val o = if (followsCard) null else if (landscapeDevice) "right" else "up"
         if (o != fixedOrientation) { fixedOrientation = o; shell.orientationRequested(this) }
         gl?.turn(turn)
         fitGl()
@@ -145,7 +159,8 @@ class PdkWindow(
 
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
         super.onSizeChanged(w, h, ow, oh)
-        fitGl()
+        // On a Duo the card turning the other shape turns the game with it.
+        if (followsCard && (w >= h) != (ow >= oh)) orient() else fitGl()
     }
 
     /** Starts the process. False if the runtime isn't in this build. */
@@ -470,7 +485,7 @@ class PdkWindow(
             val vw = player.videoWidth; val vh = player.videoHeight
             val cw = box.width; val ch = box.height
             if (vw <= 0 || vh <= 0 || cw <= 0 || ch <= 0) return
-            val turned = (vw >= vh) != landscapeDevice
+            val turned = (vw >= vh) != (if (followsCard) cw >= ch else landscapeDevice)
             val (sw, sh) = if (turned) vh to vw else vw to vh
             val scale = minOf(cw.toFloat() / sw, ch.toFloat() / sh)
             val w = Math.round(vw * scale); val h = Math.round(vh * scale)

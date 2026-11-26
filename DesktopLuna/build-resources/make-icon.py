@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Luna DE's icon, from Lunacy's moon (Meta/LunaRound.png; its NOTICE says where that came from).
+"""Luna DE's icon, from Lunacy's moon (Meta/LunaRound.png, cropped a little; its NOTICE says where that came from).
 
   python3 DesktopLuna/build-resources/make-icon.py
 
@@ -25,6 +25,10 @@ def rounded(art, size, radius):
 
 
 art = Image.open(SRC).convert("RGB")
+# Cropped 34 px a side (of 804), which leaves out the bright star on the source's bottom edge;
+# at Dock, taskbar and launcher sizes it reads as a speck of dust on the icon's border.
+C = 34
+art = art.crop((C, C, art.width - C, art.height - C))
 rounded(art, 1024, 180).save(os.path.join(HERE, "icon.png"))
 mac = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
 mac.paste(rounded(art, 824, 185), (100, 100))

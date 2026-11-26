@@ -8,8 +8,13 @@
 #   AndroidLuna/fetch-assets.sh --desktop
 #   (cd DesktopLuna && npm install && npm run dist)
 #
-# The TouchPad must run webOS CE 3.1.0 (https://github.com/webOSArchive/webOS-Community-Edition),
-# which is what Lunacy's patches are diffs against; it is read, never written, but for one
+# The TouchPad must run webOS CE 3.1.0 or 3.2.0 (https://github.com/webOSArchive/webOS-Community-Edition).
+# Lunacy's patches are diffs against 3.1.0's files and apply to 3.2.0's as they are; of what is
+# taken here, 3.2.0 changed its time zone table, the addressing popup (a fix) and the mail
+# services' preload of CE's mail shim, which fetch-assets.sh takes out (checked 2026-11-26 on
+# the reference TouchPad, 600121). A TouchPad that ran the webOS Community Account Manager
+# keeps its patched palmprofile service through the update; fetch-assets.sh --desktop wants
+# one flashed clean. The device is read, never written, but for one
 # archive in /media/internal that is removed again. Needs novacom (the webOS SDK's, or
 # webos-sdk-redux's), git and tar. Luna DE's assets only: the Android build's native parts (the
 # mail and messaging engines, Node for Android, busybox, the PDK runtime) come from more than a
@@ -48,8 +53,8 @@ try() { n=0; until "$@"; do n=$((n + 1)); [ $n -lt 5 ] || return 1; sleep 6; don
 
 info=$(try nova run file:///bin/cat /etc/palm-build-info 2>/dev/null) || fail "no TouchPad answers over novacom (novacom -l lists devices; -d <id> picks one)"
 echo "$info" | grep -q '^BUILDNAME=Nova-HP-Topaz' || fail "the device isn't a TouchPad: $(echo "$info" | grep BUILDNAME)"
-echo "$info" | grep -q '^PRODUCT_VERSION_STRING=webOS CE 3\.1\.0' ||
-    fail "the TouchPad runs '$(echo "$info" | sed -n 's/^PRODUCT_VERSION_STRING=//p')', not webOS CE 3.1.0, which Lunacy's patches are written against"
+echo "$info" | grep -q -E '^PRODUCT_VERSION_STRING=webOS CE 3\.[12]\.0$' ||
+    fail "the TouchPad runs '$(echo "$info" | sed -n 's/^PRODUCT_VERSION_STRING=//p')', not webOS CE 3.1.0 or 3.2.0, which Lunacy's patches are written against"
 echo "get-assets-from-touchpad: $(echo "$info" | sed -n 's/^PRODUCT_VERSION_STRING=//p'), build $(echo "$info" | sed -n 's/^BUILDMARK=//p')"
 
 W=$(mktemp -d)
@@ -145,8 +150,9 @@ else
         git -C "$G" archive "$c" "$@" | tar -x -C "$CE" || fail "webOS CE commit $c hasn't $*"
         for p in "$@"; do echo "$p: $c (webOS-Community-Edition), fetched $(date -u +%Y-%m-%d)" >> "$CE/COMMIT"; done
     }
-    ce 67ad3d8 system/usr/palm/frameworks/contacts system/usr/palm/frameworks/enyo/0.10/framework/lib/accounts \
+    ce 67ad3d8 system/usr/palm/frameworks/contacts \
         system/usr/palm/frameworks/mojo/builtins/palmcontactsVersion1_0.js system/usr/palm/public/accounts/com.palm.palmprofile
+    ce bbc1cd6 system/usr/palm/frameworks/enyo/0.10/framework/lib/accounts   # 3.2.0-CE-Release
     ce 8284a49 system/usr/palm/frameworks/calendar
     ce 7bd5641 apps/org.webosarchive.photos.service
     echo "get-assets-from-touchpad: $CE ($(du -sh "$CE" | cut -f1))"

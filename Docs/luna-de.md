@@ -813,6 +813,13 @@ their services). What differed:
 - Three browser kinds differ in white space only; `/etc/openal` and the native programs under
   `/usr/bin` and `/usr/lib` are left out, being Android's.
 
+Checked again 2026-11-26 against the reference TouchPad on webOS CE 3.2.0 (600121), which
+`get-assets-from-touchpad.sh` takes from then on as well as 3.1.0: every Lunacy patch applies, and
+the result differs from a 3.1.0 device's only where CE changed 3.2.0 (its time zone table, and
+the addressing popup's fix), once `fetch-assets.sh` takes CE's mail shim out of the mail
+services' preload. That TouchPad still has the Community Account Manager's palmprofile service
+from before its update, so its `--desktop` run wants the clean copy too.
+
 **The assets are one zip** (2026-11-16, from the Mac side's proposal). A package used to carry
 about 12,000 small asset files; an installer wrote each, a virus scanner read each and a Mac's
 signature sealed each. `package.js` now lays the checkout's three asset folders over each other,

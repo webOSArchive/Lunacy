@@ -111,7 +111,7 @@ and system files with Lunacy's patches applied. Those are HP's and Palm's, not L
 in its repository, so a builder takes them from a TouchPad of their own, once:
 
 ```
-AndroidLuna/get-assets-from-touchpad.sh    # a TouchPad running webOS CE 3.1.0, on the cable (novacom)
+AndroidLuna/get-assets-from-touchpad.sh    # a TouchPad running webOS CE 3.1.0 or 3.2.0, on the cable (novacom)
 AndroidLuna/fetch-assets.sh --desktop      # applies Lunacy's patches: Luna DE's part of local-assets
 ```
 

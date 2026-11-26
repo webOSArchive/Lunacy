@@ -47,7 +47,7 @@ cp -r $V/touchpad/enyo-0.10 $L/fw/enyo/1.0
 # what each one is and why. A patch that no longer applies is a build failure, not a silent skip.
 for patch in ../LunaRuntimes/enyo-1.0/patches/*.patch; do
     [ -e "$patch" ] || continue
-    (cd $L/fw/enyo/1.0 && $PATCH -p1 --forward --silent --fuzz=0 --follow-symlinks < "$HERE/$patch") ||
+    (cd $L/fw/enyo/1.0 && $PATCH -p1 --forward --silent --fuzz=0 --no-backup-if-mismatch --follow-symlinks < "$HERE/$patch") ||
         { echo "fetch-assets: $patch does not apply to the TouchPad's Enyo" >&2; exit 1; }
     applied "$patch" "$L/fw/enyo/1.0"
     echo "enyo: applied $(basename "$patch")"
@@ -62,7 +62,7 @@ cp -r $V/webos-ce/system/usr/palm/frameworks/enyo/0.10/framework/lib/accounts/. 
 # series, since the SDK takes the TouchPad's library and not this one.
 for patch in ../LunaRuntimes/enyo-accounts/patches/*.patch; do
     [ -e "$patch" ] || continue
-    (cd $L/fw/enyo/1.0/framework/lib/accounts && $PATCH -p1 --forward --silent --fuzz=0 < "$HERE/$patch") ||
+    (cd $L/fw/enyo/1.0/framework/lib/accounts && $PATCH -p1 --forward --silent --fuzz=0 --no-backup-if-mismatch < "$HERE/$patch") ||
         { echo "fetch-assets: $patch does not apply to webOS CE's accounts library" >&2; exit 1; }
     applied "$patch" "$L/fw/enyo/1.0/framework/lib/accounts"
     echo "enyo accounts: applied $(basename "$patch")"
@@ -114,17 +114,19 @@ cp -r $V/touchpad/mojo/. $L/fw/mojo/
 # shared resources and images; Lunacy serves it at its own path so those links resolve.
 cp -r $V/touchpad/mojocommon/. $L/fw/mojocommon/
 chmod -R u+w $L/fw/mojo $L/fw/mojocommon
+# webOS CE's copy of the contacts library's prebuilt builtin, with its AppPrefs fix (the
+# CE project's system/, Workbench/vendor/webos-ce), as for the framework itself below. In place
+# before Lunacy's patches, which make it loadable as a script (0002): copied after them, from
+# 0.7.0 until 2026-11-26, it shipped with V8's native syntax and failed to load.
+cp $V/webos-ce/system/usr/palm/frameworks/mojo/builtins/palmcontactsVersion1_0.js $L/fw/mojo/builtins/
 # Lunacy's changes to Mojo, as diffs against the device's own copy (LunaRuntimes/mojo/CHANGES.md).
 for patch in ../LunaRuntimes/mojo/patches/*.patch; do
     [ -e "$patch" ] || continue
-    (cd $L/fw/mojo && $PATCH -p1 --forward --silent --fuzz=0 --follow-symlinks < "$HERE/$patch") ||
+    (cd $L/fw/mojo && $PATCH -p1 --forward --silent --fuzz=0 --no-backup-if-mismatch --follow-symlinks < "$HERE/$patch") ||
         { echo "fetch-assets: $patch does not apply to the TouchPad's Mojo" >&2; exit 1; }
     applied "$patch" "$L/fw/mojo"
     echo "mojo: applied $(basename "$patch")"
 done
-# webOS CE's copy of the contacts library's prebuilt builtin, with its AppPrefs fix (the
-# CE project's system/, Workbench/vendor/webos-ce), as for the framework itself below.
-cp $V/webos-ce/system/usr/palm/frameworks/mojo/builtins/palmcontactsVersion1_0.js $L/fw/mojo/builtins/
 cat > $L/fw/mojo/NOTICE <<'NOTICE'
 Palm's Mojo framework, copied from /usr/palm/frameworks/mojo on the reference TouchPad
 (webOS CE 3.1.0): mojo.js, submission 506's assets, and the builtins webOS's own browser
@@ -156,7 +158,7 @@ calendar_framework() {
     cp -r $V/webos-ce/system/usr/palm/frameworks/calendar/. "$1/"
     for patch in ../LunaRuntimes/calendar/patches/*.patch; do
         [ -e "$patch" ] || continue
-        (cd "$1" && $PATCH -p1 --forward --silent --fuzz=0 < "$HERE/$patch") ||
+        (cd "$1" && $PATCH -p1 --forward --silent --fuzz=0 --no-backup-if-mismatch < "$HERE/$patch") ||
             { echo "fetch-assets: $patch does not apply to CE's calendar framework" >&2; exit 1; }
         applied "$patch" "$1"
     done
@@ -344,7 +346,7 @@ rm -f $R/usr/palm/services/com.palm.service.photos/install-on-device.sh
 # Lunacy's changes to it, as diffs against the TouchPad's (LunaRuntimes/photos-service/CHANGES.md).
 for patch in ../LunaRuntimes/photos-service/patches/*.patch; do
     [ -e "$patch" ] || continue
-    (cd $R/usr/palm/services/com.palm.service.photos && $PATCH -p1 --forward --silent --fuzz=0 < "$HERE/$patch") ||
+    (cd $R/usr/palm/services/com.palm.service.photos && $PATCH -p1 --forward --silent --fuzz=0 --no-backup-if-mismatch < "$HERE/$patch") ||
         { echo "fetch-assets: $patch does not apply to the TouchPad's photos service" >&2; exit 1; }
     applied "$patch" "$R/usr/palm/services/com.palm.service.photos"
 done
@@ -473,6 +475,13 @@ A=$V/touchpad/eas
 [ -n "$DESKTOP" ] || cp $A/usr/bin/mojomail-eas $R/usr/bin/
 [ -n "$DESKTOP" ] || cp $A/sysroot/usr/lib/libxml2.so.2 $R/usr/lib/
 cp $A/usr/share/dbus-1/system-services/com.palm.eas.service $R/usr/share/dbus-1/system-services/
+# webOS CE 3.2.0's mail services also preload its mail shim (libce-mailshim.so: CE's OAuth for
+# mail), which Lunacy doesn't ship: it signs mail in its own way (Docs/oauth.md). Taken out, so
+# a 3.2.0 TouchPad's files start the services as 3.1.0's do.
+for s in com.palm.imap com.palm.smtp com.palm.eas; do
+    sed -i.bak 's|:/usr/lib/ssl11mail/libce-mailshim\.so||' $R/usr/share/dbus-1/system-services/$s.service
+    rm -f $R/usr/share/dbus-1/system-services/$s.service.bak
+done
 cp $A/etc/palm/db/kinds/* $R/etc/palm/db/kinds/
 cp $A/etc/palm/db/permissions/com.palm.securitypolicy.eas $R/etc/palm/db/permissions/
 cp $A/etc/palm/db_kinds/com.palm.securitypolicy $A/etc/palm/db_kinds/com.palm.securitypolicy.device $R/etc/palm/db_kinds/

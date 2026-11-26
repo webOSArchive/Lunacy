@@ -1,0 +1,13 @@
+The keyboard's tap sounds: what webOS played as each key went down.
+
+These are the TouchPad's (from the root filesystem of its webOS Doctor,
+webosdoctorp320hstnh-ce-600105.jar), copied on 2026-11-22:
+
+- key.wav, space.wav, backspace.wav, return.wav: /usr/share/systemsounds/key.pcm, space.pcm,
+  backspace.pcm and return.pcm, each given a WAV header and otherwise unchanged (16-bit mono
+  at 44.1 kHz, the format of the other systemsounds; see assist/NOTICE). LunaSysMgr asks for
+  them by name (SysmgrIMEModel::keyDownAudioFeedback: "space", "backspace", "return", and
+  "key" for every other key) through com.palm.audio/systemsounds/playFeedback.
+
+Copyright Palm, Inc. / Hewlett-Packard; never released under an open licence; distributed by
+Lunacy as abandonware, like Mojo and the Prelude fonts.

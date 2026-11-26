@@ -19,7 +19,8 @@ Apache License 2.0, from Hewlett-Packard, LG Electronics (Open webOS) and the we
 - Open webOS and webOS CE apps and libraries: Accounts, Contacts, Music, the enyo-accounts
   library, the IM transport (imlibpurpleservice), and luna-service2's header, which
   liblunaservice follows.
-- Pre Keyboard's matcher, which LunaKeyboard's Corrector.kt adapts.
+- Pre Keyboard's matcher, which LunaKeyboard's Corrector.kt adapts, and its key buzz's
+  strengths, which KeyFeedback.kt uses.
 - Google Caja's HTML sanitizer, which Email's compose window loads.
 
 LGPL, where Lunacy's code is built into an LGPL library
@@ -50,8 +51,8 @@ Other open licences
 Palm and HP's webOS, distributed as abandonware
 - Mojo and Palm's other frameworks, Palm's bundled apps (Email, Calendar, Clock, Memos, Web,
   Photos, Messaging and the rest, as each app's NOTICE says), the Prelude fonts, the TouchPad
-  wallpapers and ringtones, and the system UI, images and libraries copied from the
-  reference TouchPad. Copyright Palm, Inc. / Hewlett-Packard. Never released under an open
+  wallpapers and ringtones, the keyboard's tap sounds, and the system UI, images and
+  libraries copied from the reference TouchPad. Copyright Palm, Inc. / Hewlett-Packard. Never released under an open
   licence; no owner has asserted rights since webOS was discontinued. The webOS Archive and
   webOS CE changes to these apps are their authors'.
 - Email's icon again as AndroidLuna/src/main/res/drawable-nodpi/share_email.png, a copy of

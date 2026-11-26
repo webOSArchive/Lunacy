@@ -30,6 +30,17 @@ Text Assist (auto-correction):
     available under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/).
 - The correction's art and sound (src/main/assets/assist) are the TouchPad's; see their NOTICE.
 
+Tap sounds and the key buzz:
+
+- The tap sounds, src/main/assets/sounds, are the TouchPad's /usr/share/systemsounds key.pcm,
+  space.pcm, backspace.pcm and return.pcm, given a WAV header; Palm / HP, distributed as
+  abandonware. See src/main/assets/sounds/NOTICE.
+- When they play is ported from LunaCE's Src/ime/TabletKeyboard.cpp (makeSound) and
+  SysmgrIMEDataInterface.cpp (keyDownAudioFeedback), Apache 2.0.
+- The key buzz's three strengths and lengths, in src/main/java/org/webosarchive/keyboard/
+  KeyFeedback.kt, are Pre Keyboard's (https://github.com/alan-morford/prekeyboard,
+  Haptics.kt), Copyright 2026 Alan Morford, Apache License 2.0.
+
 The emoji key (webOS CE 3.2):
 
 - The emoji images, src/main/assets/emoji, are OpenMoji's (https://openmoji.org), CC BY-SA 4.0,

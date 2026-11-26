@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- No subtypes: Android would list the keyboard under the first one's name ("English (US)")
+     with the keyboard's own name small below it. There is only US QWERTY, so it is listed
+     simply as Luna Keyboard. -->
 <input-method xmlns:android="http://schemas.android.com/apk/res/android"
-    android:settingsActivity="org.webosarchive.keyboard.SetupActivity">
-    <subtype android:label="@string/subtype_en_us"
-        android:imeSubtypeLocale="en_US"
-        android:imeSubtypeMode="keyboard" />
-</input-method>
+    android:settingsActivity="org.webosarchive.keyboard.SetupActivity" />

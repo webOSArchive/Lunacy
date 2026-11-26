@@ -51,6 +51,8 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
         fun onHide()
         /** One step of the cursor, as an arrow key; [select] extends the selection. */
         fun onCursor(dx: Int, dy: Int, select: Boolean)
+        /** A key went down, repeated, or the scroll ball stepped: its tap sound and buzz. */
+        fun onPress(sound: KeyFeedback.Sound)
         /** The label webOS would have put on Return: "Done", "Go", "Search"… */
         fun enterLabel(): String
     }
@@ -503,11 +505,17 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
     private fun trackMove(dx: Float, dy: Float) {
         trackDeltaX += dx; trackDeltaY += dy
         val select = shift != Shift.OFF
-        if (trackDeltaX >= TRACK_STEP) { trackDeltaX = 0f; trackVX = Math.min(1f, trackVX + 0.1f); host.onCursor(1, 0, select) }
-        if (trackDeltaX <= -TRACK_STEP) { trackDeltaX = 0f; trackVX = Math.max(-1f, trackVX - 0.1f); host.onCursor(-1, 0, select) }
-        if (trackDeltaY <= -TRACK_STEP) { trackDeltaY = 0f; trackVY = Math.max(-1f, trackVY - 0.1f); host.onCursor(0, -1, select) }
-        if (trackDeltaY >= TRACK_STEP) { trackDeltaY = 0f; trackVY = Math.min(1f, trackVY + 0.1f); host.onCursor(0, 1, select) }
+        if (trackDeltaX >= TRACK_STEP) { trackDeltaX = 0f; trackVX = Math.min(1f, trackVX + 0.1f); step(1, 0, select) }
+        if (trackDeltaX <= -TRACK_STEP) { trackDeltaX = 0f; trackVX = Math.max(-1f, trackVX - 0.1f); step(-1, 0, select) }
+        if (trackDeltaY <= -TRACK_STEP) { trackDeltaY = 0f; trackVY = Math.max(-1f, trackVY - 0.1f); step(0, -1, select) }
+        if (trackDeltaY >= TRACK_STEP) { trackDeltaY = 0f; trackVY = Math.min(1f, trackVY + 0.1f); step(0, 1, select) }
         invalidate()
+    }
+
+    /** One step of the ball: LunaSysMgr sounds each one with backspace's tap. */
+    private fun step(dx: Int, dy: Int, select: Boolean) {
+        host.onPress(KeyFeedback.Sound.BACKSPACE)
+        host.onCursor(dx, dy, select)
     }
 
     // --- The press-and-hold popup -----------------------------------------------------------
@@ -580,6 +588,7 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
             if (z.key.main != Fn.BACKSPACE) return
             repeats++
             val word = repeats * LETTER_REPEAT > WORD_DELETE_AFTER
+            host.onPress(KeyFeedback.Sound.BACKSPACE)   // each repeat sounds, as webOS's repeatChar did
             host.onBackspace(word)
             handler.postDelayed(this, if (word) WORD_REPEAT else LETTER_REPEAT)
         }
@@ -601,6 +610,13 @@ class KeyboardView(context: Context, private val host: Host) : View(context) {
                     return true
                 }
                 pressedZone = z; pressed = z.key
+                // A new touch sounds at once, whatever the key; sliding on to another doesn't.
+                host.onPress(when (z.key.main) {
+                    Fn.BACKSPACE -> KeyFeedback.Sound.BACKSPACE
+                    Fn.RETURN -> KeyFeedback.Sound.RETURN
+                    ' '.code -> KeyFeedback.Sound.SPACE
+                    else -> KeyFeedback.Sound.KEY
+                })
                 if (z.key.main == Fn.BACKSPACE) {
                     repeats = 0
                     host.onBackspace(false)

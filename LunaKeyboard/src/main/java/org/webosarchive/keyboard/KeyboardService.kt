@@ -1,5 +1,7 @@
 package org.webosarchive.keyboard
 
+import android.content.Context
+import android.content.SharedPreferences
 import android.graphics.RectF
 import android.inputmethodservice.InputMethodService
 import android.os.Build
@@ -45,6 +47,7 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
     @Volatile private var personal: Set<String> = emptySet()
     private lateinit var shortcuts: Shortcuts
     private lateinit var notifier: TextAssist.Notifier
+    private lateinit var feedback: KeyFeedback
 
     override fun onCreate() {
         super.onCreate()
@@ -60,10 +63,32 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
         }.start()
         shortcuts = Shortcuts(this) { words -> personal = words; corrector?.learnAll(words) }
         notifier = TextAssist.Notifier(this)
+        feedback = KeyFeedback(this)
+        for (name in LIVE_PREFS) getSharedPreferences(name, Context.MODE_PRIVATE).registerOnSharedPreferenceChangeListener(settingsChanged)
+    }
+
+    /**
+     * The setup screen's changes, shown at once, even with the keyboard up over its try-it
+     * field: a new size rebuilds the keyboard, and Auto-Capitalization relights shift. The rest
+     * (sounds, the buzz, Text Assist's switches) are read as they are used. Kept in a field:
+     * SharedPreferences holds its listeners weakly.
+     */
+    private val settingsChanged = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        main.post {
+            when (key) {
+                KeyboardView.Scale.KEY -> if (view != null && view?.scale != KeyboardView.Scale.current(this)) {
+                    setInputView(onCreateInputView())
+                    view?.reset()
+                    updateCaps()
+                }
+                "autoCapitalization" -> updateCaps()
+            }
+        }
     }
 
     override fun onDestroy() {
-        shortcuts.close(); notifier.release()
+        for (name in LIVE_PREFS) getSharedPreferences(name, Context.MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(settingsChanged)
+        shortcuts.close(); notifier.release(); feedback.release()
         super.onDestroy()
     }
 
@@ -103,7 +128,7 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         editor = info
-        // A size chosen in the setup screen takes effect the next time the keyboard comes up.
+        // A size chosen while the keyboard wasn't up (or its process wasn't running).
         if (view?.scale != KeyboardView.Scale.current(this)) setInputView(onCreateInputView())
         view?.reset()
         resetAssist()
@@ -561,6 +586,8 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
         requestHideSelf(0)
     }
 
+    override fun onPress(sound: KeyFeedback.Sound) = feedback.press(sound)
+
     override fun onCursor(dx: Int, dy: Int, select: Boolean) {
         val ic = currentInputConnection ?: return
         flushPending()
@@ -616,5 +643,7 @@ class KeyboardService : InputMethodService(), KeyboardView.Host {
         const val CAPS_AFTER_DELETE_MS = 80L
         /** What joins a word to more of an address or a path: the word before one is left as typed. */
         val JOINS = setOf("@", "_", "/", "\\")
+        /** The settings files whose changes the keyboard shows straight away: its size's and Text Assist's. */
+        val LIVE_PREFS = listOf(KeyboardView.Scale.PREFS, "textassist")
     }
 }

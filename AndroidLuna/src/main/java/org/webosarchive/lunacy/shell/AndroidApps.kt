@@ -51,7 +51,34 @@ class AndroidApps(private val context: Context, private val files: AppFiles, pri
         }.getOrNull()
     }
 
-    fun list(): List<AppInfo> {
+    /**
+     * The last list read. Reading it asks Android for every launchable activity and loads each
+     * one's label, which on a slow tablet with the icon thread loading the same apps' resources
+     * held the main thread past Android's limit as the shell started: an ANR (Nexus 7, build
+     * 817, 2026-11-26; the Chromecast with Google TV needs the same). So it is read on a thread
+     * of its own, and the shell gets what was read last.
+     */
+    @Volatile private var known: List<AppInfo>? = null
+    private val reader = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "android-apps") }
+    private val mainThread = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** Whether Android's apps have been read yet: until then [list] is empty. */
+    val ready: Boolean get() = known != null
+
+    /** Android's apps as last read ([refresh]); empty until the first read is in. Never waits. */
+    fun list(): List<AppInfo> = known ?: emptyList()
+
+    /** Reads Android's apps again off the main thread, then runs [done] on the main thread. */
+    fun refresh(done: () -> Unit) {
+        reader.execute {
+            known = runCatching { read() }.getOrElse { e ->
+                android.util.Log.w("Lunacy", "android apps: can't list them", e); known ?: emptyList()
+            }
+            mainThread.post(done)
+        }
+    }
+
+    private fun read(): List<AppInfo> {
         val pm = context.packageManager
         val main = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         @Suppress("DEPRECATION")

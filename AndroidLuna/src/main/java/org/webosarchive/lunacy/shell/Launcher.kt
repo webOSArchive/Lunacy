@@ -659,7 +659,10 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private var pressedDelete: String? = null
     private var donePressed = false
 
-    fun enterEditMode() { if (!editing) { editing = true; cancelLaunchFeedback(); onEditModeChanged(true); invalidate() } }
+    fun enterEditMode() { if (!editing && editable) { editing = true; cancelLaunchFeedback(); onEditModeChanged(true); invalidate() } }
+
+    /** Whether the launcher can be edited now: not until every app it holds a place for is in its list. */
+    var editable = true
 
     /** Done, the home button, or the launcher closing. */
     fun exitEditMode() {
@@ -849,6 +852,7 @@ class Launcher(context: Context, private val luna: Luna, private val onLaunch: (
     private val longPress = Runnable {
         val app = downApp ?: return@Runnable
         if (drag != Drag.UNDECIDED) return@Runnable
+        if (!editable) return@Runnable
         enterEditMode()
         pickUp(app, downX, downY)
     }

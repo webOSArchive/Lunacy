@@ -150,7 +150,11 @@ class ShellActivity : Activity(), WindowHost {
     private var androidAppsAt: AndroidApps? = null
     /** Proof of concept: Android's own apps in the launcher, for Lunacy as the home screen. Its icons are at the shell's scale. */
     private val androidApps: AndroidApps get() =
-        androidAppsAt ?: AndroidApps(this, files, luna.px(Launcher.Params.ICON.toInt())).also { androidAppsAt = it }
+        androidAppsAt ?: AndroidApps(this, files, luna.px(Launcher.Params.ICON.toInt())).also {
+            androidAppsAt = it
+            // Read off the main thread; the launcher, dock and Just Type follow when it is in.
+            it.refresh { if (androidAppsAt === it) { setLauncherApps(); showDock() } }
+        }
     private var androidById: Map<String, AppInfo> = emptyMap()
     /** webOS apps pinned to Android's own home screen, when Lunacy isn't it. */
     private val homeScreenPins by lazy { HomeScreenPins(this) }
@@ -296,8 +300,8 @@ class ShellActivity : Activity(), WindowHost {
             androidApps.forget(pkg)
             AndroidNotifications.forget(pkg)
             androidById.keys.filter { it.startsWith("${AndroidApps.PREFIX}$pkg/") }.forEach { luna.forgetIcons(it) }
-            setLauncherApps()
-            showDock()
+            val apps = androidApps
+            apps.refresh { if (androidAppsAt === apps) { setLauncherApps(); showDock() } }
         }
     }
     /** A shortcut was pinned or unpinned, or its app changed it: the tiles follow, with new icons. */
@@ -364,6 +368,7 @@ class ShellActivity : Activity(), WindowHost {
         override val displayService get() = this@ShellActivity.displayService
         override val universalSearch: UniversalSearch? get() = if (this@ShellActivity::universalSearch.isInitialized) this@ShellActivity.universalSearch else null
         override val hiddenApps get() = this@ShellActivity.hiddenApps
+        override val androidAppsReady get() = androidApps.ready
         override fun launchPoints() = this@ShellActivity.launchPoints()
         override fun justTypeApps() = (registry.launchPoints + addedById.values + androidById.values).filter { it.id !in hiddenApps }
         override fun appById(id: String) = this@ShellActivity.appById(id)

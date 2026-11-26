@@ -58,6 +58,8 @@ class ShellChrome(
         val universalSearch: UniversalSearch?
         /** The apps the user has hidden with Software Manager. */
         val hiddenApps: HiddenApps
+        /** Android's apps have been read: until then they are missing from [launchPoints] and [appById]. */
+        val androidAppsReady: Boolean
         /** What the launcher shows: every app and launch point less the hidden ones. */
         fun launchPoints(): List<AppInfo>
         /** What Just Type can launch. */
@@ -307,6 +309,9 @@ class ShellChrome(
     /** The launcher's apps, again, and Software Manager hears it. */
     fun setLauncherApps() {
         launcher.hidden = host.hiddenApps.all()
+        // Until Android's apps are in, the launcher isn't edited: a save then would drop
+        // their places, which aren't on its pages yet (LauncherLayout.saveTabs).
+        launcher.editable = host.androidAppsReady
         launcher.setApps(host.launchPoints())
         host.launcherAppsChanged()
     }
@@ -633,7 +638,9 @@ class ShellChrome(
     private fun setDock(ids: List<String>) {
         val all = ids.distinct().toMutableList()
         val hiddenApps = host.hiddenApps
-        dock().forEachIndexed { i, id -> if (id in hiddenApps && id !in all && all.size < quickLaunch.maxItems) all.add(minOf(i, all.size), id) }
+        // An Android app not read yet keeps its slot too (AndroidApps.refresh).
+        val waiting = { id: String -> !host.androidAppsReady && id.startsWith(AndroidApps.PREFIX) && host.appById(id) == null }
+        dock().forEachIndexed { i, id -> if ((id in hiddenApps || waiting(id)) && id !in all && all.size < quickLaunch.maxItems) all.add(minOf(i, all.size), id) }
         dockPrefs.edit().putString("dock", org.json.JSONArray(all.take(quickLaunch.maxItems)).toString()).apply()
         showDock()
     }

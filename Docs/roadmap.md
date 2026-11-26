@@ -99,6 +99,10 @@ Every device:      Lunacy and LunaKeyboard 823
   for after the release: closing each card as the test goes, and a crash check that sees one.
 - The keyboard's subtype, gone with PR #3, left Luna Keyboard switched on and default where it was
   (Fold3, Pixel Tablet).
+- **Nexus 5 (codepoet):** Atlantis comes up upside down and cut off, Where's My Water shrunk and cut
+  off at the right. Not new: 1.1.0 (793, built from its tag) shows both the same on the same phone,
+  side by side with 823. GL games on the Pre3 profile draw for the Pre3's portrait screen; the
+  Duo's answer (the TouchPad's profile) doesn't carry to a phone. For after the release.
 
 ### The 1.1.0 candidate's round (2026-11-18)
 

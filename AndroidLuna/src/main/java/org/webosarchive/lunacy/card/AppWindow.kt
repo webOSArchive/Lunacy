@@ -206,6 +206,12 @@ open class AppWindow(
             setDatabasePath(context.getDir("websql", Context.MODE_PRIVATE).path)
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             mediaPlaybackRequiresUserGesture = false
+            // Android's font size never reaches a webOS page (codepoet, 2026-11-26). WebView
+            // starts its text zoom at the system's font scale, and webOS laid every app out at
+            // its own sizes, with nothing that larger text would fit: at 1.3 Device Info's rows
+            // overran and cut off (Galaxy Tab A7 Lite). Display size, the density, is the
+            // shell's to follow, and it does.
+            textZoom = 100
             // The page's viewport is declared rather than inferred: the compat layer gives
             // every page a viewport meta carrying the card's own width and a scale pinned at
             // 1, merged into whatever the app declared (see "The viewport" in compat.js).

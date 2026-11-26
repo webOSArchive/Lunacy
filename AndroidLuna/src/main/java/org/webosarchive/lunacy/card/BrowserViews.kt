@@ -224,6 +224,9 @@ class BrowserViews(internal val window: AppWindow, private val webosRoot: File, 
                 loadWithOverviewMode = true
                 setSupportMultipleWindows(true)
                 javaScriptCanOpenWindowsAutomatically = false
+                // webOS's browser kept its own text size; Android's font size doesn't reach
+                // it, as it doesn't reach a card (AppWindow).
+                textZoom = 100
             }
             // webOS's browser had no dark mode: a page that offers one is shown light, whatever
             // Android's own theme is.

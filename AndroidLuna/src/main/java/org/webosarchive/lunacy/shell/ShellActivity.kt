@@ -142,9 +142,16 @@ class ShellActivity : Activity(), WindowHost {
         pdkRuntimeOf?.takeIf { it.first == d }?.let { return it.second }
         // A PDK app saw its device's own screen, whatever way it was held: the TouchPad's
         // 1024 x 768 landscape panel, the Pre3's 480 x 800 portrait one. The card scales it.
-        val (w, h, dpi) = if (d == DeviceProfile.PRE3) Triple(480, 800, 260) else Triple(1024, 768, 132)
+        // On a Surface Duo a PDK app is the TouchPad's, whatever the shell's layout: Lunacy has
+        // one of its screens, a TouchPad's 4:3 held as one plays (1800 x 1350), and the
+        // TouchPad's own way of showing PDK apps - phone-only ones through portability, games
+        // turning themselves by tilt - is what they draw right for there. As the Pre3's, GL
+        // games drew for a portrait screen and came out sideways and cut off (Atlantis, Worms,
+        // Where's My Water; codepoet, 2026-11-26).
+        val pd = if (org.webosarchive.lunacy.card.isSurfaceDuo) DeviceProfile.TOUCHPAD else d
+        val (w, h, dpi) = if (pd == DeviceProfile.PRE3) Triple(480, 800, 260) else Triple(1024, 768, 132)
         return PdkRuntime(this, java.io.File(filesDir, "cryptofs/apps/usr/palm/applications"),
-            w, h, dpi, d.platformVersion, d.modelNameAscii, DeviceProfile.nduid(this), webos)
+            w, h, dpi, pd.platformVersion, pd.modelNameAscii, DeviceProfile.nduid(this), webos)
             .also { pdkRuntimeOf = d to it }
     }
     private var androidAppsAt: AndroidApps? = null

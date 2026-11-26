@@ -8,7 +8,6 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.SurfaceTexture
-import android.os.Build
 import android.util.Log
 import android.text.InputType
 import android.view.KeyEvent
@@ -59,8 +58,7 @@ class PdkWindow(
      * portrait box on it, the game sideways in it. Following the card, a game fills a
      * landscape screen the right way up, with a guide open on the other.
      */
-    private val followsCard = Build.MANUFACTURER.equals("Microsoft", ignoreCase = true) &&
-        Build.MODEL.startsWith("Surface Duo")
+    private val followsCard = isSurfaceDuo
     /** The shape a game's screen is fitted to: the card's on a Duo, the device's elsewhere. */
     private val landscapeScreen get() = if (followsCard && width > 0 && height > 0) width >= height else landscapeDevice
     /** Where a movie's path is looked up (libSDL_cinema): the webOS root, and the installed apps' folder. */
@@ -116,13 +114,29 @@ class PdkWindow(
      * drawing, for its banners (the PDK's PDL.h); it moves nothing, so it is only noted. The
      * Pre3 profile's portrait screen is assumed to turn the same way (no Pre3 to measure).
      */
+    /** The turn the device the app was told of gives its buffer: [turn] where the card is that device's shape. */
+    private fun deviceTurn(): Int {
+        val gw = host.width; val gh = host.height
+        if (gw <= 0 || gh <= 0) return turn
+        return if ((gw >= gh) == landscapeDevice) 0 else if (landscapeDevice) -90 else 90
+    }
+
+    /**
+     * The quarter turn a buffer of the other shape from its screen is given: counter-clockwise
+     * on a TouchPad, clockwise on a Pre3, each measured. A Duo's portrait card is a TouchPad
+     * held portrait, which no TouchPad screen ever showed, so the turn is a choice there:
+     * clockwise, the way that leaves a game drawn upright for a TouchPad held portrait upright
+     * (Where's My Water, 2026-11-26).
+     */
+    private fun quarter(): Int = if (!landscapeDevice || (followsCard && !landscapeScreen)) 90 else -90
+
     private fun orient() {
         val gw = host.width; val gh = host.height
         if (gw <= 0 || gh <= 0) return
         // The TouchPad turns an other-shape buffer counter-clockwise, the Pre3 clockwise:
         // its top edge lands on the screen's right (measured 2026-10-03 with an 800 x 480
         // buffer on a Pre3; the TouchPad's on 2026-10-02).
-        turn = if ((gw >= gh) == landscapeScreen) 0 else if (landscapeDevice) -90 else 90
+        turn = if ((gw >= gh) == landscapeScreen) 0 else quarter()
         val o = if (followsCard) null else if (landscapeDevice) "right" else "up"
         if (o != fixedOrientation) { fixedOrientation = o; shell.orientationRequested(this) }
         gl?.turn(turn)
@@ -377,7 +391,17 @@ class PdkWindow(
                 // Gravity in the card's frame is (-sx, -sy, -z). Sent as Android's axes were, every
                 // tilt game steered backwards, and sideways on the tablet profile.
                 val k = 32768f / android.hardware.SensorManager.GRAVITY_EARTH
-                val gx = -sx * k; val gy = -sy * k; val gz = -z * k
+                var gx = -sx * k; var gy = -sy * k; val gz = -z * k
+                // On a Duo the card shows the game as it is, where the device the game was told
+                // of (a Pre3, a TouchPad) turns a buffer of the other shape a quarter: the game
+                // is drawing for that device held turned, so tilt is told in that device's frame,
+                // or a game that turns itself by it turns twice (Atlantis, Worms, Where's My
+                // Water, 2026-11-26). Elsewhere the two turns are the same and nothing changes.
+                when (deviceTurn() - turn) {
+                    90, -270 -> { val c = gx; gx = gy; gy = -c }
+                    -90, 270 -> { val c = gx; gx = -gy; gy = c }
+                    180, -180 -> { gx = -gx; gy = -gy }
+                }
                 if (landscapeDevice) host.accel(gy.toInt(), gx.toInt(), gz.toInt())
                 else host.accel(gx.toInt(), (-gy).toInt(), gz.toInt())
             }
@@ -489,7 +513,7 @@ class PdkWindow(
             val (sw, sh) = if (turned) vh to vw else vw to vh
             val scale = minOf(cw.toFloat() / sw, ch.toFloat() / sh)
             val w = Math.round(vw * scale); val h = Math.round(vh * scale)
-            texture.rotation = if (!turned) 0f else if (landscapeDevice) -90f else 90f
+            texture.rotation = if (!turned) 0f else quarter().toFloat()
             val lp = texture.layoutParams as android.widget.FrameLayout.LayoutParams
             if (lp.width != w || lp.height != h) { lp.width = w; lp.height = h; texture.layoutParams = lp }
         }
@@ -561,3 +585,11 @@ class PdkWindow(
         }
     }
 }
+
+/**
+ * A Microsoft Surface Duo or Duo 2 (codepoet, 2026-11-26). Lunacy has one of its two screens,
+ * and each is the other shape from the display as a whole, so a PDK app there is the TouchPad's
+ * (ShellActivity's PDK runtime) and follows its card ([PdkWindow]).
+ */
+val isSurfaceDuo: Boolean get() = android.os.Build.MANUFACTURER.equals("Microsoft", ignoreCase = true) &&
+    android.os.Build.MODEL.startsWith("Surface Duo")

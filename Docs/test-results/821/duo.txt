@@ -1,0 +1,56 @@
+===== Lunacy device pass on 192.168.10.74:5555 — Surface Duo (Android 12) — Thu Nov 26 10:14:36 AM EST 2026 =====
+[PASS] 1 id  build 1.2.0 (821), debug, arm64-v8a
+[PASS] 2 start  shell up, activities running in 3 s
+[INFO] 2 start  native service com.palm.eas not started (on demand)
+[PASS] 2 start  native service com.palm.filecache ready
+[INFO] 2 start  native service com.palm.imap not started (on demand)
+[INFO] 2 start  native service com.palm.imlibpurple not started (on demand)
+[INFO] 2 start  native service com.palm.smtp not started (on demand)
+[PASS] 2 start  Email loaded headless at boot
+[PASS] 2 bus  systemservice answers the time (SDK relay)
+[PASS] 2 bus  applicationManager lists 46 apps
+[PASS] 2 bus  an unknown service answers an error (rule 2)
+[PASS] 2 bus  db8 refuses a caller without rights
+[PASS] 2 bus  com.palm.wifi is the private bus's
+[PASS] 2 bus  the ringtone volume is the private bus's
+[PASS] 2 bus  com.palm.btmonitor is the private bus's
+[PASS] 2 bus  every waiting activity file is live (17 )
+[PASS] 2 bus  com.palm.wifi answers a com.palm app
+[PASS] 2 bus  the ringtone volume answers a com.palm app
+[PASS] 2 bus  com.palm.btmonitor answers a com.palm app
+[PASS] 2 bus  filenotifyd's state answers Video Player's watch
+[PASS] 2 page  XML getElementsByTagName matches local names (WebDAV replies)
+[INFO] 3 mail  no mail accounts
+[INFO] 3 contacts  no contacts on this device
+[PASS] 4 apps  com.palm.app.accounts: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.browser: card in 2 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.calculator: card in 2 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.calendar: card in 1 s (running app), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.clock: card in 0 s (running app), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.contacts: card in 2 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.deviceinfo: card in 2 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.email: card in 1 s (running app), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.enyo-findapps: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.exhibitionpreferences: card in 2 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.help: card in 2 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.location: card in 2 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.messaging: card in 0 s (running app), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.musicplayer: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.notes: card in 2 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.photos: card in 2 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.screenlock: card in 2 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.searchpreferences: card in 2 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.soundsandalerts: card in 2 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.swmanager: card in 2 s (started), no uncaught errors, no broken images
+[PASS] 4 apps  com.palm.app.updates: card in 1 s (started), no uncaught errors, no broken images
+[PASS] 15 core  systemProperties: an nduid of 40 hex digits, the device is "HP Pre3", an unknown key is "no such key"
+[PASS] 15 core  the media index answers the file picker: 5 misc.file, 27 image.file, 1 image.album, 0 video.file, 10 audio.file
+[PASS] 15 core  the picker relay reads the media kinds only, and db8 refuses Email the image kind
+[PASS] 15 core  the thumbnailer: a 1024x1024 picture fits 64x64 as 64x64, and its long form says 200x200 for 200x200
+[PASS] 15 core  Screen & Lock shows its Android rows (the layout, Android's notifications and wallpaper, the edge swipe)
+[PASS] 15 core  a notification's sound plays, and a file that isn't there plays the class's default
+[PASS] 5 regr  Email queried its accounts 2 time(s) from start to card (22fa049)
+[PASS] 5 regr  Clock launched as Lunacy starts opened its card (the boot settled after 5000 ms)
+[PASS] 6 crash  no Java crash, native signal or ANR
+[PASS] 6 crash  no service died
+===== 48 passed, 0 failed, 0 skipped =====

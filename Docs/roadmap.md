@@ -72,6 +72,34 @@ with them hasn't been made (its version is the SDK's). Since, 2026-11-19 (codepo
 Lock's brightness, dimming, timeout and Secure Unlock rows are left out in Luna DE. Open there: no music library; a frame
 from another app's origin has no bridge; `listAllHandlersForUrl` is unanswered (on Android too).
 
+### The 1.2.0 candidate's round (2026-11-26)
+
+Three candidates: 817 (stopped for the Nexus 7's ANR as the shell starts, fixed in 4aa3da5),
+821 (with alan-morford's keyboard PR #3; stopped for the Surface Duo's PDK games, fixed in
+b1d9e35) and 823, the one that passed. codepoet checked 823 on the Duo by hand first.
+
+```
+Build under test:  1.2.0, build 823, commit 2e58435 (branch android-tv); release and debug, both ABIs and the keyboard
+Tier 2:            fresh-install.sh      A7 Lite: 49 passed / 0 failed                  test-results/823/fresh-a7lite.txt
+                   device-test.sh        in place, data kept: Duo 48/0, Fold3 58/0, Pixel Tablet 54/0, HP 10 G2 46/0,
+                                         Nexus 7 47/0, Nexus 5 46/2 (a Just Type settings card past 25 s and Email's
+                                         third accounts reload: the phone's slowness, codepoet)
+                   pdk-sweep.sh          scenarios and a sample: A7 13/13, Fold3 17/17, Pixel Tablet 17/17, HP 10 G2 13/13,
+                                         Nexus 5 13/13, Nexus 7 13/13, Duo 14 started / 2 exited (below)
+Every device:      Lunacy and LunaKeyboard 823
+```
+
+- **Surface Duo:** Worms exited once inside its movie decoder (libsmpeg) and then ran three times
+  cleanly; Radiant Defense (codepoet's, sampled) crashes every time on the Duo (a null pointer in
+  its own code), held either way, and runs on the A7 Lite and the Fold3 (Adreno 660): the Duo's
+  own (Adreno 640, Android 12). Not holding the release (codepoet).
+- **Nexus 5, under the device test's load:** once, with some twenty cards open, Android's renderer
+  ran out of GPU memory for a layer and Lunacy restarted (817's rerun). The test's own load, not a
+  user's; and device-test's crash check missed it (it reads the logs of its two starts). Both are
+  for after the release: closing each card as the test goes, and a crash check that sees one.
+- The keyboard's subtype, gone with PR #3, left Luna Keyboard switched on and default where it was
+  (Fold3, Pixel Tablet).
+
 ### The 1.1.0 candidate's round (2026-11-18)
 
 Nothing was left on `main` to cherry-pick: its three commits ahead of the merge base are on

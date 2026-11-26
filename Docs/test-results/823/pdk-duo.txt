@@ -1,0 +1,18 @@
+[INFO] sample of 4 from 3 other PDK apps: com.kuuasema.supersonichd com.namconetworks.fc.en net.hexage.defense 
+[PASS] org.scummvm.scummvm: started (.lunacy.start through libbusybox.so and libenosys.so and libld-linux.s), still running after 16 s
+[FAIL] com.ea.app.worms.pre.na.efigs: started, then within 16 s: pdk [com.ea.app.worms.pre.na.efigs]: exited 1
+[PASS] com.cmdrkeen.game: started (clonekeen through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.subatomicstudios.fieldrunners: started (fieldrunners through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.bigfishgames.app.atlantisskypatrolhd: started (atlantisskypatrolhd through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.hyperdevbox.exzeus: started (exzeus through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.explusalpha.snes9x: started (s9x through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.apkenv.wheresmywater: started (apkenv through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.apkenv.fruitninja: started (apkenv through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.glu.app.ghero5: started (ghero5.exe through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.gameloft.app.hawx: started (hawx through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.gameloft.app.asphalt6: started (Asphalt6 through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.quickoffice.webos: started (qoservice through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.kuuasema.supersonichd: started (Supersonic_HD through libenosys.so and libld-linux.so), still running after 16 s
+[PASS] com.namconetworks.fc.en: started (fc through libenosys.so and libld-linux.so), still running after 16 s
+[FAIL] net.hexage.defense: started, then within 16 s: pdk [net.hexage.defense]: exited 139
+===== 14 started, 2 failed, 0 not installed; judge the screenshots in Workbench/results/pdk-823-duo against pdk-scenarios.txt =====

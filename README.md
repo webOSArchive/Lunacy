@@ -70,12 +70,17 @@ Lunacy like any other card. The shell's styling target is LunaCE.
 Lunacy supports Android 5.0.1 through Android 17 on tablets, as a 32-bit APK for the older
 devices and a 64-bit one for the newer. Phones are partially supported through light adaptation or zooming.
 - Can run as the default Android Launcher (optional)
+- Runs on Android TV, driven by the remote (experimental: [Docs/android-tv.md](Docs/android-tv.md))
 - Pair it with the optional webOS-style keyboard
 - Launches webOS and Android apps
 
 ## Using it
 
-**Lunacy 1.0 is out** (November 2026): [release notes](https://github.com/webOSArchive/Lunacy/releases/latest).
+**Lunacy 1.2.0 is the current release** (November 2026): [release notes](https://github.com/webOSArchive/Lunacy/releases/latest).
+
+**Lunacy is in maintenance** from 1.2.0: its maintainer has stepped back to other projects for a
+while. Bug reports and pull requests are still welcome, and releases will come as fixes land;
+new features are slower. See [Contributing](#contributing).
 
 [<img src="https://appcatalog.webosarchive.org/assets/fdroid.png" alt="Get it on F-Droid" height="60">](https://stacks.webosarchive.org/feeds/fdroid/repo/)
 
@@ -190,6 +195,23 @@ https://github.com/user-attachments/assets/072e5bc7-b3dd-403b-9d75-74835698484d
 
 Building from source is [BUILDING.md](BUILDING.md).
 
+## Contributing
+
+Pull requests are welcome; the keyboard's tap sounds in 1.2.0 came from one. Before starting:
+
+- **Read the rules** in [CLAUDE.md](CLAUDE.md): they apply to people and AI agents alike. The
+  first matters most: Lunacy looks and behaves like webOS on a TouchPad (a Pre3 in phone mode),
+  as measured on the device, and no app is ever patched or special-cased; a fix goes into the
+  frameworks or the compatibility layer, for every app.
+- **Find your way in** with [Docs/architecture.md](Docs/architecture.md), then
+  [Docs/dev-workflow.md](Docs/dev-workflow.md) for building, running and inspecting cards.
+  [Docs/roadmap.md](Docs/roadmap.md)'s "Where things stand" lists what is open.
+- **Say where a fix landed** in [Docs/fix-log.md](Docs/fix-log.md), and a change to Enyo or Mojo
+  as a patch in `LunaRuntimes/` with its entry in that folder's `CHANGES.md`.
+- **Test it** as [Docs/test-plan.md](Docs/test-plan.md) describes, on the devices you have, and
+  say which in the pull request. Anything copied from a device or another project needs a
+  NOTICE with its source.
+
 ## Documentation
 
 - [BUILDING.md](BUILDING.md): what you need and how to build both APKs
@@ -205,6 +227,8 @@ Building from source is [BUILDING.md](BUILDING.md).
 - [Docs/dev-workflow.md](Docs/dev-workflow.md): building, running, and checking against a TouchPad
 - [Docs/luna-shell-reference.md](Docs/luna-shell-reference.md): LunaCE shell spec, from its source
 - [Docs/luna-deltas.md](Docs/luna-deltas.md): where Lunacy still differs from LunaCE, as a work list with pointers
+- [Docs/pdk.md](Docs/pdk.md): native (PDK) apps and games, and how they run
+- [Docs/android-tv.md](Docs/android-tv.md): Lunacy on Android TV (experimental)
 - [Docs/related-projects.md](Docs/related-projects.md): the wider webOS preservation landscape
 
 ## Licence

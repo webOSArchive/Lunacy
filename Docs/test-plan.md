@@ -63,6 +63,8 @@ Legend: `[ ]` not yet run · `[Pass]` · `[Fail]` · `[Human]` needs eyes or han
 | Galaxy Tab A7 Lite | 14 | arm64 | debug | a current cheap tablet; mail, PDK and hybrid apps |
 | Galaxy Z Fold3 | 15 | arm64 | debug | a foldable: both screens, folding mid-use |
 | Pixel Tablet | 17 | arm64 only | debug | the newest Android; read-only unless codepoet opens it |
+| Surface Duo | 12 | arm64 | debug | two screens, each the other shape from the display: PDK games as a TouchPad's ([pdk.md](pdk.md)); never `wm size` it |
+| Chromecast with Google TV | 14 | arm32 | debug | Android TV, a remote and no touch ([android-tv.md](android-tv.md)); wireless debugging only |
 | Boox Go Color 7 | | | release | codepoet installs it and reports back; nobody else touches it |
 
 Addresses are in [dev-workflow.md](dev-workflow.md), and every change to a device goes in
@@ -123,6 +125,25 @@ isn't user activity, so on an unplugged device dismiss the lock screen and send
 `input keyevent KEYCODE_WAKEUP` every minute or so during the run. On a phone (the Nexus 5),
 an app late in the run may miss the 25 s limit once some twenty cards are open: open it by hand
 before calling it a failure.
+
+Learnt in the 1.2.0 round (2026-11-26):
+- **A fresh install has no PDK games.** The sweep skips a scenario a device lacks, so put the
+  scenarios back after `fresh-install.sh` (each app id's newest package from the Museum, through
+  Lunacy's own installer: serve them, `adb reverse tcp:8123 tcp:8123`, then
+  `--es install http://localhost:8123/<file>`). `adb reverse` didn't reach the HP 10 G2 over
+  Wi-Fi; serve on this machine's LAN address for it instead. `palm-install` over the relay
+  drops packages of a few hundred MB (Asphalt 6).
+- **Android 5.1's lock screen** (the Nexus 7) has no `wm dismiss-keyguard`, and a swipe lock
+  sleeps the screen ten seconds after each wake: keep it on with `svc power stayon true` while it
+  charges and send the Menu key (`input keyevent 82`) every few seconds, or cards open behind the
+  lock and fail "no card".
+- **The Nexus 5 is slow:** a card past the 25 s limit, or Email's third accounts reload, is the
+  phone's slowness and not a failure (codepoet). A crash or an uncaught error still is. With some
+  twenty cards open it once ran out of GPU memory for a layer and Lunacy restarted; the test's
+  load, not a person's, and section 6's crash check missed it. For after 1.2.0: close each card
+  as section 4 goes, and a crash check that sees a crash Lunacy recovered from.
+- **On a TV** drive the remote with `input dpad keyevent`; a plain `input keyevent` is a virtual
+  keyboard's, which a TV leaves alone.
 
 **Tier 1** (`test.sh`) is:
 - every bundled JSON file parses (a stray comma silently stops a kind, a template or an app);

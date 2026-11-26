@@ -34,7 +34,94 @@ after 1.0.
 Before shipping 1.0, as for every release: the latest App Catalog bundled (6.3.3000 since
 2026-11-19, codepoet's package for 1.1.0; 6.3.2931 was 1.0's).
 
-## Where things stand (2026-11-19)
+## Where things stand (2026-11-26)
+
+**Released:** Lunacy 1.2.0 (build 823, from commit 2e58435; the tag `1.2.0` and the GitHub
+release are codepoet's), 2026-11-26, and in the F-Droid feed (checked against the server, file
+by file). Everything is on `main`; `android-tv` was merged into it for 1.2.0.
+
+**Lunacy is in maintenance from 1.2.0** (codepoet, 2026-11-26: stepping back to other projects
+for a while). Fixes and community pull requests keep it going; the first, alan-morford's
+keyboard tap sounds, is in 1.2.0. For anyone picking it up:
+- **Read first:** [CLAUDE.md](../CLAUDE.md) (the rules: rule 0, the look and feel, above all;
+  no per-app hacks), [architecture.md](architecture.md), [dev-workflow.md](dev-workflow.md)
+  (devices, tools, inspecting cards), [BUILDING.md](../BUILDING.md).
+- **A release:** commit; `./build.sh release` then `./build.sh debug` (the six APKs and one
+  `SHA256SUMS`); a round as [test-plan.md](test-plan.md) says, one build on every device and
+  one fresh install among them; then `Meta/fdroid/update-repo.sh` and an upload of the feed's
+  `repo/` and `archive/` only (never the folder: it holds the key), checked against the server.
+  Before each release, the newest App Catalog bundled (6.3.3000 since 1.1.0).
+- **Where fixes are recorded:** [fix-log.md](fix-log.md) (each fix and the layer it landed
+  in), `LunaRuntimes/*/CHANGES.md` (each framework patch; Enyo and Mojo patches go into
+  webos-sdk-redux too), [luna-deltas.md](luna-deltas.md) (every difference from webOS), and
+  [android5-setup.md](android5-setup.md) (every change to a test device).
+
+**1.2.0 brought** (since 1.1.0):
+- webOS CE 3.2.0: HP's name out of what people see, by CE's own rules (`hp_wording.py`);
+  the App Catalog icon for HP's bag; Device Info's About headed by Lunacy's robot; apps told
+  webOS CE 3.2.0 (`platformVersion` 3.2.0, `hpwOS/3.2.0`, "webOS TouchPad"), measured on the
+  reference TouchPad on 3.2.0. `get-assets-from-touchpad.sh` takes a 3.1.0 or 3.2.0 TouchPad.
+- Android's font size no longer reaches webOS pages (display size still does).
+- The Surface Duo and Duo 2: PDK apps as a TouchPad's, turned by their card ([pdk.md](pdk.md)).
+- Android TV, experimental: the TV's launcher, the remote in cards, the launcher, the card view
+  and the dock ([android-tv.md](android-tv.md)).
+- LunaKeyboard: the TouchPad's tap sounds, a buzz on keys, the setup screen in Pre Keyboard's
+  arrangement (PR #3, alan-morford); auto-correct ranking from webOS CE's SmartKey.
+- Email in Android's Share and for `mailto:` links.
+- Fixes: no ANR as the shell starts (Android's apps read off the main thread); Mojo's contacts
+  builtin parses again (broken since 0.7.0); no `.orig` files in the assets.
+- Alongside: webOS Account 1.2.1 (webos-community-account) installs on Lunacy, without First
+  Use's Wi-Fi scanning or "Skip Account Setup"; its `package.sh --rootfs` builds it without a
+  TouchPad. Its upload to the App Museum is codepoet's.
+
+**Open after 1.2.0, the likeliest next work** (besides "Open, carried forward" below):
+- **PDK games on phones** (the Pre3 profile): GL games draw for the Pre3's portrait surface, so
+  on the Nexus 5 Atlantis is upside down and cut off and Where's My Water shrunk, as in 1.1.0
+  ([pdk.md](pdk.md), "Open, on phones"). The Duo's answer doesn't carry over.
+- **Radiant Defense on the Duo** crashes in its own code; it runs on the A7 Lite and Fold3.
+- **The device test:** close each card as section 4 goes (the Nexus 5 ran out of GPU memory
+  with twenty open), and a crash check that sees a crash Lunacy recovered from.
+- **Many open cards on a small device:** webOS warned "too many cards" when memory ran low;
+  Lunacy has nothing like it.
+- **The Duo's two screens:** a card on each, or a layout that keeps clear of the hinge
+  (codepoet's ideas, 2026-11-26; only the PDK turn was done).
+- **webOS CE 3.2.0's time zone table** wasn't taken: Lunacy follows Android's rules (codepoet).
+- **`com.palm.wifi`** has no network scan (`findnetworks`), by choice: nothing needs it since
+  webOS Account 1.2.1, and a made-up list would break rule 2.
+
+### The 1.2.0 candidate's round (2026-11-26)
+
+Three candidates: 817 (stopped for the Nexus 7's ANR as the shell starts, fixed in 4aa3da5),
+821 (with alan-morford's keyboard PR #3; stopped for the Surface Duo's PDK games, fixed in
+b1d9e35) and 823, the one that passed. codepoet checked 823 on the Duo by hand first.
+
+```
+Build under test:  1.2.0, build 823, commit 2e58435 (branch android-tv); release and debug, both ABIs and the keyboard
+Tier 2:            fresh-install.sh      A7 Lite: 49 passed / 0 failed                  test-results/823/fresh-a7lite.txt
+                   device-test.sh        in place, data kept: Duo 48/0, Fold3 58/0, Pixel Tablet 54/0, HP 10 G2 46/0,
+                                         Nexus 7 47/0, Nexus 5 46/2 (a Just Type settings card past 25 s and Email's
+                                         third accounts reload: the phone's slowness, codepoet)
+                   pdk-sweep.sh          scenarios and a sample: A7 13/13, Fold3 17/17, Pixel Tablet 17/17, HP 10 G2 13/13,
+                                         Nexus 5 13/13, Nexus 7 13/13, Duo 14 started / 2 exited (below)
+Every device:      Lunacy and LunaKeyboard 823
+```
+
+- **Surface Duo:** Worms exited once inside its movie decoder (libsmpeg) and then ran three times
+  cleanly; Radiant Defense (codepoet's, sampled) crashes every time on the Duo (a null pointer in
+  its own code), held either way, and runs on the A7 Lite and the Fold3 (Adreno 660): the Duo's
+  own (Adreno 640, Android 12). Not holding the release (codepoet).
+- **Nexus 5, under the device test's load:** once, with some twenty cards open, Android's renderer
+  ran out of GPU memory for a layer and Lunacy restarted (817's rerun). The test's own load, not a
+  user's; and device-test's crash check missed it (it reads the logs of its two starts). Both are
+  for after the release: closing each card as the test goes, and a crash check that sees one.
+- The keyboard's subtype, gone with PR #3, left Luna Keyboard switched on and default where it was
+  (Fold3, Pixel Tablet).
+- **Nexus 5 (codepoet):** Atlantis comes up upside down and cut off, Where's My Water shrunk and cut
+  off at the right. Not new: 1.1.0 (793, built from its tag) shows both the same on the same phone,
+  side by side with 823. GL games on the Pre3 profile draw for the Pre3's portrait screen; the
+  Duo's answer (the TouchPad's profile) doesn't carry to a phone. For after the release.
+
+## Where things stood (2026-11-19)
 
 **Released:** Lunacy 1.1.0 (build 792, tag `1.1.0`; GitHub and the F-Droid feed), 2026-11-19.
 **webos-sdk-redux 0.5** (tag `0.5-Release`), and **Luna DE 0.5.1**, Lunacy's desktop shell, as
@@ -71,38 +158,6 @@ wallpaper, and Screen & Lock without Android's rows. They are in 1.1.0's code; a
 with them hasn't been made (its version is the SDK's). Since, 2026-11-19 (codepoet): Screen &
 Lock's brightness, dimming, timeout and Secure Unlock rows are left out in Luna DE. Open there: no music library; a frame
 from another app's origin has no bridge; `listAllHandlersForUrl` is unanswered (on Android too).
-
-### The 1.2.0 candidate's round (2026-11-26)
-
-Three candidates: 817 (stopped for the Nexus 7's ANR as the shell starts, fixed in 4aa3da5),
-821 (with alan-morford's keyboard PR #3; stopped for the Surface Duo's PDK games, fixed in
-b1d9e35) and 823, the one that passed. codepoet checked 823 on the Duo by hand first.
-
-```
-Build under test:  1.2.0, build 823, commit 2e58435 (branch android-tv); release and debug, both ABIs and the keyboard
-Tier 2:            fresh-install.sh      A7 Lite: 49 passed / 0 failed                  test-results/823/fresh-a7lite.txt
-                   device-test.sh        in place, data kept: Duo 48/0, Fold3 58/0, Pixel Tablet 54/0, HP 10 G2 46/0,
-                                         Nexus 7 47/0, Nexus 5 46/2 (a Just Type settings card past 25 s and Email's
-                                         third accounts reload: the phone's slowness, codepoet)
-                   pdk-sweep.sh          scenarios and a sample: A7 13/13, Fold3 17/17, Pixel Tablet 17/17, HP 10 G2 13/13,
-                                         Nexus 5 13/13, Nexus 7 13/13, Duo 14 started / 2 exited (below)
-Every device:      Lunacy and LunaKeyboard 823
-```
-
-- **Surface Duo:** Worms exited once inside its movie decoder (libsmpeg) and then ran three times
-  cleanly; Radiant Defense (codepoet's, sampled) crashes every time on the Duo (a null pointer in
-  its own code), held either way, and runs on the A7 Lite and the Fold3 (Adreno 660): the Duo's
-  own (Adreno 640, Android 12). Not holding the release (codepoet).
-- **Nexus 5, under the device test's load:** once, with some twenty cards open, Android's renderer
-  ran out of GPU memory for a layer and Lunacy restarted (817's rerun). The test's own load, not a
-  user's; and device-test's crash check missed it (it reads the logs of its two starts). Both are
-  for after the release: closing each card as the test goes, and a crash check that sees one.
-- The keyboard's subtype, gone with PR #3, left Luna Keyboard switched on and default where it was
-  (Fold3, Pixel Tablet).
-- **Nexus 5 (codepoet):** Atlantis comes up upside down and cut off, Where's My Water shrunk and cut
-  off at the right. Not new: 1.1.0 (793, built from its tag) shows both the same on the same phone,
-  side by side with 823. GL games on the Pre3 profile draw for the Pre3's portrait screen; the
-  Duo's answer (the TouchPad's profile) doesn't carry to a phone. For after the release.
 
 ### The 1.1.0 candidate's round (2026-11-18)
 

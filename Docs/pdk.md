@@ -359,6 +359,33 @@ mapped back. The Pre3's portrait screen is assumed to turn the same way; there i
 to measure. PDL orientation requests are noted and nothing more. A PDK card is full screen
 from the start, no status bar, as on webOS (codepoet).
 
+**The Surface Duo (and Duo 2), 2026-11-26.** Lunacy has one of the Duo's two screens, each the
+other shape from the display as a whole, and the Duo's shell is in phone mode. Held as one plays
+(the screens one above the other, a game on one and a guide on the other), Lunacy's screen is
+landscape and a TouchPad's 4:3 (1800 x 1350). So on a Duo alone (`isSurfaceDuo`, codepoet's
+call):
+- a PDK app is the TouchPad's (`ShellActivity`'s PDK runtime): told 1024 x 768, phone-only apps
+  through portability, whatever the shell's layout;
+- the card holds no orientation (`PdkWindow.followsCard`), and the picture is turned by the
+  card's own shape, again whenever it changes: a landscape card is the TouchPad as it is, a
+  portrait card a TouchPad held portrait, turned clockwise (`quarter`), the way that leaves a game
+  drawn upright for it upright (Where's My Water);
+- tilt is told in the frame of that TouchPad (`deviceTurn() - turn`), so a game that turns
+  itself by tilt doesn't turn twice. Off the Duo the two turns are always the same.
+
+Found the hard way: as the Pre3's, GL games drew for the Pre3's portrait 480 x 800 surface
+whatever mode they asked for, and turned to the card they came out sideways and cut off
+(Atlantis, Worms); telling a Pre3 game a landscape screen crashed Worms. Checked on the Duo held
+both ways with a fixed tilt (a temporary debug switch, since removed): Atlantis, Keen, ScummVM
+and Worms upright on a landscape screen, Where's My Water upright on a portrait one.
+
+**Open, on phones (Pre3 profile):** the same GL games draw for the Pre3's portrait surface there
+too. On the Nexus 5, Atlantis comes up upside down and cut off and Where's My Water shrunk and
+cut off at the right, in 1.1.0 and 1.2.0 alike (roadmap, the 1.2.0 round). The Duo's answer
+doesn't carry over: a phone's screen isn't a TouchPad's shape. And Radiant Defense
+(`net.hexage.defense`) crashes on the Duo every time (its own null pointer), and runs on the
+A7 Lite and the Fold3: the Duo's (Adreno 640, Android 12).
+
 **The libraries apps link by name.** A scan of every ARM binary in the mirror (871 apps
 carry one) for libraries the runtime didn't provide: `libSDL_image-1.2.so.0` 310,
 `libGLESv2.so` 160, `libSDL_ttf-2.0.so.0` 137, `libSDL_net-1.2.so.0` 115, unversioned names

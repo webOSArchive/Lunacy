@@ -1,8 +1,8 @@
-# Android TV (experimental, branch android-tv)
+# Android TV (experimental)
 
 Lunacy on a TV, driven by a remote. Started 2026-11-23 on a Chromecast with Google TV
 (Android 14, 32-bit ARM, no touch screen; [android5-setup.md](android5-setup.md) has the
-device). It lives on the `android-tv` branch until codepoet says otherwise.
+device). Merged into `main` for 1.2.0 (2026-11-26); still experimental.
 
 webOS had no remote and no focus: every control was a finger's. So what is here has no
 TouchPad to be measured against. codepoet's call (2026-11-23): the focused control is shown in
@@ -82,6 +82,12 @@ Chromecast 48/0/0 and on the Fold3 (over 791, data kept) 55/0/0; a fresh install
 Chromecast 48/0/0; the Fold3 folded and unfolded twice by codepoet (one process throughout,
 cards kept, db8 answering). Not run: the HP 10 G2 (Android 5, Chromium 37), Nexus 5, Nexus 7
 and A7 Lite were off the network; codepoet will test them another time.
+
+**1.2.0 (build 823, 2026-11-26):** the Android apps' list is read off the main thread, which
+was an ANR as the shell started on slow devices, the Chromecast among them. Smoke-tested on the
+Chromecast: Lunacy started with no ANR, Back opened the launcher and the D-pad and OK opened
+Calculator. To drive it from adb, send `input dpad keyevent ...`: a plain `input keyevent`
+comes from a virtual keyboard, whose keys a TV leaves alone (49d7e3e).
 
 **Play Protect on the TV.** Reinstalling after an uninstall, Play Protect blocked Lunacy as
 "built for an older version of Android" (targetSdk 28, as on main); the first install that day

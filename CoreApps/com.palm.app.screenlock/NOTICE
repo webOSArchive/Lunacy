@@ -27,3 +27,8 @@ preferences and its wallpaper, com.palm.display/control sets Android's brightnes
 screen-off timeout, enyo.FilePicker finds Lunacy's picker at webOS's own path, and
 com.palm.systemmanager's lock calls answer from Android's own screen lock, which Secure Unlock
 sets through Android's chooser (Docs/luna-deltas.md, A21).
+
+Changed from the packaged app, with codepoet's go-ahead (2026-11-26): webOS CE 3.2.0's
+de-branding (the CE project's build/full-ce/hp_wording.py, tag 3.2.0-CE-Release), applied here
+by the same rules on 2026-11-26: the vendor in its appinfo.json files is "webOS Archive" where
+it said "HP".

@@ -8,3 +8,8 @@ Copied from the reference TouchPad, where it is pre-installed but lives in the u
 the filesystem (/media/cryptofs/apps). The app is here exactly as it was packaged, and Lunacy
 does not change it (rule 5 in CLAUDE.md). The build scripts and specs that shipped beside it
 (Rakefile, Gemfile, build.sh, ci_build.sh, spec/) are left out; nothing else is.
+
+Changed from the packaged app, with codepoet's go-ahead (2026-11-26): webOS CE 3.2.0's
+de-branding (the CE project's build/full-ce/hp_wording.py, tag 3.2.0-CE-Release), applied here
+by the same rules on 2026-11-26: the vendor in its appinfo.json files is "webOS Archive" where
+it said "HP".

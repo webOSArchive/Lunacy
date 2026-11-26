@@ -53,9 +53,10 @@ for patch in ../LunaRuntimes/enyo-1.0/patches/*.patch; do
     echo "enyo: applied $(basename "$patch")"
 done
 # webOS CE's accounts library, which Contacts and Calendar show on first launch: the
-# community enyo-accounts 1.1.1.1 with "Get started with your webOS account:" (its strings)
-# and the webOS App Catalog's icon for the HP shopping bag (appcatalog-32x32/48x48), from the
-# webOS CE project's system/ (Workbench/vendor/webos-ce).
+# community enyo-accounts 1.1.1.1 as webOS CE 3.2.0 ships it: HP's name out of its wording
+# ("Get started with your webOS Account:", "Synergy Services"), templates that name their own
+# subtitle, and the webOS App Catalog's icon for the HP shopping bag (appcatalog-32x32/48x48),
+# from the webOS CE project's system/ (Workbench/vendor/webos-ce).
 cp -r $V/webos-ce/system/usr/palm/frameworks/enyo/0.10/framework/lib/accounts/. $L/fw/enyo/1.0/framework/lib/accounts/
 # Lunacy's changes to CE's accounts library (LunaRuntimes/enyo-accounts/CHANGES.md): its own
 # series, since the SDK takes the TouchPad's library and not this one.

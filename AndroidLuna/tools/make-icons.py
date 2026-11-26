@@ -13,6 +13,8 @@ Makes Lunacy's launcher icon and notification icon from codepoet's artwork in Me
 - The splash logo is the robot alone (drawable-*/lunacy_logo.png), on splash_background.
 - The TV banner (drawable-xhdpi/tv_banner.png, 320 x 180 px), which Android TV's launcher
   shows in place of an icon: the robot on the sky, beside "Lunacy" in Prelude.
+- Device Info's About header (CoreApps/com.palm.app.deviceinfo/images/about-lunacy.png): the
+  robot alone, where webOS CE 3.2.0's About scene has its moon, 92 px drawn from 184 px.
 - The notification small icon is the crescent from Meta/LunaRound.png as a white silhouette
   (drawable-*/ic_stat_lunacy.png, 24 dp), as Android draws a small icon.
 
@@ -85,6 +87,21 @@ def crescent():
     return white
 
 
+ABOUT_PX = 184
+
+
+def about_header():
+    """The robot centred in a transparent square for Device Info's About header."""
+    r = robot()
+    h = ABOUT_PX
+    w = round(r.width * h / r.height)
+    img = Image.new("RGBA", (ABOUT_PX, ABOUT_PX), (0, 0, 0, 0))
+    small = r.resize((w, h), Image.LANCZOS)
+    img.paste(small, ((ABOUT_PX - w) // 2, 0), small)
+    img.save(os.path.join(ROOT, "CoreApps", "com.palm.app.deviceinfo", "images", "about-lunacy.png"),
+             optimize=True)
+
+
 def save(img, *path):
     out = os.path.join(RES, *path)
     os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -154,6 +171,8 @@ def main():
     <monochrome android:drawable="@mipmap/ic_launcher_monochrome" />
 </adaptive-icon>
 """
+    about_header()
+
     os.makedirs(os.path.join(RES, "mipmap-anydpi-v26"), exist_ok=True)
     with open(os.path.join(RES, "mipmap-anydpi-v26", "ic_launcher.xml"), "w") as f:
         f.write(adaptive)

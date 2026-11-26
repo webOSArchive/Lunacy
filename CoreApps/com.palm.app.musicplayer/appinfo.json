@@ -1,7 +1,7 @@
 {
 	"id": "com.palm.app.musicplayer",
 	"version": "3.0.8000",
-	"vendor": "HP",
+	"vendor": "webOS Archive",
 	"type": "web",
 	"main": "index.html",
 	"title": "Music",

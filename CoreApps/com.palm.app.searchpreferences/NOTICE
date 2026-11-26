@@ -13,3 +13,8 @@ Everything it shows and sets is com.palm.universalsearch's, which Lunacy answers
 
 Copyright Palm, Inc. / Hewlett-Packard; never released under an open licence; distributed by
 Lunacy as abandonware, like Mojo and the Prelude fonts.
+
+Changed from the packaged app, with codepoet's go-ahead (2026-11-26): webOS CE 3.2.0's
+de-branding (the CE project's build/full-ce/hp_wording.py, tag 3.2.0-CE-Release), applied here
+by the same rules on 2026-11-26: the vendor in its appinfo.json files is "webOS Archive" where
+it said "HP".

@@ -11,6 +11,31 @@ body {
 	vertical-align: middle;
 	font-size: 24px;
 }
+/* About: the header keeps its height but shows only the robot, centred and 92 px, hanging
+ * from the strip into the page as webOS CE 3.2.0's moon does (its ce-about.css: 6 px from the
+ * top; the page's first line starts 112 px down, clear of it). */
+.header-welcome {
+	position: relative;
+	z-index: 1;
+}
+.header-welcome .about-header-art {
+	display: none;
+}
+.header-welcome.about > * {
+	visibility: hidden;
+}
+.header-welcome.about > .about-header-art {
+	display: block;
+	visibility: visible;
+	position: absolute;
+	top: 6px;
+	left: 50%;
+	margin-left: -46px;
+	width: 92px;
+	height: 92px;
+	background: url(../images/about-lunacy.png) center center no-repeat;
+	background-size: 92px 92px;
+}
 .header-shadow {
 	height: 8px;
 	background: -webkit-gradient(linear, left top, left bottom, from(rgba(0,0,0,0.25)), to(rgba(0,0,0,0)));
@@ -120,7 +145,9 @@ body {
  * reference TouchPad (same sizes and colours; ids renamed to this app's classes). */
 .about-body {
 	margin: 0 auto;
-	padding: 24px 16px 24px 16px;
+	/* The header (60.5 px, measured) and its shadow (8 px) above, then this: 112 px to the
+	 * first line, as on webOS CE. */
+	padding: 44px 16px 24px 16px;
 	max-width: 720px;
 	color: #444444;
 }

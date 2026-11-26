@@ -507,6 +507,9 @@ product; being "close enough" is not the goal.
   - `com.palm.preferences/systemProperties/Get` (`DMMODEL`, `PRODoID`, `boardType`,
     `deviceName`, `version`, the build fields);
   - `X-Palm-Carrier` on every request the shim sends (`c090-01`, the WiFi TouchPad's).
+  - The TouchPad it reports is one on webOS CE 3.2.0, the current release (codepoet,
+    2026-11-26, so app developers can target it): platformVersion 3.2.0, `hpwOS/3.2.0`,
+    `webOS CE 3.2.0` and "webOS TouchPad", measured on the reference TouchPad (600121).
   - **The device's identity is derived, not random, and can be carried over.** webOS Archive's
     services know a device by its `nduid` - the App Museum and the shared updater library both
     send it as `clientid` - and app licences were tied to it, so it has to be stable: Lunacy

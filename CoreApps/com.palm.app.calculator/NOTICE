@@ -12,3 +12,8 @@ Archive's.
 The app's files are here exactly as the package carries them, and Lunacy does not change them
 (rule 5 in CLAUDE.md). The package's own copy of its resources under usr/palm/packages is left
 out; nothing else is.
+
+Changed from the packaged app, with codepoet's go-ahead (2026-11-26): webOS CE 3.2.0's
+de-branding (the CE project's build/full-ce/hp_wording.py, tag 3.2.0-CE-Release), applied here
+by the same rules on 2026-11-26: the vendor in its appinfo.json files is "webOS Archive" where
+it said "HP".

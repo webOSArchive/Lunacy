@@ -24,3 +24,8 @@ than a TouchPad's as the system's does, and the shade beside the sheet reaches i
 (the TouchPad's 1024 px look is unchanged). The build scripts and specs that shipped beside it
 (Rakefile, Gemfile, Gemfile.lock, ci_build.sh, build-ignore, jasminerunner.html, spec/) are
 left out; nothing else is.
+
+Changed from the packaged app, with codepoet's go-ahead (2026-11-26): webOS CE 3.2.0's
+de-branding (the CE project's build/full-ce/hp_wording.py, tag 3.2.0-CE-Release), applied here
+by the same rules on 2026-11-26: the vendor in its appinfo.json files is "webOS Archive" where
+it said "HP".

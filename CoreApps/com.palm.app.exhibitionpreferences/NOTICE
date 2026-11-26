@@ -16,3 +16,8 @@ LunaSysMgr did (see "Exhibition" in docs/architecture.md).
 (org.webosarchive.lunacy android/openSettings, panel "screensaver"), where Lunacy Exhibition is
 chosen; its strings in the app's four languages are Lunacy's. Marked [Lunacy] in
 source/ExhibitionPreferencesApp.js.
+
+Changed from the packaged app, with codepoet's go-ahead (2026-11-26): webOS CE 3.2.0's
+de-branding (the CE project's build/full-ce/hp_wording.py, tag 3.2.0-CE-Release), applied here
+by the same rules on 2026-11-26: the vendor in its appinfo.json files is "webOS Archive" where
+it said "HP".

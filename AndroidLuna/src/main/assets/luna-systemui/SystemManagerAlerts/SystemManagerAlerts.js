@@ -846,7 +846,7 @@ enyo.kind({
 		if(this.params.errorType == "ProfileMismatch")
 			this.$.alertMsg.setContent($L("These devices cannot pair because they are not on the same webOS Account."));
 		else if(this.params.errorType == "DeviceNotCompatible")
-			this.$.alertMsg.setContent($L("This device can't be paired because it's not a HP device."));
+			this.$.alertMsg.setContent($L("This device can't be paired because it's not a webOS device."));
 	},
 
 	closeAlert: function(event) {

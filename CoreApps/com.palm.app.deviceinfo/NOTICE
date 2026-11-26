@@ -7,7 +7,10 @@ the environment the apps actually run in, and hands settings that belong to Andr
 Android. It keeps Palm's app id, so it sits where webOS users expect to find it, and Palm's
 icons, so it looks like it belongs.
 
-The app's code is Lunacy's, under the same terms as the rest of Lunacy. These files are not:
+The app's code is Lunacy's, under the same terms as the rest of Lunacy. images/about-lunacy.png,
+About's header, is Lunacy's robot (Meta/LunacyRobot.png, made into this by
+AndroidLuna/tools/make-icons.py); Meta/NOTICE has its terms, the Android robot's among them.
+These files are Palm's:
 
 - icon.png, icon-256x256.png, images/header-icon-deviceinfo.png
 

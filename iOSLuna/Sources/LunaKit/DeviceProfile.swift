@@ -9,11 +9,11 @@ import UIKit
 /// about 132 per inch), so Enyo's layouts fill the real screen at the TouchPad's own sizes; on a
 /// phone the page is laid out at the card's width in points, as Lunacy lays it out in dips.
 public struct DeviceProfile {
-    /// The reference TouchPad, webOS CE 3.1.0.
+    /// The reference TouchPad as webOS CE 3.2.0 reports it (measured 2026-11-26).
     public static let touchPad = DeviceProfile(
-        name: "TOUCHPAD", modelName: "TouchPad", modelNameAscii: "TouchPad", deviceName: "HP TouchPad",
-        model: "HSTNH-I29C", boardType: "topaz-Wifi-pvt\n", platformVersion: (3, 1, 0), versionPrefix: "webOS CE",
-        userAgent: "Mozilla/5.0 (hp-tablet; Linux; hpwOS/3.1.0; U; en-US) AppleWebKit/534.6 " +
+        name: "TOUCHPAD", modelName: "TouchPad", modelNameAscii: "TouchPad", deviceName: "webOS TouchPad",
+        model: "HSTNH-I29C", boardType: "topaz-Wifi-pvt\n", platformVersion: (3, 2, 0), versionPrefix: "webOS CE",
+        userAgent: "Mozilla/5.0 (hp-tablet; Linux; hpwOS/3.2.0; U; en-US) AppleWebKit/534.6 " +
             "(KHTML, like Gecko) wOSSystem/234.83 Safari/534.6 TouchPad/1.0",
         carrierCode: "c090-01", carrierName: "", productLineVersion: "1.0", browserOsName: "hpwOS",
         buildName: "Nova-HP-Topaz", buildNumber: "86", serialPrefix: "5CL", serialBodyLength: 7,

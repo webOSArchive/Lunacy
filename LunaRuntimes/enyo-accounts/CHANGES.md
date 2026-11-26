@@ -8,7 +8,14 @@ apart from [the Enyo patches](../enyo-1.0/CHANGES.md) because the SDK
 TouchPad's tree, where CE's Add Account list doesn't exist. The library is the webOS CE
 project's, so a change here is one to offer back to it.
 
-### 0001-template-subtitle.patch
+No patches are open; the next change goes in `patches/`, which fetch-assets.sh reads.
+
+### 0001-template-subtitle.patch (retired 2026-11-26: in webOS CE 3.2.0)
+
+webOS CE took this change into its own library for 3.2.0 (its `add-account.js`, for its
+Microsoft 365 template), so Lunacy's copy of CE's 3.2.0 library has it and the patch is gone.
+What it was:
+
 
 An account template may give the line under its name in Add Account (`loc_subtitle`).
 

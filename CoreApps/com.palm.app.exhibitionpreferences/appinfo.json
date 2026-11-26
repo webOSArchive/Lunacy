@@ -1,7 +1,7 @@
 {
 	"id": "com.palm.app.exhibitionpreferences",
 	"version": "1.0.0",
-	"vendor": "HP",
+	"vendor": "webOS Archive",
 	"type": "web",
 	"main": "index.html",
 	"title": "Exhibition",

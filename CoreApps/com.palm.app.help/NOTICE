@@ -10,3 +10,9 @@ CLAUDE.md (2026-11-03), marked [Lunacy] in index.js: it chose its tablet UI only
 exactly 1024 wide, the TouchPad's, so on any other tablet it showed its phone UI. It now also
 takes the tablet UI wherever Lunacy says it is a TouchPad (a tablet; phone mode says Pre3).
 Its articles come from webOS Archive's help host.
+
+Changed from the packaged app, with codepoet's go-ahead (2026-11-26): webOS CE 3.2.0's
+de-branding (the CE project's build/full-ce/hp_wording.py, tag 3.2.0-CE-Release), applied here
+by the same rules on 2026-11-26: the vendor in its appinfo.json files is "webOS Archive" where
+it said "HP"; Help no longer checks for HP's Care Pack app, so the Care Pack page is never
+offered.

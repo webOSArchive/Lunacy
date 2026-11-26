@@ -14,9 +14,11 @@ enyo.kind({
 	name: "DeviceInfo",
 	kind: "VFlexBox",
 	components: [
-		{kind: "Control", className: "enyo-toolbar-light header-welcome", components: [
+		{kind: "Control", name: "header", className: "enyo-toolbar-light header-welcome", components: [
 			{kind: "Image", src: "images/header-icon-deviceinfo.png"},
-			{name: "title", content: $L("Device Information"), style: "padding-left: 10px;"}
+			{name: "title", content: $L("Device Information"), style: "padding-left: 10px;"},
+			// About's header is this alone, where webOS CE 3.2.0's About scene has its moon.
+			{className: "about-header-art"}
 		]},
 		{className: "header-shadow"},
 		{kind: "Scroller", name: "scroller", flex: 1, components: [
@@ -72,9 +74,10 @@ enyo.kind({
 					{kind: "Button", className: "enyo-button", caption: $L("Android Device Info"), onclick: "openAndroid"},
 					{content: $L("Android owns the rest: its own About screen has the hardware, the build and the legal notices."), className: "note"}
 				]},
-				// About (App Menu), after webOS CE's Device Info About scene on the reference
-				// TouchPad: a version line, the dedication, a rule, and the names, code
-				// contributors in bold. The words are codepoet's (2026-11-12).
+				// About (App Menu), after webOS CE's Device Info About scene (3.2.0): no icon or
+				// title in the header, only Lunacy's robot hanging from it, then a version line,
+				// the dedication, a rule, and the names, code contributors in bold. The words
+				// are codepoet's (2026-11-12).
 				{name: "about", className: "about-body", components: [
 					{name: "aboutVersion", className: "about-version"},
 					{className: "about-p", content: $L("Lunacy is dedicated to everyone who helped keep the dream alive. All of the community members of webOS Archive, the former members of webOS Nation, the developers of webOS Ports, and the original developers at Palm and HP deserve credit for maintaining and believing in something special. The following contributors have provided recent code for webOS Community Edition that has found a new home in Lunacy:")},
@@ -235,7 +238,7 @@ enyo.kind({
 			this.$.credits.render();
 		}
 		this.aboutShown = true;
-		this.$.title.setContent($L("About Lunacy"));
+		this.$.header.addClass("about");
 		this.$.aboutBar.show();
 		this.$.pane.selectViewByName("about");
 		this.$.scroller.scrollTo(0, 0);
@@ -243,7 +246,7 @@ enyo.kind({
 	},
 	closeAbout: function() {
 		this.aboutShown = false;
-		this.$.title.setContent($L("Device Information"));
+		this.$.header.removeClass("about");
 		this.$.aboutBar.hide();
 		this.$.pane.selectViewByName("info");
 		this.$.scroller.scrollTo(0, 0);

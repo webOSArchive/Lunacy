@@ -39,8 +39,8 @@ enyo.kind({
 			{kind: "Spacer", flex: 1},
 			{kind: "Control", className: "content", components: [
 			  {kind: "Image", src: "images/bg_empty_artists.png"},
-			  {content: $L("There are no songs on your HP TouchPad"), className: "heading"},
-			  {content: $L("You can add music to your HP TouchPad with the HP Play music app, found at www.hpplay.com, or copy music to your HP TouchPad in USB mode.")}
+			  {content: $L("There are no songs on your webOS TouchPad"), className: "heading"},
+			  {content: $L("You can copy music to your webOS TouchPad in USB mode.")}
 			]},
 			{kind: "Button", caption: $L("Add songs"), showing: false},
 			{kind: "Spacer", flex: 3}		

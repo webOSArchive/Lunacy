@@ -41,10 +41,10 @@
 	"Song": "Brano",
 	"Songs": "Brani",
 	"There are no songs in this playlist.": "Non ci sono brani nella playlist.",
-	"There are no songs on your HP TouchPad": "Non vi sono brani su HP TouchPad",
+	"There are no songs on your webOS TouchPad": "Non vi sono brani su webOS TouchPad",
 	"Time": "Ora",
 	"Type Playlist Name": "Digita il nome della playlist",
 	"View": "Visualizza",
 	"View #{strMediaType} Tracks": "Visualizza #{strMediaType} tracce",
-	"You can add music to your HP TouchPad with the HP Play music app, found at www.hpplay.com, or copy music to your HP TouchPad in USB mode.": "Per aggiungere brani musicali a HP TouchPad è possibile utilizzare l'applicazione HP Play, disponibile all'indirizzo www.hpplay.com, o copiare la musica su HP TouchPad in modalità USB."
+	"You can copy music to your webOS TouchPad in USB mode.": "È possibile copiare la musica su webOS TouchPad in modalità USB."
 }

@@ -32,3 +32,9 @@ message then showed a broken image until the chat was opened again. The same cha
 every chat row fall back to the generic avatar, when the chat has none yet
 (ConversationList.listSetupRow) and when its photo doesn't decode, such as a buddy icon a chat
 server sent that isn't an image (ConversationItem.contactImageError, on Enyo's Image error event).
+
+Changed from the packaged app, with codepoet's go-ahead (2026-11-26): webOS CE 3.2.0's
+de-branding (the CE project's build/full-ce/hp_wording.py, tag 3.2.0-CE-Release), applied here
+by the same rules on 2026-11-26: the vendor in its appinfo.json files is "webOS Archive" where
+it said "HP"; the first-launch line names "your webOS phone" where it said "your HP webOS
+phone".

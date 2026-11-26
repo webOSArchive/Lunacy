@@ -82,15 +82,20 @@ enum class DeviceProfile(
      */
     val homeButtonOrientationAngle: Int,
 ) {
-    /** Measured on the reference TouchPad (webOS CE 3.1.0). */
+    /**
+     * Measured on the reference TouchPad, first on webOS CE 3.1.0. On webOS CE 3.2.0 (600121,
+     * 2026-11-26) it is "webOS TouchPad", and apps are told 3.2.0: deviceInfo's platformVersion
+     * and the user agent's hpwOS/3.2.0 (the rest of both as on 3.1.0), and systemProperties'
+     * version "webOS CE 3.2.0". Lunacy reports 3.2.0 so apps can target it (codepoet).
+     */
     TOUCHPAD(
         modelName = "TouchPad",
         modelNameAscii = "TouchPad",
-        deviceName = "HP TouchPad",
+        deviceName = "webOS TouchPad",
         model = "HSTNH-I29C",
         boardType = "topaz-Wifi-pvt\n",
-        platformVersion = "3.1.0",
-        userAgent = "Mozilla/5.0 (hp-tablet; Linux; hpwOS/3.1.0; U; en-US) AppleWebKit/534.6 " +
+        platformVersion = "3.2.0",
+        userAgent = "Mozilla/5.0 (hp-tablet; Linux; hpwOS/3.2.0; U; en-US) AppleWebKit/534.6 " +
             "(KHTML, like Gecko) wOSSystem/234.83 Safari/534.6 TouchPad/1.0",
         carrierCode = "c090-01",
         carrierName = "",

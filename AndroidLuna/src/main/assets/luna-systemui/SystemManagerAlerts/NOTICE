@@ -7,3 +7,10 @@ stylesheets/notifications.css and the images they name (images/, beside this fol
 stylesheets name aren't on the device either). Abandonware, like the rest of luna-systemui.
 Lunacy serves them at their webOS paths and opens the location alert from its System Alerts
 app (CoreApps/org.webosarchive.lunacy.systemalerts).
+
+Changed from the packaged app, with codepoet's go-ahead (2026-11-26): webOS CE 3.2.0's
+de-branding (the CE project's build/full-ce/hp_wording.py, tag 3.2.0-CE-Release), applied here
+by the same rules on 2026-11-26: the pairing alert's "it's not a HP device" reads "it's not a
+webOS device", and images/notification-large-appcatalog.png is the webOS App Catalog's icon in
+place of HP's shopping bag, the same file as the CE project's
+system/usr/lib/luna/system/luna-systemui/images/notification-large-appcatalog.png.

@@ -18,3 +18,8 @@ The app's files are here exactly as the package carries them, and Lunacy does no
 the files under /media/internal, Android's Pictures, DCIM and Movies among them) and shows the
 thumbnails Palm's photos service makes, which Lunacy also ships. A change Lunacy needs in the
 app is made in the webOS CE project and comes here with its next release.
+
+Changed from the packaged app, with codepoet's go-ahead (2026-11-26): webOS CE 3.2.0's
+de-branding (the CE project's build/full-ce/hp_wording.py, tag 3.2.0-CE-Release), applied here
+by the same rules on 2026-11-26: the vendor in its appinfo.json files is "webOS Archive" where
+it said "HP".

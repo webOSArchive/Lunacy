@@ -12,7 +12,6 @@ them never needed Palm's hardware. They needed Palm's *contract*.
 
 Lunacy provides that contract on Android.
 
-
 ## How it works
 
 Lunacy re-implements the contract, not the OS:
@@ -31,6 +30,43 @@ Lunacy re-implements the contract, not the OS:
 
 Enyo was designed to scale from phone to tablet: its flex layouts and panels fill whatever
 screen they are given. So most apps run at the device's real size, on both phones and tablets.
+
+## Using it
+
+**Lunacy 1.2.0 is the current release** (November 2026): [release notes](https://github.com/webOSArchive/Lunacy/releases/latest).
+
+[<img src="https://appcatalog.webosarchive.org/assets/fdroid.png" alt="Get it on F-Droid" height="60">](https://stacks.webosarchive.org/feeds/fdroid/repo/)
+
+**Lunacy is available on F-Droid**, along with LunaKeyboard, from the webOS Archive's own
+repository. To add it to F-Droid:
+
+- Open the [repository page](https://stacks.webosarchive.org/feeds/fdroid/repo/) on your
+  device and tap its link, or scan its QR code.
+- Or, in F-Droid, go to Settings → Repositories → + and enter
+  `https://stacks.webosarchive.org/feeds/fdroid/repo`
+
+F-Droid then installs the right build for your device and keeps it up to date.
+
+**Or sideload the APKs** from [the releases](https://github.com/webOSArchive/Lunacy/releases):
+
+1. **Allow unknown sources.** Settings → Security → Unknown sources. (On Android 8 and later
+   this is asked for per app, when you open the APK.)
+2. **Install the APK for your device** - `AndroidLuna-arm64-release.apk` for a 64-bit device,
+   `AndroidLuna-arm32-release.apk` for a 32-bit one (every Android 5 device; if unsure, try the
+   64-bit one first, which a 32-bit device refuses). Copy it to the device and tap it, or
+   `adb install`. The `-debug` APKs are for development; a debug build and a release build
+   can't be installed over each other without uninstalling, which loses Lunacy's data. Open **Lunacy** from the Android launcher. The card view, the launcher and the bundled apps are
+   there; **App Catalog**, on the launcher's Downloads tab, is where the apps come from.
+3. **Optional: the webOS keyboard.** Install `LunaKeyboard-release.apk`, open **LunaKeyboard** and
+   use its two buttons - switch it on in Android's settings, then choose it while a text field
+   has focus. Android's own keyboard stays installed; switching back is the same picker.
+4. **Optional: Exhibition as the screen saver.** In Android's screen saver settings (Settings →
+   Display → Screen saver; Daydream on Android 5, or the button in Lunacy's **Exhibition**
+   Settings app), pick **Lunacy Exhibition**. On a dock or charger, when the screen would time
+   out, Lunacy shows webOS's Exhibition mode instead, and it stays on until the device comes
+   off the charger, as a TouchPad did on its Touchstone. Which face it shows is chosen in the
+   Exhibition app; tap the screen during Exhibition for controls (if the app provides them).
+   Lunacy never turns the screen saver on by itself.
 
 ## Project Goals
 
@@ -73,47 +109,6 @@ devices and a 64-bit one for the newer. Phones are partially supported through l
 - Runs on Android TV, driven by the remote (experimental: [Docs/android-tv.md](Docs/android-tv.md))
 - Pair it with the optional webOS-style keyboard
 - Launches webOS and Android apps
-
-## Using it
-
-**Lunacy 1.2.0 is the current release** (November 2026): [release notes](https://github.com/webOSArchive/Lunacy/releases/latest).
-
-**Lunacy is in maintenance** from 1.2.0: its maintainer has stepped back to other projects for a
-while. Bug reports and pull requests are still welcome, and releases will come as fixes land;
-new features are slower. See [Contributing](#contributing).
-
-[<img src="https://appcatalog.webosarchive.org/assets/fdroid.png" alt="Get it on F-Droid" height="60">](https://stacks.webosarchive.org/feeds/fdroid/repo/)
-
-**Lunacy is available on F-Droid**, along with LunaKeyboard, from the webOS Archive's own
-repository. To add it to F-Droid:
-
-- Open the [repository page](https://stacks.webosarchive.org/feeds/fdroid/repo/) on your
-  device and tap its link, or scan its QR code.
-- Or, in F-Droid, go to Settings → Repositories → + and enter
-  `https://stacks.webosarchive.org/feeds/fdroid/repo`
-
-F-Droid then installs the right build for your device and keeps it up to date.
-
-**Or sideload the APKs** from [the releases](https://github.com/webOSArchive/Lunacy/releases):
-
-1. **Allow unknown sources.** Settings → Security → Unknown sources. (On Android 8 and later
-   this is asked for per app, when you open the APK.)
-2. **Install the APK for your device** - `AndroidLuna-arm64-release.apk` for a 64-bit device,
-   `AndroidLuna-arm32-release.apk` for a 32-bit one (every Android 5 device; if unsure, try the
-   64-bit one first, which a 32-bit device refuses). Copy it to the device and tap it, or
-   `adb install`. The `-debug` APKs are for development; a debug build and a release build
-   can't be installed over each other without uninstalling, which loses Lunacy's data. Open **Lunacy** from the Android launcher. The card view, the launcher and the bundled apps are
-   there; **App Catalog**, on the launcher's Downloads tab, is where the apps come from.
-3. **Optional: the webOS keyboard.** Install `LunaKeyboard-release.apk`, open **LunaKeyboard** and
-   use its two buttons - switch it on in Android's settings, then choose it while a text field
-   has focus. Android's own keyboard stays installed; switching back is the same picker.
-4. **Optional: Exhibition as the screen saver.** In Android's screen saver settings (Settings →
-   Display → Screen saver; Daydream on Android 5, or the button in Lunacy's **Exhibition**
-   Settings app), pick **Lunacy Exhibition**. On a dock or charger, when the screen would time
-   out, Lunacy shows webOS's Exhibition mode instead, and it stays on until the device comes
-   off the charger, as a TouchPad did on its Touchstone. Which face it shows is chosen in the
-   Exhibition app; tap the screen during Exhibition for controls (if the app provides them).
-   Lunacy never turns the screen saver on by itself.
 
 ## Customizing
 
